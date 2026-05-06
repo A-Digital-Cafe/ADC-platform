@@ -168,11 +168,9 @@ export function BoardView({ project, perms, caller }: Props) {
 				toColumn={mover.pendingMove ? project.kanbanColumns.find((c) => c.key === mover.pendingMove?.toColumn)?.name : undefined}
 				onCancel={() => {
 					mover.cancelMove();
-					void reload();
+					reload();
 				}}
-				onSubmit={(detail: TransitionCommentSubmitDetail) => {
-					void mover.confirmMoveWithComment(detail);
-				}}
+				onSubmit={(detail: TransitionCommentSubmitDetail) => mover.confirmMoveWithComment(detail)}
 			/>
 		</div>
 	);

@@ -1,14 +1,14 @@
 import type { CommentsSectionSubmitDetail } from "@ui-library/utils/react-jsx";
-import type { SessionData } from "@ui-library/utils/session";
+import type { SessionResponse } from "@ui-library/utils/session";
 import { canComment, canDeleteSocial } from "../utils/permissions";
 import type { useArticleComments, DraftChangeDetail, RequestAttachmentDetail } from "../hooks/useArticleComments";
 
 const DISCORD_URL = "https://discord.gg/vShXpyWTTq";
 
 interface Props {
-	session: SessionData;
-	articleAuthorId?: string | null;
-	state: ReturnType<typeof useArticleComments>;
+	readonly session: SessionResponse;
+	readonly articleAuthorId?: string | null;
+	readonly state: ReturnType<typeof useArticleComments>;
 }
 
 export function ArticleCommentsBlock({ session, articleAuthorId, state }: Props) {
@@ -57,21 +57,11 @@ export function ArticleCommentsBlock({ session, articleAuthorId, state }: Props)
 					attachmentUrls={state.attachmentUrls}
 					initialDraftBlocks={state.draftBlocks}
 					initialDraftAttachmentIds={state.draftAttachmentIds}
-					onadcSubmit={(ev: CustomEvent<CommentsSectionSubmitDetail>) => {
-						void state.submit(ev.detail);
-					}}
-					onadcDelete={(ev: CustomEvent<string>) => {
-						void state.remove(ev.detail);
-					}}
-					onadcReactToggle={(ev: CustomEvent<{ commentId: string; emoji: string; reacted: boolean }>) => {
-						void state.reactToggle(ev.detail);
-					}}
-					onadcLoadMore={() => {
-						void state.loadMore();
-					}}
-					onadcDraftChange={(ev: CustomEvent<DraftChangeDetail>) => {
-						void state.draftChange(ev.detail);
-					}}
+					onadcSubmit={(ev: CustomEvent<CommentsSectionSubmitDetail>) => state.submit(ev.detail)}
+					onadcDelete={(ev: CustomEvent<string>) => state.remove(ev.detail)}
+					onadcReactToggle={(ev: CustomEvent<{ commentId: string; emoji: string; reacted: boolean }>) => state.reactToggle(ev.detail)}
+					onadcLoadMore={() => state.loadMore()}
+					onadcDraftChange={(ev: CustomEvent<DraftChangeDetail>) => state.draftChange(ev.detail)}
 					onadcRequestAttachment={(ev: CustomEvent<RequestAttachmentDetail>) => state.requestAttachment(ev.detail)}
 				/>
 			)}

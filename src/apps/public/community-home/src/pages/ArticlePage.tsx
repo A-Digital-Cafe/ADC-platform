@@ -26,10 +26,10 @@ export function ArticlePage({ slug }: { readonly slug: string }) {
 	const breadcrumbRef = useRef<HTMLElement & { adcBack?: unknown }>(null);
 
 	useEffect(() => {
-		void loadArticle();
-		void commentsState.loadInitial();
-		void socialApi.getRating(slug).then(setRating);
-		void getSession().then(setSession);
+		loadArticle();
+		commentsState.loadInitial();
+		socialApi.getRating(slug).then(setRating);
+		getSession().then(setSession);
 	}, [slug]);
 
 	useEffect(() => {

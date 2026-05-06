@@ -45,7 +45,7 @@ export function ColumnsSection({ project, canEdit, onSaved }: Props) {
 		}
 		const prevRequire = project.settings?.requireCommentOnFinalTransition === true;
 		if (prevRequire !== requireComment) {
-			const settings: ProjectSettings = { ...(project.settings ?? {}), requireCommentOnFinalTransition: requireComment };
+			const settings: ProjectSettings = { ...project.settings, requireCommentOnFinalTransition: requireComment };
 			const sRes = await pmApi.updateSettings(project.id, settings);
 			if (!sRes.success) {
 				setSaving(false);

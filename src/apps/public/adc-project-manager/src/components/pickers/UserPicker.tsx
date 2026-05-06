@@ -4,11 +4,11 @@ import { identityPmApi } from "../../utils/identity-api.ts";
 import { ClientUser } from "@common/types/identity/User.ts";
 
 interface Props {
-	selectedIds: string[];
-	onChange: (ids: string[]) => void;
-	disabled?: boolean;
-	label?: string;
-	initialCache?: Record<string, { username?: string; avatar?: string }>;
+	readonly selectedIds: string[];
+	readonly onChange: (ids: string[]) => void;
+	readonly disabled?: boolean;
+	readonly label?: string;
+	readonly initialCache?: Record<string, { username?: string; avatar?: string }>;
 }
 
 /**

@@ -15,10 +15,10 @@ const MAX_TABLE_ROWS = 200;
 const MAX_TABLE_COLS = 20;
 
 const TEXT_ALIGNS: readonly TextAlign[] = ["left", "center", "right"];
-const TEXT_MARKS: readonly TextMark[] = ["bold", "italic", "code"];
+const TEXT_MARKS: ReadonlySet<TextMark> = new Set(["bold", "italic", "code"]);
 const CALLOUT_TONES: readonly CalloutTone[] = ["info", "warning", "success", "error"];
 const CALLOUT_ROLES: readonly CalloutRole[] = ["note", "status", "alert"];
-const LINK_RELS: readonly LinkRel[] = ["nofollow", "noopener", "noreferrer", "ugc", "sponsored"];
+const LINK_RELS: ReadonlySet<LinkRel> = new Set(["nofollow", "noopener", "noreferrer", "ugc", "sponsored"]);
 
 export interface SanitizeOptions {
 	allowedAttachmentIds?: ReadonlySet<string>;
@@ -28,7 +28,7 @@ export interface SanitizeOptions {
 function clampString(s: unknown, max: number): string {
 	if (typeof s !== "string") return "";
 	// eslint-disable-next-line no-control-regex
-	const trimmed = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+	const trimmed = s.replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/, "");
 	return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 
@@ -51,12 +51,12 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 			};
 		}
 		case "paragraph": {
-			const marks = Array.isArray(r.marks) ? (r.marks.filter((m) => TEXT_MARKS.includes(m as TextMark)) as TextMark[]) : undefined;
+			const marks = Array.isArray(r.marks) ? (r.marks.filter((m) => TEXT_MARKS.has(m as TextMark)) as TextMark[]) : undefined;
 			return {
 				type: "paragraph",
 				text: clampString(r.text, TEXT_MAX),
 				align: pickEnum(r.align, TEXT_ALIGNS),
-				marks: marks && marks.length ? marks : undefined,
+				marks: marks?.length ? marks : undefined,
 			};
 		}
 		case "list": {
@@ -88,14 +88,14 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 			};
 		}
 		case "quote": {
-			const rel = Array.isArray(r.rel) ? (r.rel.filter((x) => LINK_RELS.includes(x as LinkRel)) as LinkRel[]) : undefined;
+			const rel = Array.isArray(r.rel) ? (r.rel.filter((x) => LINK_RELS.has(x as LinkRel)) as LinkRel[]) : undefined;
 			const url = typeof r.url === "string" ? clampString(r.url, 600) : undefined;
 			const safeUrl = url && /^https?:\/\//i.test(url) ? url : undefined;
 			return {
 				type: "quote",
 				text: clampString(r.text, TEXT_MAX),
 				url: safeUrl,
-				rel: rel && rel.length ? rel : undefined,
+				rel: rel?.length ? rel : undefined,
 				ariaLabel: typeof r.ariaLabel === "string" ? clampString(r.ariaLabel, 200) : undefined,
 			};
 		}
@@ -121,7 +121,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				type: "table",
 				header,
 				rows,
-				columnAlign: columnAlign && columnAlign.length ? columnAlign : undefined,
+				columnAlign: columnAlign?.length ? columnAlign : undefined,
 				caption: typeof r.caption === "string" ? clampString(r.caption, 240) : undefined,
 				rowHeaders: r.rowHeaders === true,
 			};
