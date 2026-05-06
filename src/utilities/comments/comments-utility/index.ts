@@ -1,7 +1,8 @@
 import type { Connection } from "mongoose";
 import { BaseUtility } from "../../BaseUtility.js";
 import { getOrCreateCommentModel } from "./schemas/comment.schema.js";
-import { getOrCreateCommentDraftModel } from "./schemas/draft.schema.js";
+import { getOrCreateCommentDraftModel, buildCommentDraftSchema } from "./schemas/draft.schema.js";
+import { DraftsRepository, buildDraftId, type DraftKey, type DraftPayload } from "./helpers/drafts.js";
 import {
 	CommentsManager,
 	type CommentsManagerOptions,
@@ -12,8 +13,6 @@ import {
 	type UpdateInput,
 	type ListOptions,
 	type ThreadOptions,
-	type DraftKey,
-	type DraftPayload,
 } from "./managers/CommentsManager.js";
 
 export type {
@@ -28,7 +27,8 @@ export type {
 	DraftKey,
 	DraftPayload,
 };
-export { CommentsManager };
+export { CommentsManager, DraftsRepository, buildDraftId, getOrCreateCommentDraftModel, buildCommentDraftSchema };
+export type { CommentDraftDoc } from "./schemas/draft.schema.js";
 
 export interface CreateCommentsManagerOptions extends Omit<CommentsManagerOptions, "commentModel" | "draftModel"> {
 	mongoConnection: Connection;

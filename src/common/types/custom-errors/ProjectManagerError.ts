@@ -30,8 +30,14 @@ type ProjectManagerErrorTypes =
 	| "COMMENT_REQUIRED_ON_FINAL"
 	| "COMMENTS_UNAVAILABLE"
 	| "ATTACHMENTS_UNAVAILABLE"
+	// Issue description
+	| "DESCRIPTION_DRAFTS_UNAVAILABLE"
+	| "ISSUE_DESCRIPTION_TOO_MANY_ATTACHMENTS"
+	| "ISSUE_DESCRIPTION_BAD_ATTACHMENT"
+	| "ISSUE_DESCRIPTION_ATTACHMENT_NOT_OWNED"
 	// Auth
-	| "NO_TOKEN";
+	| "NO_TOKEN"
+	| "FORBIDDEN";
 
 export class ProjectManagerError extends ADCCustomError<Record<string, unknown>, ProjectManagerErrorTypes> {
 	public readonly name = "ProjectManagerError";

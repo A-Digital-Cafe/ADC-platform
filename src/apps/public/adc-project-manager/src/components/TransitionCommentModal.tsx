@@ -22,7 +22,7 @@ const DEFAULT_HELPER = "Esta transición requiere dejar un comentario para docum
 
 /**
  * Modal específico de PM para transiciones que requieren comentario.
- * Compone primitives genéricos `<adc-modal>` + `<adc-comment-form>`.
+ * Compone primitives genéricos `<adc-modal>` + `<adc-blocks-form>`.
  */
 export function TransitionCommentModal({
 	open,
@@ -48,7 +48,7 @@ export function TransitionCommentModal({
 					</p>
 				)}
 				<p className="text-sm">{helperText}</p>
-				<adc-comment-form
+				<adc-blocks-form
 					submitting={submitting}
 					submitLabel="Confirmar y comentar"
 					showCancel

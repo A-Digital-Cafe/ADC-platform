@@ -6,6 +6,7 @@ import type { IssueListFilters } from "../dao/issues.ts";
 import type { Block } from "@common/ADC/types/learning.ts";
 import { buildIssueResourceCtx } from "./utils/issueResourceCtx.ts";
 import { assertCommentForFinalTransition } from "./utils/transitionGuards.ts";
+import { validateAndSanitizeIssueDescription } from "./utils/validateIssueDescription.ts";
 
 const ISSUE_CREATE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
 const ISSUE_UPDATE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
@@ -56,7 +57,28 @@ export class IssueEndpoints {
 		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
 		const project = await service.projects.getProject(ctx.params.projectId, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
-		return service.issues.create(project, ctx.data, ctx.token ?? undefined, caller);
+		const data = { ...ctx.data };
+		// Validar adjuntos referenciados en la descripción con el mismo criterio
+		// que comments (ownership + permiso). En `create` el issue aún no existe,
+		// así que evaluamos el contexto contra el proyecto + un issue "sintético".
+		if (Array.isArray(data.description) && data.description.length) {
+			const pmCtx = await service.buildPMCtx(IssueEndpoints.#kernelKey, ctx);
+			const syntheticAttachmentCtx = {
+				userId: ctx.user?.id ?? "",
+				tokenOrgId: ctx.user?.orgId ?? null,
+				project,
+				issue: { reporterId: ctx.user?.id ?? "", assigneeIds: [], assigneeGroupIds: [] } as unknown as Issue,
+				pmCtx,
+			};
+			data.description = await validateAndSanitizeIssueDescription(service, syntheticAttachmentCtx, data.description);
+		}
+		const issue = await service.issues.create(project, data, ctx.token ?? undefined, caller);
+		if (caller.userId) {
+			await service.issueDescriptionDrafts
+				.delete(caller.userId, { targetType: "pm-issue-description", targetId: issue.id })
+				.catch(() => undefined);
+		}
+		return issue;
 	}
 
 	@RegisterEndpoint({
@@ -82,7 +104,19 @@ export class IssueEndpoints {
 		const service = IssueEndpoints.#service;
 		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
 		const { reason, ...updates } = ctx.data ?? {};
-		return service.issues.update(ctx.params.id, updates, reason, ctx.token ?? undefined, caller);
+		// Si se actualiza la descripción, validar adjuntos contra el contexto real
+		// del issue (project + issue resueltos).
+		if (Array.isArray(updates.description)) {
+			const built = await buildIssueResourceCtx(service, IssueEndpoints.#kernelKey, ctx, { requireAuth: true });
+			updates.description = await validateAndSanitizeIssueDescription(service, built.attachmentCtx, updates.description);
+		}
+		const updated = await service.issues.update(ctx.params.id, updates, reason, ctx.token ?? undefined, caller);
+		if (caller.userId && updates.description !== undefined) {
+			await service.issueDescriptionDrafts
+				.delete(caller.userId, { targetType: "pm-issue-description", targetId: updated.id })
+				.catch(() => undefined);
+		}
+		return updated;
 	}
 
 	@RegisterEndpoint({

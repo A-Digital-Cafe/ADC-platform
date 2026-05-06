@@ -1,5 +1,7 @@
 import { createCommentsApi } from "@ui-library/utils/api-comments";
 import { createAttachmentsApi } from "@ui-library/utils/api-attachments";
+import type { Block } from "@common/ADC/types/learning.ts";
+import type { CommentDraft } from "@common/types/comments/Comment.ts";
 import { api } from "./client.ts";
 
 const forIssue = (issueId: string) => {
@@ -35,4 +37,15 @@ export const issueAttachmentsApi = {
 	getIssueAttachmentDownloadUrl: (id: string, aid: string, opts: Parameters<A["downloadUrl"]>[1] = {}) =>
 		forIssue(id).a.downloadUrl(aid, opts),
 	deleteIssueAttachment: (id: string, aid: string) => forIssue(id).a.remove(aid),
+};
+
+/**
+ * API client para el draft de descripción de issue. Reutiliza la forma de
+ * CommentDraft (target genérico) y se persiste con TTL en el backend.
+ */
+export const issueDescriptionApi = {
+	getIssueDescriptionDraft: (id: string) => api.get<{ draft: CommentDraft | null }>(`/issues/${id}/description/draft`),
+	saveIssueDescriptionDraft: (id: string, data: { blocks: Block[]; attachmentIds?: string[] }) =>
+		api.put<{ draft: CommentDraft }, { blocks: Block[]; attachmentIds?: string[] }>(`/issues/${id}/description/draft`, { body: data }),
+	deleteIssueDescriptionDraft: (id: string) => api.delete<{ ok: true }>(`/issues/${id}/description/draft`),
 };

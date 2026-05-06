@@ -28,7 +28,9 @@ function applyFilters(issues: Issue[], f: BoardFilterState, q: string): Issue[] 
 		if (f.assigneeId && !i.assigneeIds.includes(f.assigneeId)) return false;
 		if (q) {
 			const needle = q.toLowerCase();
-			if (!i.title.toLowerCase().includes(needle) && !i.description.toLowerCase().includes(needle)) return false;
+			// La descripci\u00f3n ahora es Block[] enriquecida; el filtro local s\u00f3lo
+			// matchea por t\u00edtulo/key. Para b\u00fasqueda full-text usar el backend (q).
+			if (!i.title.toLowerCase().includes(needle) && !i.key.toLowerCase().includes(needle)) return false;
 		}
 		return true;
 	});

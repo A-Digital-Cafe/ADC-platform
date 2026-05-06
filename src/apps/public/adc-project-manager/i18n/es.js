@@ -125,7 +125,11 @@ export default {
 		groupByMilestone: "Por milestone",
 		completedGroup: "Finalizados",
 		moveHint: "Arrastra un issue a otra sección para cambiar su sprint.",
-		countDone: "{{done}}/{{total}} finalizados"
+		countDone: "{{done}}/{{total}} finalizados",
+		descriptionPlaceholder: "Describe el issue con bloques...",
+		descriptionEmpty: "Sin descripción",
+		descriptionClickToEdit: "Clic para editar",
+		descriptionUnsavedChanges: "Tienes cambios sin guardar — clic para retomar"
 	},
 	board: {
 		title: "Tablero",
@@ -259,6 +263,11 @@ export default {
 		INVALID_COLUMN: "Columna inválida.",
 		INVALID_PRIORITY: "Prioridad inválida.",
 		WIP_LIMIT_REACHED: "Se alcanzó el límite de trabajo en progreso.",
-		ATTACHMENTS_NOT_IMPLEMENTED: "Los adjuntos aún no están implementados."
+		ATTACHMENTS_NOT_IMPLEMENTED: "Los adjuntos aún no están implementados.",
+		FORBIDDEN: "No tienes permiso para realizar esta acción.",
+		DESCRIPTION_DRAFTS_UNAVAILABLE: "Los borradores de descripción no están disponibles en este momento.",
+		ISSUE_DESCRIPTION_TOO_MANY_ATTACHMENTS: "La descripción del issue tiene demasiados adjuntos.",
+		ISSUE_DESCRIPTION_BAD_ATTACHMENT: "Adjunto inválido en la descripción del issue.",
+		ISSUE_DESCRIPTION_ATTACHMENT_NOT_OWNED: "No puedes usar un adjunto que no te pertenece."
 	}
 };

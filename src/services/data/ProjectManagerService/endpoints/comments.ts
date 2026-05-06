@@ -49,7 +49,11 @@ export class IssueCommentsEndpoints {
 		const svc = IssueCommentsEndpoints.#service;
 		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx);
 		const cursor = ctx.query.cursor || null;
-		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
+		// Si la query no especifica `parentId`, devolvemos todos los comentarios
+		// del issue en flat (incluye replies bajo padres eliminados). El cliente
+		// reconstruye el \u00e1rbol con `buildCommentsTree`. Si llega expl\u00edcitamente
+		// (string vac\u00edo o "null") = solo ra\u00edces; otro valor = replies de ese padre.
+		const parentId = ctx.query.parentId === undefined ? undefined : ctx.query.parentId || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
 		return svc.issueComments.list(commentCtx, {
 			targetType: TARGET_TYPE,
