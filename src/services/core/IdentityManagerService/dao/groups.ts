@@ -65,6 +65,30 @@ export class GroupManager {
 	}
 
 	/**
+	 * Devuelve datos públicos mínimos (nombre + descripción) para mostrar
+	 * los grupos asignados a recursos como issues/comentarios sin requerir
+	 * permisos de lectura sobre `groups`. La cardinalidad se limita para
+	 * mitigar abusos.
+	 */
+	async getPublicProfiles(groupIds: readonly string[]): Promise<Map<string, { name: string; description?: string }>> {
+		const out = new Map<string, { name: string; description?: string }>();
+		const ids = Array.from(new Set(groupIds.filter(Boolean))).slice(0, 50);
+		if (ids.length === 0) return out;
+		try {
+			const docs = await this.groupModel
+				.find({ id: { $in: ids } })
+				.select({ id: 1, name: 1, description: 1 })
+				.lean();
+			for (const d of docs) {
+				out.set(d.id, { name: d.name, description: d.description });
+			}
+		} catch (error) {
+			this.logger.logError(`Error obteniendo perfiles públicos de grupos: ${error}`);
+		}
+		return out;
+	}
+
+	/**
 	 * Actualiza un grupo
 	 * @param token Token de autenticación (requerido para verificar permisos)
 	 */
@@ -131,6 +155,31 @@ export class GroupManager {
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error obteniendo grupos: ${error}`);
+			return [];
+		}
+	}
+
+	/**
+	 * Búsqueda incremental de grupos por nombre/descripción (estilo `searchUsers`).
+	 * Devuelve hasta `limit` resultados ordenados por nombre.
+	 * @param query Texto a buscar (mínimo recomendado: 2 chars)
+	 * @param limit Máximo de resultados (default 10)
+	 * @param token Token de autenticación
+	 * @param orgId Si se proporciona, restringe a grupos de esa org; si no, sólo globales
+	 */
+	async searchGroups(query: string, limit: number = 10, token?: string, orgId?: string): Promise<Group[]> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.GROUPS, orgId);
+
+		try {
+			const escapedQuery = query.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+			const regex = new RegExp(escapedQuery, "i");
+			const filter: any = { $or: [{ name: regex }, { description: regex }] };
+			if (orgId) filter.orgId = orgId;
+			else filter.$and = [{ $or: [{ orgId: null }, { orgId: { $exists: false } }] }];
+			const docs = await this.groupModel.find(filter).limit(limit);
+			return docs.map((d: any) => d.toObject?.() || d);
+		} catch (error) {
+			this.logger.logError(`Error buscando grupos: ${error}`);
 			return [];
 		}
 	}

@@ -13,6 +13,53 @@ const ISSUE_UPDATE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
 const ISSUE_DELETE_RATE_LIMIT = { max: 5, timeWindow: 60_000 };
 const ISSUE_MOVE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
 
+/**
+ * Resuelve perfiles públicos (username/avatar para usuarios, name/description
+ * para grupos) referenciados por `reporterId`, `assigneeIds` y
+ * `assigneeGroupIds` y los anexa a cada issue como `assigneeProfiles` /
+ * `assigneeGroupProfiles`. Esto permite al frontend renderizar nombres sin
+ * llamar a Identity (que podría devolver 401/403 si el usuario no tiene
+ * permisos para leer `users`/`groups`).
+ *
+ * Tolera fallos: si IdentityManagerService no responde, devuelve los issues
+ * tal cual (los pickers harán fallback a IDs como hasta ahora).
+ */
+async function attachAssigneeProfiles<T extends Issue | Issue[]>(service: ProjectManagerService, target: T): Promise<T> {
+	const list = Array.isArray(target) ? target : [target];
+	if (list.length === 0) return target;
+	const userIds = new Set<string>();
+	const groupIds = new Set<string>();
+	for (const i of list) {
+		if (i.reporterId) userIds.add(i.reporterId);
+		for (const id of i.assigneeIds ?? []) userIds.add(id);
+		for (const id of i.assigneeGroupIds ?? []) groupIds.add(id);
+	}
+	try {
+		const identity = service.identity;
+		const [userMap, groupMap] = await Promise.all([
+			userIds.size ? identity.users.getPublicProfiles([...userIds]) : Promise.resolve(new Map()),
+			groupIds.size ? identity.groups.getPublicProfiles([...groupIds]) : Promise.resolve(new Map()),
+		]);
+		for (const i of list) {
+			const ups: Record<string, { username?: string; avatar?: string }> = {};
+			for (const id of new Set([i.reporterId, ...(i.assigneeIds ?? [])])) {
+				const p = userMap.get(id);
+				if (p) ups[id] = p;
+			}
+			i.assigneeProfiles = ups;
+			const gps: Record<string, { name: string; description?: string }> = {};
+			for (const id of i.assigneeGroupIds ?? []) {
+				const p = groupMap.get(id);
+				if (p) gps[id] = p;
+			}
+			i.assigneeGroupProfiles = gps;
+		}
+	} catch {
+		// Identity no disponible: dejamos los issues sin enriquecer.
+	}
+	return target;
+}
+
 export class IssueEndpoints {
 	static #service: ProjectManagerService;
 	static #kernelKey: symbol;
@@ -42,6 +89,7 @@ export class IssueEndpoints {
 		};
 
 		const issues = await service.issues.list(project, filters, ctx.token ?? undefined, caller);
+		await attachAssigneeProfiles(service, issues);
 		return { issues, project };
 	}
 
@@ -78,7 +126,7 @@ export class IssueEndpoints {
 				.delete(caller.userId, { targetType: "pm-issue-description", targetId: issue.id })
 				.catch(() => undefined);
 		}
-		return issue;
+		return await attachAssigneeProfiles(service, issue);
 	}
 
 	@RegisterEndpoint({
@@ -91,7 +139,7 @@ export class IssueEndpoints {
 		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
 		const issue = await service.issues.get(ctx.params.id, ctx.token ?? undefined, caller);
 		if (!issue) throw new ProjectManagerError(404, "ISSUE_NOT_FOUND", "Issue no encontrado");
-		return issue;
+		return await attachAssigneeProfiles(service, issue);
 	}
 
 	@RegisterEndpoint({
@@ -116,7 +164,7 @@ export class IssueEndpoints {
 				.delete(caller.userId, { targetType: "pm-issue-description", targetId: updated.id })
 				.catch(() => undefined);
 		}
-		return updated;
+		return await attachAssigneeProfiles(service, updated);
 	}
 
 	@RegisterEndpoint({
@@ -175,7 +223,7 @@ export class IssueEndpoints {
 			}
 		}
 
-		return updated;
+		return await attachAssigneeProfiles(service, updated);
 	}
 
 	@RegisterEndpoint({
