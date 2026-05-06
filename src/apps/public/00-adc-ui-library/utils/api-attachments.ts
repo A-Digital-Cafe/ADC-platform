@@ -49,13 +49,13 @@ export function createAttachmentsApi(api: AdcApi, prefix: string, idScope: strin
 			const params: Record<string, string | number> = {};
 			if (opts.inline) params.inline = "true";
 			if (opts.ttl) params.ttl = opts.ttl;
-			return api.get<{ url: string; expiresAt: string }>(
+			return api.get<{ url: string; expiresIn: number; attachment: AttachmentDTO }>(
 				url(`/${attachmentId}/download`),
 				Object.keys(params).length ? { params } : undefined
 			);
 		},
 		remove: (attachmentId: string) =>
-			api.delete<{ success: boolean }>(url(`/${attachmentId}`), {
+			api.delete<{ ok?: boolean; success?: boolean }>(url(`/${attachmentId}`), {
 				idempotencyKey: `${idScope}-att-del:${attachmentId}`,
 			}),
 	};

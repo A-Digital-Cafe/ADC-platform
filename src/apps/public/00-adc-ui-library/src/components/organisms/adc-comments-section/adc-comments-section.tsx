@@ -132,6 +132,7 @@ export class AdcCommentsSection {
 				submitting={this.submitting}
 				initialBlocks={this.initialDraftBlocks}
 				initialAttachmentIds={this.initialDraftAttachmentIds}
+				attachmentUrls={this.attachmentUrls}
 				onAdcSubmit={this.handleRootSubmit}
 				onAdcDraftChange={(ev: CustomEvent<{ blocks: Block[]; attachmentIds: string[] }>) => this.handleDraftChange(null, null, ev)}
 				onAdcRequestAttachment={(ev: CustomEvent<{ kind: "image" | "file" }>) => this.handleRequestAttachment(null, null, ev)}
@@ -150,6 +151,7 @@ export class AdcCommentsSection {
 						submitLabel="Guardar"
 						showCancel={true}
 						initialBlocks={this.editingBlocks}
+						attachmentUrls={this.attachmentUrls}
 						onAdcSubmit={(ev: CustomEvent<{ blocks: Block[]; attachmentIds: string[] }>) => this.handleEditSubmit(node.id, ev)}
 						onAdcCancel={() => {
 							this.editingId = null;
@@ -193,6 +195,7 @@ export class AdcCommentsSection {
 							submitLabel="Responder"
 							showCancel={true}
 							placeholder="Escribe una respuesta..."
+							attachmentUrls={this.attachmentUrls}
 							onAdcSubmit={(ev: CustomEvent<{ blocks: Block[]; attachmentIds: string[] }>) => this.handleReplySubmit(node.id, ev)}
 							onAdcCancel={() => {
 								this.replyingTo = null;

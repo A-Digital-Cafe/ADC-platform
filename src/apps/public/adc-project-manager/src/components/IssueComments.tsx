@@ -161,8 +161,8 @@ export function IssueComments({ issueId, caller, canComment = true, canModerate 
 	const handleReactToggle = useCallback(
 		async (detail: { commentId: string; emoji: string; reacted: boolean }) => {
 			const r = detail.reacted
-				? await pmApi.unreactIssueComment(issueId, detail.commentId, detail.emoji)
-				: await pmApi.reactIssueComment(issueId, detail.commentId, detail.emoji);
+				? await pmApi.reactIssueComment(issueId, detail.commentId, detail.emoji)
+				: await pmApi.unreactIssueComment(issueId, detail.commentId, detail.emoji);
 			if (r.success && r.data) {
 				const updated = r.data;
 				setFlatComments((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));

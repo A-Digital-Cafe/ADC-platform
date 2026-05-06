@@ -60,6 +60,27 @@ export class AdcBlocksEditor {
 		this.syncDomFromBlocks();
 	}
 
+	/**
+	 * Cuando llegan URLs de adjuntos (resueltas async tras el upload o al cargar
+	 * un comentario existente), refrescamos in-place sólo el contenido de las
+	 * cards de tipo "attachment" para no destruir la selección/caret del editor.
+	 */
+	@Watch("attachmentUrls")
+	onAttachmentUrlsChange() {
+		if (!this.editorEl) return;
+		for (const [id, block] of this.standaloneById) {
+			if (block.type !== "attachment") continue;
+			const cardEl = this.editorEl.querySelector(`[data-standalone-id="${id}"]`);
+			if (!cardEl) continue;
+			const oldContent = cardEl.querySelector(".adc-blocks-editor__standalone-attachment");
+			if (!oldContent) continue;
+			const tmp = document.createElement("div");
+			tmp.innerHTML = this.attachmentCardContent(block);
+			const newContent = tmp.firstElementChild;
+			if (newContent) oldContent.replaceWith(newContent);
+		}
+	}
+
 	// ── Markdown ↔ HTML ──────────────────────────────────────────────────────
 
 	private static escapeHtml(s: string): string {
@@ -78,7 +99,7 @@ export class AdcBlocksEditor {
 
 	/** Recorre un nodo y emite markdown para texto + strong/em/code. Cualquier otro tag: extraer texto. */
 	private static nodeToMarkdown(node: Node): string {
-		if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+		if (node.nodeType === Node.TEXT_NODE) return (node.textContent || "").replace(/\u200B/g, "");
 		if (node.nodeType !== Node.ELEMENT_NODE) return "";
 		const el = node as HTMLElement;
 		const tag = el.tagName.toLowerCase();
@@ -92,27 +113,89 @@ export class AdcBlocksEditor {
 		return inner;
 	}
 
-	/** Determina si el bloque es un "card" no editable embebido en el flujo (code/quote/callout/divider/table). */
+	/** Determina si el bloque es un "card" no editable embebido en el flujo (code/quote/callout/divider/table/attachment). */
 	private static isStandaloneCardBlock(b: Block): boolean {
-		return b.type === "code" || b.type === "quote" || b.type === "callout" || b.type === "divider" || b.type === "table";
+		return (
+			b.type === "code" ||
+			b.type === "quote" ||
+			b.type === "callout" ||
+			b.type === "divider" ||
+			b.type === "table" ||
+			b.type === "attachment"
+		);
 	}
 
-	/** Snippet de texto del bloque standalone para mostrar en la card inline. */
-	private static standalonePreview(b: Block): string {
+	/** Controles del header (input de lenguaje, select de tono) según el tipo. */
+	private static standaloneHeaderControls(b: Block): string {
+		if (b.type === "code") {
+			const lang = AdcBlocksEditor.escapeHtml(b.language || "");
+			return `<input type="text" class="adc-blocks-editor__standalone-input" data-standalone-action="language" placeholder="lenguaje" value="${lang}" />`;
+		}
+		if (b.type === "callout") {
+			const tones = ["info", "warning", "success", "error"] as const;
+			const opts = tones.map((t) => `<option value="${t}"${b.tone === t ? " selected" : ""}>${t}</option>`).join("");
+			return `<select class="adc-blocks-editor__standalone-input" data-standalone-action="tone">${opts}</select>`;
+		}
+		return "";
+	}
+
+	/** Cuerpo editable del bloque standalone (contenteditable=true en un área anidada). */
+	private standaloneEditableContent(b: Block): string {
 		switch (b.type) {
 			case "code":
-				return AdcBlocksEditor.escapeHtml((b.content || "").slice(0, 200)) || "<em>(vacío)</em>";
+				return `<pre class="adc-blocks-editor__standalone-content adc-blocks-editor__standalone-code" data-standalone-content contenteditable="true" spellcheck="false">${AdcBlocksEditor.escapeHtml(b.content || "")}</pre>`;
 			case "quote":
-				return AdcBlocksEditor.escapeHtml((b.text || "").slice(0, 200)) || "<em>(vacío)</em>";
+				return `<blockquote class="adc-blocks-editor__standalone-content adc-blocks-editor__standalone-quote" data-standalone-content contenteditable="true" data-placeholder="Cita">${AdcBlocksEditor.escapeHtml(b.text || "") || "<br>"}</blockquote>`;
 			case "callout":
-				return AdcBlocksEditor.escapeHtml((b.text || "").slice(0, 200)) || "<em>(vacío)</em>";
-			case "table":
-				return `<em>Tabla (${b.rows?.length || 0} filas)</em>`;
+				return `<div class="adc-blocks-editor__standalone-content adc-blocks-editor__standalone-callout" data-standalone-content contenteditable="true" data-placeholder="Mensaje destacado">${AdcBlocksEditor.escapeHtml(b.text || "") || "<br>"}</div>`;
 			case "divider":
-				return `<hr style="border-color: var(--color-alt);" />`;
+				return `<hr class="adc-blocks-editor__standalone-divider" />`;
+			case "table":
+				return `<div class="adc-blocks-editor__standalone-content"><em>Tabla (${b.rows?.length || 0} filas)</em></div>`;
+			case "attachment":
+				return this.attachmentCardContent(b);
 			default:
 				return "";
 		}
+	}
+
+	/** Renderiza el contenido de la card de un adjunto: preview de imagen o chip de archivo. */
+	private attachmentCardContent(b: Block): string {
+		const url = b.attachmentId ? this.attachmentUrls[b.attachmentId] : undefined;
+		const safeName = AdcBlocksEditor.escapeHtml(b.fileName || "");
+		const sizeStr = AdcBlocksEditor.formatBytes(b.size);
+		const sizeHtml = sizeStr
+			? `<span class="adc-blocks-editor__standalone-attachment-size">${AdcBlocksEditor.escapeHtml(sizeStr)}</span>`
+			: "";
+		if (b.kind === "image") {
+			const preview = url
+				? `<img src="${AdcBlocksEditor.escapeHtml(url)}" alt="${AdcBlocksEditor.escapeHtml(b.alt || b.fileName || "")}" class="adc-blocks-editor__standalone-attachment-img" loading="lazy" />`
+				: `<div class="adc-blocks-editor__standalone-attachment-placeholder" aria-hidden="true">🖼️</div>`;
+			return `<figure class="adc-blocks-editor__standalone-content adc-blocks-editor__standalone-attachment" data-attachment-kind="image">${preview}<figcaption class="adc-blocks-editor__standalone-attachment-caption">${safeName}${sizeHtml}</figcaption></figure>`;
+		}
+		return `<div class="adc-blocks-editor__standalone-content adc-blocks-editor__standalone-attachment" data-attachment-kind="file"><span class="adc-blocks-editor__standalone-attachment-icon" aria-hidden="true">📎</span><span class="adc-blocks-editor__standalone-attachment-name">${safeName}</span>${sizeHtml}</div>`;
+	}
+
+	/** Lee el estado actual de un bloque standalone desde su DOM (contenido, lenguaje, tono). */
+	private static readStandaloneFromDom(current: Block, cardEl: HTMLElement): Block {
+		const contentEl = cardEl.querySelector("[data-standalone-content]") as HTMLElement | null;
+		if (current.type === "code") {
+			const langInput = cardEl.querySelector('[data-standalone-action="language"]') as HTMLInputElement | null;
+			return {
+				...current,
+				language: (langInput?.value ?? current.language) || "text",
+				content: contentEl?.innerText ?? "",
+			};
+		}
+		if (current.type === "quote") {
+			return { ...current, text: (contentEl?.innerText ?? "").trim() };
+		}
+		if (current.type === "callout") {
+			const toneSel = cardEl.querySelector('[data-standalone-action="tone"]') as HTMLSelectElement | null;
+			const tone = (toneSel?.value || current.tone || "info") as "info" | "warning" | "success" | "error";
+			return { ...current, tone, text: (contentEl?.innerText ?? "").trim() };
+		}
+		return current;
 	}
 
 	private static standaloneLabel(b: Block): string {
@@ -127,6 +210,8 @@ export class AdcBlocksEditor {
 				return "Tabla";
 			case "divider":
 				return "Divisor";
+			case "attachment":
+				return b.kind === "image" ? "Imagen" : "Archivo";
 			default:
 				return "Bloque";
 		}
@@ -146,9 +231,11 @@ export class AdcBlocksEditor {
 			const el = child as HTMLElement;
 			const id = el.dataset?.standaloneId;
 			if (id && this.standaloneById.has(id)) {
-				const b = this.standaloneById.get(id)!;
-				orderedStandalone.push([id, b]);
-				blocks.push(b);
+				const current = this.standaloneById.get(id)!;
+				const updated = AdcBlocksEditor.readStandaloneFromDom(current, el);
+				this.standaloneById.set(id, updated);
+				orderedStandalone.push([id, updated]);
+				blocks.push(updated);
 				continue;
 			}
 			const tag = el.tagName.toLowerCase();
@@ -190,16 +277,13 @@ export class AdcBlocksEditor {
 	}
 
 	private buildBlocks(): Block[] {
-		// Adjuntos viven aparte (en el grid lateral), no en el contenteditable.
-		const attachments = (this.blocks || []).filter((b) => b && b.type === "attachment");
-		const flow = this.extractFlowBlocks();
-		// Garantía: si todo quedó vacío, devolver al menos un párrafo vacío para que el comentario no se considere vacío sólo por DOM transitorio.
-		return [...flow, ...attachments];
+		// Todos los bloques (incluidos attachments) viven dentro del flujo del editor.
+		return this.extractFlowBlocks();
 	}
 
 	private syncDomFromBlocks() {
 		if (!this.editorEl) return;
-		const flowBlocks = (this.blocks || []).filter((b) => b && b.type !== "attachment");
+		const flowBlocks = this.blocks || [];
 		// Reconstruir el mapa standalone preservando ids previos cuando sea posible.
 		const previous = new Map(this.standaloneById);
 		this.standaloneById = new Map();
@@ -243,7 +327,7 @@ export class AdcBlocksEditor {
 							id = k;
 							break;
 						}
-					return AdcBlocksEditor.standaloneCardHtml(id, b);
+					return this.standaloneCardHtml(id, b);
 				}
 				return "";
 			})
@@ -265,17 +349,19 @@ export class AdcBlocksEditor {
 		}
 	}
 
-	/** HTML de una card no editable que representa un bloque standalone en el flujo. */
-	private static standaloneCardHtml(id: string, b: Block): string {
+	/** HTML de una card con cuerpo editable que representa un bloque standalone en el flujo. */
+	private standaloneCardHtml(id: string, b: Block): string {
 		const label = AdcBlocksEditor.standaloneLabel(b);
-		const preview = AdcBlocksEditor.standalonePreview(b);
+		const controls = AdcBlocksEditor.standaloneHeaderControls(b);
+		const content = this.standaloneEditableContent(b);
 		return (
 			`<div class="adc-blocks-editor__standalone" contenteditable="false" data-standalone-id="${id}" role="group" aria-label="${AdcBlocksEditor.escapeHtml(label)}">` +
 			`<div class="adc-blocks-editor__standalone-header">` +
 			`<span class="adc-blocks-editor__standalone-label">${AdcBlocksEditor.escapeHtml(label)}</span>` +
+			`<span class="adc-blocks-editor__standalone-controls">${controls}</span>` +
 			`<button type="button" class="adc-blocks-editor__standalone-remove" data-standalone-action="remove" aria-label="Quitar bloque">✕</button>` +
 			`</div>` +
-			`<div class="adc-blocks-editor__standalone-preview">${preview}</div>` +
+			content +
 			`</div>`
 		);
 	}
@@ -340,13 +426,38 @@ export class AdcBlocksEditor {
 
 	private toggleCodeOnSelection() {
 		const sel = window.getSelection();
-		if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+		if (!sel || sel.rangeCount === 0) return;
 		const range = sel.getRangeAt(0);
 		const startParent =
 			range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
 				? (range.commonAncestorContainer as HTMLElement)
 				: range.commonAncestorContainer.parentElement;
 		const codeAncestor = startParent?.closest("code");
+
+		// Selección colapsada: toggle "modo code" con un <code> vacío y ZWSP
+		// (zero-width space) para fijar el caret dentro/fuera del span.
+		if (sel.isCollapsed) {
+			if (codeAncestor && this.editorEl?.contains(codeAncestor)) {
+				// Salir del code: mover el caret justo después del elemento.
+				const after = document.createRange();
+				after.setStartAfter(codeAncestor);
+				after.collapse(true);
+				sel.removeAllRanges();
+				sel.addRange(after);
+				return;
+			}
+			const code = document.createElement("code");
+			// ZWSP para que el caret sea posicionable dentro del code vacío.
+			code.appendChild(document.createTextNode("\u200B"));
+			range.insertNode(code);
+			const inside = document.createRange();
+			inside.setStart(code.firstChild!, 1);
+			inside.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(inside);
+			return;
+		}
+
 		if (codeAncestor && this.editorEl?.contains(codeAncestor)) {
 			const text = codeAncestor.textContent || "";
 			codeAncestor.replaceWith(document.createTextNode(text));
@@ -543,12 +654,6 @@ export class AdcBlocksEditor {
 		document.execCommand("insertText", false, text);
 	};
 
-	private readonly removeAttachmentBlock = (attachmentId: string) => {
-		this.suppressSync = true;
-		this.blocks = (this.blocks || []).filter((b) => !(b.type === "attachment" && b.attachmentId === attachmentId));
-		this.adcBlocksChange.emit(this.blocks);
-	};
-
 	// ── Bloques estructurales (code/quote/callout/divider) ─────────────────
 
 	/**
@@ -577,7 +682,7 @@ export class AdcBlocksEditor {
 		this.standaloneById.set(id, newBlock);
 		// Construir la card y un párrafo vacío trailing.
 		const wrapper = document.createElement("div");
-		wrapper.innerHTML = AdcBlocksEditor.standaloneCardHtml(id, newBlock);
+		wrapper.innerHTML = this.standaloneCardHtml(id, newBlock);
 		const cardEl = wrapper.firstElementChild as HTMLElement;
 		const trailing = document.createElement("div");
 		trailing.innerHTML = "<br>";
@@ -606,22 +711,6 @@ export class AdcBlocksEditor {
 		this.emit();
 	}
 
-	private updateStandaloneById(id: string, patch: Partial<Block>) {
-		const current = this.standaloneById.get(id);
-		if (!current) return;
-		const updated = { ...current, ...patch } as Block;
-		this.standaloneById.set(id, updated);
-		// Refrescar la vista previa de la card embebida sin perder el caret del editor.
-		if (this.editorEl) {
-			const card = this.editorEl.querySelector(`[data-standalone-id="${id}"]`);
-			const previewEl = card?.querySelector(".adc-blocks-editor__standalone-preview");
-			const labelEl = card?.querySelector(".adc-blocks-editor__standalone-label");
-			if (previewEl) previewEl.innerHTML = AdcBlocksEditor.standalonePreview(updated);
-			if (labelEl) labelEl.textContent = AdcBlocksEditor.standaloneLabel(updated);
-		}
-		this.emit();
-	}
-
 	private removeStandaloneById(id: string) {
 		if (!this.editorEl) return;
 		const card = this.editorEl.querySelector(`[data-standalone-id="${id}"]`);
@@ -635,106 +724,15 @@ export class AdcBlocksEditor {
 		}
 		this.emit();
 	}
-	private renderStructuralBlock(id: string, block: Block) {
-		const wrapperClass = "flex flex-col gap-1 p-2 bg-background border border-alt rounded-lg";
-		const headerClass = "flex items-center justify-between gap-2 text-xs text-muted";
-		const removeBtn = (
-			<button
-				type="button"
-				class="text-tdanger hover:opacity-70 px-1 cursor-pointer"
-				onClick={() => this.removeStandaloneById(id)}
-				aria-label="Quitar bloque"
-				title="Quitar bloque"
-			>
-				✕
-			</button>
-		);
 
-		if (block.type === "code") {
-			return (
-				<div class={wrapperClass} key={`c-${id}`}>
-					<div class={headerClass}>
-						<input
-							type="text"
-							class="bg-surface border border-alt rounded px-1 text-xs"
-							placeholder="lenguaje"
-							value={block.language}
-							onInput={(ev) =>
-								this.updateStandaloneById(id, { language: (ev.target as HTMLInputElement).value } as Partial<Block>)
-							}
-						/>
-						{removeBtn}
-					</div>
-					<textarea
-						class="w-full bg-surface border border-alt rounded px-2 py-1 text-text font-mono text-sm"
-						rows={4}
-						placeholder="Código"
-						value={block.content}
-						onInput={(ev) => this.updateStandaloneById(id, { content: (ev.target as HTMLTextAreaElement).value } as Partial<Block>)}
-					/>
-				</div>
-			);
+	private readonly handleEditorChange = (ev: Event) => {
+		const t = ev.target as HTMLElement | null;
+		if (!t) return;
+		const action = t.getAttribute("data-standalone-action");
+		if (action === "language" || action === "tone") {
+			this.emit();
 		}
-
-		if (block.type === "quote") {
-			return (
-				<div class={wrapperClass} key={`q-${id}`}>
-					<div class={headerClass}>
-						<span>Cita</span>
-						{removeBtn}
-					</div>
-					<textarea
-						class="w-full bg-surface border-l-4 border-primary rounded px-2 py-1 text-text italic"
-						rows={2}
-						placeholder="Cita"
-						value={block.text}
-						onInput={(ev) => this.updateStandaloneById(id, { text: (ev.target as HTMLTextAreaElement).value } as Partial<Block>)}
-					/>
-				</div>
-			);
-		}
-
-		if (block.type === "callout") {
-			return (
-				<div class={wrapperClass} key={`cl-${id}`}>
-					<div class={headerClass}>
-						<select
-							class="bg-surface border border-alt rounded px-1 text-xs"
-							onChange={(ev) =>
-								this.updateStandaloneById(id, {
-									tone: (ev.target as HTMLSelectElement).value as "info" | "warning" | "success" | "error",
-								} as Partial<Block>)
-							}
-						>
-							{(["info", "warning", "success", "error"] as const).map((tone) => (
-								<option value={tone} selected={block.tone === tone}>
-									{tone}
-								</option>
-							))}
-						</select>
-						{removeBtn}
-					</div>
-					<textarea
-						class="w-full bg-surface border border-alt rounded px-2 py-1 text-text"
-						rows={2}
-						placeholder="Mensaje destacado"
-						value={block.text}
-						onInput={(ev) => this.updateStandaloneById(id, { text: (ev.target as HTMLTextAreaElement).value } as Partial<Block>)}
-					/>
-				</div>
-			);
-		}
-
-		if (block.type === "divider") {
-			return (
-				<div class={`${wrapperClass} flex-row items-center`} key={`d-${id}`}>
-					<hr class="flex-1 border-alt" />
-					{removeBtn}
-				</div>
-			);
-		}
-		return null;
-	}
+	};
 
 	private renderToolButton(opts: {
 		label: string;
@@ -769,10 +767,6 @@ export class AdcBlocksEditor {
 
 	render() {
 		const remaining = this.maxLength - this.charCount;
-		const attachments = (this.blocks || []).filter((b) => b.type === "attachment");
-		// Listar standalone blocks por id en el orden actual del DOM.
-		const standaloneEntries: Array<{ id: string; block: Block }> = [];
-		for (const [id, block] of this.standaloneById) standaloneEntries.push({ id, block });
 		const lowOnChars = remaining <= Math.max(20, Math.floor(this.maxLength * 0.05));
 		// Sólo bloques realmente "standalone" — heading/list son inline (toolbar dedicado).
 		const blockKinds: Array<{ key: "code" | "quote" | "callout" | "divider"; label: string; icon: string }> = [
@@ -979,53 +973,9 @@ export class AdcBlocksEditor {
 					onMouseUp={this.handleSelectionChange}
 					onPaste={this.handlePaste}
 					onClick={this.handleEditorClick}
+					onChange={this.handleEditorChange}
 					onFocus={this.handleSelectionChange}
 				/>
-
-				{standaloneEntries.length > 0 && (
-					<div class="flex flex-col gap-2 p-2 border-t border-alt">
-						{standaloneEntries.map((e) => this.renderStructuralBlock(e.id, e.block))}
-					</div>
-				)}
-
-				{attachments.length > 0 && (
-					<ul class="grid grid-cols-2 sm:grid-cols-3 gap-2 list-none p-2 m-0 border-t border-alt">
-						{attachments.map((a) => {
-							const url = a.attachmentId ? this.attachmentUrls[a.attachmentId] : undefined;
-							const sizeStr = AdcBlocksEditor.formatBytes(a.size);
-							return (
-								<li
-									key={a.attachmentId}
-									class="relative flex flex-col gap-1 bg-background border border-alt rounded-lg p-2 text-xs"
-								>
-									{a.kind === "image" && url ? (
-										<a href={url} target="_blank" rel="noopener noreferrer" class="block">
-											<img src={url} alt={a.alt || a.fileName} class="w-full h-24 object-cover rounded" loading="lazy" />
-										</a>
-									) : (
-										<div class="w-full h-24 flex items-center justify-center bg-alt/30 rounded text-2xl">
-											{a.kind === "image" ? "🖼️" : "📎"}
-										</div>
-									)}
-									<div class="flex flex-col min-w-0">
-										<span class="truncate font-medium text-text" title={a.fileName}>
-											{a.fileName}
-										</span>
-										{sizeStr && <span class="text-muted">{sizeStr}</span>}
-									</div>
-									<button
-										type="button"
-										class="absolute top-1 right-1 text-tdanger bg-surface/90 rounded-full w-5 h-5 flex items-center justify-center hover:opacity-80 cursor-pointer"
-										onClick={() => this.removeAttachmentBlock(a.attachmentId!)}
-										aria-label={`Quitar ${a.fileName}`}
-									>
-										✕
-									</button>
-								</li>
-							);
-						})}
-					</ul>
-				)}
 			</div>
 		);
 	}

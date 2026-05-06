@@ -51,9 +51,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 			};
 		}
 		case "paragraph": {
-			const marks = Array.isArray(r.marks)
-				? (r.marks.filter((m) => TEXT_MARKS.includes(m as TextMark)) as TextMark[])
-				: undefined;
+			const marks = Array.isArray(r.marks) ? (r.marks.filter((m) => TEXT_MARKS.includes(m as TextMark)) as TextMark[]) : undefined;
 			return {
 				type: "paragraph",
 				text: clampString(r.text, TEXT_MAX),
@@ -90,9 +88,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 			};
 		}
 		case "quote": {
-			const rel = Array.isArray(r.rel)
-				? (r.rel.filter((x) => LINK_RELS.includes(x as LinkRel)) as LinkRel[])
-				: undefined;
+			const rel = Array.isArray(r.rel) ? (r.rel.filter((x) => LINK_RELS.includes(x as LinkRel)) as LinkRel[]) : undefined;
 			const url = typeof r.url === "string" ? clampString(r.url, 600) : undefined;
 			const safeUrl = url && /^https?:\/\//i.test(url) ? url : undefined;
 			return {
@@ -116,7 +112,10 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				return padded.map((c) => clampString(c, TABLE_CELL_MAX));
 			});
 			const columnAlign = Array.isArray(r.columnAlign)
-				? (r.columnAlign.slice(0, cols).map((a) => pickEnum(a, TEXT_ALIGNS)).filter(Boolean) as TextAlign[])
+				? (r.columnAlign
+						.slice(0, cols)
+						.map((a) => pickEnum(a, TEXT_ALIGNS))
+						.filter(Boolean) as TextAlign[])
 				: undefined;
 			return {
 				type: "table",
@@ -163,25 +162,6 @@ export function sanitizeBlocks(raw: unknown, opts: SanitizeOptions = {}): Block[
 		}
 	}
 	return out;
-}
-
-/** Devuelve un texto plano (primer párrafo o concat) útil para previews/`updateLog.reason`. */
-export function blocksToPlainText(blocks: Block[], maxLen = 200): string {
-	const parts: string[] = [];
-	for (const b of blocks) {
-		if (b.type === "paragraph" || b.type === "heading" || b.type === "quote" || b.type === "callout") {
-			if (b.text) parts.push(b.text);
-		} else if (b.type === "list") {
-			parts.push(b.items.join(", "));
-		} else if (b.type === "code") {
-			parts.push(b.content);
-		} else if (b.type === "attachment") {
-			parts.push(`📎 ${b.fileName}`);
-		}
-		if (parts.join(" ").length > maxLen) break;
-	}
-	const txt = parts.join(" ").trim();
-	return txt.length > maxLen ? txt.slice(0, maxLen - 1) + "…" : txt;
 }
 
 /** Extrae attachmentIds referenciados en bloques (para validar integridad). */
