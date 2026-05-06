@@ -76,9 +76,8 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	});
 	const [saving, setSaving] = useState(false);
 	const [history, setHistory] = useState<UpdateLogEntry[]>([]);
-	const [showHistory, setShowHistory] = useState(false);
 	const [projectIssues, setProjectIssues] = useState<Issue[]>([]);
-	const [activeTab, setActiveTab] = useState<"details" | "comments">("details");
+	const [bottomTab, setBottomTab] = useState<"comments" | "history">("comments");
 	// Adjuntos referenciados en bloques de la descripción (para resolver URLs y
 	// para enviar `attachmentIds` en el draft junto a `blocks`).
 	const [descAttachmentIds, setDescAttachmentIds] = useState<string[]>([]);
@@ -113,11 +112,13 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 		});
 	}, [issue]);
 
+	const canEdit = isNew ? canWriteProjectResource(perms, Scope.ISSUES, project, caller) : canUpdateIssue(perms, project, issue, caller);
+
 	// Cargar el draft de descripción al abrir un issue existente. A diferencia
 	// de los comentarios, no aplicamos el draft automáticamente: lo guardamos
 	// aparte y mostramos un banner "tienes cambios sin guardar" clickeable.
 	useEffect(() => {
-		if (!issue) return;
+		if (!issue || !canEdit) return;
 		let cancelled = false;
 		(async () => {
 			const r = await pmApi.getIssueDescriptionDraft(issue.id).catch(() => null);
@@ -132,8 +133,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 		return () => {
 			cancelled = true;
 		};
-	}, [issue]);
-
+	}, [issue, canEdit]);
 	// Resolver URLs de attachments referenciados en bloques de la descripción,
 	// tanto en lo guardado como en el draft (para mostrar correctamente el
 	// preview/render).
@@ -179,8 +179,6 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 			if (r.success && r.data) setProjectIssues(r.data.issues);
 		});
 	}, [project.id, project.issueLinkTypes.length]);
-
-	const canEdit = isNew ? canWriteProjectResource(perms, Scope.ISSUES, project, caller) : canUpdateIssue(perms, project, issue, caller);
 
 	const save = async () => {
 		setSaving(true);
@@ -237,43 +235,24 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	};
 
 	return (
-		<adc-modal ref={modalRef} open modalTitle={isNew ? t("issues.newIssue") : `${issue?.key} · ${t("common.edit")}`} size="lg">
-			{!isNew && issue && (
-				<div className="px-4 pt-3 flex gap-2 border-b border-border">
-					<button
-						type="button"
-						className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${activeTab === "details" ? "border-primary text-text" : "border-transparent text-muted"}`}
-						onClick={() => setActiveTab("details")}
-					>
-						{t("common.details") ?? "Detalles"}
-					</button>
-					<button
-						type="button"
-						className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${activeTab === "comments" ? "border-primary text-text" : "border-transparent text-muted"}`}
-						onClick={() => setActiveTab("comments")}
-					>
-						{t("issues.comments") ?? "Comentarios"}
-					</button>
+		<adc-modal ref={modalRef} open modalTitle={isNew ? t("issues.newIssue") : `${issue?.key} · ${t("common.edit")}`} size="xl">
+			<div className="p-4 space-y-4">
+				{/* Título arriba de todo */}
+				<div>
+					<label className="block text-sm font-medium mb-1 text-text">{t("issues.issueTitle")}</label>
+					<adc-input value={form.title} onInput={(e: any) => setForm({ ...form, title: e.target.value })} disabled={!canEdit} />
 				</div>
-			)}
-			{activeTab === "comments" && !isNew && issue ? (
-				<div className="p-4">
-					<IssueComments issueId={issue.id} caller={caller} />
-				</div>
-			) : (
-				<div className="space-y-3 p-4">
-					<div>
-						<label className="block text-sm font-medium mb-1 text-text">{t("issues.issueTitle")}</label>
-						<adc-input value={form.title} onInput={(e: any) => setForm({ ...form, title: e.target.value })} disabled={!canEdit} />
-					</div>
-					<div>
+
+				{/* Cuerpo: descripción 70% / metadatos 30% */}
+				<div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-4">
+					{/* Columna izquierda: descripción */}
+					<div className="min-w-0">
 						<label className="block text-sm font-medium mb-1 text-text">{t("common.description")}</label>
 						{hasUnsavedDraft && !descEditing && (
 							<button
 								type="button"
 								className="w-full text-left mb-2 px-3 py-2 rounded-md border border-warning bg-warning/10 text-warning text-sm hover:bg-warning/15 cursor-pointer"
 								onClick={() => {
-									// Entrar en edici\u00f3n con el draft pendiente (no aplicado a `form`).
 									if (draftDescription) {
 										setForm((prev) => ({ ...prev, description: draftDescription }));
 										setDescAttachmentIds(draftAttachmentIds);
@@ -403,114 +382,147 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 							</button>
 						)}
 					</div>
-					<div className="grid grid-cols-3 gap-2">
+					{/* Columna derecha: metadatos (30%) */}
+					<aside className="space-y-3 lg:border-l lg:border-border lg:pl-4 min-w-0">
+						<div className="grid grid-cols-3 gap-2">
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.urgency")}</label>
+								<adc-input
+									type="number"
+									value={String(form.urgency)}
+									onInput={(e: any) => setForm({ ...form, urgency: Number(e.target.value) })}
+									disabled={!canEdit}
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.impact")}</label>
+								<adc-input
+									type="number"
+									value={String(form.importance)}
+									onInput={(e: any) => setForm({ ...form, importance: Number(e.target.value) })}
+									disabled={!canEdit}
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.difficulty")}</label>
+								<adc-input
+									type="number"
+									value={String(form.difficulty)}
+									onInput={(e: any) => setForm({ ...form, difficulty: Number(e.target.value) })}
+									disabled={!canEdit}
+								/>
+							</div>
+						</div>
 						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.urgency")}</label>
-							<adc-input
-								type="number"
-								value={String(form.urgency)}
-								onInput={(e: any) => setForm({ ...form, urgency: Number(e.target.value) })}
+							<label className="block text-sm font-medium mb-1 text-text">{t("issues.column")}</label>
+							<adc-combobox
+								value={form.columnKey}
+								clearable={false}
+								options={JSON.stringify(project.kanbanColumns.map((c) => ({ label: c.name, value: c.key })))}
+								onadcChange={(e: any) => setForm({ ...form, columnKey: e.detail })}
 								disabled={!canEdit}
 							/>
 						</div>
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.impact")}</label>
-							<adc-input
-								type="number"
-								value={String(form.importance)}
-								onInput={(e: any) => setForm({ ...form, importance: Number(e.target.value) })}
-								disabled={!canEdit}
-							/>
+						<div className="grid grid-cols-1 gap-2">
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.sprint")}</label>
+								<adc-combobox
+									value={form.sprintId}
+									placeholder={t("issues.unassigned")}
+									options={JSON.stringify(sprints.map((s) => ({ label: s.name, value: s.id })))}
+									onadcChange={(e: any) => setForm({ ...form, sprintId: e.detail })}
+									disabled={!canEdit}
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.milestone")}</label>
+								<adc-combobox
+									value={form.milestoneId}
+									placeholder={t("issues.unassigned")}
+									options={JSON.stringify(milestones.map((m) => ({ label: m.name, value: m.id })))}
+									onadcChange={(e: any) => setForm({ ...form, milestoneId: e.detail })}
+									disabled={!canEdit}
+								/>
+							</div>
 						</div>
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.difficulty")}</label>
-							<adc-input
-								type="number"
-								value={String(form.difficulty)}
-								onInput={(e: any) => setForm({ ...form, difficulty: Number(e.target.value) })}
-								disabled={!canEdit}
-							/>
-						</div>
-					</div>
-					<div>
-						<label className="block text-sm font-medium mb-1 text-text">{t("issues.column")}</label>
-						<adc-combobox
-							value={form.columnKey}
-							clearable={false}
-							options={JSON.stringify(project.kanbanColumns.map((c) => ({ label: c.name, value: c.key })))}
-							onadcChange={(e: any) => setForm({ ...form, columnKey: e.detail })}
+						<UserPicker
+							label={t("issues.assignees")}
+							selectedIds={form.assigneeIds}
+							onChange={(ids) => setForm({ ...form, assigneeIds: ids })}
+							disabled={!canEdit}
+							initialCache={issue?.assigneeProfiles}
+						/>
+						<GroupPicker
+							label={t("issues.assigneeGroups")}
+							selectedIds={form.assigneeGroupIds}
+							orgId={project.orgId}
+							onChange={(ids) => setForm({ ...form, assigneeGroupIds: ids })}
+							disabled={!canEdit}
+							resolvedById={issue?.assigneeGroupProfiles}
+						/>
+						<CustomFieldsEditor
+							defs={project.customFieldDefs}
+							values={form.customFields}
+							onChange={(values) => setForm({ ...form, customFields: values })}
 							disabled={!canEdit}
 						/>
+						{project.issueLinkTypes.length > 0 && (
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.links")}</label>
+								<IssueLinksEditor
+									linkTypes={project.issueLinkTypes}
+									currentIssueId={issue?.id}
+									allIssues={projectIssues}
+									value={form.linkedIssues}
+									onChange={(links) => setForm({ ...form, linkedIssues: links })}
+									disabled={!canEdit}
+								/>
+							</div>
+						)}
+						{!isNew && canEdit && (
+							<div>
+								<label className="block text-sm font-medium mb-1 text-text">{t("issues.reason")}</label>
+								<adc-input value={form.reason} onInput={(e: any) => setForm({ ...form, reason: e.target.value })} />
+							</div>
+						)}
+					</aside>
+				</div>
+
+				{/* Acciones de guardado */}
+				{canEdit && (
+					<div className="flex gap-2 justify-end pt-2 border-t border-text/15">
+						<adc-button variant="primary" onClick={save} disabled={saving || !form.title}>
+							{saving ? t("common.saving") : t("common.save")}
+						</adc-button>
 					</div>
-					<div className="grid grid-cols-2 gap-2">
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.sprint")}</label>
-							<adc-combobox
-								value={form.sprintId}
-								placeholder={t("issues.unassigned")}
-								options={JSON.stringify(sprints.map((s) => ({ label: s.name, value: s.id })))}
-								onadcChange={(e: any) => setForm({ ...form, sprintId: e.detail })}
-								disabled={!canEdit}
-							/>
-						</div>
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.milestone")}</label>
-							<adc-combobox
-								value={form.milestoneId}
-								placeholder={t("issues.unassigned")}
-								options={JSON.stringify(milestones.map((m) => ({ label: m.name, value: m.id })))}
-								onadcChange={(e: any) => setForm({ ...form, milestoneId: e.detail })}
-								disabled={!canEdit}
-							/>
-						</div>
-					</div>
-					<UserPicker
-						label={t("issues.assignees")}
-						selectedIds={form.assigneeIds}
-						onChange={(ids) => setForm({ ...form, assigneeIds: ids })}
-						disabled={!canEdit}
-					/>
-					<GroupPicker
-						label={t("issues.assigneeGroups")}
-						selectedIds={form.assigneeGroupIds}
-						orgId={project.orgId}
-						onChange={(ids) => setForm({ ...form, assigneeGroupIds: ids })}
-						disabled={!canEdit}
-					/>
-					<CustomFieldsEditor
-						defs={project.customFieldDefs}
-						values={form.customFields}
-						onChange={(values) => setForm({ ...form, customFields: values })}
-						disabled={!canEdit}
-					/>
-					{project.issueLinkTypes.length > 0 && (
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.links")}</label>
-							<IssueLinksEditor
-								linkTypes={project.issueLinkTypes}
-								currentIssueId={issue?.id}
-								allIssues={projectIssues}
-								value={form.linkedIssues}
-								onChange={(links) => setForm({ ...form, linkedIssues: links })}
-								disabled={!canEdit}
-							/>
-						</div>
-					)}
-					{!isNew && canEdit && (
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("issues.reason")}</label>
-							<adc-input value={form.reason} onInput={(e: any) => setForm({ ...form, reason: e.target.value })} />
-						</div>
-					)}
-					{!isNew && (
-						<div>
-							<adc-button variant="accent" onClick={() => setShowHistory((s) => !s)}>
+				)}
+
+				{/* Tabs inferiores: Comentarios (default) | Historial */}
+				{!isNew && issue && (
+					<div className="pt-2">
+						<div className="flex gap-2 border-b border-border">
+							<button
+								type="button"
+								className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${bottomTab === "comments" ? "border-primary text-text" : "border-transparent text-muted"}`}
+								onClick={() => setBottomTab("comments")}
+							>
+								{t("issues.comments") ?? "Comentarios"}
+							</button>
+							<button
+								type="button"
+								className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${bottomTab === "history" ? "border-primary text-text" : "border-transparent text-muted"}`}
+								onClick={() => setBottomTab("history")}
+							>
 								{t("issues.history")} ({history.length})
-							</adc-button>
-							{showHistory && (
-								<ul className="mt-2 border border-border rounded p-2 max-h-60 overflow-auto text-xs space-y-1">
+							</button>
+						</div>
+						<div className="pt-3">
+							{bottomTab === "comments" ? (
+								<IssueComments issueId={issue.id} caller={caller} />
+							) : (
+								<ul className="rounded p-2 max-h-80 overflow-auto text-xs space-y-1">
 									{history.map((h, idx) => (
-										<li key={idx} className="border-b border-border last:border-0 pb-1">
+										<li key={idx} className="border-b border-text/15 pb-1">
 											<span className="font-mono text-muted">{new Date(h.at).toLocaleString()}</span>{" "}
 											<span className="font-semibold">{h.field}</span>:{" "}
 											<span className="text-muted">{JSON.stringify(h.oldValue)}</span> →{" "}
@@ -522,20 +534,9 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 								</ul>
 							)}
 						</div>
-					)}
-					<div className="flex gap-2 justify-end pt-2">
-						<adc-button variant="accent" onClick={onClose}>
-							{t("common.cancel")}
-						</adc-button>
-						{canEdit && (
-							<adc-button variant="primary" onClick={save} disabled={saving || !form.title}>
-								{saving ? t("common.saving") : t("common.save")}
-							</adc-button>
-						)}
 					</div>
-				</div>
-			)}
-
+				)}
+			</div>
 			<TransitionCommentModal
 				open={!!mover.pendingMove}
 				submitting={mover.moving}

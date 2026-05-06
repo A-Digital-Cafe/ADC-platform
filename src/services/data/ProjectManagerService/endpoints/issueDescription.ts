@@ -22,13 +22,13 @@ interface SaveDescriptionDraftBody {
  */
 function canEditIssueDescription(commentCtx: Awaited<ReturnType<typeof buildIssueResourceCtx>>["commentCtx"]): boolean {
 	const { project, issue, userId, tokenOrgId, pmCtx } = commentCtx;
+	if (pmCtx.isGlobalAdmin || pmCtx.hasGlobalPMWrite) return true;
 	if (!isProjectAccessibleInOrgContext(project, tokenOrgId)) return false;
 	if (project.ownerId === userId) return true;
 	if (issue.reporterId === userId) return true;
 	if (issue.assigneeIds?.includes(userId)) return true;
 	const groupIds = pmCtx.groupIds ?? [];
 	if (issue.assigneeGroupIds?.some((gid) => groupIds.includes(gid))) return true;
-	if (pmCtx.isGlobalAdmin || pmCtx.hasGlobalPMWrite) return true;
 	return false;
 }
 

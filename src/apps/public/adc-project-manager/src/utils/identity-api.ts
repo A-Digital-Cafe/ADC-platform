@@ -42,4 +42,8 @@ export const identityPmApi = {
 
 	/** Lista grupos visibles al caller. Opcionalmente filtrable por org. */
 	listGroups: (orgId?: string) => identityApi.get<ClientGroup[]>("/groups", orgId ? { params: { orgId } } : undefined),
+
+	/** Búsqueda incremental de grupos por nombre/descripción (min 2 chars). */
+	searchGroups: (q: string, orgId?: string) =>
+		identityApi.get<ClientGroup[]>("/groups/search", { params: orgId ? { q, orgId } : { q } }),
 };

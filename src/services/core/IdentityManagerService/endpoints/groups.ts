@@ -66,6 +66,19 @@ export class GroupEndpoints {
 
 	@RegisterEndpoint({
 		method: "GET",
+		url: "/api/identity/groups/search",
+		permissions: [P.IDENTITY.GROUPS.READ],
+	})
+	static async searchGroups(ctx: EndpointCtx) {
+		const q = ctx.query?.q?.trim();
+		if (!q || q.length < 2) return [];
+		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
+		const groups = await GroupEndpoints.#identity.groups.searchGroups(q, 10, ctx.token!, orgId);
+		return groups;
+	}
+
+	@RegisterEndpoint({
+		method: "GET",
 		url: "/api/identity/groups/:groupId",
 		permissions: [P.IDENTITY.GROUPS.READ],
 	})

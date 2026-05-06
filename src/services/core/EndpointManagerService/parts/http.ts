@@ -69,9 +69,11 @@ export function createHttpWrapper(
 			reply.header("X-RateLimit-Remaining", Math.max(0, rl.max - count));
 
 			if (count > rl.max) {
+				reply.header("Retry-After", rlTtlSeconds);
 				reply.status(429).send({
 					error: "RATE_LIMIT_EXCEEDED",
 					message: `Too many requests. Limit: ${rl.max} per ${rlTtlSeconds}s`,
+					retryAfter: rlTtlSeconds,
 				});
 				return;
 			}

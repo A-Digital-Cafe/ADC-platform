@@ -39,6 +39,10 @@ export interface Issue {
 	assigneeIds: string[];
 	assigneeGroupIds: string[];
 
+	/** Asignee Profiles hidratados on request */
+	assigneeProfiles?: Record<string, { username?: string; avatar?: string }>;
+	assigneeGroupProfiles?: Record<string, { name: string; description?: string }>;
+
 	priority: IssuePriority;
 	storyPoints?: number;
 
