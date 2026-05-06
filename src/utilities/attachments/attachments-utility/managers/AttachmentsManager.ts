@@ -49,11 +49,7 @@ export interface AttachmentsManagerOptions {
 	maxSize?: number;
 	allowedMimeTypes?: ReadonlyArray<string> | null;
 	presignTtl?: number;
-	/**
-	 * Si se provee, habilita métodos `@OnlyKernel()` (p.ej. `gc`) y se exige
-	 * que el caller pase exactamente esta misma key como primer argumento.
-	 */
-	kernelKey?: symbol;
+	kernelKey: symbol;
 }
 
 export interface PresignUploadInput {
@@ -98,7 +94,7 @@ export class AttachmentsManager {
 	readonly #allowedMimes: ReadonlySet<string> | null;
 	readonly #presignTtl: number;
 	// Pública para que `@OnlyKernel()` pueda leerla vía `this.kernelKey`.
-	readonly kernelKey?: symbol;
+	private kernelKey?: symbol;
 
 	constructor(opts: AttachmentsManagerOptions) {
 		this.#model = opts.model;
@@ -110,7 +106,14 @@ export class AttachmentsManager {
 		this.#maxSize = opts.maxSize ?? ATTACHMENT_DEFAULT_MAX_SIZE;
 		this.#allowedMimes = opts.allowedMimeTypes === null ? null : new Set(opts.allowedMimeTypes ?? ATTACHMENT_DEFAULT_ALLOWED_MIMES);
 		this.#presignTtl = opts.presignTtl ?? opts.s3Provider.getDefaultPresignTtl();
-		this.kernelKey = opts.kernelKey;
+		this.setKernelKey(opts.kernelKey);
+	}
+
+	private setKernelKey(key: symbol): void {
+		if (this.kernelKey) {
+			throw new Error("Kernel key ya está establecida");
+		}
+		this.kernelKey = key;
 	}
 
 	get bucket(): string {
@@ -323,6 +326,26 @@ export class AttachmentsManager {
 			await this.#s3.deleteObject({ bucket: attachment!.bucket, key: attachment!.storageKey });
 		} catch {
 			// ignorable: si el objeto no existe en S3, igual borramos el doc
+		}
+		await this.#model.deleteOne({ _id: attachmentId });
+	}
+
+	/**
+	 * ⚠️ Borrado interno sin pasar por `permissionChecker`. Únicamente para uso
+	 * desde otros managers/servicios de confianza dentro del mismo bounded
+	 * context (p.ej. `CommentsManager` haciendo GC de adjuntos huérfanos tras
+	 * borrar un comentario, donde la autorización ya fue evaluada al borrar el
+	 * comentario padre). Protegido por `@OnlyKernel()`.
+	 */
+	@OnlyKernel()
+	async forceDelete(_kernelKey: symbol, attachmentId: string): Promise<void> {
+		void _kernelKey;
+		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
+		if (!doc) return;
+		try {
+			await this.#s3.deleteObject({ bucket: doc.bucket, key: doc.storageKey });
+		} catch {
+			// si el objeto no existe en S3, igual borramos el doc
 		}
 		await this.#model.deleteOne({ _id: attachmentId });
 	}

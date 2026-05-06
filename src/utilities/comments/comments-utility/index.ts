@@ -51,6 +51,7 @@ export default class CommentsUtility extends BaseUtility {
 			maxThreadDepth: opts.maxThreadDepth,
 			maxBlocksPerComment: opts.maxBlocksPerComment,
 			editWindowMs: opts.editWindowMs,
+			attachmentsKernelKey: opts.attachmentsKernelKey,
 		});
 	}
 }

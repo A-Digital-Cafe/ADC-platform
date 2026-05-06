@@ -36,6 +36,7 @@ export interface CommentsManagerOptions {
 	maxThreadDepth?: number;
 	maxBlocksPerComment?: number;
 	editWindowMs?: number | null;
+	attachmentsKernelKey?: symbol;
 }
 
 export interface CreateInput {
@@ -105,6 +106,7 @@ export class CommentsManager {
 	readonly #maxDepth: number;
 	readonly #maxBlocks: number;
 	readonly #editWindowMs: number | null;
+	readonly #attachmentsKernelKey: symbol | undefined;
 
 	constructor(opts: CommentsManagerOptions) {
 		this.#model = opts.commentModel;
@@ -114,6 +116,7 @@ export class CommentsManager {
 		this.#permissionChecker = opts.permissionChecker;
 		this.#maxDepth = opts.maxThreadDepth ?? COMMENT_MAX_DEPTH;
 		this.#editWindowMs = opts.editWindowMs ?? null;
+		this.#attachmentsKernelKey = opts.attachmentsKernelKey;
 	}
 
 	async #checkPermission(action: CommentAction, ctx: CommentPermissionContext, comment?: Comment): Promise<void> {
@@ -457,9 +460,13 @@ export class CommentsManager {
 		const toDelete = attachmentIds.filter((id) => !stillReferenced.has(id));
 		for (const id of toDelete) {
 			try {
-				await this.#attachments.delete(ctx as any, id);
+				if (this.#attachmentsKernelKey) {
+					await this.#attachments.forceDelete(this.#attachmentsKernelKey, id);
+				} else {
+					await this.#attachments.delete(ctx as any, id);
+				}
 			} catch {
-				// ignorable: el adjunto pudo ya estar borrado o sin permiso; el comentario sigue eliminado.
+				// ignorable: el adjunto pudo ya estar borrado; el comentario sigue eliminado.
 			}
 		}
 	}

@@ -37,8 +37,8 @@ export function buildCommentDraftSchema(): Schema<CommentDraftDoc> {
 	});
 
 	schema.index({ ownerId: 1, targetType: 1, targetId: 1, parentId: 1, editingCommentId: 1 }, { unique: true });
-	// TTL: limpia drafts no actualizados en 30 días
-	schema.index({ updatedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
+	// TTL: Mongo borra drafts no actualizados en 7 días.
+	schema.index({ updatedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 7 });
 
 	return schema as unknown as Schema<CommentDraftDoc>;
 }
