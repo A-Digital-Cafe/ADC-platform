@@ -22,6 +22,7 @@ export class AdcCommentForm {
 	@Prop() submitLabel: string = "Comentar";
 	@Prop() initialBlocks: Block[] = [];
 	@Prop() initialAttachmentIds: string[] = [];
+	@Prop() attachmentUrls: Record<string, string> = {};
 	@Prop() draftDebounceMs: number = 800;
 	@Prop() showCancel: boolean = false;
 	@Prop() disabled: boolean = false;
@@ -74,6 +75,14 @@ export class AdcCommentForm {
 	private readonly handleBlocksChange = (ev: CustomEvent<Block[]>) => {
 		ev.stopPropagation();
 		this.blocks = ev.detail || [];
+		// Mantener `attachmentIds` derivado de los bloques `attachment` (orden DOM).
+		const ids: string[] = [];
+		for (const b of this.blocks) {
+			if (b.type === "attachment" && typeof b.attachmentId === "string" && b.attachmentId) {
+				ids.push(b.attachmentId);
+			}
+		}
+		this.attachmentIds = ids;
 		this.#scheduleDraftEmit();
 	};
 
@@ -100,6 +109,7 @@ export class AdcCommentForm {
 					blocks={this.blocks}
 					placeholder={this.placeholder}
 					disabled={this.disabled}
+					attachmentUrls={this.attachmentUrls}
 					onAdcBlocksChange={this.handleBlocksChange}
 					onAdcRequestAttachment={this.handleRequestAttachment}
 				/>

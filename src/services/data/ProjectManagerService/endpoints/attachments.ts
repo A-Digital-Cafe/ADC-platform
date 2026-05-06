@@ -31,7 +31,7 @@ export class IssueAttachmentsEndpoints {
 		const svc = IssueAttachmentsEndpoints.#service;
 		const { issue, attachmentCtx } = await buildIssueResourceCtx(svc, IssueAttachmentsEndpoints.#kernelKey, ctx);
 		const attachments = await svc.issueAttachments.listByOwner(attachmentCtx, "pm-issue", issue.id);
-		return { attachments: attachments.map((a) => svc.issueAttachments.toDto(a)) };
+		return attachments.map((a) => svc.issueAttachments.toDto(a));
 	}
 
 	@RegisterEndpoint({
@@ -66,7 +66,7 @@ export class IssueAttachmentsEndpoints {
 		const svc = IssueAttachmentsEndpoints.#service;
 		const { attachmentCtx } = await buildIssueResourceCtx(svc, IssueAttachmentsEndpoints.#kernelKey, ctx, { requireAuth: true });
 		const attachment = await svc.issueAttachments.confirmUpload(attachmentCtx, ctx.params.attachmentId);
-		return { attachment: svc.issueAttachments.toDto(attachment) };
+		return svc.issueAttachments.toDto(attachment);
 	}
 
 	@RegisterEndpoint({

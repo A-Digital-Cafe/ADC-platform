@@ -229,6 +229,10 @@ export class CommentsManager {
 		await this.#model.updateOne({ _id: commentId }, { $set: { blocks: sanitized, attachmentIds, edited: true, updatedAt } });
 		const updatedDoc = { ...doc, blocks: sanitized, attachmentIds, edited: true, updatedAt };
 
+		// GC: adjuntos que estaban antes y ya no están referenciados por nadie.
+		const removed = (doc.attachmentIds ?? []).filter((id) => !attachmentIds.includes(id));
+		if (removed.length) await this.#cleanupOrphanedAttachments(ctx, removed, commentId, doc.targetType, doc.targetId);
+
 		await this.#drafts.deleteForEdit(ctx.userId, { targetType: doc.targetType, targetId: doc.targetId, parentId: doc.parentId }, commentId);
 
 		return this.#hydrate(ctx, [updatedDoc]).then((arr) => arr[0]);
@@ -239,6 +243,8 @@ export class CommentsManager {
 		if (!doc) return;
 		const comment = this.#docToCommentNoAttachments(doc);
 		await this.#checkPermission("delete", ctx, comment);
+
+		const referencedAttachmentIds = doc.attachmentIds ?? [];
 
 		if (doc.replyCount > 0) {
 			// soft delete preservando hilo
@@ -255,12 +261,18 @@ export class CommentsManager {
 					},
 				}
 			);
+			if (referencedAttachmentIds.length) {
+				await this.#cleanupOrphanedAttachments(ctx, referencedAttachmentIds, commentId, doc.targetType, doc.targetId);
+			}
 			return;
 		}
 
 		await this.#model.deleteOne({ _id: commentId });
 		if (doc.parentId) {
 			await this.#model.updateOne({ _id: doc.parentId, replyCount: { $gt: 0 } }, { $inc: { replyCount: -1 } });
+		}
+		if (referencedAttachmentIds.length) {
+			await this.#cleanupOrphanedAttachments(ctx, referencedAttachmentIds, commentId, doc.targetType, doc.targetId);
 		}
 	}
 
@@ -411,5 +423,44 @@ export class CommentsManager {
 
 	#docToCommentNoAttachments(doc: CommentDoc): Comment {
 		return this.#docToComment(doc, new Map());
+	}
+
+	/**
+	 * Borra de S3 + Mongo los adjuntos cuya última referencia era este comentario.
+	 * Para cada id, comprueba si algún OTRO comentario (no soft-deleted) del mismo
+	 * `target` lo sigue referenciando; si no, lo elimina vía `attachmentsManager`.
+	 * Errores individuales se loggean pero no abortan el flujo: la eliminación del
+	 * comentario ya está hecha y un adjunto huérfano residual no debe romperla.
+	 */
+	async #cleanupOrphanedAttachments(
+		ctx: CommentPermissionContext,
+		attachmentIds: string[],
+		excludeCommentId: string,
+		targetType: string,
+		targetId: string
+	): Promise<void> {
+		if (!this.#attachments || !attachmentIds.length) return;
+		const referencedElsewhere = await this.#model
+			.find(
+				{
+					_id: { $ne: excludeCommentId },
+					targetType,
+					targetId,
+					deleted: false,
+					attachmentIds: { $in: attachmentIds },
+				},
+				{ attachmentIds: 1 }
+			)
+			.lean<Array<{ attachmentIds: string[] }>>();
+		const stillReferenced = new Set<string>();
+		for (const c of referencedElsewhere) for (const id of c.attachmentIds) stillReferenced.add(id);
+		const toDelete = attachmentIds.filter((id) => !stillReferenced.has(id));
+		for (const id of toDelete) {
+			try {
+				await this.#attachments.delete(ctx as any, id);
+			} catch {
+				// ignorable: el adjunto pudo ya estar borrado o sin permiso; el comentario sigue eliminado.
+			}
+		}
 	}
 }

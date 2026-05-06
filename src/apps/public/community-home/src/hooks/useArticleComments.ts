@@ -123,8 +123,8 @@ export function useArticleComments(slug: string) {
 	const reactToggle = useCallback(
 		async (detail: { commentId: string; emoji: string; reacted: boolean }) => {
 			const updated = detail.reacted
-				? await socialApi.unreactComment(slug, detail.commentId, detail.emoji)
-				: await socialApi.reactComment(slug, detail.commentId, detail.emoji);
+				? await socialApi.reactComment(slug, detail.commentId, detail.emoji)
+				: await socialApi.unreactComment(slug, detail.commentId, detail.emoji);
 			if (updated) setFlat((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
 		},
 		[slug]

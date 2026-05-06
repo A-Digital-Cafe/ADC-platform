@@ -1,11 +1,12 @@
 import { Schema, type Connection, type Model } from "mongoose";
 import type { Attachment, AttachmentStatus } from "../../../../common/types/attachments/Attachment.js";
 
-export type AttachmentDoc = Attachment;
+export type AttachmentDoc = Omit<Attachment, "id"> & { _id: string };
 
 export function buildAttachmentSchema(): Schema<AttachmentDoc> {
 	const schema = new Schema<AttachmentDoc>(
 		{
+			_id: { type: String, required: true } as any,
 			basePath: { type: String, required: true, maxlength: 80 },
 			subPath: { type: String, required: true, maxlength: 240 },
 			ownerType: { type: String, required: true, maxlength: 40 },
@@ -36,7 +37,7 @@ export function buildAttachmentSchema(): Schema<AttachmentDoc> {
 	schema.index({ basePath: 1, subPath: 1, ownerId: 1 });
 	schema.index({ status: 1, createdAt: 1 });
 
-	return schema;
+	return schema as Schema<AttachmentDoc>;
 }
 
 export function getOrCreateAttachmentModel(connection: Connection, collectionName: string): Model<AttachmentDoc> {
