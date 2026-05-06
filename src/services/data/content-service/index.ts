@@ -60,6 +60,7 @@ export default class ContentService extends BaseService {
 					return ctx.ownerType === "article-comment" ? `${slug}/comments` : `${slug}`;
 				},
 				permissionChecker: articleAttachmentsChecker,
+				kernelKey,
 			});
 
 			commentsManager = commentsUtil.createCommentsManager({
@@ -67,6 +68,7 @@ export default class ContentService extends BaseService {
 				collectionName: "article_comments",
 				attachmentsManager,
 				permissionChecker: articleCommentsChecker,
+				attachmentsKernelKey: kernelKey,
 			});
 		} catch (e) {
 			this.logger.logWarn(

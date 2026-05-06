@@ -217,17 +217,52 @@ export class AdcBlocksEditor {
 		}
 	}
 
+	/** Tags inline que pueden aparecer como hermanos top-level del editor cuando el contenteditable
+	 * todavía no envolvió el texto en un bloque. Se agrupan junto a text nodes en un único paragraph
+	 * preservando los wrappers (`<b>`, `<code>`, …) vía `nodeToMarkdown`. */
+	private static readonly INLINE_TAGS = new Set([
+		"b",
+		"strong",
+		"i",
+		"em",
+		"u",
+		"s",
+		"strike",
+		"code",
+		"span",
+		"a",
+		"br",
+		"font",
+		"sub",
+		"sup",
+		"mark",
+	]);
+
+	private static isInlineTopLevel(node: Node): boolean {
+		if (node.nodeType === Node.TEXT_NODE) return true;
+		if (node.nodeType !== Node.ELEMENT_NODE) return false;
+		return AdcBlocksEditor.INLINE_TAGS.has((node as HTMLElement).tagName.toLowerCase());
+	}
+
 	/** Recorre el contenteditable y reconstruye la lista de bloques inline + standalone en su orden real. */
 	private extractFlowBlocks(): Block[] {
 		if (!this.editorEl) return [];
 		const blocks: Block[] = [];
 		const orderedStandalone: Array<[string, Block]> = [];
+		let inlineBuf: Node[] = [];
+		const flushInline = () => {
+			if (inlineBuf.length === 0) return;
+			const md = inlineBuf.map(AdcBlocksEditor.nodeToMarkdown).join("").trim();
+			inlineBuf = [];
+			if (md) blocks.push({ type: "paragraph", text: md });
+		};
 		for (const child of Array.from(this.editorEl.childNodes)) {
-			if (child.nodeType !== Node.ELEMENT_NODE) {
-				const text = (child.textContent ?? "").trim();
-				if (text) blocks.push({ type: "paragraph", text });
+			if (AdcBlocksEditor.isInlineTopLevel(child)) {
+				inlineBuf.push(child);
 				continue;
 			}
+			flushInline();
+			if (child.nodeType !== Node.ELEMENT_NODE) continue;
 			const el = child as HTMLElement;
 			const id = el.dataset?.standaloneId;
 			if (id && this.standaloneById.has(id)) {
@@ -253,6 +288,7 @@ export class AdcBlocksEditor {
 			const md = AdcBlocksEditor.inlineMarkdown(el).trim();
 			if (md) blocks.push({ type: "paragraph", text: md });
 		}
+		flushInline();
 		// Reordenar el Map según el orden encontrado en DOM, descartando ids huérfanos.
 		this.standaloneById = new Map(orderedStandalone);
 		return blocks;
@@ -438,9 +474,13 @@ export class AdcBlocksEditor {
 		// (zero-width space) para fijar el caret dentro/fuera del span.
 		if (sel.isCollapsed) {
 			if (codeAncestor && this.editorEl?.contains(codeAncestor)) {
-				// Salir del code: mover el caret justo después del elemento.
+				// Salir del code: insertar un text node ZWSP fuera del <code> y anclar el caret allí.
+				// Sin esto, Chromium re-introduce el siguiente carácter dentro del <code> por la regla
+				// de boundary (icono "se queda activado" al pulsar espacio).
+				const exitNode = document.createTextNode("\u200B");
+				codeAncestor.parentNode?.insertBefore(exitNode, codeAncestor.nextSibling);
 				const after = document.createRange();
-				after.setStartAfter(codeAncestor);
+				after.setStart(exitNode, 1);
 				after.collapse(true);
 				sel.removeAllRanges();
 				sel.addRange(after);

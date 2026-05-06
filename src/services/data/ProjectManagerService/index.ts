@@ -105,6 +105,7 @@ export default class ProjectManagerService extends BaseService {
 					return ctx.ownerType === "pm-issue-comment" ? `${projectId}/${issueId}/comments` : `${projectId}/${issueId}`;
 				},
 				permissionChecker: issueAttachmentsChecker,
+				kernelKey,
 			});
 
 			this.#issueCommentsManager = commentsUtil.createCommentsManager({
@@ -112,6 +113,7 @@ export default class ProjectManagerService extends BaseService {
 				collectionName: "pm_comments",
 				attachmentsManager: this.#issueAttachmentsManager,
 				permissionChecker: issueCommentsChecker,
+				attachmentsKernelKey: kernelKey,
 			});
 		} catch (e) {
 			const err = e as Error;

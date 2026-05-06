@@ -45,6 +45,7 @@ export default class AttachmentsUtility extends BaseUtility {
 			maxSize: opts.maxSize,
 			allowedMimeTypes: opts.allowedMimeTypes,
 			presignTtl: opts.presignTtl,
+			kernelKey: opts.kernelKey,
 		});
 	}
 }
