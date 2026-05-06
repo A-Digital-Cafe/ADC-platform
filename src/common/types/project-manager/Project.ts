@@ -38,6 +38,12 @@ export interface PriorityStrategy {
 export interface ProjectSettings {
 	/** Límites WIP por columna (por `column.key`). */
 	wipLimits?: Record<string, number>;
+	/**
+	 * Si está activo, mover un issue a una columna `isDone` requiere dejar un
+	 * comentario explicando el cierre. El comentario se guarda con `label =
+	 * "transition-reason"` para que el frontend lo destaque visualmente.
+	 */
+	requireCommentOnFinalTransition?: boolean;
 }
 
 /** Proyecto del Project Manager. */

@@ -26,6 +26,10 @@ type ProjectManagerErrorTypes =
 	| "TIER_LIMIT_REACHED"
 	// Feature flags
 	| "ATTACHMENTS_NOT_IMPLEMENTED"
+	// Comments
+	| "COMMENT_REQUIRED_ON_FINAL"
+	| "COMMENTS_UNAVAILABLE"
+	| "ATTACHMENTS_UNAVAILABLE"
 	// Auth
 	| "NO_TOKEN";
 

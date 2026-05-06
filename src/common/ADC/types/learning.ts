@@ -13,6 +13,8 @@ export type CalloutTone = "info" | "warning" | "success" | "error";
 export type CalloutRole = "note" | "status" | "alert";
 export type LinkRel = "nofollow" | "noopener" | "noreferrer" | "ugc" | "sponsored";
 
+export type AttachmentKind = "image" | "file";
+
 export type Block =
 	| { type: "heading"; level: 2 | 3 | 4 | 5 | 6; text: string; align?: TextAlign; id?: string }
 	| { type: "paragraph"; text: string; align?: TextAlign; marks?: TextMark[] }
@@ -21,6 +23,17 @@ export type Block =
 	| { type: "callout"; tone: CalloutTone; text: string; role?: CalloutRole }
 	| { type: "quote"; text: string; url?: string; rel?: LinkRel[]; ariaLabel?: string }
 	| { type: "table"; header: string[]; rows: string[][]; columnAlign?: TextAlign[]; caption?: string; rowHeaders?: boolean }
+	| {
+			type: "attachment";
+			kind: AttachmentKind;
+			attachmentId: string;
+			fileName: string;
+			mimeType: string;
+			size: number;
+			alt?: string;
+			caption?: string;
+			align?: TextAlign;
+	  }
 	| { type: "divider" };
 
 // ============================================================================

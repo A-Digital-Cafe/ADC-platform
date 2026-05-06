@@ -12,8 +12,8 @@
  *   node scripts/generate-react-jsx.mjs --all                    # all ui-libraries
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 
@@ -60,6 +60,49 @@ function extractLocalType(srcContent, name) {
 	return `type ${name} = ${m[1].trim()};`;
 }
 
+/**
+ * Extract an exported type alias from a source file.
+ * e.g. `export type AttachmentUrlMap = Record<string, string>;`
+ */
+function extractExportedType(srcContent, name) {
+	const re = new RegExp(String.raw`export\s+type\s+${name}\s*=\s*([^;]+);`);
+	const m = srcContent.match(re);
+	if (!m) return null;
+	return `type ${name} = ${m[1].trim()};`;
+}
+
+/** Recursively walk a directory collecting .ts/.tsx files. */
+function walkSrcFiles(dir, acc = []) {
+	if (!existsSync(dir)) return acc;
+	for (const entry of readdirSync(dir)) {
+		const full = join(dir, entry);
+		const st = statSync(full);
+		if (st.isDirectory()) walkSrcFiles(full, acc);
+		else if (/\.(tsx?|ts)$/.test(entry)) acc.push(full);
+	}
+	return acc;
+}
+
+/** Build a registry of exported interfaces/types across the lib's src/. */
+function buildExportRegistry(srcDir) {
+	const files = walkSrcFiles(srcDir);
+	/** @type {Map<string, string>} name → file content */
+	const nameToFile = new Map();
+	for (const f of files) {
+		const content = readFileSync(f, "utf-8");
+		const ifaceRe = /export\s+interface\s+(\w+)/g;
+		const typeRe = /export\s+type\s+(\w+)\s*=/g;
+		let m;
+		while ((m = ifaceRe.exec(content)) !== null) {
+			if (!nameToFile.has(m[1])) nameToFile.set(m[1], content);
+		}
+		while ((m = typeRe.exec(content)) !== null) {
+			if (!nameToFile.has(m[1])) nameToFile.set(m[1], content);
+		}
+	}
+	return nameToFile;
+}
+
 // ─── Main generator ───
 
 function generate(libPath) {
@@ -73,6 +116,9 @@ function generate(libPath) {
 
 	const content = readFileSync(dtsPath, "utf-8");
 	const lines = content.split("\n");
+
+	// Global registry of all exported interfaces/types in the library's src/
+	const exportRegistry = buildExportRegistry(resolve(absLib, "src"));
 
 	// ============================================================
 	// 1. Collect custom type imports (from .tsx sources, not @stencil)
@@ -115,30 +161,74 @@ function generate(libPath) {
 
 		const srcContent = readFileSync(srcFile, "utf-8");
 		const def = extractInterface(srcContent, original);
-		if (!def) continue;
+		if (!def) {
+			// Try as exported type alias
+			const typeDef = extractExportedType(srcContent, original);
+			if (typeDef) {
+				extraDefs.push(`export ${typeDef}`);
+				if (alias !== original) typeAliases.set(alias, original);
+			}
+			continue;
+		}
 
 		typeDefs.set(original, def);
 		if (alias !== original) typeAliases.set(alias, original);
+	}
 
-		// Check for local (non-exported) types referenced in the interface body
-		// Match PascalCase identifiers that aren't TS built-ins
-		const builtIns = new Set([
-			"string", "number", "boolean", "any", "unknown", "void", "null",
-			"undefined", "never", "object", "Array", "Record", "Map", "Set",
-			"Promise", "Partial", "Required", "Readonly", "Pick", "Omit",
-			"true", "false", "Event", "MouseEvent", "KeyboardEvent",
-			"HTMLElement", "Element", "EventEmitter", "CustomEvent",
-		]);
-		const refRegex = /(?<!\w)([A-Z][a-zA-Z0-9]+)(?=[\s;[\]|&,?>)}])/g;
+	// Recursively resolve any referenced types still missing.
+	const builtIns = new Set([
+		"string", "number", "boolean", "any", "unknown", "void", "null",
+		"undefined", "never", "object", "Array", "Record", "Map", "Set",
+		"Promise", "Partial", "Required", "Readonly", "Pick", "Omit",
+		"true", "false", "Event", "MouseEvent", "KeyboardEvent",
+		"HTMLElement", "Element", "EventEmitter", "CustomEvent",
+	]);
+	const refRegex = /(?<!\w)([A-Z][a-zA-Z0-9]+)(?=[\s;[\]|&,?>)}])/g;
+
+	const queue = [...typeDefs.entries()].map(([n, d]) => ({ name: n, def: d }));
+	while (queue.length > 0) {
+		const { def } = queue.shift();
 		let rm;
 		while ((rm = refRegex.exec(def)) !== null) {
 			const ref = rm[1];
-			if (builtIns.has(ref) || typeDefs.has(ref) || ref === original) continue;
-			// Try to extract non-exported type from same file
-			const localDef = extractLocalType(srcContent, ref);
-			if (localDef && !extraDefs.some(d => d.includes(`type ${ref}`))) {
-				extraDefs.push(localDef);
+			if (builtIns.has(ref) || typeDefs.has(ref) || extraDefs.some(d => d.includes(`type ${ref} =`) || d.includes(`type ${ref}=`))) continue;
+
+			// Try the registry: any exported interface/type in the lib
+			const regContent = exportRegistry.get(ref);
+			if (regContent) {
+				const ifaceDef = extractInterface(regContent, ref);
+				if (ifaceDef) {
+					typeDefs.set(ref, ifaceDef);
+					queue.push({ name: ref, def: ifaceDef });
+					continue;
+				}
+				const typeDef = extractExportedType(regContent, ref);
+				if (typeDef) {
+					extraDefs.push(`export ${typeDef}`);
+					queue.push({ name: ref, def: typeDef });
+					continue;
+				}
 			}
+		}
+		refRegex.lastIndex = 0;
+	}
+
+	// Also pull in non-exported local types from the original imported source files
+	for (const [, { sourceRel }] of typeImports) {
+		const basePath = sourceRel.replace(/^\.\//, "").replace(/\.js$/, "");
+		let srcFile = resolve(absLib, "src", basePath + ".tsx");
+		if (!existsSync(srcFile)) srcFile = resolve(absLib, "src", basePath + ".ts");
+		if (!existsSync(srcFile)) continue;
+		const srcContent = readFileSync(srcFile, "utf-8");
+		for (const [, def] of typeDefs) {
+			let rm;
+			while ((rm = refRegex.exec(def)) !== null) {
+				const ref = rm[1];
+				if (builtIns.has(ref) || typeDefs.has(ref) || extraDefs.some(d => d.includes(`type ${ref} =`) || d.includes(`type ${ref}=`))) continue;
+				const localDef = extractLocalType(srcContent, ref);
+				if (localDef) extraDefs.push(localDef);
+			}
+			refRegex.lastIndex = 0;
 		}
 	}
 
@@ -169,8 +259,55 @@ function generate(libPath) {
 		const block = extractBraceBlock(nsBlock, braceStart);
 
 		// Parse props line by line, stripping event handlers (on* props)
+		// Pre-process: join multi-line prop declarations into single logical lines.
+		// A prop spans multiple lines when its type uses inline `{ ... }` or other
+		// brace-enclosed structures. We accumulate until braces are balanced and
+		// the line ends with `;`.
+		// The block string includes the surrounding `{` and `}` — strip them first.
+		const innerBlock = block.replace(/^\s*\{/, "").replace(/\}\s*$/, "");
+		const rawLines = innerBlock.split("\n");
+		const blockLines = [];
+		let pending = "";
+		let pendingDepth = 0;
+		for (const rawLine of rawLines) {
+			const trimmedRaw = rawLine.trim();
+			// JSDoc passes through as-is to keep buffer tracking simple
+			if (
+				pending === "" &&
+				(trimmedRaw.startsWith("/**") || trimmedRaw.startsWith("*") || trimmedRaw.endsWith("*/"))
+			) {
+				blockLines.push(rawLine);
+				continue;
+			}
+			if (pending === "") {
+				// Start of a logical prop line
+				pending = rawLine;
+				pendingDepth = 0;
+				for (const ch of rawLine) {
+					if (ch === "{") pendingDepth++;
+					else if (ch === "}") pendingDepth--;
+				}
+				if (pendingDepth <= 0 && trimmedRaw.endsWith(";")) {
+					blockLines.push(pending);
+					pending = "";
+					pendingDepth = 0;
+				}
+			} else {
+				pending += " " + trimmedRaw;
+				for (const ch of rawLine) {
+					if (ch === "{") pendingDepth++;
+					else if (ch === "}") pendingDepth--;
+				}
+				if (pendingDepth <= 0 && trimmedRaw.endsWith(";")) {
+					blockLines.push(pending);
+					pending = "";
+					pendingDepth = 0;
+				}
+			}
+		}
+		if (pending) blockLines.push(pending);
+
 		const propLines = [];
-		const blockLines = block.split("\n");
 		let inJsdoc = false;
 		let jsdocBuffer = [];
 

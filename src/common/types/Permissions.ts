@@ -94,6 +94,8 @@ export const P = buildAllPermissions() as {
 		readonly CONTENT: ScopePermissions<"community">;
 		readonly PUBLISH_STATUS: ScopePermissions<"community">;
 		readonly SOCIAL: ScopePermissions<"community">;
+		readonly COMMENTS: ScopePermissions<"community">;
+		readonly ATTACHMENTS: ScopePermissions<"community">;
 	};
 	readonly PROJECT_MANAGER: {
 		readonly PROJECTS: ScopePermissions<"project-manager">;
@@ -104,6 +106,7 @@ export const P = buildAllPermissions() as {
 		readonly ATTACHMENTS: ScopePermissions<"project-manager">;
 		readonly SETTINGS: ScopePermissions<"project-manager">;
 		readonly STATS: ScopePermissions<"project-manager">;
+		readonly COMMENTS: ScopePermissions<"project-manager">;
 	};
 };
 

@@ -34,17 +34,6 @@ export const issueSchema = new Schema<Issue>(
 				targetIssueId: String,
 			},
 		],
-		attachments: [
-			{
-				id: String,
-				fileName: String,
-				mimeType: String,
-				size: Number,
-				storageKey: String,
-				uploadedBy: String,
-				uploadedAt: { type: Date, default: Date.now },
-			},
-		],
 
 		updateLog: [
 			{

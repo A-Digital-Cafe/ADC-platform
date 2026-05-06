@@ -1,0 +1,11 @@
+{
+	"name": "comments-utility",
+	"version": "1.0.0",
+	"description": "Utility para gestionar comentarios polimórficos con threading, reactions y drafts. Reutilizable por servicios.",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"dependencies": {
+		"mongoose": "^8.0.0"
+	}
+}

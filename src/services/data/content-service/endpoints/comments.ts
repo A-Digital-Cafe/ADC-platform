@@ -1,101 +1,224 @@
 import type { Model } from "mongoose";
-import type { Comment } from "../../../../common/ADC/types/community.js";
 import type { Article } from "../../../../common/ADC/types/learning.js";
-import { COMMENT_MAX_LENGTH, COMMENT_MIN_LENGTH } from "../../../../common/ADC/types/community.js";
+import type { Block } from "../../../../common/ADC/types/learning.js";
+import type { CommentLabel } from "../../../../common/types/comments/Comment.ts";
 import { RegisterEndpoint, type EndpointCtx } from "../../../core/EndpointManagerService/index.js";
 import { HttpError } from "@common/types/ADCCustomError.ts";
-import { P } from "@common/types/Permissions.ts";
-import { canModerateSocial } from "../utils/community-perms.js";
+import type { CommentsManager } from "../../../../utilities/comments/comments-utility/index.js";
+import { buildArticleResourceCtx } from "./utils/articleResourceCtx.ts";
 
 interface SlugParams {
 	slug: string;
 }
 
-interface SlugIdParams {
+interface SlugCommentParams {
 	slug: string;
-	id: string;
+	commentId: string;
 }
 
-interface CreateCommentBody {
-	content?: unknown;
+interface SlugCommentReactionParams extends SlugCommentParams {
+	emoji: string;
 }
 
-const HEX24 = /^[0-9a-f]{24}$/i;
-
-function sanitizeContent(raw: unknown): string {
-	if (typeof raw !== "string") throw new HttpError(400, "INVALID_CONTENT", "content must be a string");
-	const trimmed = raw.trim();
-	if (trimmed.length < COMMENT_MIN_LENGTH) throw new HttpError(400, "EMPTY_CONTENT", "Comment cannot be empty");
-	if (trimmed.length > COMMENT_MAX_LENGTH) throw new HttpError(400, "CONTENT_TOO_LONG", `Comment exceeds ${COMMENT_MAX_LENGTH} chars`);
-	return trimmed;
+interface CreateBody {
+	blocks: Block[];
+	parentId?: string | null;
+	attachmentIds?: string[];
+	label?: CommentLabel;
 }
+
+interface UpdateBody {
+	blocks: Block[];
+	attachmentIds?: string[];
+}
+
+interface DraftBody {
+	blocks: Block[];
+	attachmentIds?: string[];
+	parentId?: string | null;
+	editingCommentId?: string | null;
+}
+
+const TARGET_TYPE = "article";
+
+const COMMENT_RATE_LIMIT = { max: 30, timeWindow: 60_000 };
+const REACT_RATE_LIMIT = { max: 60, timeWindow: 60_000 };
+const DRAFT_RATE_LIMIT = { max: 60, timeWindow: 60_000 };
 
 export class CommentEndpoints {
-	private static model: Model<Comment>;
-	private static articleModel: Model<Article>;
+	static #articleModel: Model<Article>;
+	static #commentsManager: CommentsManager | null = null;
 
-	static init(model: Model<any>, articleModel: Model<any>) {
-		CommentEndpoints.model ??= model;
-		CommentEndpoints.articleModel ??= articleModel;
+	static init(articleModel: Model<Article>, commentsManager: CommentsManager): void {
+		CommentEndpoints.#articleModel ??= articleModel;
+		CommentEndpoints.#commentsManager ??= commentsManager;
 	}
 
-	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments" })
-	static async list(ctx: EndpointCtx<SlugParams>): Promise<{ comments: Comment[] }> {
-		const { slug } = ctx.params;
-		const docs = await CommentEndpoints.model.find({ articleSlug: slug }).sort({ createdAt: 1 }).limit(500).lean();
-		return { comments: docs as Comment[] };
+	static get articleModel(): Model<Article> {
+		return CommentEndpoints.#articleModel;
+	}
+
+	static #manager(): CommentsManager {
+		if (!CommentEndpoints.#commentsManager) {
+			throw new HttpError(503, "COMMENTS_UNAVAILABLE", "Comentarios no disponibles");
+		}
+		return CommentEndpoints.#commentsManager;
+	}
+
+	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments", deferAuth: true })
+	static async list(ctx: EndpointCtx<SlugParams>) {
+		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx);
+		const cursor = ctx.query.cursor || null;
+		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
+		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
+		return CommentEndpoints.#manager().list(commentCtx, {
+			targetType: TARGET_TYPE,
+			targetId: articleSlug,
+			parentId,
+			cursor,
+			limit,
+		});
+	}
+
+	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments/threads/:rootId", deferAuth: true })
+	static async thread(ctx: EndpointCtx<{ slug: string; rootId: string }>) {
+		const { commentCtx } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx);
+		const cursor = ctx.query.cursor || null;
+		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
+		return CommentEndpoints.#manager().getThread(commentCtx, ctx.params.rootId, { cursor, limit });
+	}
+
+	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments/count", deferAuth: true })
+	static async count(ctx: EndpointCtx<SlugParams>) {
+		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx);
+		const total = await CommentEndpoints.#manager().count(commentCtx, { targetType: TARGET_TYPE, targetId: articleSlug });
+		return { total };
 	}
 
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/learning/articles/:slug/comments",
-		permissions: [P.COMMUNITY.SOCIAL.WRITE],
-		options: { rateLimit: { max: 5, timeWindow: 3_600_000 } },
+		deferAuth: true,
+		options: { rateLimit: COMMENT_RATE_LIMIT },
 	})
-	static async create(ctx: EndpointCtx<SlugParams, CreateCommentBody>): Promise<{ comment: Comment }> {
-		const { slug } = ctx.params;
-		const user = ctx.user;
-		if (!user) throw new HttpError(401, "UNAUTHENTICATED", "Authentication required");
-
-		const article = await CommentEndpoints.articleModel.findOne({ slug, listed: true }).select("slug listed").lean();
-		if (!article) throw new HttpError(404, "ARTICLE_NOT_FOUND", "Article not found or not published");
-
-		const content = sanitizeContent(ctx.data?.content);
-
-		const doc = await CommentEndpoints.model.create({
-			articleSlug: slug,
-			authorId: user.id,
-			authorName: user.username,
-			authorImage: (user.metadata?.avatar as string) || undefined,
-			content,
+	static async create(ctx: EndpointCtx<SlugParams, CreateBody>) {
+		if (!ctx.data?.blocks?.length) throw new HttpError(400, "MISSING_FIELDS", "`blocks` requerido");
+		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, {
+			requireAuth: true,
+			requireListed: true,
 		});
+		return CommentEndpoints.#manager().create(commentCtx, {
+			targetType: TARGET_TYPE,
+			targetId: articleSlug,
+			parentId: ctx.data.parentId ?? null,
+			blocks: ctx.data.blocks,
+			attachmentIds: ctx.data.attachmentIds,
+			label: ctx.data.label,
+		});
+	}
 
-		return { comment: doc.toObject() as Comment };
+	@RegisterEndpoint({
+		method: "PUT",
+		url: "/api/learning/articles/:slug/comments/:commentId",
+		deferAuth: true,
+		options: { rateLimit: COMMENT_RATE_LIMIT },
+	})
+	static async update(ctx: EndpointCtx<SlugCommentParams, UpdateBody>) {
+		if (!ctx.data?.blocks?.length) throw new HttpError(400, "MISSING_FIELDS", "`blocks` requerido");
+		const { commentCtx } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		return CommentEndpoints.#manager().update(commentCtx, ctx.params.commentId, {
+			blocks: ctx.data.blocks,
+			attachmentIds: ctx.data.attachmentIds,
+		});
 	}
 
 	@RegisterEndpoint({
 		method: "DELETE",
-		url: "/api/learning/articles/:slug/comments/:id",
-		permissions: [P.COMMUNITY.SOCIAL.WRITE],
+		url: "/api/learning/articles/:slug/comments/:commentId",
+		deferAuth: true,
+		options: { rateLimit: COMMENT_RATE_LIMIT },
 	})
-	static async remove(ctx: EndpointCtx<SlugIdParams>): Promise<{ success: boolean }> {
-		const { slug, id } = ctx.params;
-		const user = ctx.user;
-		if (!user) throw new HttpError(401, "UNAUTHENTICATED", "Authentication required");
-		if (!HEX24.test(id)) throw new HttpError(400, "INVALID_ID", "Invalid comment id");
+	static async remove(ctx: EndpointCtx<SlugCommentParams>) {
+		const { commentCtx } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		await CommentEndpoints.#manager().delete(commentCtx, ctx.params.commentId);
+		return { ok: true };
+	}
 
-		const comment = await CommentEndpoints.model.findOne({ _id: id, articleSlug: slug }).select("authorId").lean();
-		if (!comment) throw new HttpError(404, "COMMENT_NOT_FOUND", "Comment not found");
+	@RegisterEndpoint({
+		method: "POST",
+		url: "/api/learning/articles/:slug/comments/:commentId/reactions/:emoji",
+		deferAuth: true,
+		options: { rateLimit: REACT_RATE_LIMIT },
+	})
+	static async react(ctx: EndpointCtx<SlugCommentReactionParams>) {
+		const { commentCtx } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		const emoji = decodeURIComponent(ctx.params.emoji);
+		return CommentEndpoints.#manager().react(commentCtx, ctx.params.commentId, emoji);
+	}
 
-		const isOwner = comment.authorId === user.id;
-		const isModerator = canModerateSocial(user);
+	@RegisterEndpoint({
+		method: "DELETE",
+		url: "/api/learning/articles/:slug/comments/:commentId/reactions/:emoji",
+		deferAuth: true,
+		options: { rateLimit: REACT_RATE_LIMIT },
+	})
+	static async unreact(ctx: EndpointCtx<SlugCommentReactionParams>) {
+		const { commentCtx } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		const emoji = decodeURIComponent(ctx.params.emoji);
+		return CommentEndpoints.#manager().unreact(commentCtx, ctx.params.commentId, emoji);
+	}
 
-		if (!isOwner && !isModerator) {
-			const article = await CommentEndpoints.articleModel.findOne({ slug }).select("authorId").lean();
-			if (article?.authorId !== user.id) throw new HttpError(403, "FORBIDDEN", "Not allowed to delete this comment");
-		}
+	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments/draft", deferAuth: true })
+	static async getDraft(ctx: EndpointCtx<SlugParams>) {
+		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
+		const editingCommentId = ctx.query.editingCommentId === undefined ? null : ctx.query.editingCommentId || null;
+		const draft = await CommentEndpoints.#manager().getDraft(commentCtx, {
+			targetType: TARGET_TYPE,
+			targetId: articleSlug,
+			parentId,
+			editingCommentId,
+		});
+		return { draft };
+	}
 
-		await CommentEndpoints.model.deleteOne({ _id: id, articleSlug: slug });
-		return { success: true };
+	@RegisterEndpoint({
+		method: "PUT",
+		url: "/api/learning/articles/:slug/comments/draft",
+		deferAuth: true,
+		options: { rateLimit: DRAFT_RATE_LIMIT, skipIdempotency: true },
+	})
+	static async saveDraft(ctx: EndpointCtx<SlugParams, DraftBody>) {
+		if (!Array.isArray(ctx.data?.blocks)) throw new HttpError(400, "MISSING_FIELDS", "`blocks` requerido");
+		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		return CommentEndpoints.#manager().saveDraft(
+			commentCtx,
+			{
+				targetType: TARGET_TYPE,
+				targetId: articleSlug,
+				parentId: ctx.data.parentId ?? null,
+				editingCommentId: ctx.data.editingCommentId ?? null,
+			},
+			{ blocks: ctx.data.blocks, attachmentIds: ctx.data.attachmentIds }
+		);
+	}
+
+	@RegisterEndpoint({
+		method: "DELETE",
+		url: "/api/learning/articles/:slug/comments/draft",
+		deferAuth: true,
+		options: { skipIdempotency: true },
+	})
+	static async deleteDraft(ctx: EndpointCtx<SlugParams>) {
+		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx, { requireAuth: true });
+		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
+		const editingCommentId = ctx.query.editingCommentId === undefined ? null : ctx.query.editingCommentId || null;
+		await CommentEndpoints.#manager().deleteDraft(commentCtx, {
+			targetType: TARGET_TYPE,
+			targetId: articleSlug,
+			parentId,
+			editingCommentId,
+		});
+		return { ok: true };
 	}
 }

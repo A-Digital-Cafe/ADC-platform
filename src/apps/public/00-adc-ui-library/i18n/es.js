@@ -27,6 +27,27 @@ export default {
 		REFRESH_FAILED: "Error al refrescar tokens",
 		// Errores de idempotencia
 		IDEMPOTENCY_RUNNING: "Esta operación ya está siendo procesada. Espere hasta 2 minutos antes de intentar nuevamente.",
-		IDEMPOTENCY_KEY_MISSING: "Se requiere una clave de idempotencia para esta operación."
+		IDEMPOTENCY_KEY_MISSING: "Se requiere una clave de idempotencia para esta operación.",
+		// Errores de adjuntos
+		ATTACHMENT_BAD_INPUT: "Datos de adjunto inválidos",
+		ATTACHMENT_TOO_LARGE: "El archivo supera el tamaño máximo permitido",
+		ATTACHMENT_UNSUPPORTED_MIME: "Tipo de archivo no soportado",
+		ATTACHMENT_FORBIDDEN: "No tienes permiso para realizar esta acción sobre este adjunto",
+		ATTACHMENT_NOT_FOUND: "Adjunto no encontrado",
+		ATTACHMENT_NOT_UPLOADED: "El adjunto aún no ha sido subido",
+		ATTACHMENT_PENDING: "El adjunto está pendiente de confirmación",
+		// Errores de comentarios
+		COMMENT_FORBIDDEN: "No tienes permiso para realizar esta acción sobre este comentario",
+		COMMENT_NOT_FOUND: "Comentario no encontrado",
+		COMMENT_PARENT_NOT_FOUND: "Comentario padre no encontrado",
+		COMMENT_PARENT_MISMATCH: "El comentario padre pertenece a otro recurso",
+		COMMENT_DEPTH_EXCEEDED: "Se ha excedido la profundidad máxima del hilo",
+		COMMENT_EMPTY: "El comentario no puede estar vacío",
+		COMMENT_TOO_MANY_ATTACHMENTS: "Demasiados adjuntos en este comentario",
+		COMMENT_ATTACHMENTS_DISABLED: "Los adjuntos no están habilitados para comentarios aquí",
+		COMMENT_BAD_ATTACHMENT: "Adjunto inválido o no autorizado",
+		COMMENT_ATTACHMENT_NOT_OWNED: "Solo puedes adjuntar archivos que tú hayas subido",
+		COMMENT_EDIT_WINDOW_CLOSED: "Ya no se puede editar este comentario",
+		COMMENT_BAD_EMOJI: "Emoji inválido"
 	}
 };

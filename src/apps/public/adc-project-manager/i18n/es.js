@@ -51,6 +51,7 @@ export default {
 		yes: "Sí",
 		no: "No",
 		description: "Descripción",
+		details: "Detalles",
 		name: "Nombre",
 		status: "Estado",
 		createdAt: "Creado",
@@ -105,6 +106,7 @@ export default {
 		milestone: "Milestone",
 		move: "Mover",
 		history: "Historial",
+		comments: "Comentarios",
 		filter: "Filtrar",
 		orderBy: "Ordenar por",
 		byPriority: "Prioridad",
@@ -223,6 +225,9 @@ export default {
 		customFnId: "ID de función custom",
 		wipHint: "Dejá el valor en 0 o vacío para quitar el límite.",
 		badgeOptions: "Opciones del badge",
+		requireCommentOnFinalTransition: "Requerir comentario al cerrar",
+		requireCommentOnFinalTransitionHint:
+			"Si está activo, mover un issue a una columna final requiere dejar un comentario que documente la razón.",
 		errors: {
 			labelNeedsOptions: "El campo \"{{name}}\" requiere al menos una opción.",
 			badgeNeedsOptions: "El campo badge \"{{name}}\" requiere al menos una opción."

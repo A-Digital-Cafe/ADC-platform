@@ -184,6 +184,29 @@ export class UserEndpoints {
 		return {};
 	}
 
+	/**
+	 * Endpoint público para resolver avatares de un conjunto de usuarios
+	 * (e.g. autores de comentarios, miembros listados, etc.). Devuelve únicamente
+	 * username + avatar — datos ya públicos donde se muestren.
+	 */
+	@RegisterEndpoint({
+		method: "GET",
+		url: "/api/identity/users/avatars",
+		options: { rateLimit: { max: 60, timeWindow: 60_000 } },
+	})
+	static async getAvatars(ctx: EndpointCtx) {
+		const idsParam = (ctx.query?.ids ?? "").toString().trim();
+		if (!idsParam) return { profiles: {} };
+		const ids = idsParam
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean);
+		const profiles = await UserEndpoints.#identity.users.getPublicProfiles(ids);
+		const out: Record<string, { username?: string; avatar?: string }> = {};
+		for (const [id, p] of profiles) out[id] = p;
+		return { profiles: out };
+	}
+
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users",

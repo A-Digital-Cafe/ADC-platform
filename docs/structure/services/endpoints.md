@@ -94,6 +94,42 @@ Regla práctica:
 
 - Si el permiso depende sólo del rol global, usar `permissions`.
 - Si depende del estado del recurso o del caller sobre ese recurso, usar `deferAuth: true`.
+- Endpoints públicos puros (no leen `ctx.user` ni delegan a un `permissionChecker`): no aplicar ninguno de los dos. En cualquier otro caso, debe haber `permissions` o `deferAuth`.
+
+### Semántica de `deferAuth` vs nada
+
+- Sin `deferAuth` y sin `permissions`: el `PermissionValidator` registrado por `IdentityManagerService` **no se invoca**. `ctx.user` queda con lo que pobló el middleware HTTP a partir del token, sin revalidación adicional ni refresco de permisos.
+- Con `deferAuth: true`: el validator corre con permisos vacíos, no falla si no hay token, pero **revalida el token contra la sesión activa** y refresca `ctx.user.permissions`. Es el modo correcto cuando un endpoint puede ser consumido autenticado u anónimo y la decisión final la toma el `permissionChecker` del manager (caso típico: lecturas que filtran por `articleListed`/`isAuthor`/`isModerator`, o mutaciones cuyo permiso depende del recurso).
+- Con `permissions: [...]` no vacío: modo estricto, exige token y rol/permiso válido antes de ejecutar el handler.
+
+## Carga de recurso + `requireAuth` por endpoint
+
+Cuando varios endpoints comparten el mismo recurso de entrada (mismo `:slug`, `:id`, etc.) y construyen el mismo contexto enriquecido para un `permissionChecker`, centralizar esa carga en un helper `buildXxxResourceCtx` colocado en `endpoints/utils/`.
+
+El helper debe:
+
+1. Leer el recurso una sola vez (`findOne(...).lean()` con `select` mínimo).
+2. Lanzar `404` si no existe (y opcionalmente si no es público vía `requireListed`).
+3. Aceptar un flag `requireAuth?: boolean` que lance `401` si el endpoint es mutativo o privado y `ctx.user` falta.
+4. Devolver el contexto ya tipado para el `permissionChecker` del manager (p. ej. `commentCtx`, `attachmentCtx`).
+
+```ts
+// endpoints/utils/articleResourceCtx.ts
+export async function buildArticleResourceCtx(
+	model: Model<Article>,
+	ctx: EndpointCtx<{ slug: string }>,
+	opts: { requireAuth?: boolean; requireListed?: boolean } = {}
+) {
+	/* ... */
+}
+```
+
+Reglas de uso:
+
+- En lecturas anónimas (`GET` de colecciones públicas): llamar **sin** `requireAuth` para permitir invitados; el `permissionChecker` decidirá qué se ve.
+- En mutaciones (`POST`/`PUT`/`DELETE`) y en endpoints privados (drafts, presign, confirm): pasar `{ requireAuth: true }`.
+- Combinar siempre con `deferAuth: true` en el decorator: así `ctx.user` queda poblado y el helper puede chequear su presencia.
+- `requireAuth` del helper **no sustituye** la autorización: sólo asegura identidad antes de delegar al manager, que aplica el `permissionChecker` real.
 
 ## Contexto del caller
 
@@ -165,6 +201,9 @@ static async create(ctx: EndpointCtx<never, { name?: string }>) {
 - [ ] La validación del endpoint es sólo de shape y formato.
 - [ ] Los campos sensibles del body se descartan antes de delegar.
 - [ ] La autorización usa `permissions` o `deferAuth`, no ambos para el mismo caso.
+- [ ] Si el endpoint depende del recurso, usa `deferAuth: true` y delega al `permissionChecker` del manager.
+- [ ] La carga del recurso compartido vive en un helper `buildXxxResourceCtx` con flag `requireAuth`.
+- [ ] Mutaciones y endpoints privados pasan `{ requireAuth: true }` al helper.
 - [ ] El endpoint no toca modelos ni providers.
 - [ ] Las respuestas siguen una convención estable.
 - [ ] Todos los errores salen mediante el error tipado del servicio.

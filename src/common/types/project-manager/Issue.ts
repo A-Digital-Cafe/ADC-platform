@@ -1,5 +1,5 @@
 import type { IssueLink } from "./IssueLink.ts";
-import type { IssueAttachment } from "./Attachment.ts";
+import type { AttachmentDTO } from "../attachments/Attachment.ts";
 import type { UpdateLogEntry } from "./UpdateLogEntry.ts";
 import type { CustomFieldValue } from "./CustomField.ts";
 
@@ -43,7 +43,11 @@ export interface Issue {
 
 	customFields: Record<string, CustomFieldValue>;
 	linkedIssues: IssueLink[];
-	attachments: IssueAttachment[];
+	/**
+	 * Adjuntos del issue. Se hidratan vía `AttachmentsManager`
+	 * (no se almacenan embebidos en el documento).
+	 */
+	attachments?: AttachmentDTO[];
 
 	updateLog: UpdateLogEntry[];
 

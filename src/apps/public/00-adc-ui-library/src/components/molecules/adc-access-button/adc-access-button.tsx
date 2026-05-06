@@ -2,6 +2,7 @@ import { Component, Prop, State, h, Event, EventEmitter, Listen, Element } from 
 import { isPrivateHost } from "../../../utils/url.js";
 import { broadcastAuthChange, forceLogoutAndRefresh, getStoredAuthUser, setStoredAuthUser, setupAuthSync } from "../../../../utils/auth-sync.js";
 import { appendCsrfHeader } from "../../../../utils/csrf.js";
+import { buildAvatarUrl } from "../../../../utils/avatar.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 
 interface OrgOption {
@@ -269,17 +270,14 @@ export class AdcAccessButton {
 	};
 
 	/**
-	 * Genera URL de avatar usando DiceBear API (avatares procedurales)
-	 * Usa el ID del usuario como seed para consistencia
+	 * Resuelve la URL del avatar usando la sesión (que ya combina perfil/metadata/
+	 * linkedAccounts en el backend) con fallback determinista a DiceBear.
 	 */
 	private getAvatarUrl(): string {
-		if (this.user?.avatar) {
-			return this.user.avatar;
-		}
-
-		// DiceBear - avatares procedurales gratuitos
-		const seed = this.user?.id || this.user?.username || "default";
-		return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+		return buildAvatarUrl({
+			avatar: this.user?.avatar ?? null,
+			seed: this.user?.id || this.user?.username || "default",
+		});
 	}
 
 	render() {

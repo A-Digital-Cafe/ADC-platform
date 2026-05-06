@@ -36,6 +36,24 @@ interface GlobalRoute {
 	method: string;
 	path: string;
 	handler: FastifyHandler;
+	/** Score de especificidad. Mayor = más específica. Se usa para ordenar la tabla de matching. */
+	specificity: number;
+}
+
+/**
+ * Calcula la especificidad de un patrón de ruta. Más estática = mayor.
+ * Garantiza que `/x/draft` se evalúe antes que `/x/:id` durante el matching.
+ */
+function routeSpecificity(pattern: string): number {
+	const segments = pattern.split("/").filter(Boolean);
+	let score = 0;
+	for (const seg of segments) {
+		if (seg.startsWith(":")) score += 1;
+		else if (seg.includes("*")) score += 0;
+		else score += 100;
+	}
+	// Desempate menor: rutas más largas son ligeramente preferidas.
+	return score * 1000 + segments.length;
 }
 
 interface PathMatchResult {
@@ -452,7 +470,11 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			method: method.toUpperCase(),
 			path,
 			handler: normalizedHandler,
+			specificity: routeSpecificity(path),
 		});
+		// Mantener invariante: tabla ordenada por especificidad descendente para
+		// que el matcher (orden de iteración) priorice rutas estáticas.
+		this.globalRoutes.sort((a, b) => b.specificity - a.specificity);
 
 		this.logger.logDebug(`Ruta global registrada: ${method.toUpperCase()} ${path}`);
 	}
@@ -502,7 +524,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			host.routes.set(methodUpper, new Map());
 		}
 
-		host.routes.get(methodUpper)!.set(path, normalizeHandler(handler));
+		const methodMap = host.routes.get(methodUpper)!;
+		methodMap.set(path, normalizeHandler(handler));
+		// Reordenar el Map por especificidad descendente para que rutas
+		// estáticas (e.g. `/x/draft`) ganen frente a paramétricas (`/x/:id`).
+		const sorted = Array.from(methodMap.entries()).sort(([a], [b]) => routeSpecificity(b) - routeSpecificity(a));
+		host.routes.set(methodUpper, new Map(sorted));
 		this.logger.logDebug(`Ruta de host registrada: ${hostPattern} ${methodUpper} ${path}`);
 	}
 

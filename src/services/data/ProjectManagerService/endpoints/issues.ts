@@ -1,15 +1,16 @@
 import { RegisterEndpoint, type EndpointCtx } from "../../../core/EndpointManagerService/index.js";
-import { P } from "@common/types/Permissions.ts";
 import { ProjectManagerError } from "@common/types/custom-errors/ProjectManagerError.ts";
 import type ProjectManagerService from "../index.js";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
 import type { IssueListFilters } from "../dao/issues.ts";
+import type { Block } from "@common/ADC/types/learning.ts";
+import { buildIssueResourceCtx } from "./utils/issueResourceCtx.ts";
+import { assertCommentForFinalTransition } from "./utils/transitionGuards.ts";
 
 const ISSUE_CREATE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
 const ISSUE_UPDATE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
 const ISSUE_DELETE_RATE_LIMIT = { max: 5, timeWindow: 60_000 };
 const ISSUE_MOVE_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
-const ISSUE_ATTACHMENT_RATE_LIMIT = { max: 20, timeWindow: 60_000 };
 
 export class IssueEndpoints {
 	static #service: ProjectManagerService;
@@ -103,11 +104,44 @@ export class IssueEndpoints {
 		deferAuth: true,
 		options: { rateLimit: ISSUE_MOVE_RATE_LIMIT },
 	})
-	static async move(ctx: EndpointCtx<{ id: string }, { columnKey: string; reason?: string }>) {
+	static async move(
+		ctx: EndpointCtx<{ id: string }, { columnKey: string; reason?: string; commentBlocks?: Block[]; commentAttachmentIds?: string[] }>
+	) {
 		if (!ctx.data?.columnKey) throw new ProjectManagerError(400, "MISSING_FIELDS", "`columnKey` es requerido");
 		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
-		return service.issues.move(ctx.params.id, ctx.data.columnKey, ctx.data.reason, ctx.token ?? undefined, caller);
+		const kernelKey = IssueEndpoints.#kernelKey;
+		const caller = await service.resolveCaller(kernelKey, ctx);
+
+		// Pre-resolución para validar la transición y comprobar el flag del proyecto
+		// antes de mover el issue.
+		const pre = await buildIssueResourceCtx(service, kernelKey, ctx, { requireAuth: true });
+		const commentBlocks = ctx.data.commentBlocks;
+		assertCommentForFinalTransition(pre.project, ctx.data.columnKey, commentBlocks);
+
+		const updated = await service.issues.move(ctx.params.id, ctx.data.columnKey, ctx.data.reason, ctx.token ?? undefined, caller);
+
+		// Si se proporcionó un comentario (obligatorio o no), se persiste con
+		// `label = "transition-reason"` para destacarlo en el historial.
+		if (commentBlocks && commentBlocks.length) {
+			try {
+				await service.issueComments.create(pre.commentCtx, {
+					targetType: "pm-issue",
+					targetId: updated.id,
+					blocks: commentBlocks,
+					attachmentIds: ctx.data.commentAttachmentIds,
+					label: "transition-reason",
+					meta: {
+						fromColumn: pre.issue.columnKey,
+						toColumn: updated.columnKey,
+						reason: ctx.data.reason,
+					},
+				});
+			} catch (e) {
+				console.warn(`[ProjectManager] Move OK pero falló el comentario de transición: ${(e as Error).message}`);
+			}
+		}
+
+		return updated;
 	}
 
 	@RegisterEndpoint({
@@ -121,16 +155,5 @@ export class IssueEndpoints {
 		const issue = await service.issues.get(ctx.params.id, ctx.token ?? undefined, caller);
 		if (!issue) throw new ProjectManagerError(404, "ISSUE_NOT_FOUND", "Issue no encontrado");
 		return { updateLog: issue.updateLog };
-	}
-
-	/** Stub read-only: uploads requieren `internal-s3-provider` (Fase 6). */
-	@RegisterEndpoint({
-		method: "POST",
-		url: "/api/pm/issues/:id/attachments",
-		permissions: [P.PROJECT_MANAGER.ATTACHMENTS.WRITE],
-		options: { rateLimit: ISSUE_ATTACHMENT_RATE_LIMIT },
-	})
-	static async upload() {
-		throw new ProjectManagerError(501, "ATTACHMENTS_NOT_IMPLEMENTED", "Uploads no disponibles hasta que exista `internal-s3-provider`");
 	}
 }

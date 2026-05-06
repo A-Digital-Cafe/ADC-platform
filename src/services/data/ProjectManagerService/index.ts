@@ -10,6 +10,8 @@ import { ProjectEndpoints } from "./endpoints/projects.js";
 import { SprintEndpoints } from "./endpoints/sprints.js";
 import { MilestoneEndpoints } from "./endpoints/milestones.js";
 import { IssueEndpoints } from "./endpoints/issues.js";
+import { IssueCommentsEndpoints } from "./endpoints/comments.js";
+import { IssueAttachmentsEndpoints } from "./endpoints/attachments.js";
 import { PMScopes } from "@common/types/project-manager/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
@@ -20,6 +22,14 @@ import type { Issue } from "@common/types/project-manager/Issue.ts";
 import type { CallerMembership, PMCtx } from "./dao/projects.ts";
 import { Kernel } from "../../../kernel.ts";
 import { hasGlobalAdminRole, isOrgAdminOrPM } from "./utils/pm-roles.ts";
+import type AttachmentsUtility from "../../../utilities/attachments/attachments-utility/index.js";
+import type CommentsUtility from "../../../utilities/comments/comments-utility/index.js";
+import type { AttachmentsManager, SubPathContext } from "../../../utilities/attachments/attachments-utility/index.js";
+import type { CommentsManager } from "../../../utilities/comments/comments-utility/index.js";
+import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
+import { issueAttachmentsChecker } from "./permissions/issueAttachments.ts";
+import { issueCommentsChecker } from "./permissions/issueComments.ts";
+import { ProjectManagerError as ProjectManagerErrorRef } from "@common/types/custom-errors/ProjectManagerError.ts";
 
 export default class ProjectManagerService extends BaseService {
 	public readonly name = "ProjectManagerService";
@@ -28,6 +38,8 @@ export default class ProjectManagerService extends BaseService {
 	#sprintManager: SprintManager | null = null;
 	#milestoneManager: MilestoneManager | null = null;
 	#issueManager: IssueManager | null = null;
+	#issueAttachmentsManager: AttachmentsManager | null = null;
+	#issueCommentsManager: CommentsManager | null = null;
 
 	#authVerifier: IAuthVerifier | null = null;
 	#identity: IdentityManagerService | null = null;
@@ -44,7 +56,14 @@ export default class ProjectManagerService extends BaseService {
 	readonly #getAuthVerifier: AuthVerifierGetter = () => this.#authVerifier;
 
 	@EnableEndpoints({
-		managers: () => [ProjectEndpoints, SprintEndpoints, MilestoneEndpoints, IssueEndpoints],
+		managers: () => [
+			ProjectEndpoints,
+			SprintEndpoints,
+			MilestoneEndpoints,
+			IssueEndpoints,
+			IssueCommentsEndpoints,
+			IssueAttachmentsEndpoints,
+		],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -68,10 +87,46 @@ export default class ProjectManagerService extends BaseService {
 
 		this.#authVerifier = this.#identity.createAuthVerifier();
 
+		// --- Attachments + Comments wiring ---
+		try {
+			const s3 = this.getMyProvider<InternalS3Provider>("object/internal-s3-provider");
+			const attachmentsUtil = this.getMyUtility<AttachmentsUtility>("attachments-utility");
+			const commentsUtil = this.getMyUtility<CommentsUtility>("comments-utility");
+			const connection = this.mongoProvider.getConnection();
+
+			this.#issueAttachmentsManager = attachmentsUtil.createAttachmentsManager({
+				mongoConnection: connection,
+				collectionName: "pm_attachments",
+				s3Provider: s3,
+				basePath: "projects",
+				subPathResolver: (ctx: SubPathContext) => {
+					const projectId = (ctx as any).project?.id ?? "_";
+					const issueId = (ctx as any).issue?.id ?? ctx.ownerId ?? "_";
+					return ctx.ownerType === "pm-issue-comment" ? `${projectId}/${issueId}/comments` : `${projectId}/${issueId}`;
+				},
+				permissionChecker: issueAttachmentsChecker,
+			});
+
+			this.#issueCommentsManager = commentsUtil.createCommentsManager({
+				mongoConnection: connection,
+				collectionName: "pm_comments",
+				attachmentsManager: this.#issueAttachmentsManager,
+				permissionChecker: issueCommentsChecker,
+			});
+		} catch (e) {
+			const err = e as Error;
+			this.logger.logWarn(
+				`No se pudieron inicializar attachments/comments del PM: ${err.message}. Endpoints relacionados fallarán con 503 hasta que estén disponibles.`
+			);
+			if (err.stack) this.logger.logDebug(err.stack);
+		}
+
 		ProjectEndpoints.init(this, kernelKey);
 		SprintEndpoints.init(this, kernelKey);
 		MilestoneEndpoints.init(this, kernelKey);
 		IssueEndpoints.init(this, kernelKey);
+		IssueCommentsEndpoints.init(this, kernelKey);
+		IssueAttachmentsEndpoints.init(this, kernelKey);
 
 		this.logger.logOk("ProjectManagerService iniciado");
 	}
@@ -176,6 +231,18 @@ export default class ProjectManagerService extends BaseService {
 	get identity(): IdentityManagerService {
 		if (!this.#identity) throw new Error("IdentityManagerService not initialized");
 		return this.#identity;
+	}
+
+	get issueAttachments(): AttachmentsManager {
+		if (!this.#issueAttachmentsManager)
+			throw new ProjectManagerErrorRef(503, "ATTACHMENTS_UNAVAILABLE", "Attachments no disponibles (provider/utility no inicializado)");
+		return this.#issueAttachmentsManager;
+	}
+
+	get issueComments(): CommentsManager {
+		if (!this.#issueCommentsManager)
+			throw new ProjectManagerErrorRef(503, "COMMENTS_UNAVAILABLE", "Comments no disponibles (provider/utility no inicializado)");
+		return this.#issueCommentsManager;
 	}
 
 	@DisableEndpoints()

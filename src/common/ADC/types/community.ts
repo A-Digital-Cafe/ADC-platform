@@ -1,18 +1,8 @@
 /**
- * Tipos para interacción social en Community (comentarios, ratings).
- * Fuente única de verdad para backend y frontend.
+ * Tipos para interacción social en Community (ratings, métricas).
+ * Los comentarios ahora se almacenan vía `comments-utility` y se exponen como
+ * el tipo unificado `Comment` de `@common/types/comments/Comment`.
  */
-
-export interface Comment {
-	_id?: string;
-	articleSlug: string;
-	authorId: string;
-	authorName?: string;
-	authorImage?: string;
-	content: string;
-	createdAt?: string;
-	updatedAt?: string;
-}
 
 export interface Rating {
 	articleSlug: string;
@@ -28,8 +18,5 @@ export interface RatingStats {
 	myRating: number | null;
 }
 
-/** Límites de tamaño/seguridad para inputs sociales */
-export const COMMENT_MAX_LENGTH = 2000;
-export const COMMENT_MIN_LENGTH = 1;
 export const RATING_MIN = 1;
 export const RATING_MAX = 5;

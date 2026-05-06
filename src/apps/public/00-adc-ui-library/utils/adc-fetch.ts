@@ -59,6 +59,19 @@ function hashIdempotency(data: unknown): string {
 	return h.toString(36);
 }
 
+/**
+ * Garantiza que el header `Idempotency-Key` solo contenga caracteres ISO-8859-1
+ * imprimibles (HTTP no acepta unicode en headers). Si detecta caracteres fuera
+ * de rango (e.g. emojis), reemplaza la clave por su hash determinista.
+ */
+function sanitizeIdempotencyKey(key: string): string {
+	for (let i = 0; i < key.length; i++) {
+		const code = key.charCodeAt(i);
+		if (code > 0xff || code < 0x20) return hashIdempotency(key);
+	}
+	return key;
+}
+
 function isCircuitBreakerStatus(status?: number): status is number {
 	return typeof status === "number" && status >= 400 && status < 600;
 }
@@ -179,7 +192,8 @@ export function createAdcApi(config: AdcApiConfig) {
 		options: RequestOptions<TData> = {}
 	): Promise<AdcFetchResult<T>> {
 		const { params, body, headers, translateParams, idempotencyKey, idempotencyData, signal, skipCsrf } = options;
-		const resolvedIdempotencyKey = idempotencyData !== undefined ? hashIdempotency(idempotencyData) : idempotencyKey;
+		const rawIdempotencyKey = idempotencyData !== undefined ? hashIdempotency(idempotencyData) : idempotencyKey;
+		const resolvedIdempotencyKey = rawIdempotencyKey ? sanitizeIdempotencyKey(rawIdempotencyKey) : undefined;
 
 		const url = `${baseUrl}${path}${buildQueryString(params)}`;
 		const requestHeaders = {

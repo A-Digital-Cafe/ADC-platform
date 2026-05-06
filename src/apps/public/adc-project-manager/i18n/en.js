@@ -51,6 +51,7 @@ export default {
 		yes: "Yes",
 		no: "No",
 		description: "Description",
+		details: "Details",
 		name: "Name",
 		status: "Status",
 		createdAt: "Created",
@@ -105,6 +106,7 @@ export default {
 		milestone: "Milestone",
 		move: "Move",
 		history: "History",
+		comments: "Comments",
 		filter: "Filter",
 		orderBy: "Order by",
 		byPriority: "Priority",
@@ -223,6 +225,9 @@ export default {
 		customFnId: "Custom function id",
 		wipHint: "Leave at 0 or empty to remove the limit.",
 		badgeOptions: "Badge options",
+		requireCommentOnFinalTransition: "Require comment on close",
+		requireCommentOnFinalTransitionHint:
+			"When enabled, moving an issue to a final column requires leaving a comment documenting the reason.",
 		errors: {
 			labelNeedsOptions: "Field \"{{name}}\" requires at least one option.",
 			badgeNeedsOptions: "Badge field \"{{name}}\" requires at least one option."

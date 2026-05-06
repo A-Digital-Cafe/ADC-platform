@@ -1,0 +1,11 @@
+{
+	"name": "attachments-utility",
+	"version": "1.0.0",
+	"description": "Utility para gestionar adjuntos S3-compatibles (presign, confirm, descarga, borrado) reutilizable por servicios.",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"dependencies": {
+		"mongoose": "^8.0.0"
+	}
+}

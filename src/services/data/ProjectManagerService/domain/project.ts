@@ -60,6 +60,7 @@ export const projectSchema = new Schema<Project>(
 		},
 		settings: {
 			wipLimits: Schema.Types.Mixed,
+			requireCommentOnFinalTransition: { type: Boolean, default: false },
 		},
 
 		issueCounter: { type: Number, default: 0 },

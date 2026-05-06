@@ -94,7 +94,6 @@ export class IssueManager {
 			storyPoints: input.storyPoints,
 			customFields: input.customFields ?? {},
 			linkedIssues: input.linkedIssues ?? [],
-			attachments: [],
 			updateLog: [],
 			createdAt: new Date(),
 			updatedAt: new Date(),

@@ -1,0 +1,116 @@
+/* Placeholder visual cuando el editor está vacío. */
+.adc-blocks-editor__input:empty::before,
+.adc-blocks-editor__input > div:only-child:empty::before {
+	content: attr(data-placeholder);
+	color: var(--color-muted, #9aa0a6);
+	pointer-events: none;
+}
+
+/* Estilo de code inline dentro del editor */
+.adc-blocks-editor__input code {
+	background: var(--color-alt, rgba(0, 0, 0, 0.06));
+	padding: 0 0.25rem;
+	border-radius: 4px;
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: 0.95em;
+}
+
+.adc-blocks-editor__input strong {
+	font-weight: 700;
+}
+
+.adc-blocks-editor__input em {
+	font-style: italic;
+}
+
+/* Bloques inline (heading/list) renderizados directamente en el contenteditable. */
+.adc-blocks-editor__input h2 {
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.25;
+	margin: 0.5rem 0 0.25rem;
+}
+
+.adc-blocks-editor__input h3 {
+	font-size: 1.25rem;
+	font-weight: 700;
+	line-height: 1.3;
+	margin: 0.4rem 0 0.2rem;
+}
+
+.adc-blocks-editor__input h4 {
+	font-size: 1.1rem;
+	font-weight: 600;
+	line-height: 1.35;
+	margin: 0.3rem 0 0.15rem;
+}
+
+.adc-blocks-editor__input ul,
+.adc-blocks-editor__input ol {
+	margin: 0.25rem 0;
+	padding-left: 1.5rem;
+}
+
+.adc-blocks-editor__input ul {
+	list-style: disc outside;
+}
+
+.adc-blocks-editor__input ol {
+	list-style: decimal outside;
+}
+
+.adc-blocks-editor__input li {
+	margin: 0.1rem 0;
+}
+
+/* Card no editable que representa un bloque standalone (code/quote/callout/divider) dentro del flujo. */
+.adc-blocks-editor__standalone {
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	margin: 0.5rem 0;
+	padding: 0.5rem 0.75rem;
+	border: 1px dashed var(--color-alt, rgba(0, 0, 0, 0.15));
+	border-radius: 0.5rem;
+	background: var(--color-background, rgba(0, 0, 0, 0.02));
+	user-select: none;
+}
+
+.adc-blocks-editor__standalone-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	font-size: 0.7rem;
+	color: var(--color-muted, #888);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.adc-blocks-editor__standalone-label {
+	font-weight: 600;
+}
+
+.adc-blocks-editor__standalone-remove {
+	background: transparent;
+	border: none;
+	color: var(--color-tdanger, #c0392b);
+	cursor: pointer;
+	font-size: 0.8rem;
+	padding: 0.1rem 0.4rem;
+	border-radius: 0.25rem;
+}
+
+.adc-blocks-editor__standalone-remove:hover {
+	background: var(--color-alt, rgba(0, 0, 0, 0.06));
+}
+
+.adc-blocks-editor__standalone-preview {
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: 0.85em;
+	color: var(--color-text, inherit);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 6rem;
+	overflow: hidden;
+}

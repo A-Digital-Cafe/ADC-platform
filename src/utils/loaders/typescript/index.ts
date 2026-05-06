@@ -43,7 +43,14 @@ export default class TypeScriptLoader implements IModuleLoader {
 
 	async loadUtility(modulePath: string, config?: Record<string, any>): Promise<IUtility> {
 		const UtilityClass = await this.importClass<IUtility>(modulePath, "Utility");
-		return new UtilityClass(this.enrichConfig(modulePath, config));
+		const utilityInstance = new UtilityClass(this.enrichConfig(modulePath, config));
+		try {
+			(utilityInstance as any).setKernelKey?.(this.#kernelKey);
+			await utilityInstance.start?.(this.#kernelKey);
+		} catch (error: any) {
+			Logger.warn(`[TypeScriptLoader] Error iniciando utility ${utilityInstance.name}: ${error.message}`);
+		}
+		return utilityInstance;
 	}
 
 	async loadService(modulePath: string, kernel: Kernel, config?: Record<string, any> | IModuleConfig): Promise<IService> {

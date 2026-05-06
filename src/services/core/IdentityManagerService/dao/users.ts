@@ -5,6 +5,7 @@ import { generateId, hashPassword, verifyPassword } from "@common/utils/crypto.t
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
+import { resolveUserAvatar } from "@common/utils/avatar.ts";
 
 export type UserAuthenticationResult = Partial<User> | { id: string; isActive: boolean } | { id: string; wrongPassword: boolean } | null;
 
@@ -92,6 +93,30 @@ export class UserManager {
 			this.logger.logError(`Error obteniendo usuario: ${error}`);
 			return null;
 		}
+	}
+
+	/**
+	 * Devuelve datos públicos mínimos para mostrar perfiles (avatar + username)
+	 * de un conjunto de usuarios. Sin verificación de permisos: estos campos
+	 * ya son públicos cuando un usuario aparece como autor de un comentario,
+	 * artículo, etc. Limita la cardinalidad para mitigar abusos.
+	 */
+	async getPublicProfiles(userIds: readonly string[]): Promise<Map<string, { username?: string; avatar?: string }>> {
+		const out = new Map<string, { username?: string; avatar?: string }>();
+		const ids = Array.from(new Set(userIds.filter(Boolean))).slice(0, 50);
+		if (ids.length === 0) return out;
+		try {
+			const docs = await this.userModel
+				.find({ id: { $in: ids } })
+				.select({ id: 1, username: 1, avatar: 1, metadata: 1, linkedAccounts: 1 })
+				.lean();
+			for (const d of docs as any[]) {
+				out.set(d.id, { username: d.username, avatar: resolveUserAvatar(d) });
+			}
+		} catch (error) {
+			this.logger.logError(`Error obteniendo perfiles públicos: ${error}`);
+		}
+		return out;
 	}
 
 	/**

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
-import type { Project, KanbanColumn } from "@common/types/project-manager/Project.ts";
+import type { Project, KanbanColumn, ProjectSettings } from "@common/types/project-manager/Project.ts";
 import { shortId } from "../../utils/ids.ts";
 import { pmApi } from "../../utils/pm-api.ts";
 
@@ -13,6 +13,7 @@ interface Props {
 export function ColumnsSection({ project, canEdit, onSaved }: Props) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [cols, setCols] = useState<KanbanColumn[]>(() => [...project.kanbanColumns].sort((a, b) => a.order - b.order));
+	const [requireComment, setRequireComment] = useState<boolean>(project.settings?.requireCommentOnFinalTransition === true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -36,12 +37,23 @@ export function ColumnsSection({ project, canEdit, onSaved }: Props) {
 	const save = async () => {
 		setSaving(true);
 		setError(null);
-		const res = await pmApi.updateColumns(project.id, cols);
-		setSaving(false);
-		if (!res.success) {
-			setError(res.errorKey ?? "error");
+		const colsRes = await pmApi.updateColumns(project.id, cols);
+		if (!colsRes.success) {
+			setSaving(false);
+			setError(colsRes.errorKey ?? "error");
 			return;
 		}
+		const prevRequire = project.settings?.requireCommentOnFinalTransition === true;
+		if (prevRequire !== requireComment) {
+			const settings: ProjectSettings = { ...(project.settings ?? {}), requireCommentOnFinalTransition: requireComment };
+			const sRes = await pmApi.updateSettings(project.id, settings);
+			if (!sRes.success) {
+				setSaving(false);
+				setError(sRes.errorKey ?? "error");
+				return;
+			}
+		}
+		setSaving(false);
 		await onSaved();
 	};
 
@@ -102,6 +114,26 @@ export function ColumnsSection({ project, canEdit, onSaved }: Props) {
 					</li>
 				))}
 			</ul>
+			<div className="pt-3 border-t border-border">
+				<label className="flex items-start gap-2 text-sm cursor-pointer">
+					<input
+						type="checkbox"
+						checked={requireComment}
+						onChange={(e) => setRequireComment(e.target.checked)}
+						disabled={!canEdit}
+						className="mt-1"
+					/>
+					<span>
+						<span className="font-medium block">
+							{t("settings.requireCommentOnFinalTransition") ?? "Requerir comentario al cerrar"}
+						</span>
+						<span className="text-xs text-muted">
+							{t("settings.requireCommentOnFinalTransitionHint") ??
+								"Si está activo, mover un issue a una columna final requiere dejar un comentario que documente la razón."}
+						</span>
+					</span>
+				</label>
+			</div>
 			{canEdit && (
 				<div className="flex gap-2">
 					<adc-button variant="accent" onClick={add}>

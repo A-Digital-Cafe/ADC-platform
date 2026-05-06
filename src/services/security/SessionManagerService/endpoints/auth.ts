@@ -12,6 +12,7 @@ import {
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
+import { resolveUserAvatar } from "@common/utils/avatar.ts";
 import type { AuthenticatedUser } from "../types.js";
 import { UserAuthenticationResult } from "../../../core/IdentityManagerService/dao/users.ts";
 import { User } from "@common/types/identity/User.js";
@@ -547,9 +548,8 @@ export class AuthEndpoints {
 			const user = await AuthEndpoints.deps.internalIdentity.users.getUser(userId);
 			if (!user) return null;
 
-			// Resolve avatar: prefer metadata.avatar, fallback to first linked account's providerAvatar
-			const avatar =
-				(user.metadata?.avatar as string) || user.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar)?.providerAvatar;
+			// Resolve avatar usando el helper compartido (perfil → metadata → linkedAccounts)
+			const avatar = resolveUserAvatar(user);
 
 			const permissions = await AuthEndpoints.getUserPermissions(userId);
 			return {
@@ -585,11 +585,8 @@ export class AuthEndpoints {
 	): Promise<AuthenticatedUser> {
 		const permissions = await AuthEndpoints.getUserPermissions(profile.id, orgId);
 
-		// Resolver avatar igual que getUserById: perfil → metadata → linked accounts
-		const avatar =
-			profile.avatar ||
-			(profile.metadata?.avatar as string) ||
-			profile.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar)?.providerAvatar;
+		// Resolver avatar usando el helper compartido (perfil → metadata → linkedAccounts)
+		const avatar = resolveUserAvatar(profile);
 
 		return {
 			id: profile.id,

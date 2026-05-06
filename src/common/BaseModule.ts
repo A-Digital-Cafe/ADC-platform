@@ -37,6 +37,21 @@ export abstract class BaseModule implements IModule {
 	public abstract stop(_kernelKey?: symbol): Promise<void>;
 
 	/**
+	 * Resuelve un item declarado en `config.providers/utilities/services`
+	 * aceptando match exacto o por basename (último segmento de la ruta
+	 * lógica, e.g. `"comments/comments-utility"` ↔ `"comments-utility"`).
+	 */
+	#findDeclared<T extends { name: string }>(items: T[] | undefined, name: string): T | undefined {
+		if (!items?.length) return undefined;
+		const exact = items.find((i) => i.name === name);
+		if (exact) return exact;
+		return items.find((i) => {
+			const base = i.name.split("/").pop();
+			return base === name;
+		});
+	}
+
+	/**
 	 * Obtiene un provider que fue cargado por este módulo según su configuración.
 	 * Esto asegura que se obtiene la instancia correcta cuando hay múltiples providers del mismo tipo.
 	 * @param name - Nombre del provider
@@ -44,7 +59,7 @@ export abstract class BaseModule implements IModule {
 	 * @returns La instancia del provider
 	 */
 	protected getMyProvider<P>(name: string, config?: IModuleConfig): P {
-		const providerConfig = config || this.config?.providers?.find((p) => p.name === name);
+		const providerConfig = config || this.#findDeclared(this.config?.providers, name);
 		if (!providerConfig) {
 			throw new Error(`Provider ${name} no está configurado en ${this.name}`);
 		}
@@ -58,7 +73,7 @@ export abstract class BaseModule implements IModule {
 	 * @returns La instancia de la utility
 	 */
 	protected getMyUtility<U>(name: string, config?: IModuleConfig): U {
-		const utilityConfig = config || this.config?.utilities?.find((u) => u.name === name);
+		const utilityConfig = config || this.#findDeclared(this.config?.utilities, name);
 		if (!utilityConfig) {
 			throw new Error(`Utility ${name} no está configurada en ${this.name}`);
 		}
@@ -72,7 +87,7 @@ export abstract class BaseModule implements IModule {
 	 * @returns La instancia del service
 	 */
 	protected getMyService<S>(name: string, config?: IModuleConfig): S {
-		const serviceConfig = config || this.config?.services?.find((s: any) => s.name === name);
+		const serviceConfig = config || this.#findDeclared(this.config?.services as any, name);
 		if (!serviceConfig) {
 			throw new Error(`Service ${name} no está configurado en ${this.name}`);
 		}
