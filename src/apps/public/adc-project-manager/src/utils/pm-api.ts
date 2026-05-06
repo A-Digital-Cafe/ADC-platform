@@ -1,7 +1,7 @@
 import { projectsApi } from "./pm-api/projects.ts";
 import { sprintsApi, milestonesApi } from "./pm-api/sprints.ts";
 import { issuesApi } from "./pm-api/issues.ts";
-import { issueCommentsApi, issueAttachmentsApi } from "./pm-api/social.ts";
+import { issueCommentsApi, issueAttachmentsApi, issueDescriptionApi } from "./pm-api/social.ts";
 
 export const pmApi = {
 	...projectsApi,
@@ -10,6 +10,7 @@ export const pmApi = {
 	...issuesApi,
 	...issueCommentsApi,
 	...issueAttachmentsApi,
+	...issueDescriptionApi,
 };
 
 export type { IssueListParams } from "./pm-api/client.ts";

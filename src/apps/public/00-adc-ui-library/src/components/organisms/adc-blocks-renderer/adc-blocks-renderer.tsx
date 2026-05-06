@@ -176,7 +176,7 @@ export class AdcBlocksRenderer {
 		return (
 			<div key={index} class={`my-2 ${alignClass}`.trim()}>
 				{url ? (
-					<a href={url} class="inline-flex items-center gap-2 text-link underline" download={block.fileName}>
+					<a href={url} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-link underline">
 						📎 {label}
 					</a>
 				) : (

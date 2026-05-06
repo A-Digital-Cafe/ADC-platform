@@ -10,6 +10,7 @@ import { ProjectEndpoints } from "./endpoints/projects.js";
 import { SprintEndpoints } from "./endpoints/sprints.js";
 import { MilestoneEndpoints } from "./endpoints/milestones.js";
 import { IssueEndpoints } from "./endpoints/issues.js";
+import { IssueDescriptionEndpoints } from "./endpoints/issueDescription.js";
 import { IssueCommentsEndpoints } from "./endpoints/comments.js";
 import { IssueAttachmentsEndpoints } from "./endpoints/attachments.js";
 import { PMScopes } from "@common/types/project-manager/permissions.ts";
@@ -26,6 +27,7 @@ import type AttachmentsUtility from "../../../utilities/attachments/attachments-
 import type CommentsUtility from "../../../utilities/comments/comments-utility/index.js";
 import type { AttachmentsManager, SubPathContext } from "../../../utilities/attachments/attachments-utility/index.js";
 import type { CommentsManager } from "../../../utilities/comments/comments-utility/index.js";
+import { DraftsRepository, getOrCreateCommentDraftModel } from "../../../utilities/comments/comments-utility/index.js";
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { issueAttachmentsChecker } from "./permissions/issueAttachments.ts";
 import { issueCommentsChecker } from "./permissions/issueComments.ts";
@@ -40,6 +42,7 @@ export default class ProjectManagerService extends BaseService {
 	#issueManager: IssueManager | null = null;
 	#issueAttachmentsManager: AttachmentsManager | null = null;
 	#issueCommentsManager: CommentsManager | null = null;
+	#issueDescriptionDrafts: DraftsRepository | null = null;
 
 	#authVerifier: IAuthVerifier | null = null;
 	#identity: IdentityManagerService | null = null;
@@ -61,6 +64,7 @@ export default class ProjectManagerService extends BaseService {
 			SprintEndpoints,
 			MilestoneEndpoints,
 			IssueEndpoints,
+			IssueDescriptionEndpoints,
 			IssueCommentsEndpoints,
 			IssueAttachmentsEndpoints,
 		],
@@ -115,6 +119,11 @@ export default class ProjectManagerService extends BaseService {
 				permissionChecker: issueCommentsChecker,
 				attachmentsKernelKey: kernelKey,
 			});
+
+			// Drafts de descripción de issue: reutilizan el schema de drafts (genérico
+			// por targetType) en una colección separada con TTL de 7 días.
+			const descriptionDraftModel = getOrCreateCommentDraftModel(connection, "pm_descriptions_drafts");
+			this.#issueDescriptionDrafts = new DraftsRepository(descriptionDraftModel, 200);
 		} catch (e) {
 			const err = e as Error;
 			this.logger.logWarn(
@@ -127,6 +136,7 @@ export default class ProjectManagerService extends BaseService {
 		SprintEndpoints.init(this, kernelKey);
 		MilestoneEndpoints.init(this, kernelKey);
 		IssueEndpoints.init(this, kernelKey);
+		IssueDescriptionEndpoints.init(this, kernelKey);
 		IssueCommentsEndpoints.init(this, kernelKey);
 		IssueAttachmentsEndpoints.init(this, kernelKey);
 
@@ -245,6 +255,16 @@ export default class ProjectManagerService extends BaseService {
 		if (!this.#issueCommentsManager)
 			throw new ProjectManagerErrorRef(503, "COMMENTS_UNAVAILABLE", "Comments no disponibles (provider/utility no inicializado)");
 		return this.#issueCommentsManager;
+	}
+
+	get issueDescriptionDrafts(): DraftsRepository {
+		if (!this.#issueDescriptionDrafts)
+			throw new ProjectManagerErrorRef(
+				503,
+				"DESCRIPTION_DRAFTS_UNAVAILABLE",
+				"Drafts de descripción no disponibles (mongo no inicializado)"
+			);
+		return this.#issueDescriptionDrafts;
 	}
 
 	@DisableEndpoints()

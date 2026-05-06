@@ -125,7 +125,11 @@ export default {
 		groupByMilestone: "By milestone",
 		completedGroup: "Completed",
 		moveHint: "Drag an issue onto another section to change its sprint.",
-		countDone: "{{done}}/{{total}} done"
+		countDone: "{{done}}/{{total}} done",
+		descriptionPlaceholder: "Describe the issue with blocks...",
+		descriptionEmpty: "No description",
+		descriptionClickToEdit: "Click to edit",
+		descriptionUnsavedChanges: "You have unsaved changes — click to resume"
 	},
 	board: {
 		title: "Board",
@@ -259,6 +263,11 @@ export default {
 		INVALID_COLUMN: "Invalid column.",
 		INVALID_PRIORITY: "Invalid priority.",
 		WIP_LIMIT_REACHED: "Work in progress limit reached.",
-		ATTACHMENTS_NOT_IMPLEMENTED: "Attachments are not yet implemented."
+		ATTACHMENTS_NOT_IMPLEMENTED: "Attachments are not yet implemented.",
+		FORBIDDEN: "You are not allowed to perform this action.",
+		DESCRIPTION_DRAFTS_UNAVAILABLE: "Description drafts are currently unavailable.",
+		ISSUE_DESCRIPTION_TOO_MANY_ATTACHMENTS: "The issue description has too many attachments.",
+		ISSUE_DESCRIPTION_BAD_ATTACHMENT: "Invalid attachment in the issue description.",
+		ISSUE_DESCRIPTION_ATTACHMENT_NOT_OWNED: "You cannot use an attachment that doesn't belong to you."
 	}
 };

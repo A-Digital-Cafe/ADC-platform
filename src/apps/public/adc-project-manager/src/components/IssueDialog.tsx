@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Project } from "@common/types/project-manager/Project.ts";
@@ -8,6 +8,8 @@ import type { Milestone } from "@common/types/project-manager/Milestone.ts";
 import type { UpdateLogEntry } from "@common/types/project-manager/UpdateLogEntry.ts";
 import type { CustomFieldValue } from "@common/types/project-manager/CustomField.ts";
 import type { IssueLink } from "@common/types/project-manager/IssueLink.ts";
+import type { Block } from "@common/ADC/types/learning.ts";
+import type { Block as StencilBlock } from "@ui-library/utils/react-jsx";
 import type { TransitionCommentSubmitDetail } from "./TransitionCommentModal.tsx";
 import { TransitionCommentModal } from "./TransitionCommentModal.tsx";
 import { pmApi } from "../utils/pm-api.ts";
@@ -45,7 +47,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	const isNew = !issue;
 	const [form, setForm] = useState<{
 		title: string;
-		description: string;
+		description: Block[];
 		columnKey: string;
 		sprintId: string;
 		milestoneId: string;
@@ -59,7 +61,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 		linkedIssues: IssueLink[];
 	}>({
 		title: issue?.title ?? "",
-		description: issue?.description ?? "",
+		description: Array.isArray(issue?.description) ? (issue!.description as Block[]) : [],
 		columnKey: issue?.columnKey ?? project.kanbanColumns.find((c) => c.isAuto)?.key ?? project.kanbanColumns[0]?.key ?? "todo",
 		sprintId: issue?.sprintId ?? "",
 		milestoneId: issue?.milestoneId ?? "",
@@ -77,6 +79,18 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	const [showHistory, setShowHistory] = useState(false);
 	const [projectIssues, setProjectIssues] = useState<Issue[]>([]);
 	const [activeTab, setActiveTab] = useState<"details" | "comments">("details");
+	// Adjuntos referenciados en bloques de la descripción (para resolver URLs y
+	// para enviar `attachmentIds` en el draft junto a `blocks`).
+	const [descAttachmentIds, setDescAttachmentIds] = useState<string[]>([]);
+	const [descAttachmentUrls, setDescAttachmentUrls] = useState<Record<string, string>>({});
+	// Modo del bloque de descripción: por defecto se muestra renderizado y al
+	// hacer click se entra en edición. Se guarda con su propio botón y vuelve
+	// al modo solo-lectura. Issues nuevos arrancan directamente en edición.
+	const [descEditing, setDescEditing] = useState<boolean>(isNew);
+	const [savedDescription, setSavedDescription] = useState<Block[]>(Array.isArray(issue?.description) ? (issue!.description as Block[]) : []);
+	const [hasUnsavedDraft, setHasUnsavedDraft] = useState<boolean>(false);
+	const [draftDescription, setDraftDescription] = useState<Block[] | null>(null);
+	const [draftAttachmentIds, setDraftAttachmentIds] = useState<string[]>([]);
 
 	const mover = useIssueMover({
 		project,
@@ -98,6 +112,66 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 			if (r.success && r.data) setHistory(r.data.updateLog);
 		});
 	}, [issue]);
+
+	// Cargar el draft de descripción al abrir un issue existente. A diferencia
+	// de los comentarios, no aplicamos el draft automáticamente: lo guardamos
+	// aparte y mostramos un banner "tienes cambios sin guardar" clickeable.
+	useEffect(() => {
+		if (!issue) return;
+		let cancelled = false;
+		(async () => {
+			const r = await pmApi.getIssueDescriptionDraft(issue.id).catch(() => null);
+			if (cancelled) return;
+			if (r?.success && r.data?.draft) {
+				const draft = r.data.draft;
+				setDraftDescription((draft.blocks as Block[]) ?? []);
+				setDraftAttachmentIds(draft.attachmentIds ?? []);
+				setHasUnsavedDraft(true);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [issue]);
+
+	// Resolver URLs de attachments referenciados en bloques de la descripción,
+	// tanto en lo guardado como en el draft (para mostrar correctamente el
+	// preview/render).
+	const attachmentIdsToResolve = useMemo(() => {
+		const ids = new Set<string>();
+		const collect = (blocks: Block[]) => {
+			for (const b of blocks) {
+				if (b && typeof b === "object" && (b as { type?: string }).type === "attachment") {
+					const aid = (b as { attachmentId?: string }).attachmentId;
+					if (aid) ids.add(aid);
+				}
+			}
+		};
+		collect(savedDescription);
+		collect(form.description);
+		if (draftDescription) collect(draftDescription);
+		return [...ids];
+	}, [savedDescription, form.description, draftDescription]);
+
+	useEffect(() => {
+		if (!issue) return;
+		const missing = attachmentIdsToResolve.filter((id) => !descAttachmentUrls[id]);
+		if (missing.length === 0) return;
+		let cancelled = false;
+		(async () => {
+			const updates: Record<string, string> = {};
+			for (const id of missing) {
+				const r = await pmApi.getIssueAttachmentDownloadUrl(issue.id, id, { inline: true });
+				if (r.success && r.data?.url) updates[id] = r.data.url;
+			}
+			if (!cancelled && Object.keys(updates).length) {
+				setDescAttachmentUrls((prev) => ({ ...prev, ...updates }));
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [issue, attachmentIdsToResolve, descAttachmentUrls]);
 
 	useEffect(() => {
 		if (project.issueLinkTypes.length === 0) return;
@@ -194,11 +268,140 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 					</div>
 					<div>
 						<label className="block text-sm font-medium mb-1 text-text">{t("common.description")}</label>
-						<adc-textarea
-							value={form.description}
-							onInput={(e: any) => setForm({ ...form, description: e.target.value })}
-							disabled={!canEdit}
-						/>
+						{hasUnsavedDraft && !descEditing && (
+							<button
+								type="button"
+								className="w-full text-left mb-2 px-3 py-2 rounded-md border border-warning bg-warning/10 text-warning text-sm hover:bg-warning/15 cursor-pointer"
+								onClick={() => {
+									// Entrar en edici\u00f3n con el draft pendiente (no aplicado a `form`).
+									if (draftDescription) {
+										setForm((prev) => ({ ...prev, description: draftDescription }));
+										setDescAttachmentIds(draftAttachmentIds);
+									}
+									setDescEditing(true);
+								}}
+							>
+								{t("issues.descriptionUnsavedChanges") ?? "Tienes cambios sin guardar — clic para retomar"}
+							</button>
+						)}
+						{descEditing ? (
+							<adc-blocks-form
+								placeholder={t("issues.descriptionPlaceholder") ?? "Describe el issue con bloques..."}
+								initialBlocks={form.description as StencilBlock[]}
+								initialAttachmentIds={descAttachmentIds}
+								attachmentUrls={descAttachmentUrls}
+								disabled={!canEdit}
+								submitLabel={t("common.save") ?? "Guardar"}
+								showCancel
+								onadcCancel={() => {
+									// Cancelar descarta el draft (local + backend) y vuelve a la
+									// vista renderizada con la última descripción guardada.
+									setForm((prev) => ({ ...prev, description: savedDescription }));
+									setDraftDescription(null);
+									setDraftAttachmentIds([]);
+									setHasUnsavedDraft(false);
+									setDescEditing(false);
+									if (issue) void pmApi.deleteIssueDescriptionDraft(issue.id);
+								}}
+								onadcSubmit={async (ev) => {
+									const d = ev.detail;
+									const nextBlocks = (d.blocks as Block[]) ?? [];
+									if (issue) {
+										setSaving(true);
+										const r = await pmApi.updateIssue(issue.id, { description: nextBlocks });
+										setSaving(false);
+										if (!r.success) return;
+									}
+									setSavedDescription(nextBlocks);
+									setForm((prev) => ({ ...prev, description: nextBlocks }));
+									setDescAttachmentIds(d.attachmentIds);
+									setDraftDescription(null);
+									setHasUnsavedDraft(false);
+									setDescEditing(false);
+									if (issue) {
+										void pmApi.deleteIssueDescriptionDraft(issue.id);
+										await onSaved();
+									}
+								}}
+								onadcDraftChange={(ev) => {
+									const d = ev.detail;
+									const nextBlocks = (d.blocks as Block[]) ?? [];
+									setForm((prev) => ({ ...prev, description: nextBlocks }));
+									setDescAttachmentIds(d.attachmentIds);
+									if (!issue) return;
+									if (nextBlocks.length === 0 && d.attachmentIds.length === 0) {
+										setHasUnsavedDraft(false);
+										setDraftDescription(null);
+										void pmApi.deleteIssueDescriptionDraft(issue.id);
+									} else {
+										setHasUnsavedDraft(true);
+										setDraftDescription(nextBlocks);
+										setDraftAttachmentIds(d.attachmentIds);
+										void pmApi.saveIssueDescriptionDraft(issue.id, {
+											blocks: nextBlocks,
+											attachmentIds: d.attachmentIds,
+										});
+									}
+								}}
+								onadcRequestAttachment={(ev: CustomEvent<{ kind: "image" | "file" }>) => {
+									if (!issue) return;
+									const kind = ev.detail.kind;
+									const input = globalThis.document.createElement("input");
+									input.type = "file";
+									if (kind === "image") input.accept = "image/*";
+									input.onchange = async () => {
+										const file = input.files?.[0];
+										if (!file) return;
+										const presignRes = await pmApi.presignIssueAttachment(issue.id, {
+											fileName: file.name,
+											mimeType: file.type || "application/octet-stream",
+											size: file.size,
+											forComment: false,
+										});
+										if (!presignRes.success || !presignRes.data) return;
+										const presign = presignRes.data;
+										const putRes = await fetch(presign.uploadUrl, { method: "PUT", body: file, headers: presign.headers });
+										if (!putRes.ok) return;
+										const confirm = await pmApi.confirmIssueAttachment(issue.id, presign.attachmentId);
+										if (!confirm.success || !confirm.data) return;
+										const att = confirm.data;
+										const dl = await pmApi.getIssueAttachmentDownloadUrl(issue.id, att.id, { inline: true });
+										if (dl.success && dl.data?.url) {
+											setDescAttachmentUrls((prev) => ({ ...prev, [att.id]: dl.data!.url }));
+										}
+										const newBlock: Block = {
+											type: "attachment",
+											kind,
+											attachmentId: att.id,
+											fileName: att.fileName,
+											mimeType: att.mimeType,
+											size: att.size,
+										};
+										setForm((prev) => ({ ...prev, description: [...prev.description, newBlock] }));
+										setDescAttachmentIds((prev) => [...prev, att.id]);
+									};
+									input.click();
+								}}
+							/>
+						) : (
+							<button
+								type="button"
+								className={`w-full text-left rounded-md border border-text/15 bg-surface p-3 min-h-12 ${canEdit ? "cursor-text hover:border-primary/60" : "cursor-default"}`}
+								onClick={() => {
+									if (!canEdit) return;
+									// Entrar en edici\u00f3n desde el render: el buffer arranca con lo guardado.
+									setForm((prev) => ({ ...prev, description: savedDescription }));
+									setDescEditing(true);
+								}}
+								title={canEdit ? (t("issues.descriptionClickToEdit") ?? "Clic para editar") : undefined}
+							>
+								{savedDescription.length === 0 ? (
+									<span className="text-muted text-sm italic">{t("issues.descriptionEmpty") ?? "Sin descripci\u00f3n"}</span>
+								) : (
+									<adc-blocks-renderer blocks={savedDescription as StencilBlock[]} attachmentUrls={descAttachmentUrls} />
+								)}
+							</button>
+						)}
 					</div>
 					<div className="grid grid-cols-3 gap-2">
 						<div>

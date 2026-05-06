@@ -69,7 +69,9 @@ export class CommentEndpoints {
 	static async list(ctx: EndpointCtx<SlugParams>) {
 		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx);
 		const cursor = ctx.query.cursor || null;
-		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
+		// Sin `parentId` en la query => devolver todos los comentarios del art\u00edculo
+		// en flat (incluye replies de padres eliminados); el cliente arma el \u00e1rbol.
+		const parentId = ctx.query.parentId === undefined ? undefined : ctx.query.parentId || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
 		return CommentEndpoints.#manager().list(commentCtx, {
 			targetType: TARGET_TYPE,

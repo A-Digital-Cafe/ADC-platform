@@ -1,22 +1,25 @@
 import { Component, Prop, h, Event, EventEmitter, State, Watch } from "@stencil/core";
 import type { Block } from "../../organisms/adc-blocks-renderer/adc-blocks-renderer";
 
-export interface CommentFormSubmitDetail {
+export interface BlocksFormSubmitDetail {
 	blocks: Block[];
 	attachmentIds: string[];
 }
+/** @deprecated Usar BlocksFormSubmitDetail. Alias retro-compatible. */
+export type CommentFormSubmitDetail = BlocksFormSubmitDetail;
 
 /**
- * Formulario de comentario basado en `<adc-blocks-editor>`. Soporta drafts
- * persistentes con debounce: al cambiar el contenido, espera `draftDebounceMs`
- * y emite `adcDraftChange`. La app consumidora puede persistir vía
- * `commentsApi.saveDraft`. Al montarse, si recibe `initialBlocks` los renderiza.
+ * Formulario genérico de bloques basado en `<adc-blocks-editor>`. Soporta
+ * drafts persistentes con debounce: al cambiar el contenido, espera
+ * `draftDebounceMs` y emite `adcDraftChange`. Originalmente concebido como
+ * formulario de comentarios, ahora se reutiliza también para descripciones de
+ * issues u otros campos enriquecidos.
  */
 @Component({
-	tag: "adc-comment-form",
+	tag: "adc-blocks-form",
 	shadow: false,
 })
-export class AdcCommentForm {
+export class AdcBlocksForm {
 	@Prop() submitting: boolean = false;
 	@Prop() placeholder: string = "Escribe un comentario...";
 	@Prop() submitLabel: string = "Comentar";
@@ -32,7 +35,7 @@ export class AdcCommentForm {
 
 	#draftTimer: ReturnType<typeof setTimeout> | null = null;
 
-	@Event() adcSubmit!: EventEmitter<CommentFormSubmitDetail>;
+	@Event() adcSubmit!: EventEmitter<BlocksFormSubmitDetail>;
 	@Event() adcCancel!: EventEmitter<void>;
 	@Event() adcDraftChange!: EventEmitter<{ blocks: Block[]; attachmentIds: string[] }>;
 	/** El consumidor escucha este evento para abrir el selector y devolver el `attachmentId`. */

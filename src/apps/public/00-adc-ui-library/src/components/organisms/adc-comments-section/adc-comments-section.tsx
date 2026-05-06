@@ -128,7 +128,7 @@ export class AdcCommentsSection {
 	private renderForm() {
 		if (!this.session.authenticated || !this.session.canComment) return null;
 		return (
-			<adc-comment-form
+			<adc-blocks-form
 				submitting={this.submitting}
 				initialBlocks={this.initialDraftBlocks}
 				initialAttachmentIds={this.initialDraftAttachmentIds}
@@ -146,7 +146,7 @@ export class AdcCommentsSection {
 		return (
 			<li key={node.id} class="flex flex-col gap-2 list-none p-0">
 				{isEditing ? (
-					<adc-comment-form
+					<adc-blocks-form
 						submitting={this.submitting}
 						submitLabel="Guardar"
 						showCancel={true}
@@ -190,7 +190,7 @@ export class AdcCommentsSection {
 				)}
 				{isReplying && (
 					<div class="ml-12">
-						<adc-comment-form
+						<adc-blocks-form
 							submitting={this.submitting}
 							submitLabel="Responder"
 							showCancel={true}

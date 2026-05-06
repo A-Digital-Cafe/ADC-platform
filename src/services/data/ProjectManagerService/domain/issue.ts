@@ -8,7 +8,9 @@ export const issueSchema = new Schema<Issue>(
 		key: { type: String, required: true },
 
 		title: { type: String, required: true },
-		description: { type: String, default: "" },
+		// Bloques tipo `Block[]` (compatible con descripciones legacy en string:
+		// el DAO normaliza string -> [{ type:"paragraph", text }] al leer).
+		description: { type: [Schema.Types.Mixed], default: [] } as any,
 
 		columnKey: { type: String, required: true },
 		category: { type: String, default: "task" },
@@ -57,4 +59,4 @@ issueSchema.index({ projectId: 1, key: 1 }, { unique: true });
 issueSchema.index({ projectId: 1, columnKey: 1 });
 issueSchema.index({ projectId: 1, sprintId: 1 });
 issueSchema.index({ projectId: 1, milestoneId: 1 });
-issueSchema.index({ title: "text", description: "text" });
+issueSchema.index({ title: "text" });

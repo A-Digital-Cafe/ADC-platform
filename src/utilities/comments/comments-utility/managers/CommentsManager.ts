@@ -306,11 +306,15 @@ export class CommentsManager {
 	async list(ctx: CommentPermissionContext, opts: ListOptions): Promise<CommentsPage> {
 		await this.#checkPermission("list", ctx);
 		const limit = clampLimit(opts.limit);
+		// `parentId === undefined` significa "todos los comentarios del target" (flat),
+		// para que las replies viajen junto a los roots y el cliente arme el árbol.
+		// Así las replies de un comentario soft-deleted siguen siendo visibles.
+		// Si se pasa explícitamente `null` o un string, se filtra por ese parentId.
 		const filter: Record<string, unknown> = {
 			targetType: opts.targetType,
 			targetId: opts.targetId,
-			parentId: opts.parentId ?? null,
 		};
+		if (opts.parentId !== undefined) filter.parentId = opts.parentId;
 		if (opts.cursor) filter._id = { $lt: opts.cursor };
 		const docs = await this.#model
 			.find(filter)
