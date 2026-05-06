@@ -44,9 +44,8 @@ export class ArticleEndpoints {
 	}
 
 	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles" })
-	static async list(ctx: EndpointCtx): Promise<{ articles: Article[] }> {
-		const articles = await buildArticleListPipeline(ArticleEndpoints.model, ArticleEndpoints.pathModel, ctx.query as any);
-		return { articles };
+	static async list(ctx: EndpointCtx): Promise<{ articles: Article[]; total: number; start: number; limit: number }> {
+		return buildArticleListPipeline(ArticleEndpoints.model, ArticleEndpoints.pathModel, ctx.query as any);
 	}
 
 	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug" })

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { router } from "@common/utils/router.js";
 import { contentAPI, type Article, type LearningPath } from "../utils/content-api";
+
+const PAGE_SIZE = 30;
 
 export function ArticlesPage() {
 	const [articles, setArticles] = useState<Article[]>([]);
@@ -8,35 +10,54 @@ export function ArticlesPage() {
 	const [loading, setLoading] = useState(true);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedPathSlug, setSelectedPathSlug] = useState<string>("");
+	const [page, setPage] = useState(1);
+	const [total, setTotal] = useState(0);
 
 	useEffect(() => {
-		loadInitialData();
+		contentAPI.listPaths({ public: true, listed: true }).then(setPaths);
 	}, []);
 
 	useEffect(() => {
-		if (paths.length > 0 || selectedPathSlug === "") {
-			loadArticles();
-		}
+		setPage(1);
 	}, [searchQuery, selectedPathSlug]);
 
-	async function loadInitialData() {
-		const pathsData = await contentAPI.listPaths({ public: true, listed: true });
-		setPaths(pathsData);
-		await loadArticles();
-	}
-
-	async function loadArticles() {
+	useEffect(() => {
+		let cancelled = false;
 		setLoading(true);
+		contentAPI
+			.listArticles({
+				listed: true,
+				pathSlug: selectedPathSlug || undefined,
+				q: searchQuery || undefined,
+				limit: PAGE_SIZE,
+				start: (page - 1) * PAGE_SIZE,
+			})
+			.then((r) => {
+				if (cancelled) return;
+				setArticles(r.articles);
+				setTotal(r.total);
+				setLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [searchQuery, selectedPathSlug, page]);
 
-		const articlesData = await contentAPI.listArticles({
-			listed: true,
-			pathSlug: selectedPathSlug || undefined,
-			q: searchQuery || undefined,
+	const searchRef = useCallback((el: HTMLElement | null) => {
+		if (!el) return;
+		el.addEventListener("adcInput", (e: Event) => {
+			setSearchQuery((e as CustomEvent<string>).detail ?? "");
 		});
+	}, []);
 
-		setArticles(articlesData);
-		setLoading(false);
-	}
+	const paginationRef = useCallback((el: HTMLElement | null) => {
+		if (!el) return;
+		el.addEventListener("adcPageChange", (e: Event) => {
+			setPage((e as CustomEvent<number>).detail);
+		});
+	}, []);
+
+	const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
 	const pathColorClasses: Record<string, string> = {
 		red: "bg-red-200 text-red-700",
@@ -54,12 +75,7 @@ export function ArticlesPage() {
 			<h1 className="text-3xl font-heading mb-4">Artículos</h1>
 
 			<div className="flex gap-2 items-center">
-				<adc-search-input
-					value={searchQuery}
-					onInput={(e: any) => setSearchQuery(e.target.value)}
-					placeholder="Buscar..."
-					class="max-w-[280px]"
-				/>
+				<adc-search-input ref={searchRef} value={searchQuery} placeholder="Buscar..." class="max-w-70" />
 			</div>
 
 			{paths.length > 0 && (
@@ -90,22 +106,29 @@ export function ArticlesPage() {
 					<p>Cargando artículos...</p>
 				</div>
 			) : articles.length > 0 ? (
-				<div className="mt-4 grid gap-x-4 gap-y-16 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-					{articles.map((article) => (
-						<adc-content-card
-							key={article.slug}
-							title={article.title}
-							banner-url={article.image?.url}
-							banner-alt={article.image?.alt}
-							href={`/articles/${article.slug}`}
-							onClick={(e: React.MouseEvent) => {
-								e.preventDefault();
-								router.navigate(`/articles/${article.slug}`);
-							}}
-							compact
-						/>
-					))}
-				</div>
+				<>
+					<div className="mt-4 grid gap-x-4 gap-y-16 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+						{articles.map((article) => (
+							<adc-content-card
+								key={article.slug}
+								title={article.title}
+								banner-url={article.image?.url}
+								banner-alt={article.image?.alt}
+								href={`/articles/${article.slug}`}
+								onClick={(e: React.MouseEvent) => {
+									e.preventDefault();
+									router.navigate(`/articles/${article.slug}`);
+								}}
+								compact
+							/>
+						))}
+					</div>
+					{totalPages > 1 && (
+						<div className="flex justify-center mt-8">
+							<adc-pagination ref={paginationRef} currentPage={page} totalPages={totalPages} />
+						</div>
+					)}
+				</>
 			) : (
 				<div className="text-center bg-surface rounded-xxl p-8 shadow-cozy mt-4">
 					<p className="text-text">No hay artículos.</p>

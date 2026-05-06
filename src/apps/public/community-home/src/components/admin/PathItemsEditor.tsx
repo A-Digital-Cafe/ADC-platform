@@ -29,7 +29,7 @@ export function PathItemsEditor({ items, onChange, excludePathSlug }: Props) {
 
 	useEffect(() => {
 		const h = setTimeout(() => {
-			contentAPI.listArticles({ q: q || undefined, limit: 20 }).then(setResults);
+			contentAPI.listArticles({ q: q || undefined, limit: 20 }).then((r) => setResults(r.articles));
 		}, 300);
 		return () => clearTimeout(h);
 	}, [q]);

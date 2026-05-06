@@ -7,7 +7,17 @@ interface ListArticlesQuery {
 	authorId?: string;
 	q?: string;
 	limit?: string;
-	skip?: string;
+	start?: string;
+}
+
+const DEFAULT_LIMIT = 30;
+const MAX_LIMIT = 200;
+
+export interface ArticleListResult {
+	articles: Article[];
+	total: number;
+	start: number;
+	limit: number;
 }
 
 async function resolvePathSlugs(pathModel: Model<LearningPath>, pathSlug: string): Promise<string[] | null> {
@@ -31,12 +41,15 @@ export async function buildArticleListPipeline(
 	articleModel: Model<Article>,
 	pathModel: Model<LearningPath>,
 	query: ListArticlesQuery
-): Promise<Article[]> {
+): Promise<ArticleListResult> {
 	const where: Record<string, any> = {};
+
+	const limit = Math.min(Math.max(query.limit ? Number.parseInt(query.limit) : DEFAULT_LIMIT, 1), MAX_LIMIT);
+	const start = Math.max(query.start ? Number.parseInt(query.start) : 0, 0);
 
 	if (query.pathSlug) {
 		const slugs = await resolvePathSlugs(pathModel, query.pathSlug);
-		if (slugs === null) return [];
+		if (slugs === null) return { articles: [], total: 0, start, limit };
 		where.slug = { $in: slugs };
 	}
 
@@ -71,12 +84,19 @@ export async function buildArticleListPipeline(
 			},
 		},
 		{ $sort: { createdAt: -1 } },
+		{
+			$facet: {
+				articles: [{ $skip: start }, { $limit: limit }],
+				total: [{ $count: "count" }],
+			},
+		},
 	];
 
-	const limit = query.limit ? Number.parseInt(query.limit) : undefined;
-	const skip = query.skip ? Number.parseInt(query.skip) : undefined;
-	if (skip) pipeline.push({ $skip: skip });
-	if (limit) pipeline.push({ $limit: Math.min(limit, 200) });
-
-	return articleModel.aggregate(pipeline) as Promise<Article[]>;
+	const [result] = (await articleModel.aggregate(pipeline)) as Array<{ articles: Article[]; total: Array<{ count: number }> }>;
+	return {
+		articles: result?.articles ?? [],
+		total: result?.total?.[0]?.count ?? 0,
+		start,
+		limit,
+	};
 }
