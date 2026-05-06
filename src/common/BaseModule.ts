@@ -87,7 +87,7 @@ export abstract class BaseModule implements IModule {
 	 * @returns La instancia del service
 	 */
 	protected getMyService<S>(name: string, config?: IModuleConfig): S {
-		const serviceConfig = config || this.#findDeclared(this.config?.services as any, name);
+		const serviceConfig = config || this.#findDeclared(this.config?.services, name);
 		if (!serviceConfig) {
 			throw new Error(`Service ${name} no está configurado en ${this.name}`);
 		}

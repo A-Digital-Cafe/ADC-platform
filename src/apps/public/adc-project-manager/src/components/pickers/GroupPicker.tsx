@@ -4,17 +4,17 @@ import { identityPmApi } from "../../utils/identity-api.ts";
 import { ClientGroup } from "@common/types/identity/Group.ts";
 
 interface Props {
-	selectedIds: string[];
-	onChange: (ids: string[]) => void;
-	orgId?: string | null;
-	disabled?: boolean;
-	label?: string;
+	readonly selectedIds: string[];
+	readonly onChange: (ids: string[]) => void;
+	readonly orgId?: string | null;
+	readonly disabled?: boolean;
+	readonly label?: string;
 	/**
 	 * Perfiles ya resueltos por el backend (`groupId → { name, description? }`),
 	 * usados como cache inicial para mostrar nombre + descripción de los grupos
 	 * ya seleccionados sin pegarle a `/api/identity/groups`.
 	 */
-	resolvedById?: Record<string, { name: string; description?: string }>;
+	readonly resolvedById?: Record<string, { name: string; description?: string }>;
 }
 
 /**
@@ -168,4 +168,3 @@ export function GroupPicker({ selectedIds, onChange, orgId, disabled, label, res
 		</div>
 	);
 }
-

@@ -35,9 +35,11 @@ export async function getPresignedDownloadUrl(
 	defaultTtl: number
 ): Promise<string> {
 	const ttl = input.ttl ?? defaultTtl;
-	const responseContentDisposition = input.filename
-		? `${input.inline ? "inline" : "attachment"}; filename="${input.filename.replace(/"/g, "")}"`
-		: undefined;
+
+	let responseContentDisposition = undefined;
+
+	if (input.filename)
+		responseContentDisposition = `${input.inline ? "inline" : "attachment"}; filename="${input.filename.replaceAll(/"/, "")}"`;
 	const cmd = new GetObjectCommand({
 		Bucket: bucket,
 		Key: input.key,

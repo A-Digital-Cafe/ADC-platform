@@ -72,15 +72,17 @@ export interface PresignUploadResult {
 const FILE_NAME_SAFE = /[^A-Za-z0-9._-]+/g;
 
 function safeFileName(name: string): string {
-	const cleaned = name
-		.replace(FILE_NAME_SAFE, "_")
-		.replace(/_+/g, "_")
-		.replace(/^_+|_+$/g, "");
+	const cleaned = name.replace(FILE_NAME_SAFE, "_").replaceAll(/_+/, "_").replace(/^_+/, "").replace(/_+$/, "");
 	return cleaned.length > 0 ? cleaned.slice(0, 120) : "file";
 }
 
 function sanitizeSegment(seg: string): string {
-	return seg.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "_";
+	return (
+		seg
+			.replaceAll(/[^A-Za-z0-9._-]+/, "_")
+			.replace(/^_+/, "")
+			.replace(/_+$/, "") || "_"
+	);
 }
 
 export class AttachmentsManager {

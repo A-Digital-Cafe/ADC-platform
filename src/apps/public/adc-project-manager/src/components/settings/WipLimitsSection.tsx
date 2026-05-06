@@ -25,7 +25,7 @@ export function WipLimitsSection({ project, canEdit, onSaved }: Props) {
 	const save = async () => {
 		setSaving(true);
 		setError(null);
-		const settings: ProjectSettings = { ...(project.settings ?? {}), wipLimits: limits };
+		const settings: ProjectSettings = { ...project.settings, wipLimits: limits };
 		const res = await pmApi.updateSettings(project.id, settings);
 		setSaving(false);
 		if (!res.success) {

@@ -33,7 +33,7 @@ function normalizeDescription(d: unknown): Block[] {
 
 function normalizeIssueDescription<T extends Issue | null | undefined>(issue: T): T {
 	if (!issue) return issue;
-	issue.description = normalizeDescription((issue as Issue).description as unknown);
+	issue.description = normalizeDescription(issue.description);
 	return issue;
 }
 
