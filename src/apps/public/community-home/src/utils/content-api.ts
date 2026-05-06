@@ -16,7 +16,8 @@ interface ListArticlesOptions {
 	listed?: boolean;
 	q?: string;
 	limit?: number;
-	skip?: number;
+	start?: number;
+	authorId?: string;
 }
 
 interface ListPathsResponse {
@@ -29,6 +30,16 @@ interface GetPathResponse {
 
 interface ListArticlesResponse {
 	articles: Article[];
+	total: number;
+	start: number;
+	limit: number;
+}
+
+export interface ListArticlesResult {
+	articles: Article[];
+	total: number;
+	start: number;
+	limit: number;
 }
 
 interface GetArticleResponse {
@@ -56,11 +67,16 @@ export const contentAPI = {
 		return result.data?.path;
 	},
 
-	listArticles: async (options?: ListArticlesOptions): Promise<Article[]> => {
+	listArticles: async (options?: ListArticlesOptions): Promise<ListArticlesResult> => {
 		const result = await api.get<ListArticlesResponse>("/articles", {
 			params: options as Record<string, string | number | boolean | undefined>,
 		});
-		return result.data?.articles ?? [];
+		return {
+			articles: result.data?.articles ?? [],
+			total: result.data?.total ?? 0,
+			start: result.data?.start ?? 0,
+			limit: result.data?.limit ?? 30,
+		};
 	},
 
 	getArticle: async (slug: string): Promise<Article | undefined> => {
