@@ -1,6 +1,6 @@
 import { router } from "@common/utils/router.js";
 import { canEditContent } from "../utils/permissions";
-import type { SessionData } from "@ui-library/utils/session";
+import type { SessionResponse } from "@ui-library/utils/session";
 import type { Article, LearningPath } from "../utils/content-api";
 import type { RatingStats } from "../utils/social-api";
 import { AUTHORS } from "../utils/constants";
@@ -20,7 +20,7 @@ interface Props {
 	article: Article;
 	fromPath: LearningPath | null;
 	fromPathSlug: string | null;
-	session: SessionData;
+	session: SessionResponse;
 	rating: RatingStats;
 	ratingPending: boolean;
 	canRate: boolean;
@@ -28,7 +28,7 @@ interface Props {
 	shareUrl: string;
 }
 
-export function ArticleHeader({ article, fromPath, fromPathSlug, session, rating, ratingPending, canRate, onRate, shareUrl }: Props) {
+export function ArticleHeader({ article, fromPath, fromPathSlug, session, rating, ratingPending, canRate, onRate, shareUrl }: Readonly<Props>) {
 	const author = article.authorId ? AUTHORS.get(article.authorId) : null;
 	const pathColor = fromPath?.color || article.pathColor;
 	const pathTitle = fromPath?.title || article.pathSlug;

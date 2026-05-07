@@ -74,7 +74,7 @@ export class DraftsRepository {
 			{ upsert: true }
 		);
 		const doc = await this.#model.findById(id).lean<CommentDraftDoc>();
-		return toDraft(doc!);
+		return toDraft(doc as CommentDraftDoc);
 	}
 
 	async get(ownerId: string, key: DraftKey): Promise<CommentDraft | null> {

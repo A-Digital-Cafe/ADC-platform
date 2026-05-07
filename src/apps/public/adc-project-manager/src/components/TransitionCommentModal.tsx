@@ -34,7 +34,7 @@ export function TransitionCommentModal({
 	onCancel,
 	onSubmit,
 	onRequestAttachment,
-}: Props) {
+}: Readonly<Props>) {
 	if (!open) return null;
 	return (
 		<adc-modal open modalTitle={modalTitle} size="lg" onadcClose={onCancel}>

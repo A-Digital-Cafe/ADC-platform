@@ -61,7 +61,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 		linkedIssues: IssueLink[];
 	}>({
 		title: issue?.title ?? "",
-		description: Array.isArray(issue?.description) ? (issue!.description as Block[]) : [],
+		description: Array.isArray(issue?.description) ? issue!.description : [],
 		columnKey: issue?.columnKey ?? project.kanbanColumns.find((c) => c.isAuto)?.key ?? project.kanbanColumns[0]?.key ?? "todo",
 		sprintId: issue?.sprintId ?? "",
 		milestoneId: issue?.milestoneId ?? "",
@@ -86,7 +86,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	// hacer click se entra en edición. Se guarda con su propio botón y vuelve
 	// al modo solo-lectura. Issues nuevos arrancan directamente en edición.
 	const [descEditing, setDescEditing] = useState<boolean>(isNew);
-	const [savedDescription, setSavedDescription] = useState<Block[]>(Array.isArray(issue?.description) ? (issue!.description as Block[]) : []);
+	const [savedDescription, setSavedDescription] = useState<Block[]>(Array.isArray(issue?.description) ? issue!.description : []);
 	const [hasUnsavedDraft, setHasUnsavedDraft] = useState<boolean>(false);
 	const [draftDescription, setDraftDescription] = useState<Block[] | null>(null);
 	const [draftAttachmentIds, setDraftAttachmentIds] = useState<string[]>([]);
@@ -125,7 +125,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 			if (cancelled) return;
 			if (r?.success && r.data?.draft) {
 				const draft = r.data.draft;
-				setDraftDescription((draft.blocks as Block[]) ?? []);
+				setDraftDescription(draft.blocks ?? []);
 				setDraftAttachmentIds(draft.attachmentIds ?? []);
 				setHasUnsavedDraft(true);
 			}
@@ -522,7 +522,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 							) : (
 								<ul className="rounded p-2 max-h-80 overflow-auto text-xs space-y-1">
 									{history.map((h, idx) => (
-										<li key={idx} className="border-b border-text/15 pb-1">
+										<li key={`history-${idx}`} className="border-b border-text/15 pb-1">
 											<span className="font-mono text-muted">{new Date(h.at).toLocaleString()}</span>{" "}
 											<span className="font-semibold">{h.field}</span>:{" "}
 											<span className="text-muted">{JSON.stringify(h.oldValue)}</span> →{" "}

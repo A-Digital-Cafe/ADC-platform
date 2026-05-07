@@ -46,15 +46,13 @@ export async function fetchPublicProfiles(userIds: readonly string[]): Promise<M
 			continue;
 		}
 		const inflightPromise = inflight.get(id);
-		if (inflightPromise !== undefined) {
+		if (inflightPromise === undefined) toFetch.push(id);
+		else
 			pending.push(
 				inflightPromise.then((p) => {
 					out.set(id, p);
 				})
 			);
-		} else {
-			toFetch.push(id);
-		}
 	}
 
 	if (toFetch.length > 0) {

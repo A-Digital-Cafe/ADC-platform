@@ -16,8 +16,6 @@ import type { AttachmentDTO } from "../../../../common/types/attachments/Attachm
 import { CommentError } from "../../../../common/types/custom-errors/CommentError.ts";
 import { DraftsRepository, type DraftKey, type DraftPayload } from "../helpers/drafts.ts";
 
-export type { DraftKey, DraftPayload };
-
 export type CommentAction = "list" | "create" | "reply" | "edit" | "delete" | "react" | "moderate";
 
 export interface CommentPermissionContext {

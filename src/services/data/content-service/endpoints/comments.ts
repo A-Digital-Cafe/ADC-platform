@@ -1,6 +1,5 @@
 import type { Model } from "mongoose";
-import type { Article } from "../../../../common/ADC/types/learning.js";
-import type { Block } from "../../../../common/ADC/types/learning.js";
+import type { Article, Block } from "../../../../common/ADC/types/learning.js";
 import type { CommentLabel } from "../../../../common/types/comments/Comment.ts";
 import { RegisterEndpoint, type EndpointCtx } from "../../../core/EndpointManagerService/index.js";
 import { HttpError } from "@common/types/ADCCustomError.ts";

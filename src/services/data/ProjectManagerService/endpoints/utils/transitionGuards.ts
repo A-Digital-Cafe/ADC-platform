@@ -13,7 +13,7 @@ export function assertCommentForFinalTransition(project: Project, targetColumnKe
 	const targetColumn = project.kanbanColumns.find((c) => c.key === targetColumnKey);
 	const isFinal = !!targetColumn?.isDone;
 	const requiresComment = isFinal && !!project.settings?.requireCommentOnFinalTransition;
-	if (requiresComment && (!commentBlocks || !commentBlocks.length)) {
+	if (requiresComment && !commentBlocks?.length) {
 		throw new ProjectManagerError(400, "COMMENT_REQUIRED_ON_FINAL", "Esta transición requiere un comentario explicando el cierre");
 	}
 }
