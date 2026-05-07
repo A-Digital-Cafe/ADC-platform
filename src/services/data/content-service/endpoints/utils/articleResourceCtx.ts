@@ -7,7 +7,7 @@ import type { ArticleAttachmentEndpointCtx } from "../../permissions/articleAtta
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
 
-export interface ArticleResourceCtxResult {
+interface ArticleResourceCtxResult {
 	articleSlug: string;
 	articleAuthorId: string | null;
 	articleListed: boolean;

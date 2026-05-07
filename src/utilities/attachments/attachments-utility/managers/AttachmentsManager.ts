@@ -72,13 +72,15 @@ export interface PresignUploadResult {
 const FILE_NAME_SAFE = /[^A-Za-z0-9._-]+/g;
 
 function safeFileName(name: string): string {
-	const cleaned = name.replace(FILE_NAME_SAFE, "_").replaceAll(/_+/, "_").replace(/^_+/, "").replace(/_+$/, "");
+	const bounded = name.slice(0, 240);
+	const cleaned = bounded.replaceAll(FILE_NAME_SAFE, "_").replaceAll(/_+/, "_").replace(/^_+/, "").replace(/_+$/, "");
 	return cleaned.length > 0 ? cleaned.slice(0, 120) : "file";
 }
 
 function sanitizeSegment(seg: string): string {
+	const bounded = seg.slice(0, 200);
 	return (
-		seg
+		bounded
 			.replaceAll(/[^A-Za-z0-9._-]+/, "_")
 			.replace(/^_+/, "")
 			.replace(/_+$/, "") || "_"
@@ -341,7 +343,6 @@ export class AttachmentsManager {
 	 */
 	@OnlyKernel()
 	async forceDelete(_kernelKey: symbol, attachmentId: string): Promise<void> {
-		void _kernelKey;
 		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
 		if (!doc) return;
 		try {
@@ -360,7 +361,6 @@ export class AttachmentsManager {
 	 */
 	@OnlyKernel()
 	async gc(_kernelKey: symbol, olderThanMs = 24 * 60 * 60 * 1000): Promise<number> {
-		void _kernelKey;
 		const threshold = new Date(Date.now() - olderThanMs);
 		const docs = await this.#model.find({ status: "pending", createdAt: { $lt: threshold } }).lean<Array<AttachmentDoc & { _id: string }>>();
 		let removed = 0;
@@ -390,6 +390,10 @@ export class AttachmentsManager {
 	}
 
 	#docToAttachment(doc: AttachmentDoc & { _id: string }): Attachment {
+		let uploadedAt = undefined;
+		if (doc.uploadedAt) {
+			uploadedAt = doc.uploadedAt instanceof Date ? doc.uploadedAt : new Date(doc.uploadedAt);
+		}
 		return {
 			id: String(doc._id),
 			basePath: doc.basePath,
@@ -405,7 +409,7 @@ export class AttachmentsManager {
 			status: doc.status,
 			uploadedBy: doc.uploadedBy,
 			createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),
-			uploadedAt: doc.uploadedAt ? (doc.uploadedAt instanceof Date ? doc.uploadedAt : new Date(doc.uploadedAt)) : undefined,
+			uploadedAt,
 		};
 	}
 }

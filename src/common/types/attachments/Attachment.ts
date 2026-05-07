@@ -42,9 +42,6 @@ export interface AttachmentDTO {
 	createdAt: string;
 }
 
-/** Compatibilidad con código previo. */
-export type IssueAttachment = AttachmentDTO;
-
 export const ATTACHMENT_DEFAULT_MAX_SIZE = 25 * 1024 * 1024; // 25 MB
 
 export const ATTACHMENT_DEFAULT_ALLOWED_MIMES = [

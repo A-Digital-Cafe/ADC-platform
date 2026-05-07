@@ -204,7 +204,7 @@ export class IssueEndpoints {
 
 		// Si se proporcionó un comentario (obligatorio o no), se persiste con
 		// `label = "transition-reason"` para destacarlo en el historial.
-		if (commentBlocks && commentBlocks.length) {
+		if (commentBlocks?.length) {
 			try {
 				await service.issueComments.create(pre.commentCtx, {
 					targetType: "pm-issue",

@@ -172,7 +172,8 @@ export class AdcBlocksRenderer {
 			);
 		}
 		const sizeStr = this.formatBytes(block.size);
-		const label = `${block.fileName || "Archivo"}${sizeStr ? ` (${sizeStr})` : ""}`;
+		const sizeText = sizeStr ? ` (${sizeStr})` : "";
+		const label = `${block.fileName || "Archivo"}${sizeText}`;
 		return (
 			<div key={index} class={`my-2 ${alignClass}`.trim()}>
 				{url ? (

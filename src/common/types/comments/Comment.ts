@@ -47,23 +47,6 @@ export interface CommentsPage {
 	nextCursor: string | null;
 }
 
-export interface CreateCommentInput {
-	parentId?: string | null;
-	blocks: Block[];
-	attachmentIds?: string[];
-	label?: CommentLabel;
-	meta?: Record<string, unknown>;
-}
-
-export interface UpdateCommentInput {
-	blocks: Block[];
-	attachmentIds?: string[];
-}
-
-export interface ReactionInput {
-	emoji: string;
-}
-
 export const COMMENT_MAX_BLOCKS = 50;
 export const COMMENT_MAX_DEPTH = 3;
 export const COMMENT_MAX_ATTACHMENTS = 10;

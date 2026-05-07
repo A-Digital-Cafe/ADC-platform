@@ -102,6 +102,7 @@ export class AdcCommentItem {
 			<div class="flex flex-wrap gap-1 mt-2">
 				{all.map((emoji) => {
 					const count = c.reactions?.[emoji]?.length || 0;
+					const countText = count ? ` (${count})` : "";
 					const mine = this.isReactedByMe(emoji);
 					return (
 						<button
@@ -111,7 +112,7 @@ export class AdcCommentItem {
 							onClick={() => this.toggleReaction(emoji)}
 							disabled={!this.canReact}
 							aria-pressed={mine ? "true" : "false"}
-							aria-label={`${emoji}${count ? ` (${count})` : ""}`}
+							aria-label={`${emoji}${countText}`}
 						>
 							{emoji}
 							{count > 0 && <span class="ml-1 text-xs">{count}</span>}

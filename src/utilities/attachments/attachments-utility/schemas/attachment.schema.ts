@@ -3,7 +3,7 @@ import type { Attachment, AttachmentStatus } from "../../../../common/types/atta
 
 export type AttachmentDoc = Omit<Attachment, "id"> & { _id: string };
 
-export function buildAttachmentSchema(): Schema<AttachmentDoc> {
+function buildAttachmentSchema(): Schema<AttachmentDoc> {
 	const schema = new Schema<AttachmentDoc>(
 		{
 			_id: { type: String, required: true } as any,

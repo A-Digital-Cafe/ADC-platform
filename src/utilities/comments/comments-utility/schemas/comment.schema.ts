@@ -13,7 +13,7 @@ export type CommentDoc = Omit<Comment, "id" | "createdAt" | "updatedAt" | "attac
 	updatedAt?: Date;
 };
 
-export function buildCommentSchema(): Schema<CommentDoc> {
+function buildCommentSchema(): Schema<CommentDoc> {
 	const schema = new Schema<CommentDoc>(
 		{
 			_id: { type: String, required: true } as any,

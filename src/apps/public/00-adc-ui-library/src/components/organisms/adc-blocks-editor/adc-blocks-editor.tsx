@@ -269,9 +269,11 @@ export class AdcBlocksEditor {
 			if (child.nodeType !== Node.ELEMENT_NODE) continue;
 			const el = child as HTMLElement;
 			const id = el.dataset?.standaloneId;
-			if (id && this.standaloneById.has(id)) {
+
+			if (id) {
 				const current = this.standaloneById.get(id);
-				const updated = AdcBlocksEditor.readStandaloneFromDom(current!, el);
+				if (!current) continue;
+				const updated = AdcBlocksEditor.readStandaloneFromDom(current, el);
 				this.standaloneById.set(id, updated);
 				orderedStandalone.push([id, updated]);
 				blocks.push(updated);
@@ -496,7 +498,8 @@ export class AdcBlocksEditor {
 			el.appendChild(document.createTextNode("\u200B"));
 			range.insertNode(el);
 			const inside = document.createRange();
-			inside.setStart(el.firstChild!, 1);
+			if (!el.firstChild) return;
+			inside.setStart(el.firstChild, 1);
 			inside.collapse(true);
 			sel.removeAllRanges();
 			sel.addRange(inside);
@@ -543,7 +546,8 @@ export class AdcBlocksEditor {
 			code.appendChild(document.createTextNode("\u200B"));
 			range.insertNode(code);
 			const inside = document.createRange();
-			inside.setStart(code.firstChild!, 1);
+			if (!code.firstChild) return;
+			inside.setStart(code.firstChild, 1);
 			inside.collapse(true);
 			sel.removeAllRanges();
 			sel.addRange(inside);
@@ -697,7 +701,7 @@ export class AdcBlocksEditor {
 		const text = blockEl.textContent ?? "";
 		let target: "ul" | "ol" | "h2" | "h3" | "h4" | null = null;
 		let stripLen = 0;
-		const ulMatch = /^(\*|-) $/.exec(text);
+		const ulMatch = /^[*-] $/.exec(text);
 		const olMatch = /^(\d+)\. $/.exec(text);
 		const hMatch = /^(#{1,3}) $/.exec(text);
 		if (ulMatch) {
@@ -792,9 +796,9 @@ export class AdcBlocksEditor {
 		if (sel && sel.rangeCount > 0 && this.editorEl.contains(sel.getRangeAt(0).startContainer)) {
 			let n: Node | null = sel.getRangeAt(0).startContainer;
 			while (n && n.parentNode !== this.editorEl) n = n.parentNode;
-			anchor = n && n.nodeType === Node.ELEMENT_NODE ? (n as HTMLElement) : null;
+			anchor = n?.nodeType === Node.ELEMENT_NODE ? (n as HTMLElement) : null;
 		}
-		if (anchor && anchor.parentNode === this.editorEl) {
+		if (anchor?.parentNode === this.editorEl) {
 			anchor.after(cardEl);
 			cardEl.after(trailing);
 		} else {
@@ -828,7 +832,7 @@ export class AdcBlocksEditor {
 	private readonly handleEditorChange = (ev: Event) => {
 		const t = ev.target as HTMLElement | null;
 		if (!t) return;
-		const action = t.getAttribute("data-standalone-action");
+		const action = t.dataset.standaloneAction;
 		if (action === "language" || action === "tone") {
 			this.emit();
 		}
@@ -939,7 +943,7 @@ export class AdcBlocksEditor {
 											class="flex items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-alt text-left cursor-pointer"
 											onMouseDown={(ev) => ev.preventDefault()}
 											onClick={() => {
-												this.transformCurrentBlock(`h${hl.level}` as "h2" | "h3" | "h4");
+												this.transformCurrentBlock(`h${hl.level}`);
 												this.headingMenuOpen = false;
 											}}
 											role="menuitem"

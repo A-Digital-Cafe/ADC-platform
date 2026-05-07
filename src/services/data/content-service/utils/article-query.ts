@@ -13,7 +13,7 @@ interface ListArticlesQuery {
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 200;
 
-export interface ArticleListResult {
+interface ArticleListResult {
 	articles: Article[];
 	total: number;
 	start: number;

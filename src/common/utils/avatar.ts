@@ -11,7 +11,7 @@
  *   3. primer linkedAccount activo con providerAvatar
  */
 
-export interface UserAvatarSource {
+interface UserAvatarSource {
 	avatar?: string | null;
 	metadata?: Record<string, unknown> | null;
 	linkedAccounts?: Array<{ status?: string; providerAvatar?: string }> | null;
@@ -26,7 +26,7 @@ export function resolveUserAvatar(user: UserAvatarSource | null | undefined): st
 	return linked || undefined;
 }
 
-/** Construye la URL de DiceBear como avatar procedural determinista. */
+/** @public Construye la URL de DiceBear como avatar procedural determinista. */
 export function buildDicebearAvatar(seed: string): string {
 	return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
 }

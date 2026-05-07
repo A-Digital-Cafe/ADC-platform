@@ -5,6 +5,5 @@ export * from "./Issue.ts";
 export * from "./LabelColors.ts";
 export * from "./CustomField.ts";
 export * from "./IssueLink.ts";
-export * from "./Attachment.ts";
 export * from "./UpdateLogEntry.ts";
 export * from "./permissions.ts";

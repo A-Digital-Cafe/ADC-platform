@@ -26,7 +26,7 @@ interface Props {
 
 const COMMENT_PAGE_LIMIT = 20;
 
-export function IssueComments({ issueId, caller, canComment = true, canModerate = false }: Props) {
+export function IssueComments({ issueId, caller, canComment = true, canModerate = false }: Readonly<Props>) {
 	const [flatComments, setFlatComments] = useState<Comment[]>([]);
 	const [comments, setComments] = useState<CommentTreeNode[]>([]);
 	const [cursor, setCursor] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function IssueComments({ issueId, caller, canComment = true, canModerate 
 	const requestedAttachmentRef = useRef<Set<string>>(new Set());
 
 	useEffect(() => {
-		setComments(buildCommentsTree(flatComments) as CommentTreeNode[]);
+		setComments(buildCommentsTree(flatComments));
 	}, [flatComments]);
 
 	useEffect(() => {
@@ -253,21 +253,11 @@ export function IssueComments({ issueId, caller, canComment = true, canModerate 
 			attachmentUrls={attachmentUrls}
 			initialDraftBlocks={rootDraftBlocks as StencilBlock[]}
 			initialDraftAttachmentIds={rootDraftAttachmentIds}
-			onadcSubmit={(ev) => {
-				void handleSubmit(ev.detail);
-			}}
-			onadcDelete={(ev) => {
-				void handleDelete(ev.detail);
-			}}
-			onadcReactToggle={(ev) => {
-				void handleReactToggle(ev.detail);
-			}}
-			onadcLoadMore={() => {
-				void handleLoadMore();
-			}}
-			onadcDraftChange={(ev) => {
-				void handleDraftChange(ev.detail);
-			}}
+			onadcSubmit={(ev) => handleSubmit(ev.detail)}
+			onadcDelete={(ev) => handleDelete(ev.detail)}
+			onadcReactToggle={(ev) => handleReactToggle(ev.detail)}
+			onadcLoadMore={() => handleLoadMore()}
+			onadcDraftChange={(ev) => handleDraftChange(ev.detail)}
 			onadcRequestAttachment={(ev) => handleRequestAttachment(ev.detail)}
 		/>
 	);

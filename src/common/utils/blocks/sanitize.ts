@@ -20,7 +20,7 @@ const CALLOUT_TONES: readonly CalloutTone[] = ["info", "warning", "success", "er
 const CALLOUT_ROLES: readonly CalloutRole[] = ["note", "status", "alert"];
 const LINK_RELS: ReadonlySet<LinkRel> = new Set(["nofollow", "noopener", "noreferrer", "ugc", "sponsored"]);
 
-export interface SanitizeOptions {
+interface SanitizeOptions {
 	allowedAttachmentIds?: ReadonlySet<string>;
 	maxBlocks?: number;
 }
