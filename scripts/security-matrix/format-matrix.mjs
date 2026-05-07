@@ -3,7 +3,11 @@ const MUTATIVE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 function countBy(items, selector) {
 	const counts = new Map();
 	for (const item of items) counts.set(selector(item), (counts.get(selector(item)) ?? 0) + 1);
-	return Object.fromEntries([...counts.entries()].sort());
+	return Object.fromEntries([...counts.entries()].sort((a, b) => {
+		if (typeof a[0] === "string" && typeof b[0] === "string") return a[0].localeCompare(b[0]);
+		if(typeof a[0] === "number" && typeof b[0] === "number") return a[0] - b[0];
+		return 0;
+	}));
 }
 
 function rateLabel(endpoint) {

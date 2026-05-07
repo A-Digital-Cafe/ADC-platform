@@ -49,7 +49,7 @@ function collectDirectFetches() {
 		if (file.includes("/dist/") || file.endsWith("components.d.ts")) continue;
 		const source = sourceFile(file);
 		function visit(node) {
-			if (ts.isCallExpression(node) && text(node.expression, source) === "fetch") fetches.push({ file: toRepoPath(file), line: lineOf(source, node), call: text(node, source).replace(/\s+/g, " ").slice(0, 180) });
+			if (ts.isCallExpression(node) && text(node.expression, source) === "fetch") fetches.push({ file: toRepoPath(file), line: lineOf(source, node), call: text(node, source).replaceAll(/\s+/g, " ").slice(0, 180) });
 			ts.forEachChild(node, visit);
 		}
 		visit(source);

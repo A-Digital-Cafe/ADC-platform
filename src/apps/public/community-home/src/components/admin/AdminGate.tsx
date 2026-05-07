@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { router } from "@common/utils/router.js";
-import { getSession, type SessionData } from "@ui-library/utils/session";
+import { getSession, type SessionResponse } from "@ui-library/utils/session";
 import { canEditContent, canPublish } from "../../utils/permissions";
 
 interface Props {
-	readonly children: (session: SessionData, isReviewer: boolean) => React.ReactNode;
+	readonly children: (session: SessionResponse, isReviewer: boolean) => React.ReactNode;
 	readonly requirePublish?: boolean;
 }
 
 export function AdminGate({ children, requirePublish = false }: Props) {
-	const [session, setSession] = useState<SessionData | null>(null);
+	const [session, setSession] = useState<SessionResponse | null>(null);
 	const [allowed, setAllowed] = useState<boolean | null>(null);
 	const [reviewer, setReviewer] = useState(false);
 
@@ -35,5 +35,5 @@ export function AdminGate({ children, requirePublish = false }: Props) {
 			</div>
 		);
 	}
-	return <>{children(session as SessionData, reviewer)}</>;
+	return <>{children(session as SessionResponse, reviewer)}</>;
 }

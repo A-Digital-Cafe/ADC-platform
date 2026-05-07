@@ -28,7 +28,7 @@ interface SanitizeOptions {
 function clampString(s: unknown, max: number): string {
 	if (typeof s !== "string") return "";
 	// eslint-disable-next-line no-control-regex
-	const trimmed = s.replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/, "");
+	const trimmed = s.replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 	return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }
 

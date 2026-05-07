@@ -42,7 +42,7 @@ function toD(n: number): Difficulty {
 	return v as Difficulty;
 }
 
-export function IssueDialog({ project, issue, perms, caller, sprints = [], milestones = [], onClose, onSaved }: Props) {
+export function IssueDialog({ project, issue, perms, caller, sprints = [], milestones = [], onClose, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const isNew = !issue;
 	const [form, setForm] = useState<{

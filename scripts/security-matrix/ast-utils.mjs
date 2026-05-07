@@ -49,5 +49,5 @@ export function routePathFromNode(node, source) {
 }
 
 export function canonRoute(url) {
-	return url.replace(/:[^/]+/g, ":x").replace(/\/+/g, "/");
+	return url.replaceAll(/:[^/]+/g, ":x").replaceAll(/\/+/g, "/");
 }

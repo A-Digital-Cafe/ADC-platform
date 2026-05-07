@@ -37,7 +37,7 @@ function collectActiveBadges(issue: Issue, defs: CustomFieldDef[]): ActiveBadge[
  * (prioridad, etc.). Mantiene la lógica de drag&drop nativa del browser
  * (dataTransfer).
  */
-export function IssueCard({ issue, isDraggable, muted = false, customFieldDefs, onOpen }: Props) {
+export function IssueCard({ issue, isDraggable, muted = false, customFieldDefs, onOpen }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const activeBadges = customFieldDefs ? collectActiveBadges(issue, customFieldDefs) : [];
 

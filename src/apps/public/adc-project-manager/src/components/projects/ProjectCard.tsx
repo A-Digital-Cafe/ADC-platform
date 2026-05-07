@@ -14,7 +14,7 @@ interface Props {
 	onDelete?: (id: string) => void;
 }
 
-export function ProjectCard({ project, canDelete, onOpen, onDelete }: Props) {
+export function ProjectCard({ project, canDelete, onOpen, onDelete }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	return (
 		<adc-card class="p-4 flex flex-col gap-2">

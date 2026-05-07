@@ -16,7 +16,7 @@ interface Props {
  * para consultar `/api/identity/users/search` y mantiene un cache local de los
  * chips ya seleccionados para poder mostrar el nombre sin re-fetchear.
  */
-export function UserPicker({ selectedIds, onChange, disabled, label, initialCache }: Props) {
+export function UserPicker({ selectedIds, onChange, disabled, label, initialCache }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [results, setResults] = useState<ClientUser[]>([]);
 	const [searching, setSearching] = useState(false);

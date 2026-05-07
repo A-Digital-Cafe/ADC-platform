@@ -10,7 +10,7 @@ interface Props {
 	onSaved: () => void | Promise<void>;
 }
 
-export function ColumnsSection({ project, canEdit, onSaved }: Props) {
+export function ColumnsSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [cols, setCols] = useState<KanbanColumn[]>(() => [...project.kanbanColumns].sort((a, b) => a.order - b.order));
 	const [requireComment, setRequireComment] = useState<boolean>(project.settings?.requireCommentOnFinalTransition === true);

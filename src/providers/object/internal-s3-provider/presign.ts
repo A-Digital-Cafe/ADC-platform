@@ -39,7 +39,7 @@ export async function getPresignedDownloadUrl(
 	let responseContentDisposition = undefined;
 
 	if (input.filename)
-		responseContentDisposition = `${input.inline ? "inline" : "attachment"}; filename="${input.filename.replaceAll(/"/, "")}"`;
+		responseContentDisposition = `${input.inline ? "inline" : "attachment"}; filename="${input.filename.replaceAll(/"/g, "")}"`;
 	const cmd = new GetObjectCommand({
 		Bucket: bucket,
 		Key: input.key,

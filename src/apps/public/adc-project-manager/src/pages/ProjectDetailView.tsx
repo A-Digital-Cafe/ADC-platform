@@ -21,7 +21,7 @@ interface Props {
 	onBack: () => void;
 }
 
-export function ProjectDetailView({ project, orgSlug, perms, caller, activeTab, onBack }: Props) {
+export function ProjectDetailView({ project, orgSlug, perms, caller, activeTab, onBack }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [currentProject, setCurrentProject] = useState<Project>(project);
 	const visibleTabs = getVisibleProjectTabs(perms, currentProject, caller);

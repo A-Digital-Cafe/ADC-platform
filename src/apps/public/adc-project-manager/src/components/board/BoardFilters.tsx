@@ -19,7 +19,7 @@ interface Props {
 	trailing?: ReactNode;
 }
 
-export function BoardFilters({ q, onQChange, filters, onFiltersChange, sprints, milestones, trailing }: Props) {
+export function BoardFilters({ q, onQChange, filters, onFiltersChange, sprints, milestones, trailing }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 
 	const sprintOptions = JSON.stringify([

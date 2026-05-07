@@ -37,7 +37,7 @@ export class AdcYoutubeFacade {
 		// Extraer de URLs de YouTube
 		const patterns = [/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/];
 		for (const pattern of patterns) {
-			const match = this.src.match(pattern);
+			const match = pattern.exec(this.src);
 			if (match) return match[1];
 		}
 

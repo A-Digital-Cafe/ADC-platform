@@ -53,7 +53,7 @@ function enumerateDays(from: Date, count: number): Date[] {
  * Issues con `closedAt` se ubican en su día; los pendientes se agrupan en el
  * `endDate` del rango (sprint/milestone) solo si cae dentro de la ventana.
  */
-export function CalendarGrid({ project, issues, endDate, onOpen }: Props) {
+export function CalendarGrid({ project, issues, endDate, onOpen }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 
 	const defaultStart = useMemo(() => addDays(startOfWeekSunday(new Date()), -7), []);

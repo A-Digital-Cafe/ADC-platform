@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "@common/utils/router.js";
-import { getSession, type SessionData } from "@ui-library/utils/session";
+import { getSession, type SessionResponse } from "@ui-library/utils/session";
 import { canRate } from "../utils/permissions";
 import { contentAPI, type Article, type LearningPath } from "../utils/content-api";
 import { socialApi, type RatingStats } from "../utils/social-api";
@@ -13,7 +13,7 @@ export function ArticlePage({ slug }: { readonly slug: string }) {
 	const [fromPath, setFromPath] = useState<LearningPath | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [session, setSession] = useState<SessionData>({ authenticated: false });
+	const [session, setSession] = useState<SessionResponse>({ authenticated: false });
 	const [rating, setRating] = useState<RatingStats>({ average: 0, count: 0, myRating: null });
 	const [ratingPending, setRatingPending] = useState(false);
 

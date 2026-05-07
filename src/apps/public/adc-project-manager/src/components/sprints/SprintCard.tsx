@@ -29,7 +29,18 @@ interface Props {
 	onUpdated: () => void | Promise<void>;
 }
 
-export function SprintCard({ sprint, doneCount, totalCount, perms, project, caller, onStart, onComplete, onDelete, onUpdated }: Props) {
+export function SprintCard({
+	sprint,
+	doneCount,
+	totalCount,
+	perms,
+	project,
+	caller,
+	onStart,
+	onComplete,
+	onDelete,
+	onUpdated,
+}: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const canEdit = canUpdateProjectResource(perms, Scope.SPRINTS, project, caller);
 	const [editing, setEditing] = useState(false);

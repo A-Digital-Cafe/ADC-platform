@@ -15,7 +15,7 @@ interface Props {
 	caller?: CallerCtx;
 }
 
-export function SprintsView({ project, perms, caller }: Props) {
+export function SprintsView({ project, perms, caller }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [sprints, setSprints] = useState<Sprint[]>([]);
 	const [issues, setIssues] = useState<Issue[]>([]);

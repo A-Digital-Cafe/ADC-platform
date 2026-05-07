@@ -16,7 +16,7 @@ interface Props {
  * Editor de vínculos entre issues. Usa los tipos definidos en
  * `project.issueLinkTypes` y permite agregar/remover IssueLink.
  */
-export function IssueLinksEditor({ linkTypes, currentIssueId, allIssues, value, onChange, disabled }: Props) {
+export function IssueLinksEditor({ linkTypes, currentIssueId, allIssues, value, onChange, disabled }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [linkTypeId, setLinkTypeId] = useState<string>(linkTypes[0]?.id ?? "");
 	const [targetIssueId, setTargetIssueId] = useState<string>("");

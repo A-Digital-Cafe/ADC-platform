@@ -95,8 +95,8 @@ function createCppModuleProxy(options: CppModuleOptions): IModule {
  * Inicia procesos C++ y se comunica con ellos mediante IPC (named pipes).
  */
 export default class CppLoader implements IModuleLoader {
-	private processes = new Map<string, ChildProcess>();
-	private modules = {
+	private readonly processes = new Map<string, ChildProcess>();
+	private readonly modules = {
 		provider: [] as IModule[],
 		utility: [] as IModule[],
 		service: [] as IModule[],

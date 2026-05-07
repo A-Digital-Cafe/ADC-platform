@@ -6,7 +6,7 @@ import { h } from "@stencil/core";
 import type { DisplayedError, ErrorSeverity } from "./types.js";
 
 /** Maps severity level to Tailwind CSS classes */
-export function getSeverityClass(severity: ErrorSeverity): string {
+export function getSeverityClass(severity?: ErrorSeverity): string {
 	switch (severity) {
 		case "warning":
 			return "bg-warn text-twarn border-twarn/45";
@@ -31,7 +31,7 @@ export function renderCallout(errors: DisplayedError[], onDismiss: (id: number) 
 	if (errors.length === 0) return null;
 
 	const error = errors[0];
-	const classes = `rounded-xxl border p-3 mb-2 ${getSeverityClass(error.severity!)}`;
+	const classes = `rounded-xxl border p-3 mb-2 ${getSeverityClass(error.severity)}`;
 
 	return (
 		<div class={classes} role="alert" aria-live="assertive" aria-atomic="true">
@@ -57,7 +57,7 @@ export function renderToast(errors: DisplayedError[], onDismiss: (id: number) =>
 	return (
 		<div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
 			{errors.map((error) => {
-				const classes = `rounded-xxl border p-3 shadow-lg backdrop-blur-sm animate-slide-in ${getSeverityClass(error.severity!)}`;
+				const classes = `rounded-xxl border p-3 shadow-lg backdrop-blur-sm animate-slide-in ${getSeverityClass(error.severity)}`;
 				return (
 					<div key={error.id} class={classes} role="alert" aria-live="polite">
 						<div class="flex items-start justify-between gap-2">

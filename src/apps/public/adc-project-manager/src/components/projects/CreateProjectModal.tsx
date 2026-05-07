@@ -39,7 +39,7 @@ interface Props {
 	onSubmit: (form: ProjectFormState) => Promise<void> | void;
 }
 
-export function CreateProjectModal({ orgSlug, allowed, organizations, defaultOrgId, onClose, onSubmit }: Props) {
+export function CreateProjectModal({ orgSlug, allowed, organizations, defaultOrgId, onClose, onSubmit }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 
 	const defaultVisibility: ProjectVisibility = useMemo(() => {

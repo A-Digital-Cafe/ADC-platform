@@ -36,7 +36,7 @@ function applyFilters(issues: Issue[], f: BoardFilterState, q: string): Issue[] 
 	});
 }
 
-export function BoardView({ project, perms, caller }: Props) {
+export function BoardView({ project, perms, caller }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [q, setQ] = useState("");
 	const [filters, setFilters] = useState<BoardFilterState>({});

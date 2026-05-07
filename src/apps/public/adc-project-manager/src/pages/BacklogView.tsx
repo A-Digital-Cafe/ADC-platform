@@ -25,7 +25,7 @@ interface Props {
 
 const COMPLETED_UMBRELLA_KEY = "__completed__";
 
-export function BacklogView({ project, perms, caller }: Props) {
+export function BacklogView({ project, perms, caller }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [q, setQ] = useState("");
 	const [orderBy, setOrderBy] = useState<IssueListParams["orderBy"]>("priority");

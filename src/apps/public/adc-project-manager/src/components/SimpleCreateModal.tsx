@@ -13,7 +13,7 @@ interface Props {
  * Modal genérico con campos `name` + `description` (opcional).
  * Reutilizado por "crear sprint", "crear milestone", etc.
  */
-export function SimpleCreateModal({ title, nameLabel, descriptionLabel, onClose, onSubmit }: Props) {
+export function SimpleCreateModal({ title, nameLabel, descriptionLabel, onClose, onSubmit }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [form, setForm] = useState({ name: "", description: "" });
 

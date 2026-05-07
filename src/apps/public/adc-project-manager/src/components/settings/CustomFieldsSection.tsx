@@ -14,7 +14,7 @@ interface Props {
 
 const FIELD_TYPES: CustomFieldType[] = ["text", "number", "date", "label", "badge", "user"];
 
-export function CustomFieldsSection({ project, canEdit, onSaved }: Props) {
+export function CustomFieldsSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [defs, setDefs] = useState<CustomFieldDef[]>(project.customFieldDefs);
 	const [saving, setSaving] = useState(false);

@@ -32,7 +32,7 @@ function toDateInput(v?: Date | string): string {
 	return d.toISOString().slice(0, 10);
 }
 
-export function MilestoneCard({ milestone, doneCount, totalCount, perms, project, caller, onDelete, onUpdated }: Props) {
+export function MilestoneCard({ milestone, doneCount, totalCount, perms, project, caller, onDelete, onUpdated }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const canEdit = canUpdateProjectResource(perms, Scope.MILESTONES, project, caller);
 	const [editing, setEditing] = useState(false);

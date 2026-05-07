@@ -23,7 +23,7 @@ interface Props {
  * y mantiene un cache local de los chips ya seleccionados para mostrar el
  * nombre sin re-fetchear.
  */
-export function GroupPicker({ selectedIds, onChange, orgId, disabled, label, resolvedById }: Props) {
+export function GroupPicker({ selectedIds, onChange, orgId, disabled, label, resolvedById }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [results, setResults] = useState<ClientGroup[]>([]);
 	const [searching, setSearching] = useState(false);

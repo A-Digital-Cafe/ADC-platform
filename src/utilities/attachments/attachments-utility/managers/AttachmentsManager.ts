@@ -73,7 +73,7 @@ const FILE_NAME_SAFE = /[^A-Za-z0-9._-]+/g;
 
 function safeFileName(name: string): string {
 	const bounded = name.slice(0, 240);
-	const cleaned = bounded.replaceAll(FILE_NAME_SAFE, "_").replaceAll(/_+/, "_").replace(/^_+/, "").replace(/_+$/, "");
+	const cleaned = bounded.replaceAll(FILE_NAME_SAFE, "_").replaceAll(/_+/g, "_").replace(/^_+/, "").replace(/_+$/, "");
 	return cleaned.length > 0 ? cleaned.slice(0, 120) : "file";
 }
 
@@ -81,7 +81,7 @@ function sanitizeSegment(seg: string): string {
 	const bounded = seg.slice(0, 200);
 	return (
 		bounded
-			.replaceAll(/[^A-Za-z0-9._-]+/, "_")
+			.replaceAll(/[^A-Za-z0-9._-]+/g, "_")
 			.replace(/^_+/, "")
 			.replace(/_+$/, "") || "_"
 	);

@@ -30,7 +30,7 @@ export default class UIFederationService extends BaseService {
 	private readonly importMaps = new Map<string, ImportMap>();
 	private langManager: ILangManagerService | null = null;
 	private readonly uiOutputBaseDir: string;
-	private port: number = 3000;
+	private readonly port: number = 3000;
 	private readonly isDevelopment: boolean;
 	// Registro de hosts para producción: hostPattern -> { namespace, moduleName, directory }
 	private readonly hostRegistry = new Map<string, { namespace: string; moduleName: string; directory: string }>();

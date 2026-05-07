@@ -12,7 +12,7 @@ import type OperationsService from "../../../core/OperationsService/index.ts";
 import type { Step } from "../../../core/OperationsService/types.ts";
 
 export class RoleManager {
-	#permissionChecker: PermissionChecker;
+	readonly #permissionChecker: PermissionChecker;
 	readonly #operations: OperationsService;
 
 	constructor(
