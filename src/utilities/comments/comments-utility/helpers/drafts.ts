@@ -34,7 +34,7 @@ function toDraft(doc: CommentDraftDoc): CommentDraft {
 		targetId: doc.targetId,
 		parentId: doc.parentId,
 		editingCommentId: doc.editingCommentId,
-		blocks: doc.blocks as Block[],
+		blocks: doc.blocks,
 		attachmentIds: doc.attachmentIds ?? [],
 		updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : String(doc.updatedAt),
 	};
@@ -82,7 +82,7 @@ export class DraftsRepository {
 		const doc = await this.#model.findById(id).lean<CommentDraftDoc>();
 		// Defensa en profundidad: aunque el id incluye ownerId, validamos también
 		// el campo persistido por si la colección tuviera datos legados.
-		if (!doc || doc.ownerId !== ownerId) return null;
+		if (doc?.ownerId !== ownerId) return null;
 		return toDraft(doc);
 	}
 

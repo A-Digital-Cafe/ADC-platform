@@ -136,8 +136,8 @@ export class AdcBlocksRenderer {
 	}
 
 	private formatBytes(size?: number): string {
-		if (!Number.isFinite(size)) return "";
-		const n = size as number;
+		if (size === undefined || !Number.isFinite(size)) return "";
+		const n = size;
 		if (n < 1024) return `${n} B`;
 		if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
 		if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;

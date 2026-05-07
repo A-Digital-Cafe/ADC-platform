@@ -109,8 +109,8 @@ function hashIdempotency(data: unknown): string {
  */
 function sanitizeIdempotencyKey(key: string): string {
 	for (let i = 0; i < key.length; i++) {
-		const code = key.charCodeAt(i);
-		if (code > 0xff || code < 0x20) return hashIdempotency(key);
+		const code = key.codePointAt(i);
+		if (code && (code > 0xff || code < 0x20)) return hashIdempotency(key);
 	}
 	return key;
 }
@@ -235,7 +235,7 @@ export function createAdcApi(config: AdcApiConfig) {
 		options: RequestOptions<TData> = {}
 	): Promise<AdcFetchResult<T>> {
 		const { params, body, headers, translateParams, idempotencyKey, idempotencyData, signal, skipCsrf } = options;
-		const rawIdempotencyKey = idempotencyData !== undefined ? hashIdempotency(idempotencyData) : idempotencyKey;
+		const rawIdempotencyKey = idempotencyData === undefined ? idempotencyKey : hashIdempotency(idempotencyData);
 		const resolvedIdempotencyKey = rawIdempotencyKey ? sanitizeIdempotencyKey(rawIdempotencyKey) : undefined;
 
 		const url = `${baseUrl}${path}${buildQueryString(params)}`;

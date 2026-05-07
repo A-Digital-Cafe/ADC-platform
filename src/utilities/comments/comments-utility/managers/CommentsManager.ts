@@ -405,6 +405,8 @@ export class CommentsManager {
 	}
 
 	#docToComment(doc: CommentDoc, dtoMap?: Map<string, AttachmentDTO>): Comment {
+		let updatedAt = undefined;
+		if (doc.updatedAt) updatedAt = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : String(doc.updatedAt);
 		return {
 			id: String(doc._id),
 			targetType: doc.targetType,
@@ -415,14 +417,14 @@ export class CommentsManager {
 			authorId: doc.authorId,
 			authorName: doc.authorName,
 			authorImage: doc.authorImage,
-			blocks: doc.deleted ? [] : (doc.blocks as Block[]),
+			blocks: doc.deleted ? [] : doc.blocks,
 			attachments: doc.attachmentIds.map((id) => dtoMap?.get(id)).filter((x): x is AttachmentDTO => Boolean(x)),
 			reactions: doc.reactions ?? {},
 			replyCount: doc.replyCount ?? 0,
-			label: doc.label as CommentLabel | undefined,
+			label: doc.label,
 			meta: doc.meta,
 			createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : String(doc.createdAt),
-			updatedAt: doc.updatedAt ? (doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : String(doc.updatedAt)) : undefined,
+			updatedAt,
 			edited: !!doc.edited,
 			deleted: !!doc.deleted,
 		};

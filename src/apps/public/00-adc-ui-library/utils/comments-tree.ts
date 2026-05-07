@@ -12,7 +12,7 @@ export function buildCommentsTree(flat: Comment[]): CommentTreeNode[] {
 	const roots: CommentTreeNode[] = [];
 	for (const node of map.values()) {
 		if (node.parentId && map.has(node.parentId)) {
-			map.get(node.parentId)!.children.push(node);
+			map.get(node.parentId)?.children.push(node);
 		} else {
 			roots.push(node);
 		}
