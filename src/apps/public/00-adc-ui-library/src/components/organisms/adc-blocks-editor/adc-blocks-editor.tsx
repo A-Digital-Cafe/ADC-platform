@@ -84,7 +84,7 @@ export class AdcBlocksEditor {
 	// ── Markdown ↔ HTML ──────────────────────────────────────────────────────
 
 	private static escapeHtml(s: string): string {
-		return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		return s.replaceAll(/&/, "&amp;").replaceAll(/</, "&lt;").replaceAll(/>/, "&gt;");
 	}
 
 	/** Convierte markdown inline a HTML seguro. Tokens soportados: **bold**, *italic*, `code`. */
@@ -92,14 +92,14 @@ export class AdcBlocksEditor {
 		const escaped = AdcBlocksEditor.escapeHtml(md);
 		// Orden: bold antes que italic para evitar que `*` capture `**`.
 		return escaped
-			.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
-			.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>")
-			.replace(/`([^`\n]+?)`/g, "<code>$1</code>");
+			.replaceAll(/\*\*([^*\n]+?)\*\*/, "<strong>$1</strong>")
+			.replaceAll(/(^|[^*])\*([^*\n]+?)\*(?!\*)/, "$1<em>$2</em>")
+			.replaceAll(/`([^`\n]+?)`/, "<code>$1</code>");
 	}
 
 	/** Recorre un nodo y emite markdown para texto + strong/em/code. Cualquier otro tag: extraer texto. */
 	private static nodeToMarkdown(node: Node): string {
-		if (node.nodeType === Node.TEXT_NODE) return (node.textContent || "").replace(/\u200B/g, "");
+		if (node.nodeType === Node.TEXT_NODE) return (node.textContent || "").replaceAll(/\u200B/, "");
 		if (node.nodeType !== Node.ELEMENT_NODE) return "";
 		const el = node as HTMLElement;
 		const tag = el.tagName.toLowerCase();
@@ -200,12 +200,16 @@ export class AdcBlocksEditor {
 
 	private static standaloneLabel(b: Block): string {
 		switch (b.type) {
-			case "code":
-				return `Código${b.language ? ` · ${b.language}` : ""}`;
+			case "code": {
+				const lang = b.language ? ` (${b.language})` : "";
+				return `Código${lang}`;
+			}
 			case "quote":
 				return "Cita";
-			case "callout":
-				return `Destacado${b.tone ? ` · ${b.tone}` : ""}`;
+			case "callout": {
+				const tone = b.tone ? ` (${b.tone})` : "";
+				return `Destacado${tone}`;
+			}
 			case "table":
 				return "Tabla";
 			case "divider":
@@ -266,8 +270,8 @@ export class AdcBlocksEditor {
 			const el = child as HTMLElement;
 			const id = el.dataset?.standaloneId;
 			if (id && this.standaloneById.has(id)) {
-				const current = this.standaloneById.get(id)!;
-				const updated = AdcBlocksEditor.readStandaloneFromDom(current, el);
+				const current = this.standaloneById.get(id);
+				const updated = AdcBlocksEditor.readStandaloneFromDom(current!, el);
 				this.standaloneById.set(id, updated);
 				orderedStandalone.push([id, updated]);
 				blocks.push(updated);
@@ -418,7 +422,7 @@ export class AdcBlocksEditor {
 	// ── Selección y comandos ────────────────────────────────────────────────
 
 	private isSelectionInsideEditor(): boolean {
-		const sel = window.getSelection();
+		const sel = globalThis.getSelection();
 		if (!sel || sel.rangeCount === 0) return false;
 		const range = sel.getRangeAt(0);
 		return !!this.editorEl && this.editorEl.contains(range.commonAncestorContainer);
@@ -429,21 +433,25 @@ export class AdcBlocksEditor {
 			this.activeMarks = { bold: false, italic: false, code: false };
 			return;
 		}
-		const sel = window.getSelection();
+		const sel = globalThis.getSelection();
 		let isCode = false;
+		let isBold = false;
+		let isItalic = false;
 		if (sel && sel.rangeCount > 0) {
 			let node: Node | null = sel.getRangeAt(0).startContainer;
 			while (node && node !== this.editorEl) {
-				if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName.toLowerCase() === "code") {
-					isCode = true;
-					break;
+				if (node.nodeType === Node.ELEMENT_NODE) {
+					const tag = (node as HTMLElement).tagName.toLowerCase();
+					if (tag === "code") isCode = true;
+					if (tag === "strong" || tag === "b") isBold = true;
+					if (tag === "em" || tag === "i") isItalic = true;
 				}
 				node = node.parentNode;
 			}
 		}
 		this.activeMarks = {
-			bold: document.queryCommandState("bold"),
-			italic: document.queryCommandState("italic"),
+			bold: isBold,
+			italic: isItalic,
 			code: isCode,
 		};
 	}
@@ -454,14 +462,58 @@ export class AdcBlocksEditor {
 		if (mark === "code") {
 			this.toggleCodeOnSelection();
 		} else {
-			document.execCommand(mark, false);
+			this.toggleInlineMark(mark);
 		}
 		this.updateActiveMarks();
 		this.emit();
 	}
 
+	/**
+	 * Aplica o quita un wrapper inline (<strong> / <em>) sobre la selección actual
+	 * sin usar el API obsoleto document.execCommand.
+	 */
+	private toggleInlineMark(mark: "bold" | "italic") {
+		const sel = globalThis.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+		const range = sel.getRangeAt(0);
+		const tag = mark === "bold" ? "strong" : "em";
+		// Detectar si toda la selección ya está dentro del wrapper.
+		const ancestor =
+			range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+				? (range.commonAncestorContainer as HTMLElement)
+				: range.commonAncestorContainer.parentElement;
+		const existing = ancestor?.closest(tag);
+		if (existing && this.editorEl?.contains(existing)) {
+			// Quitar: reemplazar el wrapper por su contenido.
+			const frag = document.createDocumentFragment();
+			while (existing.firstChild) frag.appendChild(existing.firstChild);
+			existing.replaceWith(frag);
+			return;
+		}
+		// Selección colapsada: insertar wrapper vacío con ZWSP para anclar el caret.
+		if (sel.isCollapsed) {
+			const el = document.createElement(tag);
+			el.appendChild(document.createTextNode("\u200B"));
+			range.insertNode(el);
+			const inside = document.createRange();
+			inside.setStart(el.firstChild!, 1);
+			inside.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(inside);
+			return;
+		}
+		// Selección con texto: envolver el contenido.
+		const el = document.createElement(tag);
+		el.appendChild(range.extractContents());
+		range.insertNode(el);
+		range.setStartAfter(el);
+		range.collapse(true);
+		sel.removeAllRanges();
+		sel.addRange(range);
+	}
+
 	private toggleCodeOnSelection() {
-		const sel = window.getSelection();
+		const sel = globalThis.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
 		const range = sel.getRangeAt(0);
 		const startParent =
@@ -550,7 +602,7 @@ export class AdcBlocksEditor {
 	private transformCurrentBlock(target: "p" | "h2" | "h3" | "h4" | "ul" | "ol") {
 		if (!this.editorEl) return;
 		this.editorEl.focus();
-		const sel = window.getSelection();
+		const sel = globalThis.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
 		const range = sel.getRangeAt(0);
 		// Asegurar que la selección está dentro del editor.
@@ -559,7 +611,7 @@ export class AdcBlocksEditor {
 		const findTopBlock = (node: Node): HTMLElement | null => {
 			let current: Node | null = node;
 			while (current && current.parentNode !== this.editorEl) current = current.parentNode;
-			return current && current.nodeType === Node.ELEMENT_NODE ? (current as HTMLElement) : null;
+			return current?.nodeType === Node.ELEMENT_NODE ? (current as HTMLElement) : null;
 		};
 
 		const startBlock = findTopBlock(range.startContainer);
@@ -630,14 +682,14 @@ export class AdcBlocksEditor {
 	 */
 	private maybeApplyMarkdownShortcut(): boolean {
 		if (!this.editorEl) return false;
-		const sel = window.getSelection();
+		const sel = globalThis.getSelection();
 		if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
 		const range = sel.getRangeAt(0);
 		if (!this.editorEl.contains(range.startContainer)) return false;
 		// Identificar el bloque actual (top-level child).
 		let block: Node | null = range.startContainer;
 		while (block && block.parentNode !== this.editorEl) block = block.parentNode;
-		if (!block || block.nodeType !== Node.ELEMENT_NODE) return false;
+		if (block?.nodeType !== Node.ELEMENT_NODE) return false;
 		const blockEl = block as HTMLElement;
 		const tag = blockEl.tagName.toLowerCase();
 		// No aplicar si ya es lista o heading.
@@ -691,7 +743,15 @@ export class AdcBlocksEditor {
 		ev.preventDefault();
 		const text = ev.clipboardData?.getData("text/plain") ?? "";
 		if (!text) return;
-		document.execCommand("insertText", false, text);
+		const sel = globalThis.getSelection();
+		if (!sel || sel.rangeCount === 0) return;
+		const range = sel.getRangeAt(0);
+		range.deleteContents();
+		range.insertNode(document.createTextNode(text));
+		range.collapse(false);
+		sel.removeAllRanges();
+		sel.addRange(range);
+		this.emit();
 	};
 
 	// ── Bloques estructurales (code/quote/callout/divider) ─────────────────
@@ -727,7 +787,7 @@ export class AdcBlocksEditor {
 		const trailing = document.createElement("div");
 		trailing.innerHTML = "<br>";
 		// Localizar el bloque hijo top-level que contiene el caret.
-		const sel = window.getSelection();
+		const sel = globalThis.getSelection();
 		let anchor: HTMLElement | null = null;
 		if (sel && sel.rangeCount > 0 && this.editorEl.contains(sel.getRangeAt(0).startContainer)) {
 			let n: Node | null = sel.getRangeAt(0).startContainer;

@@ -46,8 +46,12 @@ export async function fetchPublicProfiles(userIds: readonly string[]): Promise<M
 			continue;
 		}
 		const inflightPromise = inflight.get(id);
-		if (inflightPromise) {
-			pending.push(inflightPromise.then((p) => void out.set(id, p)));
+		if (inflightPromise !== undefined) {
+			pending.push(
+				inflightPromise.then((p) => {
+					out.set(id, p);
+				})
+			);
 		} else {
 			toFetch.push(id);
 		}
@@ -64,7 +68,11 @@ export async function fetchPublicProfiles(userIds: readonly string[]): Promise<M
 				});
 				return res.success && res.data ? res.data.profiles : {};
 			})();
-			for (const id of batch) inflight.set(id, batchPromise.then((p) => p[id] ?? {}));
+			for (const id of batch)
+				inflight.set(
+					id,
+					batchPromise.then((p) => p[id] ?? {})
+				);
 			pending.push(
 				batchPromise.then((profiles) => {
 					for (const id of batch) {
