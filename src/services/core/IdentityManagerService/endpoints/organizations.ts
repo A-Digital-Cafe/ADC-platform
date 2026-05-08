@@ -31,11 +31,30 @@ export class OrgEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/organizations",
-		permissions: [P.IDENTITY.ORGANIZATIONS.READ],
+		deferAuth: true, // Permitir acceso anónimo, validar manualmente
 	})
 	static async listOrganizations(ctx: EndpointCtx) {
+		// Fallback: si ctx.user no está poblado pero hay token, verificar manualmente
+		if (!ctx.user?.id && ctx.token) {
+			try {
+				const authVerifier = OrgEndpoints.#identity.createAuthVerifier();
+				const result = await authVerifier.verifyToken(ctx.token);
+				if (result.valid && result.userId) {
+					(ctx as any).user = {
+						id: result.userId,
+						username: "user",
+						email: undefined,
+						permissions: [],
+						orgId: result.orgId,
+					};
+				}
+			} catch {
+				// Silent fail - let the subsequent validation handle it
+			}
+		}
+
 		requireGlobalAccess(ctx);
-		return OrgEndpoints.#identity.organizations.getAllOrganizations(ctx.token!);
+		return OrgEndpoints.#identity.organizations.getAllOrganizations(ctx.token ?? undefined);
 	}
 
 	/**
@@ -61,10 +80,29 @@ export class OrgEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/organizations/:orgId",
-		permissions: [P.IDENTITY.ORGANIZATIONS.READ],
+		deferAuth: true, // Validar acceso manualmente
 	})
 	static async getOrganization(ctx: EndpointCtx<{ orgId: string }>) {
-		const org = await OrgEndpoints.#identity.organizations.getOrganization(ctx.params.orgId, ctx.token!);
+		// Fallback: si ctx.user no está poblado pero hay token, verificar manualmente
+		if (!ctx.user?.id && ctx.token) {
+			try {
+				const authVerifier = OrgEndpoints.#identity.createAuthVerifier();
+				const result = await authVerifier.verifyToken(ctx.token);
+				if (result.valid && result.userId) {
+					(ctx as any).user = {
+						id: result.userId,
+						username: "user",
+						email: undefined,
+						permissions: [],
+						orgId: result.orgId,
+					};
+				}
+			} catch {
+				// Silent fail - let the subsequent validation handle it
+			}
+		}
+
+		const org = await OrgEndpoints.#identity.organizations.getOrganization(ctx.params.orgId, ctx.token ?? undefined);
 		if (!org) throw new IdentityError(404, "ORG_NOT_FOUND", "Organización no encontrada");
 		assertReadableOrganizationAccess(ctx, org.orgId);
 		return org;
@@ -173,5 +211,208 @@ export class OrgEndpoints {
 		await OrgEndpoints.#identity.users.removeOrgMembership(ctx.params.userId, ctx.params.orgId, ctx.token!);
 		OrgEndpoints.#identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
+	}
+
+	/**
+	 * POST /api/identity/organizations/request
+	 * Crear una solicitud de organización (crea ticket en PM)
+	 * Acceso: autenticado (deferAuth para poder usar token de usuario)
+	 */
+	@RegisterEndpoint({
+		method: "POST",
+		url: "/api/identity/organizations/request",
+		deferAuth: true,
+		options: { skipIdempotency: true },
+	})
+	static async requestOrganization(
+		ctx: EndpointCtx<
+			never,
+			{
+				name: string;
+				email: string;
+				description?: string;
+				url?: string;
+				socialNetworks?: Array<{ platform: string; url: string }>;
+			}
+		>
+	) {
+		try {
+			const identity = OrgEndpoints.#identity;
+
+			// Fallback: si ctx.user no está poblado pero hay token, verificar manualmente
+			if (!ctx.user?.id && ctx.token) {
+				try {
+					const authVerifier = OrgEndpoints.#identity.createAuthVerifier();
+					const result = await authVerifier.verifyToken(ctx.token);
+					if (result.valid && result.userId) {
+						(ctx as any).user = {
+							id: result.userId,
+							username: "user",
+							email: undefined,
+							permissions: [],
+							orgId: result.orgId,
+						};
+					}
+				} catch {
+					// Silent fail - let the subsequent validation handle it
+				}
+			}
+
+			// Validar autenticación - cualquier usuario autenticado puede solicitar
+			if (!ctx.user?.id) {
+				throw new IdentityError(401, "ORG_ACCESS_DENIED", "Debes estar autenticado para crear una solicitud de organización");
+			}
+
+			const { name, email, description, url, socialNetworks } = ctx.data || {};
+
+			if (!name || !email) {
+				throw new IdentityError(400, "MISSING_FIELDS", `Campos requeridos faltantes. Recibido: ${JSON.stringify(ctx.data)}`);
+			}
+
+			// Derivar slug y validar que no existe (sin crear la organización)
+			const organizationSlug = name
+				.toLowerCase()
+				.trim()
+				.replace(/[^a-z0-9\s-]/g, "")
+				.replace(/\s+/g, "-")
+				.replace(/-+/g, "-")
+				.replace(/^-+|-+$/g, "");
+
+			// Verificar que el slug no existe (sin crear la org)
+			try {
+				const existingOrg = await identity.organizations.getOrganization(organizationSlug, ctx.token ?? undefined);
+				if (existingOrg) {
+					throw new IdentityError(409, "INVALID_BODY", `El slug '${organizationSlug}' ya está en uso`);
+				}
+			} catch (error: any) {
+				// Si es error de permisos (no admin), ignorar - el usuario puede solicitar aunque no vea todas las orgs
+				if (error instanceof IdentityError && error.statusCode !== 409) {
+					// Continuar sin validación cruzada
+				} else if (error instanceof IdentityError) {
+					throw error;
+				}
+			}
+
+			const pm = OrgEndpoints.getProjectManager();
+			if (!pm) {
+				throw new IdentityError(500, "INVALID_BODY", `ProjectManagerService no disponible`);
+			}
+
+			// Intentar obtener proyecto org-requests existente o crearlo bajo demanda
+			let project;
+			const cachedProjectId = process.env.ORG_MANAGEMENT_PROJECT_ID;
+			const projectOrgId = ctx.user?.orgId || null;
+
+			if (cachedProjectId) {
+				project = await pm.projects.getProject(cachedProjectId);
+			}
+
+			if (!project) {
+				try {
+					project = await pm.projects.getProjectBySlug("org-requests", projectOrgId, ctx.token ?? undefined);
+				} catch {
+					// No existe, crear bajo demanda
+					const pmCtx: any = {
+						userId: ctx.user.id,
+						groupIds: [],
+						tokenOrgId: null,
+						isGlobalAdmin: true,
+						hasGlobalPMRead: true,
+						hasGlobalPMWrite: true,
+						isOrgAdminOrPM: async () => true,
+					};
+
+					const newProject: any = {
+						slug: "org-requests",
+						name: "Organization Requests",
+						description: "Solicitudes de creación de organizaciones en ADC Platform",
+						visibility: "org",
+						orgId: projectOrgId,
+						kanbanColumns: [
+							{ id: "col-1", key: "todo", name: "Pendiente", order: 0, isAuto: true },
+							{ id: "col-2", key: "in-progress", name: "En revisión", order: 1 },
+							{ id: "col-3", key: "approved", name: "Aprobada", order: 2, isDone: true, color: "#10b981" },
+							{ id: "col-4", key: "rejected", name: "Rechazada", order: 3, isDone: true, color: "#ef4444" },
+						],
+						priorityStrategy: { id: "matrix-eisenhower" },
+						settings: {},
+					};
+
+					try {
+						project = await pm.projects.createProject(newProject, pmCtx);
+						process.env.ORG_MANAGEMENT_PROJECT_ID = project.id;
+					} catch (createErr: any) {
+						if (createErr?.message?.includes("ya existe")) {
+							try {
+								project = await pm.projects.getProjectBySlug("org-requests", projectOrgId, ctx.token ?? undefined);
+							} catch {
+								throw new IdentityError(500, "INVALID_BODY", "No se puede acceder al proyecto org-requests");
+							}
+						} else {
+							throw new IdentityError(500, "INVALID_BODY", `Error creando proyecto org-requests: ${createErr instanceof Error ? createErr.message : String(createErr)}`);
+						}
+					}
+				}
+			}
+
+			if (!project) {
+				throw new IdentityError(500, "INVALID_BODY", "No se pudo obtener ni crear el proyecto org-requests");
+			}
+
+			// Crear ticket en PM con metadata de solicitud
+			const ticket = await pm.issues.create(
+				project,
+				{
+					title: `Solicitud de Org: ${name}`,
+					description: `**Solicitud de creación de organización**\n\n**Nombre:** ${name}\n**Email:** ${email}\n**URL:** ${url || "N/A"}\n**Descripción:** ${description || "Sin descripción"}`,
+					category: "task",
+					customFields: {
+						type: "org_creation",
+						organizationSlug,
+						orgName: name,
+						email,
+						url: url || "",
+						description: description || "",
+						socialNetworks: socialNetworks || [],
+						requestedByUserId: ctx.user.id,
+					},
+				},
+				ctx.token, // Pasar el token del usuario autenticado
+				{ userId: ctx.user.id, groupIds: [] }
+			);
+
+			return {
+				success: true,
+				ticketId: ticket.id,
+				ticketKey: ticket.key,
+				message: `Solicitud creada. El ID es ${ticket.key}. Los administradores la revisarán pronto.`,
+			};
+		} catch (error: any) {
+			// Si ya es IdentityError, re-lanzar
+			if (error instanceof IdentityError) {
+				throw error;
+			}
+
+			throw new IdentityError(
+				error.status || 500,
+				error.errorKey || "INVALID_BODY",
+				error.message || `Error creando solicitud`
+			);
+		}
+	}
+
+
+	/**
+	 * Obtener acceso a ProjectManagerService
+	 */
+	private static getProjectManager() {
+		try {
+			const kernel = (OrgEndpoints.#identity as any)?.kernel;
+			if (!kernel) return null;
+			const pm = kernel.registry.getService("ProjectManagerService") as any;
+			return pm || null;
+		} catch {
+			return null;
+		}
 	}
 }

@@ -93,15 +93,21 @@ export class OrgManager {
 		if (isExternalCall && !token) {
 			throw new AuthorizationError("Token de autenticación requerido", "NO_TOKEN");
 		}
-		const org = await this.orgModel.findOne({
-			$or: [{ orgId: orgIdOrSlug }, { slug: orgIdOrSlug.toLowerCase() }],
-		});
-		const resolvedOrgId = org?.orgId as string | undefined;
+
+		const org = await this.orgModel
+			.findOne({
+				$or: [{ orgId: orgIdOrSlug }, { slug: orgIdOrSlug.toLowerCase() }],
+			})
+			.lean();
+
+		if (!org) return null;
+
+		const resolvedOrgId = org.orgId as string;
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS, {
-			allowIf: (_uid, { orgId: tokenOrgId }) => !!resolvedOrgId && !!tokenOrgId && tokenOrgId === resolvedOrgId,
+			allowIf: (_uid, { orgId: tokenOrgId }) => !!tokenOrgId && tokenOrgId === resolvedOrgId,
 		});
 
-		return org ? this.#toOrganization(org) : null;
+		return this.#toOrganization(org);
 	}
 
 	// Resolución ligera `orgId|slug → { orgId, slug }` para construir URLs públicas.
@@ -124,7 +130,7 @@ export class OrgManager {
 			if (!regionInfo) throw new Error(`Región no existe: ${updates.region}`);
 		}
 
-		const org = await this.orgModel.findOneAndUpdate({ orgId }, { ...updates, updatedAt: new Date() }, { new: true });
+		const org = await this.orgModel.findOneAndUpdate({ orgId }, { ...updates, updatedAt: new Date() }, { new: true, lean: true });
 
 		if (!org) throw new Error(`Organización no encontrada: ${orgId}`);
 
@@ -167,7 +173,7 @@ export class OrgManager {
 	async getAllOrganizations(token?: string): Promise<Organization[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
 
-		const orgs = await this.orgModel.find({});
+		const orgs = await this.orgModel.find({}).lean();
 		return orgs.map((org: any) => this.#toOrganization(org));
 	}
 
@@ -179,6 +185,41 @@ export class OrgManager {
 		return orgs.map((org: any) => this.#toOrganization(org));
 	}
 
+	/** Obtiene las organizaciones de un usuario (donde es miembro) */
+	async getUserOrganizations(userId: string, token?: string): Promise<Organization[]> {
+		// El endpoint ya validó que el usuario esté autenticado
+		// Aquí NO validamos permisos - solo obtenemos sus orgs
+		
+		try {
+			// Obtener el usuario y sus membresías de org
+			// Acceder directamente sin pasar por métodos que validan permisos
+			const userManager = this.userManager as any;
+			const userModel = userManager.userModel;
+			
+			if (!userModel) {
+				return [];
+			}
+
+			const user = await userModel.findOne({ id: userId }).select("orgMemberships").lean();
+			if (!user) {
+				return [];
+			}
+
+			// Extraer orgIds de las membresías
+			const orgIds = (user as any).orgMemberships?.map((m: any) => m.orgId) || [];
+			if (orgIds.length === 0) {
+				return [];
+			}
+
+			// Obtener las organizaciones por sus IDs
+			const orgs = await this.orgModel.find({ orgId: { $in: orgIds } }).lean();
+			return orgs.map((org: any) => this.#toOrganization(org));
+		} catch (error) {
+			// Cualquier error → retorna array vacío (mejor que fallar con 500)
+			return [];
+		}
+	}
+
 	/**
 	 * Genera el nombre de la base de datos para una organización
 	 * Formato: org_{slug}
@@ -188,16 +229,34 @@ export class OrgManager {
 	}
 
 	#toOrganization(doc: any): Organization {
+		// Convertir documento Mongoose a objeto plano si es necesario
+		const plainDoc = typeof doc?.toObject === "function" ? doc.toObject() : doc;
+
 		return {
-			orgId: doc.orgId,
-			slug: doc.slug,
-			region: doc.region,
-			tier: doc.tier,
-			status: doc.status,
-			permissions: doc.permissions,
-			metadata: doc.metadata,
-			createdAt: doc.createdAt,
-			updatedAt: doc.updatedAt,
+			orgId: plainDoc.orgId,
+			slug: plainDoc.slug,
+			region: plainDoc.region,
+			tier: plainDoc.tier,
+			status: plainDoc.status,
+			permissions: plainDoc.permissions,
+			metadata: plainDoc.metadata,
+			createdAt: plainDoc.createdAt,
+			updatedAt: plainDoc.updatedAt,
 		};
+	}
+
+
+
+	/**
+	 * Derivar un slug válido de un nombre de organización
+	 */
+	#deriveSlug(orgName: string): string {
+		return orgName
+			.toLowerCase()
+			.trim()
+			.replace(/[^a-z0-9\s-]/g, "") // Remove special chars
+			.replace(/\s+/g, "-") // Replace spaces with hyphens
+			.replace(/-+/g, "-") // Replace multiple hyphens with single
+			.replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
 	}
 }

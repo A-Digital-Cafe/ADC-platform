@@ -36,7 +36,37 @@ export class ProjectEndpoints {
 	})
 	static async list(ctx: EndpointCtx) {
 		const service = ProjectEndpoints.#service;
-		const projects = await service.listProjectsForCaller(ProjectEndpoints.#kernelKey, ctx);
+		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		let projects = await service.listProjectsForCaller(ProjectEndpoints.#kernelKey, ctx);
+		
+		// Manejo especial de "org-requests" para admins
+		const { CRUDXAction } = await import("@common/types/Actions.ts");
+		const { IdentityScopes } = await import("@common/types/identity/permissions.ts");
+		
+		const userId = ctx.user?.id;
+		const hasAdminPermission = userId
+			? await service.identity.permissions.hasPermission(userId, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS)
+			: false;
+		
+		if (hasAdminPermission) {
+			// Si es admin, asegurar que "org-requests" esté incluido aunque no sea miembro
+			const hasOrgRequests = projects.some(p => p.slug === "org-requests");
+			if (!hasOrgRequests) {
+				try {
+					// Buscar y agregar "org-requests" de forma segura
+					const orgRequestsProject = await service.projects.getProjectBySlugForAdmin("org-requests", null, ctx.token);
+					if (orgRequestsProject) {
+						projects = [...projects, orgRequestsProject];
+					}
+				} catch {
+					// Si no existe, ignorar
+				}
+			}
+		} else {
+			// Excluir "org-requests" para usuarios sin permiso admin
+			projects = projects.filter(p => p.slug !== "org-requests");
+		}
+		
 		return { projects };
 	}
 
@@ -65,6 +95,29 @@ export class ProjectEndpoints {
 		const projectSlug = normalizeSlug(ctx.params.projectSlug);
 		if (!projectSlug) throw new ProjectManagerError(400, "INVALID_SLUG", `Slug de proyecto inválido: '${ctx.params.projectSlug}'`);
 		const orgId = await resolveOrgSlug(service, ctx.params.orgSlug, ctx.token ?? undefined);
+		
+		// Validación especial: proyecto "org-requests" solo para admins
+		if (projectSlug === "org-requests") {
+			const { CRUDXAction } = await import("@common/types/Actions.ts");
+			const { IdentityScopes } = await import("@common/types/identity/permissions.ts");
+			
+			// Verificar que el usuario tiene permiso ORGANIZATIONS.READ (admin global)
+			const userId = ctx.user?.id;
+			const hasAdminPermission = userId
+				? await service.identity.permissions.hasPermission(userId, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS)
+				: false;
+			
+			if (!hasAdminPermission) {
+				throw new ProjectManagerError(403, "PROJECT_ACCESS_DENIED", "Solo los administradores pueden acceder al proyecto de solicitudes de organizaciones");
+			}
+			
+			// ✅ ADMIN ACCESS GRANTED: Fetch project using internal method (already authorized)
+			const projectInternals = service.projects.getInternals(ProjectEndpoints.#kernelKey);
+			const project = await projectInternals.fetchProjectBySlug(projectSlug, orgId);
+			if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
+			return project;
+		}
+		
 		const project = await service.projects.getProjectBySlug(projectSlug, orgId, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 		return project;

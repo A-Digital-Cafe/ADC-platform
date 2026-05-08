@@ -75,10 +75,27 @@ export default class IdentityManagerService extends BaseService {
 	// Cache de conexiones por organización
 	readonly #orgConnectionCache: Map<string, { connection: Connection; managers: OrgScopedManagers }> = new Map();
 
+	readonly #kernelRef: Kernel;
+
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
+		this.#kernelRef = kernel;
 		this.#mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
 		this.#operationsService = kernel.registry.getService<OperationsService>("OperationsService");
+	}
+
+	/**
+	 * Getter para acceder al Kernel (necesario para endpoints internos)
+	 */
+	get kernel(): Kernel {
+		return this.#kernelRef;
+	}
+
+	/**
+	 * Getter para acceder al AuthVerifier (usado por endpoints para validaciones)
+	 */
+	get authVerifier(): IAuthVerifier | null {
+		return this.#authVerifier;
 	}
 
 	/**
@@ -324,6 +341,20 @@ export default class IdentityManagerService extends BaseService {
 	get permissions(): PermissionManager {
 		if (!this.#permissionManager) throw new Error("PermissionManager not initialized");
 		return this.#permissionManager;
+	}
+
+	/**
+	 * Obtiene ProjectManagerService si está disponible
+	 * Usado por endpoints para crear tickets de solicitud de organización
+	 */
+	getProjectManager(): any {
+		try {
+			const kernel = (this as any)["_BaseModule__kernel"] || (this as any).kernel;
+			if (!kernel) return null;
+			return kernel.registry?.getService("ProjectManagerService");
+		} catch {
+			return null;
+		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────

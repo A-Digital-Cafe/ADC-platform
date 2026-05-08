@@ -57,13 +57,13 @@ export interface PMCtx extends CallerMembership {
 	isOrgAdminOrPM: (orgId: string) => Promise<boolean>;
 }
 
-/**
- * Accesores internos para otros DAOs del mismo service. No consumirlos desde
+/** Accesores internos para otros DAOs del mismo service. No consumirlos desde
  * endpoints: las operaciones aquí expuestas no pasan por `requirePermission`.
  */
 export interface ProjectInternals {
 	fetchProject: (projectId: string) => Promise<Project | null>;
 	incrementIssueCounter: (projectId: string) => Promise<number>;
+	fetchProjectBySlug: (slug: string, orgId: string | null) => Promise<Project | null>;
 }
 
 export class ProjectManager {
@@ -202,6 +202,22 @@ export class ProjectManager {
 		return project;
 	}
 
+	/**
+	 * Obtener proyecto por slug sin validar membresía.
+	 * USO: Solo desde endpoints que ya validaron permisos de admin global.
+	 * El token DEBE ser de un admin global con ORGANIZATIONS.READ.
+	 */
+	async getProjectBySlugForAdmin(slug: string, orgId: string | null, token?: string): Promise<Project | null> {
+		// Validar que el token corresponde a un admin global
+		const userId = await this.#permissionChecker.resolveUserId(token);
+		if (!userId) {
+			throw new ProjectManagerError(401, "PROJECT_ACCESS_DENIED", "Token inválido para acceso admin");
+		}
+		// Nota: Quien llama debe verificar ORGANIZATIONS.READ antes de llamar este método
+		const project = await this.#fetchProjectBySlug(slug, orgId);
+		return project;
+	}
+
 	/** Comprobación pública de existencia de slug (no expone el proyecto). */
 	async isSlugAvailable(slug: string, orgId: string | null, token?: string): Promise<boolean> {
 		await this.#permissionChecker.resolveUserId(token);
@@ -288,6 +304,7 @@ export class ProjectManager {
 		return {
 			fetchProject: (id) => this.#fetchProject(id),
 			incrementIssueCounter: (id) => this.#incrementIssueCounter(id),
+			fetchProjectBySlug: (slug, orgId) => this.#fetchProjectBySlug(slug, orgId),
 		};
 	}
 }
