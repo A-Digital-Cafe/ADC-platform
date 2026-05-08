@@ -15,7 +15,7 @@ interface Props {
 	onMove: (issue: Issue, columnKey: string) => void;
 }
 
-export function BacklogTable({ issues, project, perms, caller, isDragEnabled, onOpen, onMove }: Props) {
+export function BacklogTable({ issues, project, perms, caller, isDragEnabled, onOpen, onMove }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const scoreFn = resolvePriorityFn(project.priorityStrategy);
 	const columnOptions = JSON.stringify(project.kanbanColumns.map((c) => ({ label: c.name, value: c.key })));

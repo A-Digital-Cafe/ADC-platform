@@ -13,7 +13,7 @@ interface Props {
  * Paraguas colapsable que agrupa todas las secciones `isCompleted`.
  * Se renderiza por default colapsado para no distraer del trabajo en curso.
  */
-export function CompletedGroupUmbrella({ sections, isCollapsed, onToggleCollapsed, renderSection }: Props) {
+export function CompletedGroupUmbrella({ sections, isCollapsed, onToggleCollapsed, renderSection }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	if (!sections.length) return null;
 	const totalIssues = sections.reduce((acc, s) => acc + s.issues.length, 0);

@@ -20,7 +20,7 @@ interface Props {
 
 type SettingsTab = "general" | "members" | "columns" | "customFields" | "linkTypes" | "priority" | "wip";
 
-export function ProjectSettingsView({ project, perms, caller, onChanged }: Props) {
+export function ProjectSettingsView({ project, perms, caller, onChanged }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [tab, setTab] = useState<SettingsTab>("general");
 

@@ -11,6 +11,8 @@ import { createPermissionValidator } from "./parts/validator.js";
 import { createHttpWrapper } from "./parts/http.js";
 import { internalCallEndpoint } from "./parts/internalCallEndpoint.ts";
 import { JobManager } from "./parts/JobManager.ts";
+import { registerCsrfEndpoint } from "./parts/csrf.js";
+import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
 
 // Re-exportar decoradores para uso externo
 export { RegisterEndpoint, EnableEndpoints, DisableEndpoints, readEndpointMetadata, readEnableEndpointsConfig } from "./decorators.js";
@@ -43,6 +45,7 @@ export default class EndpointManagerService extends BaseService {
 	#operationsService: OperationsService | null = null;
 	readonly #registry = new EndpointRegistry(this.logger);
 	#jobManager: JobManager | null = null;
+	#csrfConfig: CsrfRuntimeConfig | null = null;
 
 	static readonly JOB_TTL_SECONDS = JobManager.JOB_TTL_SECONDS;
 
@@ -50,6 +53,7 @@ export default class EndpointManagerService extends BaseService {
 		await super.start(kernelKey);
 		this.#httpProvider = this.getMyProvider<IHostBasedHttpProvider>("fastify-server");
 		this.#operationsService = this.getMyService<OperationsService>("OperationsService");
+		this.#csrfConfig = resolveCsrfConfig(this.config.csrf as CsrfOptions | undefined);
 
 		const rabbitmq = this.getMyProvider<RabbitMQProvider>("queue/rabbitmq");
 		const redis = this.getMyProvider<RedisProvider>("queue/redis");
@@ -65,6 +69,10 @@ export default class EndpointManagerService extends BaseService {
 
 		if (this.#httpProvider && redis) {
 			this.#jobManager.registerJobEndpoint(this.#httpProvider);
+		}
+
+		if (this.#httpProvider) {
+			registerCsrfEndpoint(this.#httpProvider, this.#csrfConfig);
 		}
 
 		this.logger.logOk("EndpointManagerService iniciado");
@@ -115,6 +123,7 @@ export default class EndpointManagerService extends BaseService {
 			this.#getSessionManager.bind(this),
 			this.#operationsService!,
 			this.logger,
+			this.#csrfConfig ?? resolveCsrfConfig(this.config.csrf as CsrfOptions | undefined),
 			this.getMyProvider<RabbitMQProvider>("queue/rabbitmq"),
 			this.getMyProvider<RedisProvider>("queue/redis")
 		);
@@ -166,6 +175,7 @@ export default class EndpointManagerService extends BaseService {
 		this.#registry.clear();
 
 		this.#httpProvider = null;
+		this.#csrfConfig = null;
 		this.#sessionManager = null;
 		this.#operationsService = null;
 

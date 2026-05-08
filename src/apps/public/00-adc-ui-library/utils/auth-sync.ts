@@ -1,4 +1,5 @@
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
+import { appendCsrfHeader } from "./csrf.js";
 
 export type AuthChangeType = "logout" | "login";
 
@@ -85,9 +86,11 @@ export async function forceLogoutAndRefresh(logoutUrl = getDefaultLogoutUrl()): 
 
 	logoutInFlight = (async () => {
 		try {
+			const headers = await appendCsrfHeader("POST", logoutUrl, undefined, "include");
 			await fetch(logoutUrl, {
 				method: "POST",
 				credentials: "include",
+				headers,
 				keepalive: true,
 			});
 		} catch {

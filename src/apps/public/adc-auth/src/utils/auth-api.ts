@@ -74,6 +74,11 @@ export const authApi = {
 	refresh: () => api.post("/refresh"),
 
 	/**
+	 * Vincular cuenta OAuth pendiente con una cuenta local existente.
+	 */
+	linkAccount: (password: string) => api.post<AuthResponse>("/link-account", { body: { password } }),
+
+	/**
 	 * Cambiar contexto de organización (re-emite tokens)
 	 * @param orgId - ID de la organización o undefined para acceso personal
 	 */

@@ -11,7 +11,7 @@ interface Props {
 
 const STRATEGIES: PriorityStrategyId[] = ["matrix-eisenhower", "weighted-sum", "wsjf-like"];
 
-export function PrioritySection({ project, canEdit, onSaved }: Props) {
+export function PrioritySection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [strategy, setStrategy] = useState<PriorityStrategy>(project.priorityStrategy);
 	const [saving, setSaving] = useState(false);

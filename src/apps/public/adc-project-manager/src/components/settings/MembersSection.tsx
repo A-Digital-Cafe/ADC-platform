@@ -11,7 +11,7 @@ interface Props {
 	onSaved: () => void | Promise<void>;
 }
 
-export function MembersSection({ project, canEdit, onSaved }: Props) {
+export function MembersSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [users, setUsers] = useState(project.memberUserIds);
 	const [groups, setGroups] = useState(project.memberGroupIds);

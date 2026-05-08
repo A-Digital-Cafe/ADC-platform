@@ -2,6 +2,14 @@
 	"name": "EndpointManagerService",
 	"version": "1.0.0",
 	"kernelMode": 50,
+	"private": {
+		"csrf": {
+			"enabled": "${CSRF_ENABLED}",
+			"secret": "${CSRF_SECRET}",
+			"ttlSeconds": "${CSRF_TTL_SECONDS}",
+			"secureCookie": "${CSRF_SECURE_COOKIE}"
+		}
+	},
 	"providers": [
 		{
 			"name": "fastify-server",

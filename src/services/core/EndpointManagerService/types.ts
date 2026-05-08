@@ -28,6 +28,8 @@ export interface EndpointOptions {
 	};
 	/** Skip automatic idempotency check for this endpoint (default: false). */
 	skipIdempotency?: boolean;
+	/** Skip cookie-auth CSRF validation for this endpoint (default: false). */
+	skipCsrf?: boolean;
 	/**
 	 * When true (and the method is mutative: POST/PUT/PATCH/DELETE), the request
 	 * is enqueued into RabbitMQ after idempotency+permissions checks and the HTTP

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "@common/utils/router.js";
 import { getSession } from "@ui-library/utils/session";
 import { canEditContent } from "../utils/permissions";
@@ -44,6 +44,7 @@ export function PathPage({ slug }: { readonly slug: string }) {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [canEdit, setCanEdit] = useState(false);
+	const breadcrumbRef = useRef<HTMLElement>(null);
 
 	useEffect(() => {
 		loadPath();
@@ -51,6 +52,14 @@ export function PathPage({ slug }: { readonly slug: string }) {
 
 	useEffect(() => {
 		getSession().then((s) => setCanEdit(canEditContent(s.user?.perms)));
+	}, []);
+
+	useEffect(() => {
+		const el = breadcrumbRef.current;
+		if (!el) return;
+		const handler = () => handleBack();
+		el.addEventListener("adcBack", handler);
+		return () => el.removeEventListener("adcBack", handler);
 	}, []);
 
 	async function loadPath() {
@@ -134,30 +143,11 @@ export function PathPage({ slug }: { readonly slug: string }) {
 
 	return (
 		<div style={{ padding: "2rem" }}>
-			{/* Header con botón volver y breadcrumb */}
-			<div className="flex items-center gap-2 mb-4">
-				<adc-button class="p-2 mr-4" aria-label="Volver a Paths" onClick={handleBack}>
-					<adc-icon-left-arrow />
-					<span className="sr-only">Volver a Paths</span>
-				</adc-button>
-
-				<nav aria-label="breadcrumb">
-					<ol className="flex flex-wrap items-center breadcumb">
-						<li>
-							<a
-								href="/paths"
-								onClick={(e) => {
-									e.preventDefault();
-									router.navigate("/paths");
-								}}
-							>
-								Learning Paths
-							</a>
-						</li>
-						<li aria-current="page">{path.title}</li>
-					</ol>
-				</nav>
-			</div>
+			<adc-top-breadcrumb
+				ref={breadcrumbRef}
+				items={JSON.stringify([{ label: "Learning Paths", href: "/paths" }, { label: path.title }])}
+				back-label="Volver a Paths"
+			/>
 
 			{/* Título y share buttons */}
 			<div className="flex flex-col gap-2 mb-4 md:flex-row md:items-center">

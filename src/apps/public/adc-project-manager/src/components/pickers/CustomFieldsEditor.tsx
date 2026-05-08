@@ -25,7 +25,7 @@ function toStringArray(v: CustomFieldValue): string[] {
  * Renderiza los inputs de custom fields según su `type` y mantiene sincronizado
  * el objeto `values` indexado por `def.id`.
  */
-export function CustomFieldsEditor({ defs, values, onChange, disabled }: Props) {
+export function CustomFieldsEditor({ defs, values, onChange, disabled }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	if (defs.length === 0) return null;
 

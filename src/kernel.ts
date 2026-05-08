@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./utils/env/load-env.js";
 import * as fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import * as path from "node:path";

@@ -14,20 +14,19 @@ Los endpoints se definen directamente en los métodos de un servicio utilizando 
 import { EnableEndpoints, DisableEndpoints, RegisterEndpoint, EndpointCtx } from "./EndpointManagerService/index.js";
 
 class MyDataService extends BaseService {
+	@RegisterEndpoint({
+		method: "GET",
+		url: "/api/data/:id",
+		permissions: ["data.read"], // Permisos requeridos
+	})
+	async getData(ctx: EndpointCtx<{ id: string }>) {
+		// La validación de permisos y el contexto ya están resueltos.
+		// ctx.user contiene la info del usuario si el endpoint es protegido.
+		const { id } = ctx.params;
+		return { message: `Data for ID: ${id}` };
+	}
 
-    @RegisterEndpoint({
-        method: "GET",
-        url: "/api/data/:id",
-        permissions: ["data.read"], // Permisos requeridos
-    })
-    async getData(ctx: EndpointCtx<{ id: string }>) {
-        // La validación de permisos y el contexto ya están resueltos.
-        // ctx.user contiene la info del usuario si el endpoint es protegido.
-        const { id } = ctx.params;
-        return { message: `Data for ID: ${id}` };
-    }
-
-    // ... ciclo de vida del servicio
+	// ... ciclo de vida del servicio
 }
 ```
 
@@ -35,8 +34,8 @@ class MyDataService extends BaseService {
 
 El registro y desregistro de los endpoints está ligado al ciclo de vida del servicio que los contiene.
 
--   **`@EnableEndpoints()`**: Usado en el método `start()` de un servicio, le indica al `EndpointManagerService` que registre todos los endpoints decorados en ese servicio.
--   **`@DisableEndpoints()`**: Usado en el método `stop()`, limpia automáticamente todos los endpoints de ese servicio.
+- **`@EnableEndpoints()`**: Usado en el método `start()` de un servicio, le indica al `EndpointManagerService` que registre todos los endpoints decorados en ese servicio.
+- **`@DisableEndpoints()`**: Usado en el método `stop()`, limpia automáticamente todos los endpoints de ese servicio.
 
 ### 3. Gestión de Seguridad y Permisos
 
@@ -47,18 +46,27 @@ La seguridad es una responsabilidad compartida entre `EndpointManagerService` y 
 1.  **Wrapper y Extracción de Token**: Cada petición a un endpoint es interceptada por un "wrapper" lógico. Lo primero que hace es buscar un token de usuario en las cookies, cabeceras (`Authorization: Bearer`) o parámetros de la URL.
 
 2.  **Consulta al `SessionManagerService` (El Portero)**: `EndpointManagerService` le pasa el token encontrado al `SessionManagerService` con una pregunta simple: **"¿Es este token auténtico y a quién pertenece?"**.
-    -   `SessionManagerService` valida la firma y la fecha de expiración del token.
-    -   Si es válido, responde con la identidad del usuario y la lista completa de **permisos que tiene asignados**.
+    - `SessionManagerService` valida la firma y la fecha de expiración del token.
+    - Si es válido, responde con la identidad del usuario y la lista completa de **permisos que tiene asignados**.
 
 3.  **Validación en `EndpointManagerService` (El Control de Acceso)**: Con la identidad y los permisos del usuario en mano, `EndpointManagerService` realiza la validación final. Compara la lista de permisos del usuario con los `permissions` requeridos en el decorador `@RegisterEndpoint` para esa ruta específica.
-    -   Aquí se aplica la lógica granular que soporta wildcards (`*`) y comprobaciones a nivel de bit.
-    -   Solo si el usuario cumple con los requisitos, se procede. Si no, la petición se rechaza con un error 403.
+    - Aquí se aplica la lógica granular que soporta wildcards (`*`) y comprobaciones a nivel de bit.
+    - Solo si el usuario cumple con los requisitos, se procede. Si no, la petición se rechaza con un error 403.
 
 4.  **Inyección de Contexto (`EndpointCtx`)**: Tras una validación exitosa, se enriquece la petición con un objeto `EndpointCtx` que se pasa al método del endpoint. Este objeto contiene datos de la petición (`params`, `body`, etc.) y, crucialmente, el objeto `user` con la información del usuario autenticado.
 
 En resumen, la colaboración es la siguiente:
--   **`SessionManagerService`**: Valida la **autenticidad** de un token y **quién** es el usuario.
--   **`EndpointManagerService`**: Valida la **autorización**, es decir, si ese usuario tiene acceso a **este recurso en particular**.
+
+- **`SessionManagerService`**: Valida la **autenticidad** de un token y **quién** es el usuario.
+- **`EndpointManagerService`**: Valida la **autorización**, es decir, si ese usuario tiene acceso a **este recurso en particular**.
+
+#### CSRF e Idempotencia
+
+- Las mutaciones con autenticación por cookie validan `X-CSRF-Token` contra la cookie HttpOnly `adc_csrf`.
+- `GET /api/csrf-token` emite el token firmado y `adc-fetch.ts` lo adjunta automáticamente.
+- Hay rate limit Redis por defecto; `options.rateLimit` permite endurecer endpoints sensibles.
+- POST/PUT/PATCH/DELETE exigen `Idempotency-Key` salvo `skipIdempotency`.
+- `skipCsrf` queda reservado para endpoints que no dependan de cookies del navegador.
 
 ### 4. Manejo Avanzado de Respuestas
 
@@ -72,7 +80,7 @@ Para devolver un error HTTP específico (ej: 404, 400) de forma controlada.
 import { HttpError } from "@common/types/ADCCustomError.js";
 
 if (!userExists) {
-    throw new HttpError(404, "NOT_FOUND", "User does not exist");
+	throw new HttpError(404, "NOT_FOUND", "User does not exist");
 }
 ```
 
@@ -85,7 +93,7 @@ import { UncommonResponse } from "./EndpointManagerService/index.js";
 
 // Hacer un redirect y establecer una cookie (ej: tras un login OAuth)
 throw UncommonResponse.redirect("/dashboard", {
-    cookies: [{ name: "session_token", value: jwt, options: { httpOnly: true } }],
+	cookies: [{ name: "session_token", value: jwt, options: { httpOnly: true } }],
 });
 ```
 

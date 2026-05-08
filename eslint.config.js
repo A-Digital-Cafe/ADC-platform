@@ -6,7 +6,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['**/*.d.ts'],
+    ignores: ['**/*.d.ts', '**/utils/react-jsx.ts'],
   },
   {
     files: [

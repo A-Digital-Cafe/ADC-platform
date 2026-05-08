@@ -35,6 +35,13 @@ interface SharedPoolEntry {
 // mismo Map y se respete el refcount.
 const GLOBAL_KEY = Symbol.for("adc.mongo.sharedPools");
 const SHARED_POOLS: Map<string, SharedPoolEntry> = ((globalThis as any)[GLOBAL_KEY] ??= new Map<string, SharedPoolEntry>());
+// Promesas en vuelo para evitar carreras: si dos instancias llaman a connect()
+// en paralelo sobre el mismo physicalKey, ambas esperan la misma createConnection.
+const INFLIGHT_KEY = Symbol.for("adc.mongo.sharedPools.inflight");
+const INFLIGHT_POOLS: Map<string, Promise<SharedPoolEntry>> = ((globalThis as any)[INFLIGHT_KEY] ??= new Map<
+	string,
+	Promise<SharedPoolEntry>
+>());
 
 function computePhysicalKey(uri: string): { physicalKey: string; dbName: string } {
 	try {
@@ -93,21 +100,33 @@ export default class MongoProvider extends BaseProvider {
 		let entry = SHARED_POOLS.get(physicalKey);
 
 		if (!entry || entry.physical.readyState === 0) {
-			const physical = await mongoose
-				.createConnection(physicalKey, {
-					connectTimeoutMS: this.config.connectionTimeout,
-					serverSelectionTimeoutMS: this.config.serverSelectionTimeout,
-					socketTimeoutMS: this.config.socketTimeout,
-					retryWrites: true,
-					retryReads: true,
-					maxPoolSize: 10,
-					minPoolSize: 5,
-				})
-				.asPromise();
-
-			entry = { physical, refCount: 0, listenersAttached: false, dbViews: new Map() };
-			SHARED_POOLS.set(physicalKey, entry);
-			Logger.ok(`[MongoProvider] Pool físico abierto: ${physical.host}:${physical.port}`);
+			// Coalescer carreras: si ya hay una creación en vuelo para este key, esperarla.
+			let inflight = INFLIGHT_POOLS.get(physicalKey);
+			if (!inflight) {
+				inflight = (async () => {
+					try {
+						const physical = await mongoose
+							.createConnection(physicalKey, {
+								connectTimeoutMS: this.config.connectionTimeout,
+								serverSelectionTimeoutMS: this.config.serverSelectionTimeout,
+								socketTimeoutMS: this.config.socketTimeout,
+								retryWrites: true,
+								retryReads: true,
+								maxPoolSize: 10,
+								minPoolSize: 5,
+							})
+							.asPromise();
+						const fresh: SharedPoolEntry = { physical, refCount: 0, listenersAttached: false, dbViews: new Map() };
+						SHARED_POOLS.set(physicalKey, fresh);
+						Logger.ok(`[MongoProvider] Pool físico abierto: ${physical.host}:${physical.port}`);
+						return fresh;
+					} finally {
+						INFLIGHT_POOLS.delete(physicalKey);
+					}
+				})();
+				INFLIGHT_POOLS.set(physicalKey, inflight);
+			}
+			entry = await inflight;
 		}
 
 		entry.refCount++;

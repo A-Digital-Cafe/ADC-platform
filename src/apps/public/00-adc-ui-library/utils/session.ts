@@ -10,9 +10,6 @@ import { createAdcApi } from "./adc-fetch.js";
 import { hasBitfieldPermission } from "@common/utils/perms.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 
-/** @deprecated Usa SessionResponse directamente. */
-export type SessionData = SessionResponse;
-
 export type { SessionUser, SessionResponse };
 
 const api = createAdcApi({

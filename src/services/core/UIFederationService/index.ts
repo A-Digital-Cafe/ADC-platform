@@ -10,6 +10,7 @@ import { generateCompleteImportMap, createImportMapObject } from "./utils/import
 import { injectImportMapsInHTMLs, generateIndexHtml, generateMainEntryPoint } from "./utils/html-processor.js";
 import { generateServiceWorker } from "./utils/service-worker-generator.js";
 import { registerPublicAssets } from "./utils/public-assets.js";
+import { getUIModuleHostOptions } from "./utils/security.js";
 
 // Strategy Pattern
 import { getStrategy, isFrameworkSupported, getSupportedFrameworks, parseFramework } from "./strategies/index.js";
@@ -29,7 +30,7 @@ export default class UIFederationService extends BaseService {
 	private readonly importMaps = new Map<string, ImportMap>();
 	private langManager: ILangManagerService | null = null;
 	private readonly uiOutputBaseDir: string;
-	private port: number = 3000;
+	private readonly port: number = 3000;
 	private readonly isDevelopment: boolean;
 	// Registro de hosts para producción: hostPattern -> { namespace, moduleName, directory }
 	private readonly hostRegistry = new Map<string, { namespace: string; moduleName: string; directory: string }>();
@@ -340,6 +341,7 @@ export default class UIFederationService extends BaseService {
 		if (!hosting || !module.outputPath) return;
 
 		const registeredPatterns: string[] = [];
+		const hostOptions = getUIModuleHostOptions(module.uiConfig);
 
 		// Procesar configuración de hosts específica
 		for (const hostConfig of hosting) {
@@ -347,12 +349,12 @@ export default class UIFederationService extends BaseService {
 				if (hostConfig.subdomains) {
 					for (const subdomain of hostConfig.subdomains) {
 						const pattern = `${subdomain}.${domain}`;
-						hostProvider.registerHost(pattern, module.outputPath, { spaFallback: true });
+						hostProvider.registerHost(pattern, module.outputPath, hostOptions);
 						this.hostRegistry.set(pattern, { namespace, moduleName: module.name, directory: module.outputPath });
 						registeredPatterns.push(pattern);
 					}
 				} else {
-					hostProvider.registerHost(domain, module.outputPath, { spaFallback: true });
+					hostProvider.registerHost(domain, module.outputPath, hostOptions);
 					this.hostRegistry.set(domain, { namespace, moduleName: module.name, directory: module.outputPath });
 					registeredPatterns.push(domain);
 				}

@@ -12,6 +12,7 @@ import {
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
+import { resolveUserAvatar } from "@common/utils/avatar.ts";
 import type { AuthenticatedUser } from "../types.js";
 import { UserAuthenticationResult } from "../../../core/IdentityManagerService/dao/users.ts";
 import { User } from "@common/types/identity/User.js";
@@ -67,7 +68,7 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/login",
 		permissions: [],
-		options: { skipIdempotency: true },
+		options: { skipIdempotency: true, rateLimit: { max: 4, timeWindow: 300_000 } },
 	})
 	static async handleNativeLogin(ctx: EndpointCtx<Record<string, string>, LoginBody>): Promise<unknown> {
 		const { username, password, orgId } = ctx.data || {};
@@ -146,6 +147,7 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/register",
 		permissions: [],
+		options: { rateLimit: { max: 2, timeWindow: 3_600_000 } },
 	})
 	static async handleRegister(ctx: EndpointCtx<Record<string, string>, RegisterBody>): Promise<unknown> {
 		const { username, email, password } = ctx.data || {};
@@ -297,7 +299,7 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/refresh",
 		permissions: [],
-		options: { skipIdempotency: true },
+		options: { skipIdempotency: true, rateLimit: { max: 20, timeWindow: 60_000 } },
 	})
 	static async handleRefresh(ctx: EndpointCtx): Promise<never> {
 		const refreshToken = ctx.cookies?.[REFRESH_COOKIE_NAME];
@@ -368,7 +370,7 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/switch-org",
 		permissions: [],
-		options: { skipIdempotency: true },
+		options: { skipIdempotency: true, rateLimit: { max: 20, timeWindow: 60_000 } },
 	})
 	static async handleSwitchOrg(ctx: EndpointCtx<Record<string, string>, { orgId?: string }>): Promise<never> {
 		const token = ctx.cookies?.[ACCESS_COOKIE_NAME];
@@ -462,7 +464,7 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/logout",
 		permissions: [],
-		options: { skipIdempotency: true },
+		options: { skipIdempotency: true, rateLimit: { max: 3, timeWindow: 60_000 } },
 	})
 	static async handleLogout(ctx: EndpointCtx): Promise<never> {
 		const refreshToken = ctx.cookies?.[REFRESH_COOKIE_NAME];
@@ -546,9 +548,8 @@ export class AuthEndpoints {
 			const user = await AuthEndpoints.deps.internalIdentity.users.getUser(userId);
 			if (!user) return null;
 
-			// Resolve avatar: prefer metadata.avatar, fallback to first linked account's providerAvatar
-			const avatar =
-				(user.metadata?.avatar as string) || user.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar)?.providerAvatar;
+			// Resolve avatar usando el helper compartido (perfil → metadata → linkedAccounts)
+			const avatar = resolveUserAvatar(user);
 
 			const permissions = await AuthEndpoints.getUserPermissions(userId);
 			return {
@@ -584,11 +585,8 @@ export class AuthEndpoints {
 	): Promise<AuthenticatedUser> {
 		const permissions = await AuthEndpoints.getUserPermissions(profile.id, orgId);
 
-		// Resolver avatar igual que getUserById: perfil → metadata → linked accounts
-		const avatar =
-			profile.avatar ||
-			(profile.metadata?.avatar as string) ||
-			profile.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar)?.providerAvatar;
+		// Resolver avatar usando el helper compartido (perfil → metadata → linkedAccounts)
+		const avatar = resolveUserAvatar(profile);
 
 		return {
 			id: profile.id,

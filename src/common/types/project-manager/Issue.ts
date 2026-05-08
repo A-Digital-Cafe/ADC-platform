@@ -1,7 +1,8 @@
 import type { IssueLink } from "./IssueLink.ts";
-import type { IssueAttachment } from "./Attachment.ts";
+import type { AttachmentDTO } from "../attachments/Attachment.ts";
 import type { UpdateLogEntry } from "./UpdateLogEntry.ts";
 import type { CustomFieldValue } from "./CustomField.ts";
+import type { Block } from "../../ADC/types/learning.ts";
 
 /** Categoría/tipo de trabajo del issue. Configurable por proyecto. */
 export type IssueCategory = "task" | "bug" | "story" | "epic" | (string & {});
@@ -25,8 +26,8 @@ export interface Issue {
 	key: string;
 
 	title: string;
-	/** Markdown. */
-	description: string;
+	/** Contenido enriquecido en bloques (mismo modelo que comments). */
+	description: Block[];
 
 	columnKey: string;
 	category: IssueCategory;
@@ -38,12 +39,20 @@ export interface Issue {
 	assigneeIds: string[];
 	assigneeGroupIds: string[];
 
+	/** Asignee Profiles hidratados on request */
+	assigneeProfiles?: Record<string, { username?: string; avatar?: string }>;
+	assigneeGroupProfiles?: Record<string, { name: string; description?: string }>;
+
 	priority: IssuePriority;
 	storyPoints?: number;
 
 	customFields: Record<string, CustomFieldValue>;
 	linkedIssues: IssueLink[];
-	attachments: IssueAttachment[];
+	/**
+	 * Adjuntos del issue. Se hidratan vía `AttachmentsManager`
+	 * (no se almacenan embebidos en el documento).
+	 */
+	attachments?: AttachmentDTO[];
 
 	updateLog: UpdateLogEntry[];
 

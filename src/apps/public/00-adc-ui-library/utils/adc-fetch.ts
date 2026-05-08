@@ -10,6 +10,7 @@
 
 import { showError } from "./error-handler.js";
 import { forceLogoutAndRefresh } from "./auth-sync.js";
+import { appendCsrfHeader } from "./csrf.js";
 import ADCCustomError, { HttpError } from "@common/types/ADCCustomError.js";
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 
@@ -49,6 +50,49 @@ let failingBurstCount = 0;
 let circuitBreakerTriggeredSecond = -1;
 
 /**
+ * Per-endpoint rate-limit "cooldown" memory. Cuando el server responde 429
+ * registramos `${method}:${pathSinQuery}` con su `untilMs` y rechazamos
+ * inmediatamente cualquier request al mismo endpoint hasta que expire, evitando
+ * que componentes reactivos (e.g. UserPicker) generen avalanchas. Cap: 8h.
+ */
+const RATE_LIMIT_MAX_COOLDOWN_MS = 8 * 60 * 60 * 1000;
+const rateLimitCooldowns = new Map<string, number>();
+
+function rateLimitKey(method: HttpMethod, url: string): string {
+	const queryIdx = url.indexOf("?");
+	const path = queryIdx === -1 ? url : url.slice(0, queryIdx);
+	return `${method}:${path}`;
+}
+
+function getRateLimitRemainingMs(method: HttpMethod, url: string): number {
+	const key = rateLimitKey(method, url);
+	const until = rateLimitCooldowns.get(key);
+	if (!until) return 0;
+	const remaining = until - Date.now();
+	if (remaining <= 0) {
+		rateLimitCooldowns.delete(key);
+		return 0;
+	}
+	return remaining;
+}
+
+function registerRateLimit(method: HttpMethod, url: string, response: Response, body?: { retryAfter?: number }): void {
+	const headerVal = response.headers.get("Retry-After");
+	let seconds = 0;
+	if (headerVal) {
+		const n = Number(headerVal);
+		if (Number.isFinite(n) && n > 0) seconds = n;
+	}
+	if (!seconds && body && typeof body.retryAfter === "number" && body.retryAfter > 0) {
+		seconds = body.retryAfter;
+	}
+
+	if (!seconds) seconds = 30;
+	const ms = Math.min(seconds * 1000, RATE_LIMIT_MAX_COOLDOWN_MS);
+	rateLimitCooldowns.set(rateLimitKey(method, url), Date.now() + ms);
+}
+
+/**
  * Deterministic hash for idempotency keys.
  * Produces the same key for the same data, enabling safe retries.
  */
@@ -57,6 +101,19 @@ function hashIdempotency(data: unknown): string {
 	let h = 5381;
 	for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)!) >>> 0;
 	return h.toString(36);
+}
+
+/**
+ * Garantiza que el header `Idempotency-Key` solo contenga caracteres ISO-8859-1
+ * imprimibles (HTTP no acepta unicode en headers). Si detecta caracteres fuera
+ * de rango (e.g. emojis), reemplaza la clave por su hash determinista.
+ */
+function sanitizeIdempotencyKey(key: string): string {
+	for (let i = 0; i < key.length; i++) {
+		const code = key.codePointAt(i);
+		if (code && (code > 0xff || code < 0x20)) return hashIdempotency(key);
+	}
+	return key;
 }
 
 function isCircuitBreakerStatus(status?: number): status is number {
@@ -106,6 +163,8 @@ export interface RequestOptions<TData = Record<string, unknown>> {
 	silent?: boolean; // If true, suppresses error toasts
 	/** AbortSignal to cancel the request */
 	signal?: AbortSignal;
+	/** If true, do not attach a CSRF header to this request */
+	skipCsrf?: boolean;
 }
 
 /**
@@ -176,26 +235,48 @@ export function createAdcApi(config: AdcApiConfig) {
 		path: string,
 		options: RequestOptions<TData> = {}
 	): Promise<AdcFetchResult<T>> {
-		const { params, body, headers, translateParams, idempotencyKey, idempotencyData, signal } = options;
-		const resolvedIdempotencyKey = idempotencyData !== undefined ? hashIdempotency(idempotencyData) : idempotencyKey;
+		const { params, body, headers, translateParams, idempotencyKey, idempotencyData, signal, skipCsrf } = options;
+		const rawIdempotencyKey = idempotencyData === undefined ? idempotencyKey : hashIdempotency(idempotencyData);
+		const resolvedIdempotencyKey = rawIdempotencyKey ? sanitizeIdempotencyKey(rawIdempotencyKey) : undefined;
 
 		const url = `${baseUrl}${path}${buildQueryString(params)}`;
+		const requestHeaders = {
+			...defaultHeaders,
+			...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+			...(MUTATIVE_METHODS.has(method) && resolvedIdempotencyKey ? { "Idempotency-Key": resolvedIdempotencyKey } : {}),
+			...headers,
+		};
 
 		const fetchOptions: RequestInit = {
 			method,
 			credentials,
-			headers: {
-				...defaultHeaders,
-				...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-				...(MUTATIVE_METHODS.has(method) && resolvedIdempotencyKey ? { "Idempotency-Key": resolvedIdempotencyKey } : {}),
-				...headers,
-			},
+			headers: skipCsrf ? requestHeaders : await appendCsrfHeader(method, url, requestHeaders, credentials, signal),
 			...(body !== undefined ? { body: JSON.stringify(body) } : {}),
 			...(signal ? { signal } : {}),
 		};
 
+		// Cortar avalanchas: si el endpoint está en cooldown por 429, no salir a la red.
+		const rlRemaining = getRateLimitRemainingMs(method, url);
+		if (rlRemaining > 0) {
+			return { success: false, status: 429, errorKey: "RATE_LIMIT_EXCEEDED" };
+		}
+
 		try {
 			const response = await fetch(url, fetchOptions);
+
+			if (response.status === 429) {
+				let parsedBody: { retryAfter?: number } | undefined;
+				try {
+					parsedBody = (await response.clone().json()) as { retryAfter?: number };
+				} catch {
+					/* body opcional */
+				}
+				registerRateLimit(method, url, response, parsedBody);
+				if (!options.silent) {
+					await parseErrorResponse(response);
+				}
+				return { success: false, status: 429, errorKey: "RATE_LIMIT_EXCEEDED" };
+			}
 
 			if (!response.ok && !options.silent) {
 				await parseErrorResponse(response);

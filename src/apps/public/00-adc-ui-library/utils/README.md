@@ -1,5 +1,9 @@
 # UI Library Utils
 
+## adc-fetch.ts
+
+Cliente HTTP común para microfrontends. Maneja errores, idempotencia y agrega `X-CSRF-Token` automáticamente en POST/PUT/PATCH/DELETE cuando las credenciales no son `omit`.
+
 ## auth-sync.ts
 
 Sincroniza login/logout entre pestañas y expone un logout forzado con recarga para errores globales de sesión.

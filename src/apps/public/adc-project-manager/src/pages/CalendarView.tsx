@@ -23,7 +23,7 @@ function pickDefault(entities: Array<{ id: string; status: string }>): string | 
 	return entities[0]?.id;
 }
 
-export function CalendarView({ project, perms }: Props) {
+export function CalendarView({ project, perms }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [rangeType, setRangeType] = useState<RangeType>("sprint");
 	const [entityId, setEntityId] = useState<string | undefined>();

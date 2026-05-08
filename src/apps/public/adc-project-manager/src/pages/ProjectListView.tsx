@@ -19,7 +19,7 @@ interface Props {
 	onOpen: (project: Project) => void;
 }
 
-export function ProjectListView({ perms, caller, isAdmin, isOrgAdmin, orgId, orgSlug, onOpen }: Props) {
+export function ProjectListView({ perms, caller, isAdmin, isOrgAdmin, orgId, orgSlug, onOpen }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [loading, setLoading] = useState(true);

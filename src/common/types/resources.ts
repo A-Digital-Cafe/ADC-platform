@@ -51,12 +51,16 @@ export const COMMUNITY_SCOPES_BITS = {
 	CONTENT: 1,
 	PUBLISH_STATUS: 1 << 1,
 	SOCIAL: 1 << 2,
+	COMMENTS: 1 << 3,
+	ATTACHMENTS: 1 << 4,
 } as const;
 
 const COMMUNITY_SCOPES: ScopeDef[] = [
 	{ key: "content", value: COMMUNITY_SCOPES_BITS.CONTENT },
 	{ key: "publish_status", value: COMMUNITY_SCOPES_BITS.PUBLISH_STATUS },
 	{ key: "social", value: COMMUNITY_SCOPES_BITS.SOCIAL },
+	{ key: "comments", value: COMMUNITY_SCOPES_BITS.COMMENTS },
+	{ key: "attachments", value: COMMUNITY_SCOPES_BITS.ATTACHMENTS },
 ];
 
 /** Project Manager scopes — alineados con PMScopes en types/project-manager/permissions.ts */
@@ -69,6 +73,7 @@ const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
 	{ key: "attachments", value: 1 << 6 },
 	{ key: "settings", value: 1 << 7 },
 	{ key: "stats", value: 1 << 8 },
+	{ key: "comments", value: 1 << 9 },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Project } from "@common/types/project-manager/Project.ts";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
+import type { TransitionCommentSubmitDetail } from "../components/TransitionCommentModal.tsx";
+import { TransitionCommentModal } from "../components/TransitionCommentModal.tsx";
 import { pmApi, type IssueListParams } from "../utils/pm-api.ts";
 import { IssueDialog } from "../components/IssueDialog.tsx";
 import { BacklogFilters } from "../components/backlog/BacklogFilters.tsx";
@@ -12,6 +14,7 @@ import { CompletedGroupUmbrella } from "../components/backlog/CompletedGroupUmbr
 import { useBacklogSections } from "../hooks/useBacklogSections.ts";
 import { useBacklogData } from "../hooks/useBacklogData.ts";
 import { useBacklogGroupByPref } from "../hooks/useBacklogGroupByPref.ts";
+import { useIssueMover } from "../hooks/useIssueMover.ts";
 import { canWriteProjectResource, canUpdateProjectResource, Scope, type CallerCtx } from "../utils/permissions.ts";
 
 interface Props {
@@ -22,7 +25,7 @@ interface Props {
 
 const COMPLETED_UMBRELLA_KEY = "__completed__";
 
-export function BacklogView({ project, perms, caller }: Props) {
+export function BacklogView({ project, perms, caller }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [q, setQ] = useState("");
 	const [orderBy, setOrderBy] = useState<IssueListParams["orderBy"]>("priority");
@@ -47,9 +50,18 @@ export function BacklogView({ project, perms, caller }: Props) {
 			[key]: !(prev[key] ?? defaultCollapsed),
 		}));
 
+	const mover = useIssueMover({
+		project,
+		onSuccess: async () => {
+			await reload();
+		},
+		onFailure: async () => {
+			await reload();
+		},
+	});
+
 	const handleMove = async (issue: Issue, columnKey: string) => {
-		const res = await pmApi.moveIssue(issue.id, columnKey);
-		if (res.success) await reload();
+		await mover.requestMove(issue.id, issue.columnKey, columnKey);
 	};
 
 	const handleDrop = async (section: GroupSection, issueId: string) => {
@@ -161,6 +173,18 @@ export function BacklogView({ project, perms, caller }: Props) {
 					}}
 				/>
 			)}
+
+			<TransitionCommentModal
+				open={!!mover.pendingMove}
+				submitting={mover.moving}
+				fromColumn={mover.pendingMove ? project.kanbanColumns.find((c) => c.key === mover.pendingMove?.fromColumn)?.name : undefined}
+				toColumn={mover.pendingMove ? project.kanbanColumns.find((c) => c.key === mover.pendingMove?.toColumn)?.name : undefined}
+				onCancel={() => {
+					mover.cancelMove();
+					reload();
+				}}
+				onSubmit={(detail: TransitionCommentSubmitDetail) => mover.confirmMoveWithComment(detail)}
+			/>
 		</div>
 	);
 }

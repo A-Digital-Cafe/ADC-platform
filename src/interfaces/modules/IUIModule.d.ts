@@ -18,6 +18,11 @@ interface UIHostingConfig {
 	subdomains?: string[];
 }
 
+interface UIModuleSecurityConfig {
+	/** Headers HTTP adicionales o overrides para el host estático del módulo */
+	headers?: Record<string, string>;
+}
+
 /**
  * Configuración de un módulo UI en config.json
  *
@@ -62,6 +67,8 @@ export interface UIModuleConfig {
 	federationExposes?: Record<string, string>;
 	/** Configuración de hosting para producción (dominios/subdominios) */
 	hosting?: UIHostingConfig[];
+	/** Seguridad HTTP específica para el módulo UI */
+	security?: UIModuleSecurityConfig;
 }
 
 /**

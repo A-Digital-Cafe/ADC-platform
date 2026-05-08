@@ -46,7 +46,7 @@ export function BacklogSection({
 	onDragOver,
 	onDragLeave,
 	onDrop,
-}: Props) {
+}: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const total = section.issues.length;
 

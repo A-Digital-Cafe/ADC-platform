@@ -17,6 +17,8 @@ temp/
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -33,7 +35,6 @@ Thumbs.db
 npm-debug.log*
 
 
-.env.development
 apps/private
 private/
 **.pyc

@@ -11,7 +11,24 @@
 				"retryDelay": 5000,
 				"autoReconnect": true
 			}
+		},
+		{
+			"name": "object/internal-s3-provider",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"endpoint": "${S3_ENDPOINT}",
+				"region": "${S3_REGION}",
+				"accessKey": "${S3_ACCESS_KEY}",
+				"secretKey": "${S3_SECRET_KEY}",
+				"bucket": "${ARTICLES_S3_BUCKET}",
+				"presignTtl": 600
+			}
 		}
+	],
+	"utilities": [
+		{ "name": "attachments/attachments-utility", "version": "latest" },
+		{ "name": "comments/comments-utility", "version": "latest" }
 	],
 	"services": [
 		{

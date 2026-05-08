@@ -14,7 +14,7 @@ export class AdcModal {
 	@Prop() modalTitle: string = "";
 
 	/** Size variant */
-	@Prop() size: "sm" | "md" | "lg" = "md";
+	@Prop() size: "sm" | "md" | "lg" | "xl" = "md";
 
 	/** Whether clicking the backdrop closes the modal */
 	@Prop() dismissOnBackdrop: boolean = true;
@@ -48,6 +48,8 @@ export class AdcModal {
 				return "max-w-sm";
 			case "lg":
 				return "max-w-2xl";
+			case "xl":
+				return "max-w-6xl";
 			default:
 				return "max-w-lg";
 		}
@@ -73,7 +75,7 @@ export class AdcModal {
 									<h2 class="font-heading text-lg font-semibold text-text">{this.modalTitle}</h2>
 									<button
 										type="button"
-										class="p-1 rounded-full hover:bg-surface transition-colors min-h-[44px] min-w-[44px] touch-manipulation flex items-center justify-center"
+										class="p-1 rounded-full hover:bg-surface transition-colors min-h-11 min-w-11 touch-manipulation flex items-center justify-center"
 										onClick={this.close}
 										aria-label="Cerrar"
 									>

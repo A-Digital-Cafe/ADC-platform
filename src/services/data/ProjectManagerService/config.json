@@ -12,6 +12,32 @@
 				"maxRetries": 5,
 				"retryDelay": 5000
 			}
+		},
+		{
+			"name": "object/internal-s3-provider",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"endpoint": "${S3_ENDPOINT:-http://localhost:9000}",
+				"region": "${S3_REGION:-us-east-1}",
+				"accessKey": "${S3_ACCESS_KEY:-adc-minio}",
+				"secretKey": "${S3_SECRET_KEY:-adc-minio-secret}",
+				"forcePathStyle": true,
+				"defaultBucket": "${PM_S3_BUCKET:-adc-pm}",
+				"presignTtl": 600
+			}
+		}
+	],
+	"utilities": [
+		{
+			"name": "attachments/attachments-utility",
+			"version": "latest",
+			"language": "typescript"
+		},
+		{
+			"name": "comments/comments-utility",
+			"version": "latest",
+			"language": "typescript"
 		}
 	],
 	"services": [

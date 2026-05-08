@@ -1,5 +1,6 @@
 import type { Model } from "mongoose";
 import type { Issue, IssuePriority } from "@common/types/project-manager/Issue.ts";
+import type { Block } from "@common/ADC/types/learning.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId } from "@common/utils/crypto.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
@@ -9,6 +10,7 @@ import { ProjectManagerError } from "@common/types/custom-errors/ProjectManagerE
 import { formatIssueKey, deriveProjectKey } from "@common/utils/project-manager/keygen.ts";
 import { buildDiffEntries } from "@common/utils/project-manager/diff.ts";
 import { sortIssuesByPriority, normalizeUrgency, normalizeDifficulty } from "@common/utils/project-manager/priority.ts";
+import { sanitizeBlocks } from "@common/utils/blocks/sanitize.ts";
 import { isProjectAccessibleInOrgContext, isProjectMember } from "../utils/project-access.ts";
 import type { ProjectInternals, CallerMembership } from "./projects.ts";
 import type { Project } from "@common/types/project-manager/Project.ts";
@@ -16,6 +18,24 @@ import { getPMTierLimits } from "@common/types/project-manager/tier-limits.ts";
 import { docToPlain, findByIdAsPlain, projectOwnerAllowIf, stripImmutableFields } from "./shared.ts";
 
 const ISSUE_IMMUTABLE_FIELDS = ["id", "projectId", "key", "createdAt", "reporterId", "updateLog", "attachments"] as const;
+/** Límite de bloques en una descripción de issue (consistente con comments). */
+export const ISSUE_DESCRIPTION_MAX_BLOCKS = 200;
+
+/**
+ * Tolerancia legacy: si en DB quedó una descripción string (esquema anterior),
+ * la envolvemos en un único bloque paragraph al leerla. No persiste el cambio.
+ */
+function normalizeDescription(d: unknown): Block[] {
+	if (Array.isArray(d)) return d as Block[];
+	if (typeof d === "string" && d.length > 0) return [{ type: "paragraph", text: d } as Block];
+	return [];
+}
+
+function normalizeIssueDescription<T extends Issue | null | undefined>(issue: T): T {
+	if (!issue) return issue;
+	issue.description = normalizeDescription(issue.description);
+	return issue;
+}
 
 export interface IssueListFilters {
 	sprintId?: string;
@@ -82,7 +102,7 @@ export class IssueManager {
 			projectId: project.id,
 			key,
 			title: input.title,
-			description: input.description ?? "",
+			description: sanitizeBlocks(normalizeDescription(input.description), { maxBlocks: ISSUE_DESCRIPTION_MAX_BLOCKS }),
 			columnKey: input.columnKey ?? autoColumn.key,
 			category: input.category ?? "task",
 			sprintId: input.sprintId,
@@ -94,7 +114,6 @@ export class IssueManager {
 			storyPoints: input.storyPoints,
 			customFields: input.customFields ?? {},
 			linkedIssues: input.linkedIssues ?? [],
-			attachments: [],
 			updateLog: [],
 			createdAt: new Date(),
 			updatedAt: new Date(),
@@ -117,7 +136,7 @@ export class IssueManager {
 			ownerId: issue?.reporterId ?? project?.ownerId,
 			allowIf: (uid) => inOrgCtx && (isProjectMember(project, { id: uid, groupIds }, tokenOrgId) || isAssignee(issue, uid, groupIds)),
 		});
-		return issue;
+		return normalizeIssueDescription(issue);
 	}
 
 	async list(project: Project, filters: IssueListFilters = {}, token?: string, caller?: CallerMembership): Promise<Issue[]> {
@@ -134,7 +153,7 @@ export class IssueManager {
 		if (filters.q) query.$text = { $search: filters.q };
 
 		const docs = await this.issueModel.find(query);
-		const issues = docs.map((d) => docToPlain<Issue>(d)!);
+		const issues = docs.map((d) => normalizeIssueDescription(docToPlain<Issue>(d)!));
 
 		if (filters.orderBy === "priority") return sortIssuesByPriority(issues, project.priorityStrategy);
 		if (filters.orderBy === "createdAt") return issues.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -169,6 +188,9 @@ export class IssueManager {
 				difficulty: normalizeDifficulty(updates.priority.difficulty),
 			};
 		}
+		if (updates.description !== undefined) {
+			updates.description = sanitizeBlocks(normalizeDescription(updates.description), { maxBlocks: ISSUE_DESCRIPTION_MAX_BLOCKS });
+		}
 
 		const safe: Partial<Issue> = { ...stripImmutableFields(updates, ISSUE_IMMUTABLE_FIELDS), updatedAt: new Date() };
 
@@ -180,7 +202,7 @@ export class IssueManager {
 
 		const updated = await this.issueModel.findOneAndUpdate({ id: issueId }, updateDoc, { new: true });
 		if (!updated) throw new ProjectManagerError(404, "ISSUE_NOT_FOUND", `Issue ${issueId} no encontrado`);
-		return docToPlain<Issue>(updated)!;
+		return normalizeIssueDescription(docToPlain<Issue>(updated)!);
 	}
 
 	async delete(issueId: string, token?: string, caller?: CallerMembership): Promise<void> {
@@ -239,6 +261,6 @@ export class IssueManager {
 			{ new: true }
 		);
 		if (!updated) throw new ProjectManagerError(404, "ISSUE_NOT_FOUND", `Issue ${issueId} no encontrado`);
-		return docToPlain<Issue>(updated)!;
+		return normalizeIssueDescription(docToPlain<Issue>(updated)!);
 	}
 }

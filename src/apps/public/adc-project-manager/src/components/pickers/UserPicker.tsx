@@ -4,10 +4,11 @@ import { identityPmApi } from "../../utils/identity-api.ts";
 import { ClientUser } from "@common/types/identity/User.ts";
 
 interface Props {
-	selectedIds: string[];
-	onChange: (ids: string[]) => void;
-	disabled?: boolean;
-	label?: string;
+	readonly selectedIds: string[];
+	readonly onChange: (ids: string[]) => void;
+	readonly disabled?: boolean;
+	readonly label?: string;
+	readonly initialCache?: Record<string, { username?: string; avatar?: string }>;
 }
 
 /**
@@ -15,27 +16,71 @@ interface Props {
  * para consultar `/api/identity/users/search` y mantiene un cache local de los
  * chips ya seleccionados para poder mostrar el nombre sin re-fetchear.
  */
-export function UserPicker({ selectedIds, onChange, disabled, label }: Props) {
+export function UserPicker({ selectedIds, onChange, disabled, label, initialCache }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [results, setResults] = useState<ClientUser[]>([]);
 	const [searching, setSearching] = useState(false);
-	const [cache, setCache] = useState<Record<string, ClientUser>>({});
+	const [cache, setCache] = useState<Record<string, ClientUser>>(() => {
+		if (!initialCache) return {};
+		const seed: Record<string, ClientUser> = {};
+		for (const [id, p] of Object.entries(initialCache)) {
+			seed[id] = { id, username: p.username ?? "", avatar: p.avatar } as ClientUser;
+		}
+		return seed;
+	});
 	const searchRef = useRef<HTMLElement | null>(null);
 
+	// Re-sembrar cache cuando llegan nuevos perfiles desde el caller (ej: el
+	// issue se recarga). Solo agrega/sobrescribe los IDs presentes en
+	// `initialCache`; preserva cualquier ID que el usuario haya buscado/agregado
+	// localmente en esta sesión.
+	useEffect(() => {
+		if (!initialCache) return;
+		setCache((prev) => {
+			let changed = false;
+			const next = { ...prev };
+			for (const [id, p] of Object.entries(initialCache)) {
+				const existing = next[id];
+				if (!existing || (existing.username === "" && p.username) || existing.avatar !== p.avatar) {
+					next[id] = { id, username: p.username ?? existing?.username ?? "", avatar: p.avatar ?? existing?.avatar } as ClientUser;
+					changed = true;
+				}
+			}
+			return changed ? next : prev;
+		});
+	}, [initialCache]);
+
 	// Pre-hidrata nombres para IDs seleccionados que aún no estén en cache.
+	// Para evitar un bucle infinito si `getUser` falla (401, 404, 429), todo
+	// ID intentado se marca en cache (con un placeholder si falló) — así
+	// nunca volverá a aparecer en `missing` aunque la request no haya
+	// completado con éxito.
 	useEffect(() => {
 		const missing = selectedIds.filter((id) => !cache[id]);
 		if (missing.length === 0) return;
+		let cancelled = false;
 		(async () => {
-			const fetched: Record<string, ClientUser> = { ...cache };
+			const updates: Record<string, ClientUser> = {};
 			await Promise.all(
 				missing.map(async (id) => {
 					const r = await identityPmApi.getUser(id);
-					if (r.success && r.data) fetched[id] = r.data;
+					if (r.success && r.data) updates[id] = r.data;
 				})
 			);
-			setCache(fetched);
+			if (cancelled) return;
+			setCache((prev) => {
+				const next = { ...prev, ...updates };
+				// Marcar como "intentado" todo ID que no haya devuelto datos para
+				// no re-disparar el effect en bucle cuando hay errores persistentes.
+				for (const id of missing) {
+					if (!next[id]) next[id] = { id } as ClientUser;
+				}
+				return next;
+			});
 		})();
+		return () => {
+			cancelled = true;
+		};
 	}, [selectedIds, cache]);
 
 	const handleSearch = useCallback(async (query: string) => {
@@ -96,31 +141,24 @@ export function UserPicker({ selectedIds, onChange, disabled, label }: Props) {
 					)}
 				</div>
 			)}
-			<div>
-				{selectedIds.length === 0 && <span className="text-xs text-muted">{t("settings.noMembers")}</span>}
-				{selectedIds.length > 0 && (
-					<ul className="divide-y divide-surface">
-						{selectedIds.map((id) => {
-							const u = cache[id];
-							return (
-								<li key={id} className="flex items-center justify-between py-2">
-									<adc-user-summary username={u?.username || id} email={u?.email} />
-									{!disabled && (
-										<adc-button-rounded
-											variant="danger"
-											aria-label={t("common.delete")}
-											onClick={() => remove(id)}
-											size="md"
-										>
-											<adc-icon-close size="0.875rem" />
-										</adc-button-rounded>
-									)}
-								</li>
-							);
-						})}
-					</ul>
-				)}
-			</div>
+			{selectedIds.length === 0 && <p className="text-xs text-muted">{t("settings.noMembers")}</p>}
+			{selectedIds.length > 0 && (
+				<ul className="divide-y divide-surface">
+					{selectedIds.map((id) => {
+						const u = cache[id];
+						return (
+							<li key={id} className="flex items-center justify-between py-2">
+								<adc-user-summary username={u?.username || id} email={u?.email} />
+								{!disabled && (
+									<adc-button-rounded variant="danger" aria-label={t("common.delete")} onClick={() => remove(id)} size="md">
+										<adc-icon-close size="0.875rem" />
+									</adc-button-rounded>
+								)}
+							</li>
+						);
+					})}
+				</ul>
+			)}
 		</div>
 	);
 }

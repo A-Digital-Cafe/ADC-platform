@@ -5,8 +5,11 @@ import type { Project } from "@common/types/project-manager/Project.ts";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
 import type { Sprint } from "@common/types/project-manager/Sprint.ts";
 import type { Milestone } from "@common/types/project-manager/Milestone.ts";
-import { pmApi, type IssueListParams } from "../utils/pm-api.ts";
+import type { TransitionCommentSubmitDetail } from "../components/TransitionCommentModal.tsx";
+import { TransitionCommentModal } from "../components/TransitionCommentModal.tsx";
+import { type IssueListParams } from "../utils/pm-api.ts";
 import { useBacklogData } from "../hooks/useBacklogData.ts";
+import { useIssueMover } from "../hooks/useIssueMover.ts";
 import { IssueDialog } from "../components/IssueDialog.tsx";
 import { BoardColumn } from "../components/board/BoardColumn.tsx";
 import { BoardFilters, type BoardFilterState } from "../components/board/BoardFilters.tsx";
@@ -25,13 +28,15 @@ function applyFilters(issues: Issue[], f: BoardFilterState, q: string): Issue[] 
 		if (f.assigneeId && !i.assigneeIds.includes(f.assigneeId)) return false;
 		if (q) {
 			const needle = q.toLowerCase();
-			if (!i.title.toLowerCase().includes(needle) && !i.description.toLowerCase().includes(needle)) return false;
+			// La descripci\u00f3n ahora es Block[] enriquecida; el filtro local s\u00f3lo
+			// matchea por t\u00edtulo/key. Para b\u00fasqueda full-text usar el backend (q).
+			if (!i.title.toLowerCase().includes(needle) && !i.key.toLowerCase().includes(needle)) return false;
 		}
 		return true;
 	});
 }
 
-export function BoardView({ project, perms, caller }: Props) {
+export function BoardView({ project, perms, caller }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [q, setQ] = useState("");
 	const [filters, setFilters] = useState<BoardFilterState>({});
@@ -59,16 +64,25 @@ export function BoardView({ project, perms, caller }: Props) {
 		return map;
 	}, [filteredIssues, columnsOrdered]);
 
+	const mover = useIssueMover({
+		project,
+		onSuccess: async () => {
+			await reload();
+		},
+		onFailure: async () => {
+			await reload();
+		},
+	});
+
 	const handleMove = useCallback(
 		async (issueId: string, targetColumn: string) => {
 			const issue = issues.find((i) => i.id === issueId);
 			if (!issue || issue.columnKey === targetColumn) return;
 			// Optimistic
 			setIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, columnKey: targetColumn } : i)));
-			const res = await pmApi.moveIssue(issueId, targetColumn);
-			if (!res.success) await reload();
+			await mover.requestMove(issueId, issue.columnKey, targetColumn);
 		},
-		[issues, setIssues, reload]
+		[issues, setIssues, mover]
 	);
 
 	const isDragEnabled = canUpdateProjectResource(perms, Scope.ISSUES, project, caller);
@@ -146,6 +160,18 @@ export function BoardView({ project, perms, caller }: Props) {
 					}}
 				/>
 			)}
+
+			<TransitionCommentModal
+				open={!!mover.pendingMove}
+				submitting={mover.moving}
+				fromColumn={mover.pendingMove ? project.kanbanColumns.find((c) => c.key === mover.pendingMove?.fromColumn)?.name : undefined}
+				toColumn={mover.pendingMove ? project.kanbanColumns.find((c) => c.key === mover.pendingMove?.toColumn)?.name : undefined}
+				onCancel={() => {
+					mover.cancelMove();
+					reload();
+				}}
+				onSubmit={(detail: TransitionCommentSubmitDetail) => mover.confirmMoveWithComment(detail)}
+			/>
 		</div>
 	);
 }

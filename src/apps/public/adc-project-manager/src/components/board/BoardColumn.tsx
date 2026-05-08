@@ -34,7 +34,7 @@ export function BoardColumn({
 	onDragLeave,
 	onDrop,
 	onOpen,
-}: Props) {
+}: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const baseCls = "flex flex-col w-72 shrink-0 rounded-lg border bg-background/40 p-2 min-h-[60vh]";
 	const activeCls = isDropActive ? "border-primary ring-2 ring-primary/40" : "border-text/15";

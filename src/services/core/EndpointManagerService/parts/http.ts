@@ -8,31 +8,39 @@ import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.d.ts";
 import { createHash } from "node:crypto";
+import { validateCsrf, type TokenSource } from "./csrf.js";
+import type { CsrfRuntimeConfig } from "./csrf-config.js";
+import { resolveRateLimit } from "./rate-limit.js";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const JOB_TTL_SECONDS = 600; // 10 min
 
-function extractToken(req: FastifyRequest<any>, getSessionManager: () => SessionManagerService | null): string | null {
+interface ExtractedToken {
+	token: string | null;
+	source: TokenSource;
+}
+
+function extractToken(req: FastifyRequest<any>, getSessionManager: () => SessionManagerService | null): ExtractedToken {
 	// 1. Intentar desde cookie via SessionManager
 	const sessionManager = getSessionManager();
 	if (sessionManager) {
 		const cookieToken = sessionManager.extractSessionToken(req as any);
-		if (cookieToken) return cookieToken;
+		if (cookieToken) return { token: cookieToken, source: "cookie" };
 	}
 
 	// 2. Intentar desde header Authorization
 	const authHeader = req.headers?.authorization;
 	if (authHeader?.startsWith("Bearer ")) {
-		return authHeader.substring(7);
+		return { token: authHeader.substring(7), source: "bearer" };
 	}
 
 	// 3. Intentar desde query parameter (para WebSockets, etc.)
 	const queryToken = (req.query as any)?.token;
 	if (queryToken) {
-		return queryToken;
+		return { token: queryToken, source: "query" };
 	}
 
-	return null;
+	return { token: null, source: null };
 }
 
 export function createHttpWrapper(
@@ -40,12 +48,13 @@ export function createHttpWrapper(
 	getSessionManager: () => SessionManagerService | null,
 	operationsService: OperationsService,
 	logger: ILogger,
+	csrfConfig: CsrfRuntimeConfig,
 	rabbitmq: RabbitMQProvider | null = null,
 	redis: RedisProvider | null = null
 ): (req: FastifyRequest<any>, reply: FastifyReply<any>) => Promise<void> {
 	const requiresIdempotency = MUTATIVE_METHODS.has(endpoint.method) && endpoint.options?.skipIdempotency !== true;
 	const shouldEnqueue = MUTATIVE_METHODS.has(endpoint.method) && endpoint.options?.enqueue === true && rabbitmq !== null;
-	const rl = endpoint.options?.rateLimit;
+	const rl = resolveRateLimit(endpoint);
 	const rlTtlSeconds = rl ? Math.max(1, Math.ceil(rl.timeWindow / 1000)) : 0;
 	const rlKeyPrefix = rl ? `rl:${endpoint.method}:${endpoint.url}:` : "";
 
@@ -60,16 +69,19 @@ export function createHttpWrapper(
 			reply.header("X-RateLimit-Remaining", Math.max(0, rl.max - count));
 
 			if (count > rl.max) {
+				reply.header("Retry-After", rlTtlSeconds);
 				reply.status(429).send({
 					error: "RATE_LIMIT_EXCEEDED",
 					message: `Too many requests. Limit: ${rl.max} per ${rlTtlSeconds}s`,
+					retryAfter: rlTtlSeconds,
 				});
 				return;
 			}
 		}
 
 		// Extraer token si existe
-		const token = extractToken(req, getSessionManager);
+		const tokenInfo = extractToken(req, getSessionManager);
+		const token = tokenInfo.token;
 
 		// Obtener usuario si hay token (ya sea público o protegido)
 		let user: AuthenticatedUserInfo | null = null;
@@ -94,6 +106,8 @@ export function createHttpWrapper(
 		};
 
 		try {
+			validateCsrf(endpoint, req, tokenInfo.source, csrfConfig);
+
 			let result: unknown;
 
 			if (requiresIdempotency) {

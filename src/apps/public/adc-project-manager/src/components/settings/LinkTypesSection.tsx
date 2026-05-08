@@ -12,7 +12,7 @@ interface Props {
 	onSaved: () => void | Promise<void>;
 }
 
-export function LinkTypesSection({ project, canEdit, onSaved }: Props) {
+export function LinkTypesSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [types, setTypes] = useState<IssueLinkType[]>(project.issueLinkTypes);
 	const [saving, setSaving] = useState(false);

@@ -9,6 +9,17 @@ import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 import type { IHostBasedHttpProvider, HostOptions, HttpHandler } from "../../../interfaces/modules/providers/IHttpServer.js";
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
+import {
+	ALLOWED_CORS_HEADERS,
+	ALLOWED_HTTP_METHODS,
+	applySecurityHeaders,
+	createCorsOriginGuard,
+	getAllowHeader,
+	getBodyLimitBytes,
+	isAllowedHttpMethod,
+	isSafeStaticPath,
+	resolveSafeStaticPath,
+} from "./security/index.js";
 
 type FastifyHandler = (req: FastifyRequest<any>, reply: FastifyReply<any>) => void | Promise<void>;
 
@@ -25,6 +36,24 @@ interface GlobalRoute {
 	method: string;
 	path: string;
 	handler: FastifyHandler;
+	/** Score de especificidad. Mayor = más específica. Se usa para ordenar la tabla de matching. */
+	specificity: number;
+}
+
+/**
+ * Calcula la especificidad de un patrón de ruta. Más estática = mayor.
+ * Garantiza que `/x/draft` se evalúe antes que `/x/:id` durante el matching.
+ */
+function routeSpecificity(pattern: string): number {
+	const segments = pattern.split("/").filter(Boolean);
+	let score = 0;
+	for (const seg of segments) {
+		if (seg.startsWith(":")) score += 1;
+		else if (seg.includes("*")) score += 0;
+		else score += 100;
+	}
+	// Desempate menor: rutas más largas son ligeramente preferidas.
+	return score * 1000 + segments.length;
 }
 
 interface PathMatchResult {
@@ -129,6 +158,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		// Configuración base de Fastify
 		const fastifyOptions: any = {
 			logger: false,
+			bodyLimit: getBodyLimitBytes(),
 			routerOptions: {
 				ignoreTrailingSlash: true,
 			},
@@ -173,17 +203,23 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private async setupMiddleware(): Promise<void> {
 		// CORS - En desarrollo permitir credenciales desde cualquier localhost
 		const isDev = process.env.NODE_ENV === "development";
-		await this.app.register(fastifyCors, {
-			origin: isDev
-				? (origin, cb) => {
-						// En desarrollo, permitir cualquier localhost con cualquier puerto
-						if (!origin || origin.startsWith("http://localhost")) cb(null, true);
-						else cb(null, false);
-					}
-				: true,
-			credentials: true,
-			methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-			allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
+		await this.app.register(
+			fastifyCors as any,
+			{
+				origin: createCorsOriginGuard(isDev, () => this.getRegisteredHosts()),
+				credentials: true,
+				methods: ALLOWED_HTTP_METHODS,
+				allowedHeaders: ALLOWED_CORS_HEADERS,
+			} as any
+		);
+
+		this.app.addHook("onRequest", async (request, reply) => {
+			applySecurityHeaders(reply);
+			if (!isAllowedHttpMethod(request.method)) {
+				reply.header("Allow", getAllowHeader());
+				reply.code(405).send({ error: "METHOD_NOT_ALLOWED", message: `Method ${request.method} is not allowed` });
+				return;
+			}
 		});
 
 		// Cookie parser - Necesario para setCookie/clearCookie en endpoints
@@ -258,7 +294,11 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			for (const [pathPrefix, directory] of this.globalStaticPaths) {
 				if (urlPath.startsWith(pathPrefix)) {
 					const relativePath = urlPath.slice(pathPrefix.length) || "/index.html";
-					const filePath = path.join(directory, relativePath);
+					const filePath = resolveSafeStaticPath(directory, relativePath);
+					if (!filePath) {
+						reply.code(404).send({ error: "File not found" });
+						return;
+					}
 					return this.serveFile(filePath, directory, reply);
 				}
 			}
@@ -295,7 +335,11 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			urlPath = "/index.html";
 		}
 
-		const filePath = path.join(matchedHost.directory, urlPath);
+		const filePath = resolveSafeStaticPath(matchedHost.directory, urlPath);
+		if (!filePath) {
+			reply.code(404).send({ error: "File not found" });
+			return;
+		}
 		await this.serveFile(filePath, matchedHost.directory, reply, matchedHost.options);
 	}
 
@@ -327,18 +371,17 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 	private async serveFile(filePath: string, baseDir: string, reply: FastifyReply, options?: HostOptions): Promise<void> {
 		try {
+			if (!isSafeStaticPath(baseDir, filePath)) {
+				reply.code(404).send({ error: "File not found" });
+				return;
+			}
+
 			// Verificar que el archivo existe
 			if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
 				const ext = path.extname(filePath).toLowerCase();
 				const contentType = this.getContentType(ext);
 
-				// Headers adicionales si están configurados
-				if (options?.headers) {
-					for (const [key, value] of Object.entries(options.headers)) {
-						reply.header(key, value);
-					}
-				}
-
+				applySecurityHeaders(reply, options?.headers);
 				reply.header("Content-Type", contentType);
 				const content = fs.readFileSync(filePath);
 				reply.send(content);
@@ -347,8 +390,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 			// SPA fallback: si el archivo no existe y está habilitado, servir index.html
 			if (options?.spaFallback) {
-				const indexPath = path.join(baseDir, "index.html");
-				if (fs.existsSync(indexPath)) {
+				const indexPath = resolveSafeStaticPath(baseDir, "/index.html");
+				if (indexPath && fs.existsSync(indexPath)) {
+					applySecurityHeaders(reply, options?.headers);
 					reply.header("Content-Type", "text/html");
 					const content = fs.readFileSync(indexPath);
 					reply.send(content);
@@ -426,7 +470,11 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			method: method.toUpperCase(),
 			path,
 			handler: normalizedHandler,
+			specificity: routeSpecificity(path),
 		});
+		// Mantener invariante: tabla ordenada por especificidad descendente para
+		// que el matcher (orden de iteración) priorice rutas estáticas.
+		this.globalRoutes.sort((a, b) => b.specificity - a.specificity);
 
 		this.logger.logDebug(`Ruta global registrada: ${method.toUpperCase()} ${path}`);
 	}
@@ -476,7 +524,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			host.routes.set(methodUpper, new Map());
 		}
 
-		host.routes.get(methodUpper)!.set(path, normalizeHandler(handler));
+		const methodMap = host.routes.get(methodUpper)!;
+		methodMap.set(path, normalizeHandler(handler));
+		// Reordenar el Map por especificidad descendente para que rutas
+		// estáticas (e.g. `/x/draft`) ganen frente a paramétricas (`/x/:id`).
+		const sorted = Array.from(methodMap.entries()).sort(([a], [b]) => routeSpecificity(b) - routeSpecificity(a));
+		host.routes.set(methodUpper, new Map(sorted));
 		this.logger.logDebug(`Ruta de host registrada: ${hostPattern} ${methodUpper} ${path}`);
 	}
 

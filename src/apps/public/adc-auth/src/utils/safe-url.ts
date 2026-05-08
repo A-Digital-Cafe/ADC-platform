@@ -25,8 +25,8 @@ export function sanitizeReturnUrl(raw: string | null | undefined): string {
 	if (raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\")) {
 		// Rechaza caracteres de control (incluye CR, LF, NUL, DEL) para evitar header/URL injection.
 		for (let i = 0; i < raw.length; i++) {
-			const code = raw.charCodeAt(i);
-			if (code < 0x20 || code === 0x7f) return DEFAULT_RETURN_URL;
+			const code = raw.codePointAt(i);
+			if (code && (code < 0x20 || code === 0x7f)) return DEFAULT_RETURN_URL;
 		}
 		return raw;
 	}

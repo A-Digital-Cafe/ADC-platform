@@ -14,7 +14,7 @@ interface Props {
 	trailing?: ReactNode;
 }
 
-export function BacklogFilters({ q, onQChange, orderBy, onOrderByChange, groupBy, onGroupByChange, trailing }: Props) {
+export function BacklogFilters({ q, onQChange, orderBy, onOrderByChange, groupBy, onGroupByChange, trailing }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	return (
 		<div className="flex gap-3 items-end flex-wrap">

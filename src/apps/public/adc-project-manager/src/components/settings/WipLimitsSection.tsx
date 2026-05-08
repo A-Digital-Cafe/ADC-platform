@@ -9,7 +9,7 @@ interface Props {
 	onSaved: () => void | Promise<void>;
 }
 
-export function WipLimitsSection({ project, canEdit, onSaved }: Props) {
+export function WipLimitsSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [limits, setLimits] = useState<Record<string, number> | undefined>(project.settings?.wipLimits ?? {});
 	const [saving, setSaving] = useState(false);
@@ -25,7 +25,7 @@ export function WipLimitsSection({ project, canEdit, onSaved }: Props) {
 	const save = async () => {
 		setSaving(true);
 		setError(null);
-		const settings: ProjectSettings = { ...(project.settings ?? {}), wipLimits: limits };
+		const settings: ProjectSettings = { ...project.settings, wipLimits: limits };
 		const res = await pmApi.updateSettings(project.id, settings);
 		setSaving(false);
 		if (!res.success) {

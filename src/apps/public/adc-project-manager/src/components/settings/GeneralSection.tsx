@@ -11,7 +11,7 @@ interface Props {
 
 const VISIBILITIES: ProjectVisibility[] = ["private", "org", "public"];
 
-export function GeneralSection({ project, canEdit, onSaved }: Props) {
+export function GeneralSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [name, setName] = useState(project.name);
 	const [description, setDescription] = useState(project.description ?? "");

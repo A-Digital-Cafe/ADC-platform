@@ -321,6 +321,7 @@ export class OAuthEndpoints {
 		method: "POST",
 		url: "/api/auth/link-account",
 		permissions: [],
+		options: { skipIdempotency: true, rateLimit: { max: 3, timeWindow: 300_000 } },
 	})
 	static async handleLinkAccount(ctx: EndpointCtx<Record<string, string>>): Promise<never> {
 		const pendingToken = ctx.cookies?.[PENDING_LINK_COOKIE_NAME];

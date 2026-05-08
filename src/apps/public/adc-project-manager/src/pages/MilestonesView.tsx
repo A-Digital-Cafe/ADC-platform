@@ -15,7 +15,7 @@ interface Props {
 	caller?: CallerCtx;
 }
 
-export function MilestonesView({ project, perms, caller }: Props) {
+export function MilestonesView({ project, perms, caller }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const [milestones, setMilestones] = useState<Milestone[]>([]);
 	const [issues, setIssues] = useState<Issue[]>([]);
