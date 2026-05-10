@@ -25,7 +25,7 @@
 		"create:service": "node scripts/create-service.mjs",
 		"create:utility": "node scripts/create-utility.mjs",
 		"create:provider": "node scripts/create-provider.mjs",
-		"build:ui": "cd src/apps/public/00-adc-ui-library && npx stencil build"
+		"build:ui": "cd src/apps/public/00-adc-ui-library && npx stencil build && cd ../../../.. && node scripts/generate-ui-library-runtime.mjs && node scripts/generate-react-jsx.mjs src/apps/public/00-adc-ui-library"
 	},
 	"keywords": [
 		"kernel",
