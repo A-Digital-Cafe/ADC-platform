@@ -101,8 +101,8 @@ export class UserManager {
 	 * ya son públicos cuando un usuario aparece como autor de un comentario,
 	 * artículo, etc. Limita la cardinalidad para mitigar abusos.
 	 */
-	async getPublicProfiles(userIds: readonly string[]): Promise<Map<string, { username?: string; avatar?: string }>> {
-		const out = new Map<string, { username?: string; avatar?: string }>();
+	async getPublicProfiles(userIds: readonly string[]): Promise<Map<string, { username?: string; avatar: string | null }>> {
+		const out = new Map<string, { username?: string; avatar: string | null }>();
 		const ids = Array.from(new Set(userIds.filter(Boolean))).slice(0, 50);
 		if (ids.length === 0) return out;
 		try {
@@ -111,7 +111,7 @@ export class UserManager {
 				.select({ id: 1, username: 1, avatar: 1, metadata: 1, linkedAccounts: 1 })
 				.lean();
 			for (const d of docs as any[]) {
-				out.set(d.id, { username: d.username, avatar: resolveUserAvatar(d) });
+				out.set(d.id, { username: d.username, avatar: resolveUserAvatar(d) ?? null });
 			}
 		} catch (error) {
 			this.logger.logError(`Error obteniendo perfiles públicos: ${error}`);

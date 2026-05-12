@@ -1,5 +1,3 @@
-import React from "react";
-
 interface RowActionsProps<T> {
 	readonly item: T;
 	readonly canEdit?: boolean;

@@ -16,9 +16,9 @@ fail=0
 
 for cfg in $configs; do
   dir=$(dirname "$cfg")
-  echo "➡ tsc -p $cfg"
+  echo "➡ tsgo -p $cfg"
   
-  npx tsc -p "$cfg" --noEmit
+  npx tsgo -p "$cfg" --noEmit
   if [[ $? -ne 0 ]]; then
     echo "❌ Error en $cfg"
     fail=1

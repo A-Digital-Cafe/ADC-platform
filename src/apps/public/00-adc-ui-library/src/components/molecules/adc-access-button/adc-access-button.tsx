@@ -1,6 +1,14 @@
 import { Component, Prop, State, h, Event, EventEmitter, Listen, Element } from "@stencil/core";
 import { isPrivateHost } from "../../../utils/url.js";
-import { broadcastAuthChange, forceLogoutAndRefresh, getStoredAuthUser, setStoredAuthUser, setupAuthSync } from "../../../../utils/auth-sync.js";
+import {
+	broadcastAuthChange,
+	forceLogoutAndRefresh,
+	getStoredAuthUser,
+	setStoredAuthUser,
+	setupAuthSync,
+	setupAvatarSync,
+	type AvatarUpdatePayload,
+} from "../../../../utils/auth-sync.js";
 import { appendCsrfHeader } from "../../../../utils/csrf.js";
 import { buildAvatarUrl } from "../../../../utils/avatar.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
@@ -101,6 +109,9 @@ export class AdcAccessButton {
 	/** Limpieza de sincronización login/logout entre pestañas */
 	private teardownAuthSync?: () => void;
 
+	/** Limpieza de sincronización de avatar entre microfrontends */
+	private teardownAvatarSync?: () => void;
+
 	@Listen("mouseenter")
 	@Listen("focusin")
 	handleOpen() {
@@ -139,12 +150,15 @@ export class AdcAccessButton {
 		this.teardownAuthSync = setupAuthSync(() => {
 			globalThis.location?.reload();
 		});
+		this.teardownAvatarSync = setupAvatarSync((payload) => this.applyAvatarUpdate(payload));
 	}
 
 	disconnectedCallback() {
 		if (this.hoverTimeout) clearTimeout(this.hoverTimeout);
 		this.teardownAuthSync?.();
 		this.teardownAuthSync = undefined;
+		this.teardownAvatarSync?.();
+		this.teardownAvatarSync = undefined;
 	}
 
 	/** Construye URL completa para la API */
@@ -185,6 +199,19 @@ export class AdcAccessButton {
 			this.loading = false;
 			this.syncLoginState(authenticatedUserId);
 		}
+	}
+
+	/**
+	 * Actualiza el avatar del usuario en estado local sin re-fetchear la sesión.
+	 * Evita rotar el JWT/CSRF y re-renderiza únicamente el avatar visible.
+	 */
+	private applyAvatarUpdate(payload: AvatarUpdatePayload): void {
+		if (!this.user || this.user.id !== payload.userId) return;
+		const avatar =
+			payload.avatar && payload.cacheKey
+				? `${payload.avatar}${payload.avatar.includes("?") ? "&" : "?"}v=${payload.cacheKey}`
+				: payload.avatar;
+		this.user = { ...this.user, avatar: avatar ?? undefined };
 	}
 
 	/**
@@ -271,11 +298,12 @@ export class AdcAccessButton {
 
 	/**
 	 * Resuelve la URL del avatar usando la sesión (que ya combina perfil/metadata/
-	 * linkedAccounts en el backend) con fallback determinista a DiceBear.
+	 * linkedAccounts en el backend). Si no hay avatar, se muestra el icono dedicado.
 	 */
-	private getAvatarUrl(): string {
+	private getAvatarUrl(): string | undefined {
+		if (!this.user?.avatar) return undefined;
 		return buildAvatarUrl({
-			avatar: this.user?.avatar ?? null,
+			avatar: this.user.avatar,
 			seed: this.user?.id || this.user?.username || "default",
 		});
 	}
@@ -312,6 +340,7 @@ export class AdcAccessButton {
 		}
 
 		// Autenticado - mostrar avatar con dropdown
+		const avatarUrl = this.getAvatarUrl();
 		return (
 			<div class="relative inline-block">
 				<button
@@ -326,13 +355,22 @@ export class AdcAccessButton {
 						<p class="font-semibold truncate">{this.user?.username}</p>
 						{this.user?.orgId && <p class="text-xs text-muted truncate">{this.user.orgSlug || this.user.orgId}</p>}
 					</div>
-					<img
-						src={this.getAvatarUrl()}
-						alt={`Avatar de ${this.user?.username || "usuario"}`}
-						class="w-12 h-12 rounded-full border-2 border-accent object-cover"
-						width="40"
-						height="40"
-					/>
+					{avatarUrl ? (
+						<img
+							src={avatarUrl}
+							alt={`Avatar de ${this.user?.username || "usuario"}`}
+							class="w-12 h-12 rounded-full border-2 border-accent object-cover"
+							width="40"
+							height="40"
+						/>
+					) : (
+						<div
+							class="w-12 h-12 rounded-full border-2 border-accent flex items-center justify-center text-muted bg-surface"
+							aria-label="Sin avatar"
+						>
+							<adc-icon-no-avatar size="1.5rem" />
+						</div>
+					)}
 					<svg
 						class={`w-4 h-4 transition-transform ${this.dropdownOpen ? "rotate-180" : ""}`}
 						fill="none"
@@ -369,29 +407,7 @@ export class AdcAccessButton {
 
 						{/* Switch de organización */}
 						<div class="border-t border-divider">
-							{!this.orgSwitcherOpen ? (
-								<button
-									type="button"
-									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
-									role="menuitem"
-									onClick={this.handleOpenOrgSwitcher}
-								>
-									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
-										/>
-									</svg>
-									<div>
-										<span>{this.switchOrgText}</span>
-										{this.user?.orgId && (
-											<span class="text-xs text-muted block">{this.user.orgSlug || this.user.orgId}</span>
-										)}
-										{!this.user?.orgId && <span class="text-xs text-muted block">{this.personalAccessText}</span>}
-									</div>
-								</button>
-							) : (
+							{this.orgSwitcherOpen ? (
 								<div class="p-3 space-y-2 max-h-48 overflow-y-auto">
 									{this.loadingOrgs ? (
 										<div class="flex justify-center py-2">
@@ -446,6 +462,28 @@ export class AdcAccessButton {
 										]
 									)}
 								</div>
+							) : (
+								<button
+									type="button"
+									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
+									role="menuitem"
+									onClick={this.handleOpenOrgSwitcher}
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+										/>
+									</svg>
+									<div>
+										<span>{this.switchOrgText}</span>
+										{this.user?.orgId && (
+											<span class="text-xs text-muted block">{this.user.orgSlug || this.user.orgId}</span>
+										)}
+										{!this.user?.orgId && <span class="text-xs text-muted block">{this.personalAccessText}</span>}
+									</div>
+								</button>
 							)}
 						</div>
 						{/* Mi cuenta */}

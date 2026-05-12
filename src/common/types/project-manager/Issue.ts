@@ -40,7 +40,7 @@ export interface Issue {
 	assigneeGroupIds: string[];
 
 	/** Asignee Profiles hidratados on request */
-	assigneeProfiles?: Record<string, { username?: string; avatar?: string }>;
+	assigneeProfiles?: Record<string, { username?: string; avatar?: string | null }>;
 	assigneeGroupProfiles?: Record<string, { name: string; description?: string }>;
 
 	priority: IssuePriority;

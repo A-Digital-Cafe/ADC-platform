@@ -1,9 +1,10 @@
 import type { Model } from "mongoose";
 import type { Article, Block } from "../../../../common/ADC/types/learning.js";
-import type { CommentLabel } from "../../../../common/types/comments/Comment.ts";
+import type { CommentLabel, CommentsPage } from "../../../../common/types/comments/Comment.ts";
 import { RegisterEndpoint, type EndpointCtx } from "../../../core/EndpointManagerService/index.js";
 import { HttpError } from "@common/types/ADCCustomError.ts";
 import type { CommentsManager } from "../../../../utilities/comments/comments-utility/index.js";
+import type IdentityManagerService from "../../../core/IdentityManagerService/index.js";
 import { buildArticleResourceCtx } from "./utils/articleResourceCtx.ts";
 
 interface SlugParams {
@@ -47,10 +48,12 @@ const DRAFT_RATE_LIMIT = { max: 60, timeWindow: 60_000 };
 export class CommentEndpoints {
 	static #articleModel: Model<Article>;
 	static #commentsManager: CommentsManager | null = null;
+	static #identity: IdentityManagerService | null = null;
 
-	static init(articleModel: Model<Article>, commentsManager: CommentsManager): void {
+	static init(articleModel: Model<Article>, commentsManager: CommentsManager, identity: IdentityManagerService | null = null): void {
 		CommentEndpoints.#articleModel ??= articleModel;
 		CommentEndpoints.#commentsManager ??= commentsManager;
+		CommentEndpoints.#identity ??= identity;
 	}
 
 	static get articleModel(): Model<Article> {
@@ -64,6 +67,41 @@ export class CommentEndpoints {
 		return CommentEndpoints.#commentsManager;
 	}
 
+	static async #attachFreshAuthorProfiles(page: CommentsPage): Promise<CommentsPage> {
+		const identity = CommentEndpoints.#identity;
+		if (!identity || page.items.length === 0) return page;
+		const authorIds = Array.from(new Set(page.items.map((c) => c.authorId).filter(Boolean)));
+		if (authorIds.length === 0) return page;
+
+		try {
+			const profiles = await identity.users.getPublicProfiles(authorIds);
+			for (const comment of page.items) {
+				const profile = profiles.get(comment.authorId);
+				if (!profile) continue;
+				comment.authorName = profile.username ?? comment.authorName;
+				comment.authorImage = profile.avatar;
+			}
+		} catch {
+			// Identity no disponible: dejamos el snapshot persistido en el comentario.
+		}
+
+		return page;
+	}
+
+	static async #attachFreshAuthorProfileToCtx(commentCtx: { userId: string; authorName?: string; authorImage?: string | null }) {
+		const identity = CommentEndpoints.#identity;
+		if (!identity || !commentCtx.userId) return;
+		try {
+			const profiles = await identity.users.getPublicProfiles([commentCtx.userId]);
+			const profile = profiles.get(commentCtx.userId);
+			if (!profile) return;
+			commentCtx.authorName = profile.username ?? commentCtx.authorName;
+			commentCtx.authorImage = profile.avatar;
+		} catch {
+			// Identity no disponible: se conserva lo que venga de la sesión/token.
+		}
+	}
+
 	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments", deferAuth: true })
 	static async list(ctx: EndpointCtx<SlugParams>) {
 		const { commentCtx, articleSlug } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx);
@@ -72,13 +110,14 @@ export class CommentEndpoints {
 		// en flat (incluye replies de padres eliminados); el cliente arma el \u00e1rbol.
 		const parentId = ctx.query.parentId === undefined ? undefined : ctx.query.parentId || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
-		return CommentEndpoints.#manager().list(commentCtx, {
+		const page = await CommentEndpoints.#manager().list(commentCtx, {
 			targetType: TARGET_TYPE,
 			targetId: articleSlug,
 			parentId,
 			cursor,
 			limit,
 		});
+		return CommentEndpoints.#attachFreshAuthorProfiles(page);
 	}
 
 	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments/threads/:rootId", deferAuth: true })
@@ -86,7 +125,8 @@ export class CommentEndpoints {
 		const { commentCtx } = await buildArticleResourceCtx(CommentEndpoints.articleModel, ctx);
 		const cursor = ctx.query.cursor || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
-		return CommentEndpoints.#manager().getThread(commentCtx, ctx.params.rootId, { cursor, limit });
+		const page = await CommentEndpoints.#manager().getThread(commentCtx, ctx.params.rootId, { cursor, limit });
+		return CommentEndpoints.#attachFreshAuthorProfiles(page);
 	}
 
 	@RegisterEndpoint({ method: "GET", url: "/api/learning/articles/:slug/comments/count", deferAuth: true })
@@ -108,6 +148,7 @@ export class CommentEndpoints {
 			requireAuth: true,
 			requireListed: true,
 		});
+		await CommentEndpoints.#attachFreshAuthorProfileToCtx(commentCtx);
 		return CommentEndpoints.#manager().create(commentCtx, {
 			targetType: TARGET_TYPE,
 			targetId: articleSlug,

@@ -276,7 +276,7 @@ async function registerEndpointsForInstance(instance: any, managersGetter?: () =
 			instance,
 			methodName: ep.methodName,
 			// El handler ya está wrapped con validación de permisos
-			handler: (instance as any)[ep.methodName].bind(instance),
+			handler: instance[ep.methodName].bind(instance),
 			ownerName,
 		});
 	}

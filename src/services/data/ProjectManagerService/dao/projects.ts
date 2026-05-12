@@ -243,8 +243,7 @@ export class ProjectManager {
 		// Con token personal (tokenOrgId=null) sólo aplica a proyectos globales (orgId=null);
 		// con token de org aplica a proyectos globales o de esa org.
 		const membershipOrgFilter = ctx.tokenOrgId ? { orgId: { $in: [null, ctx.tokenOrgId] } } : { orgId: null };
-		orConditions.push({ ...membershipOrgFilter, memberUserIds: ctx.userId });
-		orConditions.push({ ...membershipOrgFilter, ownerId: ctx.userId });
+		orConditions.push({ ...membershipOrgFilter, memberUserIds: ctx.userId }, { ...membershipOrgFilter, ownerId: ctx.userId });
 		if (ctx.groupIds.length) orConditions.push({ ...membershipOrgFilter, memberGroupIds: { $in: ctx.groupIds } });
 
 		const docs = orConditions.length ? await this.projectModel.find({ $or: orConditions }) : [];

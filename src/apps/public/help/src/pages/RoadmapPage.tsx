@@ -1,0 +1,128 @@
+import "@ui-library/utils/react-jsx";
+import PageShell from "../components/PageShell";
+
+interface Item {
+	title: string;
+	status: "done" | "fase-1" | "siguiente" | "futuro";
+	notes: string;
+}
+
+const LAYERS: Array<{ name: string; description: string; items: Item[] }> = [
+	{
+		name: "Capa Ética/Legal (Cimientos)",
+		description: "Base usable globalmente y respetuosa.",
+		items: [
+			{ title: "Valores + marco GNI + espacio seguro", status: "done", notes: "Página /values publicada." },
+			{ title: "GDPR básico + privacidad/cookies/términos", status: "done", notes: "Páginas /privacy, /cookies, /terms publicadas." },
+			{ title: "Código de ética + ISO/IEC 17050-1 (compromiso)", status: "done", notes: "Página /ethics publicada." },
+			{
+				title: "GNI HRIA — Paso A (Evaluación de Impacto)",
+				status: "fase-1",
+				notes: "Página /hria publicada con estado por bloque; contenido en redacción.",
+			},
+			{
+				title: "GNI — Paso B (respuesta a autoridades)",
+				status: "fase-1",
+				notes: "Página /authority-requests publicada como checklist; proceso operativo pendiente.",
+			},
+			{
+				title: "GNI — Paso C (transparencia)",
+				status: "fase-1",
+				notes: "Página /transparency publicada como estructura; primer reporte periódico pendiente.",
+			},
+			{ title: "Geofiltro y avisos por país", status: "done", notes: "Filtro aplicado desde cloudflare." },
+		],
+	},
+	{
+		name: "Capa de Ingeniería (Construcción)",
+		description: "Calidad de código y accesibilidad.",
+		items: [
+			{
+				title: "ISO 25010:2023 — calidad de software",
+				status: "siguiente",
+				notes: "Definir métricas verificables por cada característica.",
+			},
+			{ title: "WCAG 2.1 AA", status: "siguiente", notes: "Auditoría de componentes y páginas; revisión de UI library." },
+		],
+	},
+	{
+		name: "Capa de Blindaje (Seguridad)",
+		description: "Protección frente a amenazas.",
+		items: [
+			{ title: "OWASP ASVS Nivel 1", status: "siguiente", notes: "Checklist alineada con los requisitos de seguridad." },
+			{ title: "OWASP ASVS Nivel 2", status: "futuro", notes: "Tras cierre del nivel 1." },
+			{ title: "ISO 27001 (referencia)", status: "futuro", notes: "Adopción gradual de controles, sin certificación inicial." },
+			{ title: "SOC 2 Type 1 (referencia)", status: "futuro", notes: "Requiere alcance formal y fecha; planificación posterior." },
+		],
+	},
+	{
+		name: "Capa de Transparencia (Operaciones)",
+		description: "Visibilidad pública del estado y la mejora continua.",
+		items: [
+			{ title: "SLA/SLO + Status Page", status: "futuro", notes: "Subdominio status/health con incidentes reales." },
+			{
+				title: "Publicidad en games",
+				status: "siguiente",
+				notes: "Decisión tomada; resta definir proveedor, modalidad técnica, consentimiento y documentación separada.",
+			},
+			{
+				title: "Bug Bounty con tickets públicos (id, fecha, hash, estado)",
+				status: "futuro",
+				notes: "Beneficios no monetarios escalonados; reportes hoy por contacto.",
+			},
+			{ title: "ISO 9001 (referencia)", status: "futuro", notes: "Gestión de calidad continua." },
+		],
+	},
+];
+
+const STATUS_COLOR = {
+	done: "green",
+	"fase-1": "yellow",
+	siguiente: "blue",
+	futuro: "gray",
+} as const satisfies Record<Item["status"], "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink">;
+
+const STATUS_LABEL: Record<Item["status"], string> = {
+	done: "Fase 2 (finalizado)",
+	"fase-1": "Fase 1 (en desarrollo)",
+	siguiente: "Próxima fase",
+	futuro: "Futuro",
+};
+
+export function RoadmapPage() {
+	return (
+		<PageShell
+			title="Roadmap de cumplimiento"
+			subtitle="Plan público por capas, agrupado para no duplicar trabajo."
+			declaration="informational"
+			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Roadmap" }]}
+		>
+			<p>
+				Avanzamos por capas: primero la base ética/legal, luego ingeniería, blindaje y transparencia operativa. La intención es comunicar
+				honestamente qué hay hoy, qué sigue y qué queda para más adelante.
+			</p>
+
+			{LAYERS.map((layer) => (
+				<section key={layer.name} className="mt-8">
+					<h2 className="text-2xl font-heading mb-1">{layer.name}</h2>
+					<p className="opacity-80 mb-3">{layer.description}</p>
+					<ul className="space-y-3">
+						{layer.items.map((item) => (
+							<li key={item.title} className="border-l-2 pl-3">
+								<div className="flex flex-wrap items-center gap-2">
+									<strong>{item.title}</strong>
+									<adc-badge color={STATUS_COLOR[item.status]}>{STATUS_LABEL[item.status]}</adc-badge>
+								</div>
+								<p className="text-sm opacity-80">{item.notes}</p>
+							</li>
+						))}
+					</ul>
+				</section>
+			))}
+
+			<adc-callout tone="info" role="note">
+				Las menciones a estándares externos describen un compromiso de trabajo y referencias de diseño, no una certificación obtenida.
+			</adc-callout>
+		</PageShell>
+	);
+}

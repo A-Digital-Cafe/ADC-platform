@@ -7,7 +7,6 @@ import type { Sprint } from "@common/types/project-manager/Sprint.ts";
 import type { Milestone } from "@common/types/project-manager/Milestone.ts";
 import type { TransitionCommentSubmitDetail } from "../components/TransitionCommentModal.tsx";
 import { TransitionCommentModal } from "../components/TransitionCommentModal.tsx";
-import { type IssueListParams } from "../utils/pm-api.ts";
 import { useBacklogData } from "../hooks/useBacklogData.ts";
 import { useIssueMover } from "../hooks/useIssueMover.ts";
 import { IssueDialog } from "../components/IssueDialog.tsx";
@@ -47,7 +46,7 @@ export function BoardView({ project, perms, caller }: Readonly<Props>) {
 	const { issues, setIssues, sprints, milestones, loading, reload } = useBacklogData({
 		projectId: project.id,
 		q: "",
-		orderBy: "priority" as IssueListParams["orderBy"],
+		orderBy: "priority",
 	});
 
 	const filteredIssues = useMemo(() => applyFilters(issues, filters, q), [issues, filters, q]);

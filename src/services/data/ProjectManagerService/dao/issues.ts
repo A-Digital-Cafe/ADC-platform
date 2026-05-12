@@ -27,7 +27,7 @@ export const ISSUE_DESCRIPTION_MAX_BLOCKS = 200;
  */
 function normalizeDescription(d: unknown): Block[] {
 	if (Array.isArray(d)) return d as Block[];
-	if (typeof d === "string" && d.length > 0) return [{ type: "paragraph", text: d } as Block];
+	if (typeof d === "string" && d.length > 0) return [{ type: "paragraph", text: d }];
 	return [];
 }
 

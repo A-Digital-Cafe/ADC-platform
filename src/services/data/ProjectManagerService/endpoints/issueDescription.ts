@@ -82,7 +82,7 @@ export class IssueDescriptionEndpoints {
 			throw new ProjectManagerError(400, "MISSING_FIELDS", "`blocks` es requerido");
 		}
 		const blocks = await validateAndSanitizeIssueDescription(svc, built.attachmentCtx, rawBlocks);
-		const attachmentIds = Array.isArray(ctx.data?.attachmentIds) ? ctx.data!.attachmentIds!.slice(0, ISSUE_DESCRIPTION_MAX_ATTACHMENTS) : [];
+		const attachmentIds = Array.isArray(ctx.data?.attachmentIds) ? ctx.data.attachmentIds.slice(0, ISSUE_DESCRIPTION_MAX_ATTACHMENTS) : [];
 
 		const draft = await svc.issueDescriptionDrafts.save(
 			built.commentCtx.userId,

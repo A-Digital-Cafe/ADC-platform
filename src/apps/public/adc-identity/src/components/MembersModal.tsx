@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { identityApi } from "../utils/identity-api.ts";
 import type { ClientUser } from "@common/types/identity/User.js";

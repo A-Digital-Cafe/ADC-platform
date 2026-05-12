@@ -165,7 +165,7 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 			),
 		},
 		{
-			key: "orgId" as keyof Group,
+			key: "orgId",
 			label: t("groups.scope"),
 			render: (g: Group) =>
 				g.orgId ? (

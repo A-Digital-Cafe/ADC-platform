@@ -14,6 +14,7 @@ import { LoginAttemptTracker } from "./domain/security/LoginAttemptTracker.js";
 import { GeoIPValidator } from "./domain/security/GeoIPValidator.js";
 import { SessionManager } from "./domain/session/manager.js";
 import { OAuthProviderRegistry, PlatformAuthProvider } from "./domain/oauth/index.js";
+import { resolveUserAvatar } from "@common/utils/avatar.ts";
 
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
@@ -177,11 +178,11 @@ export default class SessionManagerService extends BaseService {
 		// Inicializar singletons de endpoints
 		AuthEndpoints.init(
 			{
-				keyStore: this.#keyStore!,
-				tokenService: this.#tokenService!,
-				refreshTokenRepo: this.#refreshTokenRepo!,
-				loginTracker: this.#loginTracker!,
-				geoValidator: this.#geoValidator!,
+				keyStore: this.#keyStore,
+				tokenService: this.#tokenService,
+				refreshTokenRepo: this.#refreshTokenRepo,
+				loginTracker: this.#loginTracker,
+				geoValidator: this.#geoValidator,
 				identityService: this.#identityService,
 				internalIdentity: this.#internalIdentity,
 				cookieDomain: this.#cookieDomain,
@@ -192,10 +193,10 @@ export default class SessionManagerService extends BaseService {
 		);
 
 		OAuthEndpoints.init({
-			tokenService: this.#tokenService!,
-			geoValidator: this.#geoValidator!,
-			sessionManager: this.#sessionManager!,
-			oauthRegistry: this.#oauthRegistry!,
+			tokenService: this.#tokenService,
+			geoValidator: this.#geoValidator,
+			sessionManager: this.#sessionManager,
+			oauthRegistry: this.#oauthRegistry,
 			identityService: this.#identityService,
 			internalIdentity: this.#internalIdentity,
 			redis: this.#redis,
@@ -371,9 +372,7 @@ export default class SessionManagerService extends BaseService {
 			const user = await this.#internalIdentity.users.getUser(userId);
 			if (!user) return null;
 
-			// Resolve avatar: prefer metadata.avatar, fallback to first linked account's providerAvatar
-			const avatar =
-				(user.metadata?.avatar as string) || user.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar)?.providerAvatar;
+			const avatar = resolveUserAvatar(user);
 
 			const permissions = await this.#getUserPermissions(userId);
 			return {

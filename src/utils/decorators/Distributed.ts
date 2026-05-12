@@ -152,7 +152,7 @@ export function Distributed<T extends new (...args: any[]) => any>(constructor: 
 			// Sin worker: ejecutar localmente
 			return originalMethod.apply(target, args);
 		}
-	} as T;
+	};
 }
 
 /**

@@ -5,7 +5,6 @@ import type { Project } from "@common/types/project-manager/Project.ts";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
 import type { Sprint } from "@common/types/project-manager/Sprint.ts";
 import type { Milestone } from "@common/types/project-manager/Milestone.ts";
-import type { IssueListParams } from "../utils/pm-api.ts";
 import { useBacklogData } from "../hooks/useBacklogData.ts";
 import { CalendarGrid } from "../components/calendar/CalendarGrid.tsx";
 import { IssueDialog } from "../components/IssueDialog.tsx";
@@ -32,7 +31,7 @@ export function CalendarView({ project, perms }: Readonly<Props>) {
 	const { issues, sprints, milestones, loading, reload } = useBacklogData({
 		projectId: project.id,
 		q: "",
-		orderBy: "priority" as IssueListParams["orderBy"],
+		orderBy: "priority",
 	});
 
 	const entities: Array<Sprint | Milestone> = rangeType === "sprint" ? sprints : milestones;
@@ -79,18 +78,20 @@ export function CalendarView({ project, perms }: Readonly<Props>) {
 
 			{loading ? (
 				<adc-skeleton variant="rectangular" height="400px" />
-			) : !entity ? (
-				<p className="text-muted text-sm">{t("calendar.noSelection")}</p>
-			) : !entity.startDate || !entity.endDate ? (
-				<p className="text-muted text-sm">{t("calendar.noDates")}</p>
+			) : entity ? (
+				!entity.startDate || !entity.endDate ? (
+					<p className="text-muted text-sm">{t("calendar.noDates")}</p>
+				) : (
+					<CalendarGrid
+						project={project}
+						issues={relevantIssues}
+						startDate={new Date(entity.startDate)}
+						endDate={new Date(entity.endDate)}
+						onOpen={setEditingIssue}
+					/>
+				)
 			) : (
-				<CalendarGrid
-					project={project}
-					issues={relevantIssues}
-					startDate={new Date(entity.startDate)}
-					endDate={new Date(entity.endDate)}
-					onOpen={setEditingIssue}
-				/>
+				<p className="text-muted text-sm">{t("calendar.noSelection")}</p>
 			)}
 
 			{editingIssue && (

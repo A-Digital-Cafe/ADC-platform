@@ -1,5 +1,4 @@
 import { Component, Prop, h, Event, EventEmitter, Host } from "@stencil/core";
-import { MouseEventHandler } from "react";
 
 @Component({
 	tag: "adc-button",
@@ -12,8 +11,8 @@ export class AdcButton {
 
 	@Event() adcClick: EventEmitter<MouseEvent> | undefined;
 
-	private readonly handleClick = (event: MouseEventHandler<HTMLButtonElement>) => {
-		if (!this.disabled) this.adcClick?.emit(event as unknown as MouseEvent);
+	private readonly handleClick = (event: MouseEvent) => {
+		if (!this.disabled) this.adcClick?.emit(event);
 	};
 
 	render() {

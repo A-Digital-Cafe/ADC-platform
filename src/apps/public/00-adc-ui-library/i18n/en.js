@@ -49,5 +49,13 @@ export default {
 		COMMENT_ATTACHMENT_NOT_OWNED: "You can only attach files you uploaded",
 		COMMENT_EDIT_WINDOW_CLOSED: "This comment can no longer be edited",
 		COMMENT_BAD_EMOJI: "Invalid emoji"
+	},
+	footer: {
+		aria: "Help links",
+		privacy: "Privacy",
+		terms: "Terms",
+		cookies: "Cookies",
+		contact: "Contact",
+		help: "Help"
 	}
 };

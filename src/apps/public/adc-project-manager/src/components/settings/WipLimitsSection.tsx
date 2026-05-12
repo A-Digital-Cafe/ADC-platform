@@ -47,7 +47,7 @@ export function WipLimitsSection({ project, canEdit, onSaved }: Readonly<Props>)
 							<span className="flex-1 text-sm">{c.name}</span>
 							<adc-input
 								type="number"
-								value={limits?.[c.key] !== undefined ? String(limits[c.key]) : ""}
+								value={limits?.[c.key] === undefined ? "" : String(limits[c.key])}
 								placeholder="∞"
 								onInput={(e: any) => set(c.key, Number(e.target.value) || 0)}
 								disabled={!canEdit}

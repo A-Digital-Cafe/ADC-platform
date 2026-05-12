@@ -2,7 +2,7 @@ import { RegisterEndpoint, type EndpointCtx } from "../../../core/EndpointManage
 import { ProjectManagerError } from "@common/types/custom-errors/ProjectManagerError.ts";
 import type ProjectManagerService from "../index.js";
 import type { Block } from "@common/ADC/types/learning.ts";
-import type { CommentLabel } from "@common/types/comments/Comment.ts";
+import type { CommentLabel, CommentsPage } from "@common/types/comments/Comment.ts";
 import { buildIssueResourceCtx } from "./utils/issueResourceCtx.ts";
 
 const COMMENT_RATE_LIMIT = { max: 30, timeWindow: 60_000 };
@@ -31,6 +31,50 @@ interface DraftBody {
 	editingCommentId?: string | null;
 }
 
+/**
+ * Rehidrata autores con Identity en cada lectura. `authorImage` en comentarios
+ * queda como snapshot histórico; para UI debe prevalecer la selección actual
+ * del usuario (`default`, `custom`, `linked:*`, `none`).
+ */
+async function attachFreshAuthorProfiles(service: ProjectManagerService, page: CommentsPage): Promise<CommentsPage> {
+	if (page.items.length === 0) return page;
+	const authorIds = Array.from(new Set(page.items.map((c) => c.authorId).filter(Boolean)));
+	if (authorIds.length === 0) return page;
+
+	try {
+		const profiles = await service.identity.users.getPublicProfiles(authorIds);
+		for (const comment of page.items) {
+			const profile = profiles.get(comment.authorId);
+			if (!profile) continue;
+			comment.authorName = profile.username ?? comment.authorName;
+			comment.authorImage = profile.avatar;
+		}
+	} catch {
+		// Identity no disponible: dejamos el snapshot persistido en el comentario.
+	}
+
+	return page;
+}
+
+/**
+ * En creación sí necesitamos guardar un snapshot razonable del autor, pero no
+ * queremos resolverlo en `verifyToken` para cada request de la plataforma.
+ * Hacemos esta lectura sólo en el write de comentario, que es mucho menos
+ * frecuente que validar tokens.
+ */
+async function attachFreshAuthorProfileToCtx(service: ProjectManagerService, commentCtx: { userId: string; authorName?: string; authorImage?: string | null }) {
+	if (!commentCtx.userId) return;
+	try {
+		const profiles = await service.identity.users.getPublicProfiles([commentCtx.userId]);
+		const profile = profiles.get(commentCtx.userId);
+		if (!profile) return;
+		commentCtx.authorName = profile.username ?? commentCtx.authorName;
+		commentCtx.authorImage = profile.avatar;
+	} catch {
+		// Identity no disponible: se conserva lo que venga de la sesión/token.
+	}
+}
+
 export class IssueCommentsEndpoints {
 	static #service: ProjectManagerService;
 	static #kernelKey: symbol;
@@ -55,13 +99,14 @@ export class IssueCommentsEndpoints {
 		// (string vac\u00edo o "null") = solo ra\u00edces; otro valor = replies de ese padre.
 		const parentId = ctx.query.parentId === undefined ? undefined : ctx.query.parentId || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
-		return svc.issueComments.list(commentCtx, {
+		const page = await svc.issueComments.list(commentCtx, {
 			targetType: TARGET_TYPE,
 			targetId: issue.id,
 			parentId,
 			cursor,
 			limit,
 		});
+		return attachFreshAuthorProfiles(svc, page);
 	}
 
 	@RegisterEndpoint({
@@ -74,7 +119,8 @@ export class IssueCommentsEndpoints {
 		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx);
 		const cursor = ctx.query.cursor || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
-		return svc.issueComments.getThread(commentCtx, ctx.params.rootId, { cursor, limit });
+		const page = await svc.issueComments.getThread(commentCtx, ctx.params.rootId, { cursor, limit });
+		return attachFreshAuthorProfiles(svc, page);
 	}
 
 	@RegisterEndpoint({
@@ -99,6 +145,7 @@ export class IssueCommentsEndpoints {
 		if (!ctx.data?.blocks?.length) throw new ProjectManagerError(400, "MISSING_FIELDS", "`blocks` requerido");
 		const svc = IssueCommentsEndpoints.#service;
 		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		await attachFreshAuthorProfileToCtx(svc, commentCtx);
 		return svc.issueComments.create(commentCtx, {
 			targetType: TARGET_TYPE,
 			targetId: issue.id,

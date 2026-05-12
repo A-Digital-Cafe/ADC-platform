@@ -41,7 +41,7 @@ async function attachAssigneeProfiles<T extends Issue | Issue[]>(service: Projec
 			groupIds.size ? identity.groups.getPublicProfiles([...groupIds]) : Promise.resolve(new Map()),
 		]);
 		for (const i of list) {
-			const ups: Record<string, { username?: string; avatar?: string }> = {};
+			const ups: Record<string, { username?: string; avatar?: string | null }> = {};
 			for (const id of new Set([i.reporterId, ...(i.assigneeIds ?? [])])) {
 				const p = userMap.get(id);
 				if (p) ups[id] = p;

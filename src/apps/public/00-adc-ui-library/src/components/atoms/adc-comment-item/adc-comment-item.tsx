@@ -13,7 +13,7 @@ export interface CommentEntry {
 	id: string;
 	authorId: string;
 	authorName?: string;
-	authorImage?: string;
+	authorImage?: string | null;
 	blocks: Block[];
 	attachments: AttachmentLite[];
 	reactions: Record<string, string[]>;
@@ -50,15 +50,15 @@ export class AdcCommentItem {
 	@Prop() quickReactions: string[] = ["👍", "❤️", "🎉", "😄", "🤔"];
 
 	@State() confirmingDelete: boolean = false;
-	@State() resolvedAvatar?: string;
+	@State() resolvedAvatar?: string | null;
 
 	async componentWillLoad() {
-		if (!this.comment?.authorImage && this.comment?.authorId) {
+		if (this.comment?.authorImage === undefined && this.comment?.authorId) {
 			try {
 				const profile = await fetchPublicProfile(this.comment.authorId);
-				if (profile.avatar) this.resolvedAvatar = profile.avatar;
+				this.resolvedAvatar = profile.avatar ?? null;
 			} catch {
-				/* fallback a DiceBear se aplica en render */
+				this.resolvedAvatar = null;
 			}
 		}
 	}
@@ -159,13 +159,20 @@ export class AdcCommentItem {
 	render() {
 		const c = this.comment;
 		const date = c.createdAt ? new Date(c.createdAt).toLocaleString() : "";
-		const avatarSrc = buildAvatarUrl({
-			avatar: c.authorImage || this.resolvedAvatar || null,
-			seed: c.authorId || c.authorName || "default",
-		});
+		const avatarValue = c.authorImage === undefined ? this.resolvedAvatar : c.authorImage;
+		const avatarSrc = avatarValue ? buildAvatarUrl({ avatar: avatarValue, seed: c.authorId || c.authorName || "default" }) : undefined;
 		return (
 			<li class="flex gap-3 p-3 bg-surface rounded-xxl shadow-cozy" data-comment-id={c.id} data-depth={c.depth}>
-				<img src={avatarSrc} alt={c.authorName || "Avatar"} class="w-10 h-10 rounded-full object-cover shrink-0" />
+				{avatarSrc ? (
+					<img src={avatarSrc} alt={c.authorName || "Avatar"} class="w-10 h-10 rounded-full object-cover shrink-0" />
+				) : (
+					<div
+						class="w-10 h-10 rounded-full border border-accent flex items-center justify-center text-muted bg-surface shrink-0"
+						aria-label="Sin avatar"
+					>
+						<adc-icon-no-avatar size="1.25rem" />
+					</div>
+				)}
 				<div class="flex-1 min-w-0">
 					<div class="flex items-baseline gap-2 flex-wrap">
 						<span class="font-semibold text-text">{c.authorName || c.authorId}</span>

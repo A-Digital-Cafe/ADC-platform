@@ -39,11 +39,12 @@ function addUILibraryAliases(aliases: Record<string, string>, uiLibrary: Registe
 		}
 	}
 
-	// @ui-library -> init.js (auto-ejecuta loader + registra componentes)
-	aliases["@ui-library"] = path.resolve(outputDir, "init.js");
-
 	// @ui-library/styles -> CSS base de la UI library (para Tailwind)
 	aliases["@ui-library/styles"] = path.resolve(outputDir, "styles.css");
+
+	// @ui-library -> init.js (auto-ejecuta loader + registra componentes)
+	// Mantenerlo despues de subrutas especificas para que Rspack no capture @ui-library/styles con el alias base.
+	aliases["@ui-library"] = path.resolve(outputDir, "init.js");
 }
 
 function usesReact(module: RegisteredUIModule): boolean {

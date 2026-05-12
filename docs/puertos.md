@@ -8,3 +8,5 @@ public/adc-identity 3014
 public/comunity-home 3010
 public/my-account 3016
 public/adc-project-manager 3018
+
+public/help 3022

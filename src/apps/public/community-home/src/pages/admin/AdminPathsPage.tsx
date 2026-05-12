@@ -33,8 +33,8 @@ function initialForm(p?: LearningPath | null): FormState {
 		listed: p?.listed === true,
 		items: ((p?.items || []) as PopulatedPathItem[]).map((it) => ({
 			slug: it.slug,
-			type: it.type as "article" | "path",
-			level: (it.level || "importante") as PathItem["level"],
+			type: it.type,
+			level: it.level || "importante",
 			title: it.element?.title,
 		})),
 	};

@@ -242,7 +242,7 @@ export function createAdcApi(config: AdcApiConfig) {
 		const url = `${baseUrl}${path}${buildQueryString(params)}`;
 		const requestHeaders = {
 			...defaultHeaders,
-			...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+			...(body === undefined ? {} : { "Content-Type": "application/json" }),
 			...(MUTATIVE_METHODS.has(method) && resolvedIdempotencyKey ? { "Idempotency-Key": resolvedIdempotencyKey } : {}),
 			...headers,
 		};
@@ -251,7 +251,7 @@ export function createAdcApi(config: AdcApiConfig) {
 			method,
 			credentials,
 			headers: skipCsrf ? requestHeaders : await appendCsrfHeader(method, url, requestHeaders, credentials, signal),
-			...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 			...(signal ? { signal } : {}),
 		};
 

@@ -718,7 +718,7 @@ export class OAuthEndpoints {
 		if (!currentUser) return;
 
 		const currentRoleIds = new Set(currentUser.roleIds || []);
-		const allMappedRoleIds = new Set([...roleNameToId.values()]);
+		const allMappedRoleIds = new Set(roleNameToId.values());
 
 		// Calcular nuevos roleIds:
 		// - Mantener todos los roles que NO están en el mapa (asignados manualmente)

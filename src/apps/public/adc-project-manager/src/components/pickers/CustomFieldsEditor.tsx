@@ -11,7 +11,7 @@ interface Props {
 
 function toDateInput(v: CustomFieldValue): string {
 	if (!v || Array.isArray(v)) return "";
-	const d = v instanceof Date ? v : new Date(v as string);
+	const d = v instanceof Date ? v : new Date(v);
 	if (Number.isNaN(d.getTime())) return "";
 	return d.toISOString().slice(0, 10);
 }

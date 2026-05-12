@@ -41,14 +41,14 @@ export function ProjectSettingsView({ project, perms, caller, onChanged }: Reado
 	const tabItems = tabs.map((x) => ({ id: x.id, label: x.label, disabled: !x.enabled }));
 
 	const tabsRef = useRef<HTMLElement>(null);
-	const handleTabChange = useCallback((tabId: string) => {
-		setTab(tabId as SettingsTab);
+	const handleTabChange = useCallback((tabId: SettingsTab) => {
+		setTab(tabId);
 	}, []);
 
 	useEffect(() => {
 		const el = tabsRef.current;
 		if (!el) return;
-		const handler = (e: Event) => handleTabChange((e as CustomEvent<string>).detail);
+		const handler = (e: Event) => handleTabChange((e as CustomEvent<string>).detail as SettingsTab);
 		el.addEventListener("adcTabChange", handler);
 		return () => el.removeEventListener("adcTabChange", handler);
 	}, [handleTabChange]);

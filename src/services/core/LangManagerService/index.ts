@@ -186,11 +186,11 @@ export default class LangManagerService extends BaseService implements ILangMana
 		const result: TranslationDict = { ...target };
 
 		for (const key of Object.keys(source)) {
-			const sourceVal = source[key];
-			const targetVal = result[key];
+			const sourceVal: TranslationDict = source[key];
+			const targetVal: TranslationDict = result[key];
 
 			if (typeof sourceVal === "object" && sourceVal !== null && typeof targetVal === "object" && targetVal !== null) {
-				result[key] = this.#deepMerge(targetVal as TranslationDict, sourceVal as TranslationDict);
+				result[key] = this.#deepMerge(targetVal, sourceVal);
 			} else {
 				result[key] = sourceVal;
 			}

@@ -7,7 +7,7 @@ import { canModerateSocial } from "../utils/community-perms.js";
 export interface ArticleCommentEndpointCtx {
 	userId: string;
 	authorName?: string;
-	authorImage?: string;
+	authorImage?: string | null;
 	articleSlug: string;
 	articleAuthorId?: string | null;
 	articleListed: boolean;

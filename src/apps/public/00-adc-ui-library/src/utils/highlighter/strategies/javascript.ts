@@ -69,7 +69,7 @@ export function highlightJSFamily(
 	// Pre-token steps (language-specific, e.g. `new ClassName`)
 	for (const step of preTokenSteps) {
 		escaped = escaped.replace(step.regex, (...args) => {
-			const match = args[0] as string;
+			const match = args[0];
 			const groups = args.slice(1, -2) as string[];
 			const result = step.replacer(match, ...groups);
 			const placeholder = `__PRE_${placeholderIndex++}__`;

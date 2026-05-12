@@ -14,7 +14,7 @@ export { hasBitfieldPermission as hasPermission };
 
 export const canComment = (perms?: readonly Permission[]) => hasBitfieldPermission(perms, P.COMMUNITY.SOCIAL.WRITE);
 
-export const canRate = canComment;
+export const canRate = (perms?: readonly Permission[]) => hasBitfieldPermission(perms, P.COMMUNITY.SOCIAL.WRITE);
 
 export const canPublish = (perms?: readonly Permission[]) => hasBitfieldPermission(perms, P.COMMUNITY.PUBLISH_STATUS.WRITE);
 

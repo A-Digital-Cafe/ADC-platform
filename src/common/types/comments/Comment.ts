@@ -17,7 +17,7 @@ export interface Comment {
 	depth: number;
 	authorId: string;
 	authorName?: string;
-	authorImage?: string;
+	authorImage?: string | null;
 	blocks: Block[];
 	attachments: AttachmentDTO[];
 	reactions: Record<string, string[]>;

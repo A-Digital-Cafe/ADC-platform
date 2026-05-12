@@ -140,7 +140,7 @@ export function CustomFieldsSection({ project, canEdit, onSaved }: Readonly<Prop
 														key={c}
 														type="button"
 														disabled={!canEdit}
-														onClick={() => updateBadgeOption(d.id, idx, { color: c as LabelColor })}
+														onClick={() => updateBadgeOption(d.id, idx, { color: c })}
 														className={`rounded-full ${opt.color === c ? "ring-2 ring-primary" : ""}`}
 													>
 														<adc-color-label color={c} size="xs">

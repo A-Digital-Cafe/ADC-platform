@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Logger } from "../logger/Logger.ts";
 import { ILogger } from "../../interfaces/utils/ILogger.js";
-import os from "os";
+import os from "node:os";
 
 /**
  * Gestiona las operaciones de Docker Compose para apps, servicios y contenedores comunes del Kernel.
@@ -23,7 +23,7 @@ export class DockerManager {
 					: execFileSync("/usr/bin/which", ["docker"]).toString().trim();
 		} catch (error) {
 			this.#logger.logError(`Failed to locate Docker binary: ${error}`);
-			throw new Error("Docker binary not found. Ensure Docker is installed and available in PATH.");
+			throw new Error("Docker binary not found. Ensure Docker is installed and available in PATH.", { cause: error });
 		}
 	}
 

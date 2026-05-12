@@ -25,7 +25,7 @@ export class AdcKanbanCard {
 	/** Habilita draggable HTML5 */
 	@Prop() isDraggable: boolean = false;
 
-	@Event() cardClick!: EventEmitter<MouseEvent>;
+	@Event() cardClick!: EventEmitter<MouseEvent | KeyboardEvent>;
 
 	private readonly handleClick = (event: MouseEvent) => {
 		if (!this.clickable) return;
@@ -36,7 +36,7 @@ export class AdcKanbanCard {
 		if (!this.clickable) return;
 		if (event.key === "Enter" || event.key === " ") {
 			event.preventDefault();
-			this.cardClick.emit(event as unknown as MouseEvent);
+			this.cardClick.emit(event);
 		}
 	};
 

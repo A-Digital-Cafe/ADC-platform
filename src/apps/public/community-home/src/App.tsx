@@ -47,24 +47,6 @@ export default function App() {
 			</div>
 
 			<div className="px-8 mt-8 animate-slide-in">{renderPage()}</div>
-
-			<div slot="footer">
-				<a href="/privacy" className="underline hover:no-underline">
-					Política de Privacidad
-				</a>
-				<span aria-hidden="true" className="mx-1">
-					·
-				</span>
-				<a href="/terms" className="underline hover:no-underline">
-					Términos y Condiciones
-				</a>
-				<span aria-hidden="true" className="mx-1">
-					·
-				</span>
-				<a href="/cookies" className="underline hover:no-underline">
-					Política de Cookies
-				</a>
-			</div>
 		</adc-layout>
 	);
 }

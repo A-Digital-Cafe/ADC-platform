@@ -7,12 +7,13 @@
 
 import { createAdcApi } from "./adc-fetch.js";
 import { buildDicebearAvatar } from "@common/utils/avatar.js";
+import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 
 export { buildDicebearAvatar };
 
 interface PublicProfile {
 	username?: string;
-	avatar?: string;
+	avatar?: string | null;
 }
 
 const api = createAdcApi({ basePath: "/api/identity", devPort: 3000, credentials: "include" });
@@ -21,11 +22,21 @@ const cache = new Map<string, PublicProfile>();
 const inflight = new Map<string, Promise<PublicProfile>>();
 
 /**
+ * Resuelve URLs relativas a `/api/*` contra el backend en dev (los micro-frontends
+ * corren en puertos distintos al backend; en producción son same-origin).
+ */
+function resolveServerRelative(url: string): string {
+	if (!IS_DEV) return url;
+	if (!url.startsWith("/api/")) return url;
+	return `${getDevUrl(3000, "")}${url}`;
+}
+
+/**
  * Devuelve la URL del avatar a renderizar, garantizando un fallback
  * determinista (DiceBear) cuando no hay foto disponible.
  */
 export function buildAvatarUrl(opts: { avatar?: string | null; seed?: string | null }): string {
-	if (opts.avatar) return opts.avatar;
+	if (opts.avatar) return resolveServerRelative(opts.avatar);
 	return buildDicebearAvatar(opts.seed || "default");
 }
 

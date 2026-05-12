@@ -71,7 +71,7 @@ export function PathItemsEditor({ items, onChange, excludePathSlug }: Props) {
 	function handleItemDragOver(ev: React.DragEvent, index: number) {
 		if (dragIndex === null && !ev.dataTransfer.types.includes(DND_MIME)) return;
 		ev.preventDefault();
-		ev.dataTransfer.dropEffect = dragIndex !== null ? "move" : "copy";
+		ev.dataTransfer.dropEffect = dragIndex === null ? "copy" : "move";
 		setDragOverIndex(index);
 	}
 
@@ -106,7 +106,7 @@ export function PathItemsEditor({ items, onChange, excludePathSlug }: Props) {
 	function handleDropZoneDragOver(ev: React.DragEvent) {
 		if (!ev.dataTransfer.types.includes(DND_MIME) && dragIndex === null) return;
 		ev.preventDefault();
-		ev.dataTransfer.dropEffect = dragIndex !== null ? "move" : "copy";
+		ev.dataTransfer.dropEffect = dragIndex === null ? "copy" : "move";
 		setDropActive(true);
 	}
 

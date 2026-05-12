@@ -48,7 +48,7 @@ export const authApi = {
 	 */
 	login: (username: string, password: string, options?: Pick<RequestOptions<BlockedErrorData>, "translateParams">, orgId?: string | null) =>
 		api.post<AuthResponse, BlockedErrorData>("/login", {
-			body: { username, password, ...(orgId !== undefined ? { orgId } : {}) },
+			body: { username, password, ...(orgId === undefined ? {} : { orgId }) },
 			...options,
 		}),
 

@@ -71,7 +71,7 @@ export default class UIFederationService extends BaseService {
 		}
 
 		await this.#setupImportMapEndpoints();
-		await this.#httpProvider!.listen(this.port);
+		await this.#httpProvider.listen(this.port);
 
 		const mode = this.isDevelopment ? "desarrollo" : "producción";
 		this.logger.logOk(`UIFederationService iniciado en modo ${mode} (puerto ${this.port})`);
