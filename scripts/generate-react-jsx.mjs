@@ -409,16 +409,10 @@ import "react";
 	out += `// ─── Web component base props ───
 
 /** eslint-disable-next-line @typescript-eslint/no-empty-object-type */
-type WCProps<T = {}> = T & {
-\tchildren?: React.ReactNode;
-\tid?: string;
-\tclass?: string;
-\tclassName?: string;
-\tstyle?: React.CSSProperties | string;
-\tref?: React.Ref<HTMLElement>;
-\tslot?: string;
-\tkey?: React.Key;
-} & React.DOMAttributes<HTMLElement>;
+type WCProps<T = {}> = T & React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+	class?: string;
+	key?: React.Key;
+} & Record<string, any>;
 
 // ─── Component prop interfaces ───
 `;

@@ -17,12 +17,13 @@ export function generateCompleteImportMap(
 	const isDevelopment = process.env.NODE_ENV === "development";
 	// Construir base URL dinámica: si hay host, usar http://{host}:{port}, si no, ruta relativa
 	const baseUrl = isDevelopment && host ? `http://${host}:${port}` : "";
+	const reactVersion = "19.2.6";
 	const imports: Record<string, string> = {
-		react: "https://esm.sh/react@18.3.1",
-		"react-dom": "https://esm.sh/react-dom@18.3.1",
-		"react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-		"react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-		"react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
+		react: `https://esm.sh/react@${reactVersion}`,
+		"react-dom": `https://esm.sh/react-dom@${reactVersion}`,
+		"react-dom/client": `https://esm.sh/react-dom@${reactVersion}/client`,
+		"react/jsx-runtime": `https://esm.sh/react@${reactVersion}/jsx-runtime`,
+		"react/jsx-dev-runtime": `https://esm.sh/react@${reactVersion}/jsx-dev-runtime`,
 	};
 
 	for (const [name, module] of registeredModules.entries()) {

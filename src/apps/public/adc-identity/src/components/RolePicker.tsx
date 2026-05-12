@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Role } from "@common/types/identity/Role.ts";
 

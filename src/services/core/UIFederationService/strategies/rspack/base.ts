@@ -487,8 +487,8 @@ export default {
 
 		if (usedFrameworks.has("react")) {
 			sharedLibs.push(
-				"react: { singleton: true, requiredVersion: '^19.2.1', eager: true, strictVersion: false }",
-				"'react-dom': { singleton: true, requiredVersion: '^19.2.1', eager: true, strictVersion: false }",
+				"react: { singleton: true, requiredVersion: '^19.2.6', eager: true, strictVersion: false }",
+				"'react-dom': { singleton: true, requiredVersion: '^19.2.6', eager: true, strictVersion: false }",
 				"'react/jsx-dev-runtime': { singleton: true, eager: true, strictVersion: false }"
 			);
 		}

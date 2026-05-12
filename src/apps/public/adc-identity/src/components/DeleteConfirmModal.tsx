@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 
 interface DeleteConfirmModalProps {
