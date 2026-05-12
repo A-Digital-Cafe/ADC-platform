@@ -78,6 +78,7 @@ export interface AuthenticatedUserInfo {
 	id: string;
 	username: string;
 	email?: string;
+	avatar?: string;
 	permissions: string[];
 	orgId?: string;
 	metadata?: Record<string, unknown>;

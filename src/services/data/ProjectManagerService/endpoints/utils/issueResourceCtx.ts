@@ -6,7 +6,6 @@ import type { Issue } from "@common/types/project-manager/Issue.ts";
 import type { IssueCommentEndpointCtx } from "../../permissions/issueComments.ts";
 import type { IssueAttachmentEndpointCtx } from "../../permissions/issueAttachments.ts";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
-import { resolveUserAvatar } from "@common/utils/avatar.ts";
 
 /**
  * Construye el contexto enriquecido para llamadas al `CommentsManager` /
@@ -47,7 +46,7 @@ export async function buildIssueResourceCtx(
 	const userId = ctx.user?.id ?? "";
 	const tokenOrgId = ctx.user?.orgId ?? null;
 	const authorName = ctx.user?.username;
-	const authorImage = resolveUserAvatar(ctx.user as { metadata?: Record<string, unknown> } | undefined);
+	const authorImage = ctx.user ? (ctx.user.avatar ?? null) : undefined;
 
 	const base = {
 		userId,

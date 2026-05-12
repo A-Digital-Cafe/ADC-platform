@@ -202,7 +202,7 @@ export class UserEndpoints {
 			.map((s) => s.trim())
 			.filter(Boolean);
 		const profiles = await UserEndpoints.#identity.users.getPublicProfiles(ids);
-		const out: Record<string, { username?: string; avatar?: string }> = {};
+		const out: Record<string, { username?: string; avatar: string | null }> = {};
 		for (const [id, p] of profiles) out[id] = p;
 		return { profiles: out };
 	}

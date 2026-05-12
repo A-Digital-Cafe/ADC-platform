@@ -9,6 +9,21 @@ const AUTH_USER_KEY = "adc-auth-user";
 const AUTH_LOGOUT_PATH = "/api/auth/logout";
 const AUTH_DEV_PORT = 3000;
 
+const AVATAR_CHANNEL_NAME = "adc-avatar";
+const AVATAR_EVENT_KEY = "adc-avatar-event";
+
+/**
+ * Identificador único por contexto de ejecución (página/iframe) para que los
+ * emisores puedan distinguir su propio broadcast y evitar re-render redundante.
+ */
+const SENDER_ID = (() => {
+	try {
+		return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+	} catch {
+		return `${Date.now()}-${Math.random()}`;
+	}
+})();
+
 let logoutInFlight: Promise<void> | null = null;
 
 export function getStoredAuthUser(): string | null {
@@ -107,4 +122,78 @@ export async function forceLogoutAndRefresh(logoutUrl = getDefaultLogoutUrl()): 
 	} finally {
 		logoutInFlight = null;
 	}
+}
+
+/**
+ * Notifica a todos los microfrontends (misma pestaña y otras pestañas) que el
+ * avatar del usuario ha cambiado, para que cada consumidor refresque su UI
+ * sin recargar la página ni re-fetchear la sesión (lo que rotaría el JWT/CSRF).
+ *
+ * Cuando `avatar` viene `null` significa "sin avatar" (fallback DiceBear).
+ */
+export interface AvatarUpdatePayload {
+	userId: string;
+	/** URL absoluta o relativa a renderizar, o `null` para fallback. */
+	avatar: string | null;
+	/** Permite invalidar caché del navegador para una misma URL (ej. re-subida). */
+	cacheKey?: number;
+	/** ID interno del emisor — los receptores deben ignorar sus propios mensajes. */
+	sender?: string;
+}
+
+export function broadcastAvatarUpdate(payload: AvatarUpdatePayload): void {
+	const enriched: AvatarUpdatePayload & { ts: number } = { ...payload, sender: SENDER_ID, ts: Date.now() };
+	if (typeof BroadcastChannel !== "undefined") {
+		try {
+			const ch = new BroadcastChannel(AVATAR_CHANNEL_NAME);
+			ch.postMessage(enriched);
+			ch.close();
+		} catch {
+			/* ignore */
+		}
+	}
+	try {
+		globalThis.localStorage?.setItem(AVATAR_EVENT_KEY, JSON.stringify(enriched));
+	} catch {
+		/* ignore */
+	}
+}
+
+/**
+ * Suscribe a cambios de avatar emitidos por `broadcastAvatarUpdate`.
+ * Ignora los mensajes propios (mismo `SENDER_ID`) para evitar re-render redundante
+ * en el contexto que originó el cambio.
+ * Devuelve una función de cleanup para llamar en `disconnectedCallback`.
+ */
+export function setupAvatarSync(onAvatarUpdate: (payload: AvatarUpdatePayload) => void): () => void {
+	const handle = (data: AvatarUpdatePayload | undefined) => {
+		if (!data?.userId) return;
+		if (data.sender === SENDER_ID) return;
+		onAvatarUpdate(data);
+	};
+
+	let channel: BroadcastChannel | undefined;
+	if (typeof BroadcastChannel !== "undefined") {
+		try {
+			channel = new BroadcastChannel(AVATAR_CHANNEL_NAME);
+			channel.onmessage = (ev) => handle(ev.data as AvatarUpdatePayload);
+		} catch {
+			channel = undefined;
+		}
+	}
+
+	const storageListener = (ev: StorageEvent) => {
+		if (ev.key !== AVATAR_EVENT_KEY || !ev.newValue) return;
+		try {
+			handle(JSON.parse(ev.newValue) as AvatarUpdatePayload);
+		} catch {
+			/* ignore */
+		}
+	};
+	globalThis.addEventListener?.("storage", storageListener);
+
+	return () => {
+		channel?.close();
+		globalThis.removeEventListener?.("storage", storageListener);
+	};
 }

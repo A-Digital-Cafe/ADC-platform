@@ -8,7 +8,7 @@ interface Props {
 	readonly onChange: (ids: string[]) => void;
 	readonly disabled?: boolean;
 	readonly label?: string;
-	readonly initialCache?: Record<string, { username?: string; avatar?: string }>;
+	readonly initialCache?: Record<string, { username?: string; avatar?: string | null }>;
 }
 
 /**
@@ -42,7 +42,7 @@ export function UserPicker({ selectedIds, onChange, disabled, label, initialCach
 			for (const [id, p] of Object.entries(initialCache)) {
 				const existing = next[id];
 				if (!existing || (existing.username === "" && p.username) || existing.avatar !== p.avatar) {
-					next[id] = { id, username: p.username ?? existing?.username ?? "", avatar: p.avatar ?? existing?.avatar } as ClientUser;
+					next[id] = { id, username: p.username ?? existing?.username ?? "", avatar: "avatar" in p ? p.avatar : existing?.avatar } as ClientUser;
 					changed = true;
 				}
 			}

@@ -5,7 +5,6 @@ import type { Article } from "../../../../../common/ADC/types/learning.js";
 import type { ArticleCommentEndpointCtx } from "../../permissions/articleComments.ts";
 import type { ArticleAttachmentEndpointCtx } from "../../permissions/articleAttachments.ts";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
-import { resolveUserAvatar } from "@common/utils/avatar.ts";
 
 interface ArticleResourceCtxResult {
 	articleSlug: string;
@@ -41,7 +40,7 @@ export async function buildArticleResourceCtx(
 
 	const userId = ctx.user?.id ?? "";
 	const authorName = ctx.user?.username;
-	const authorImage = resolveUserAvatar(ctx.user as { metadata?: Record<string, unknown> } | undefined);
+	const authorImage = ctx.user ? (ctx.user.avatar ?? null) : undefined;
 
 	const base = {
 		userId,

@@ -16,6 +16,7 @@ import type CommentsUtility from "../../../utilities/comments/comments-utility/i
 import type { AttachmentsManager, SubPathContext } from "../../../utilities/attachments/attachments-utility/index.js";
 import type { CommentsManager } from "../../../utilities/comments/comments-utility/index.js";
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
+import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
 import { articleAttachmentsChecker } from "./permissions/articleAttachments.ts";
 import { articleCommentsChecker } from "./permissions/articleComments.ts";
 
@@ -40,6 +41,12 @@ export default class ContentService extends BaseService {
 		PathEndpoints.init(PathModel, ArticleModel);
 		ArticleEndpoints.init(ArticleModel, PathModel);
 		RatingEndpoints.init(RatingModel, ArticleModel);
+		let identityService: IdentityManagerService | null = null;
+		try {
+			identityService = this.getMyService<IdentityManagerService>("IdentityManagerService");
+		} catch {
+			this.logger.logWarn("IdentityManagerService no disponible; comments usarán snapshots de autor si no pueden rehidratar perfiles");
+		}
 
 		// --- Attachments + Comments wiring ---
 		let attachmentsManager: AttachmentsManager | null = null;
@@ -76,7 +83,7 @@ export default class ContentService extends BaseService {
 			);
 		}
 
-		CommentEndpoints.init(ArticleModel, commentsManager as CommentsManager);
+		CommentEndpoints.init(ArticleModel, commentsManager as CommentsManager, identityService);
 		ArticleAttachmentEndpoints.init(ArticleModel, attachmentsManager as AttachmentsManager);
 
 		this.logger.logOk("[ContentService] Servicio de contenido iniciado correctamente");

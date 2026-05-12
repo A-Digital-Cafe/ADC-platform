@@ -254,16 +254,17 @@ export class AuthEndpoints {
 
 		const orgSlug = result.session.user.orgId ? await AuthEndpoints.resolveOrgSlug(result.session.user.orgId) : undefined;
 
-		// Enriquecer sesión con datos de identity (perms bitfield, flags admin, groupIds).
+		// Enriquecer sesión con datos frescos de identity (avatar, perms bitfield, flags admin, groupIds).
 		// Se hace best-effort: si IdentityManagerService no está disponible, se devuelven defaults vacíos
 		// y la sesión sigue siendo válida (no se rompe la autenticación).
 		const sessionExtras = await AuthEndpoints.buildSessionExtras(result.session.user.id, result.session.user.orgId);
+		const freshAvatar = sessionExtras.hasFreshUser ? sessionExtras.avatar : result.session.user.avatar;
 
 		const userPayload = {
 			id: result.session.user.id,
 			username: result.session.user.username,
 			email: result.session.user.email,
-			avatar: result.session.user.avatar,
+			avatar: freshAvatar,
 			provider: result.session.user.provider,
 			orgId: result.session.user.orgId,
 			orgSlug,
@@ -577,7 +578,7 @@ export class AuthEndpoints {
 			id: string;
 			username: string;
 			email?: string;
-			avatar?: string;
+			avatar?: string | null;
 			metadata?: Record<string, unknown>;
 			linkedAccounts?: Array<{ status: string; providerAvatar?: string }>;
 		},
@@ -646,15 +647,22 @@ export class AuthEndpoints {
 	}
 
 	/**
-	 * Construye los campos extra del payload de sesión (`perms`, `isAdmin`, `isOrgAdmin`, `groupIds`)
+	 * Construye los campos extra del payload de sesión (`avatar`, `perms`, `isAdmin`, `isOrgAdmin`, `groupIds`)
 	 * consultando IdentityManagerService. Si no está disponible o falla la lectura, devuelve defaults
 	 * vacíos para no romper la respuesta de /session.
 	 */
 	private static async buildSessionExtras(
 		userId: string,
 		orgId?: string
-	): Promise<{ perms: Permission[]; isAdmin: boolean; isOrgAdmin: boolean; groupIds: string[] }> {
-		const empty = { perms: [] as Permission[], isAdmin: false, isOrgAdmin: false, groupIds: [] as string[] };
+	): Promise<{ avatar?: string; hasFreshUser: boolean; perms: Permission[]; isAdmin: boolean; isOrgAdmin: boolean; groupIds: string[] }> {
+		const empty = {
+			avatar: undefined,
+			hasFreshUser: false,
+			perms: [] as Permission[],
+			isAdmin: false,
+			isOrgAdmin: false,
+			groupIds: [] as string[],
+		};
 		const identity = AuthEndpoints.deps.identityService;
 		const internal = AuthEndpoints.deps.internalIdentity;
 		if (!identity || !internal) return empty;
@@ -670,6 +678,8 @@ export class AuthEndpoints {
 			]);
 
 			return {
+				avatar: user ? resolveUserAvatar(user) : undefined,
+				hasFreshUser: Boolean(user),
 				perms,
 				isAdmin: !orgId && hasGlobalAdminRole,
 				isOrgAdmin,

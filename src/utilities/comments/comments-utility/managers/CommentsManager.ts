@@ -21,7 +21,7 @@ export type CommentAction = "list" | "create" | "reply" | "edit" | "delete" | "r
 export interface CommentPermissionContext {
 	userId: string;
 	authorName?: string;
-	authorImage?: string;
+	authorImage?: string | null;
 }
 
 export type CommentPermissionChecker = (action: CommentAction, ctx: CommentPermissionContext, comment?: Comment) => Promise<boolean> | boolean;

@@ -14,7 +14,7 @@ import type { PMCtx } from "../dao/projects.ts";
 export interface IssueCommentEndpointCtx {
 	userId: string;
 	authorName?: string;
-	authorImage?: string;
+	authorImage?: string | null;
 	tokenOrgId: string | null;
 	project: Project;
 	issue: Issue;

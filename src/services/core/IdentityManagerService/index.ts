@@ -16,6 +16,11 @@ import { GroupEndpoints } from "./endpoints/groups.js";
 import { OrgEndpoints } from "./endpoints/organizations.js";
 import { RegionEndpoints } from "./endpoints/regions.js";
 import { StatsEndpoints } from "./endpoints/stats.js";
+import { AvatarEndpoints } from "./endpoints/avatar.js";
+import type AttachmentsUtility from "../../../utilities/attachments/attachments-utility/index.js";
+import type { AttachmentsManager } from "../../../utilities/attachments/attachments-utility/index.js";
+import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
+import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
 
 /**
@@ -86,8 +91,10 @@ export default class IdentityManagerService extends BaseService {
 	 */
 	readonly #getAuthVerifier: AuthVerifierGetter = () => this.#authVerifier;
 
+	#avatarAttachmentsManager: AttachmentsManager | null = null;
+
 	@EnableEndpoints({
-		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints],
+		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -184,6 +191,29 @@ export default class IdentityManagerService extends BaseService {
 			// Crear el AuthVerifier ahora que tenemos todos los componentes
 			this.#authVerifier = this.createAuthVerifier();
 
+			// Wire AttachmentsManager para avatares (opcional: si falta S3, los
+			// endpoints de subida devolverán 503 hasta que esté disponible).
+			try {
+				const s3 = this.getMyProvider<InternalS3Provider>("object/internal-s3-provider");
+				const attachmentsUtil = this.getMyUtility<AttachmentsUtility>("attachments-utility");
+				const connection = this.#mongoProvider.getConnection();
+				this.#avatarAttachmentsManager = attachmentsUtil.createAttachmentsManager({
+					mongoConnection: connection,
+					collectionName: "user_avatar_attachments",
+					s3Provider: s3,
+					basePath: "user-avatars",
+					subPathResolver: (ctx) => ctx.ownerId,
+					permissionChecker: userAvatarAttachmentsChecker,
+					maxSize: 2 * 1024 * 1024, // 2 MB
+					allowedMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+					kernelKey,
+				});
+			} catch (e) {
+				this.logger.logWarn(
+					`No se pudo inicializar AttachmentsManager de avatares: ${(e as Error).message}. Subida de avatares deshabilitada.`
+				);
+			}
+
 			// Inicializar endpoint managers
 			UserEndpoints.init(this);
 			RoleEndpoints.init(this);
@@ -191,6 +221,7 @@ export default class IdentityManagerService extends BaseService {
 			OrgEndpoints.init(this);
 			RegionEndpoints.init(this);
 			StatsEndpoints.init(this);
+			AvatarEndpoints.init(this, UserModel, this.#avatarAttachmentsManager);
 
 			this.logger.logOk("IdentityManagerService iniciado con soporte multi-tenant y autenticación");
 		} catch (error: any) {

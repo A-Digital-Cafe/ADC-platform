@@ -29,7 +29,7 @@ export interface ClientUser {
 	id: string;
 	username: string;
 	email?: string;
-	avatar?: string;
+	avatar?: string | null;
 	roleIds: string[];
 	groupIds: string[];
 	permissions?: Permission[];
