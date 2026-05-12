@@ -69,7 +69,7 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 									inputId={`social-platform-${idx}`}
 									name={`social-platform-${idx}`}
 									type="text"
-									placeholder="ej: Twitter, LinkedIn, TikTok, Tumblr..."
+									placeholder="ej: Facebook, Twitter, LinkedIn, Instagram..."
 									value={social.platform}
 								/>
 							</div>
