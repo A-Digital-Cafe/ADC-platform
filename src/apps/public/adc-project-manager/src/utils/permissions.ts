@@ -76,13 +76,13 @@ export function getVisibleProjectTabs(perms: Permission[], project?: Project | n
 	});
 }
 
-export function canWrite(perms: Permission[], scope: number, opts?: { ownerId?: string; selfId?: string }): boolean {
+function canWrite(perms: Permission[], scope: number, opts?: { ownerId?: string; selfId?: string }): boolean {
 	return hasPermission(perms, RESOURCE, CRUDXAction.WRITE, scope, opts);
 }
-export function canUpdate(perms: Permission[], scope: number, opts?: { ownerId?: string; selfId?: string }): boolean {
+function canUpdate(perms: Permission[], scope: number, opts?: { ownerId?: string; selfId?: string }): boolean {
 	return hasPermission(perms, RESOURCE, CRUDXAction.UPDATE, scope, opts);
 }
-export function canDelete(perms: Permission[], scope: number, opts?: { ownerId?: string; selfId?: string }): boolean {
+function canDelete(perms: Permission[], scope: number, opts?: { ownerId?: string; selfId?: string }): boolean {
 	return hasPermission(perms, RESOURCE, CRUDXAction.DELETE, scope, opts);
 }
 
