@@ -24,7 +24,7 @@
             }
             var saved = getCookie('theme') || localStorage.getItem('theme');
             var isDark = saved
-                ? saved.indexOf('dark') !== -1
+                ? saved.includes('dark')
                 : globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
             if (isDark) {
                 document.documentElement.setAttribute('dark-mode', '');

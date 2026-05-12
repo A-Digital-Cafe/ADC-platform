@@ -32,7 +32,7 @@ const DECLARATION_TONE = {
  */
 export default function PageShell({ title, subtitle, standards, declaration, lastUpdated, breadcrumb, children }: PageShellProps) {
 	const breadcrumbRef = useRef<HTMLElement>(null);
-	const backHref = breadcrumb && breadcrumb.length > 1 ? breadcrumb[breadcrumb.length - 2]?.href : undefined;
+	const backHref = breadcrumb && breadcrumb.length > 1 ? breadcrumb.at(-2)?.href : undefined;
 	const breadcrumbItems = JSON.stringify(breadcrumb ?? []);
 
 	useEffect(() => {

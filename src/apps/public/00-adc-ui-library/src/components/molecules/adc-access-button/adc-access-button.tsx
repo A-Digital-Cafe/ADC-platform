@@ -407,29 +407,7 @@ export class AdcAccessButton {
 
 						{/* Switch de organización */}
 						<div class="border-t border-divider">
-							{!this.orgSwitcherOpen ? (
-								<button
-									type="button"
-									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
-									role="menuitem"
-									onClick={this.handleOpenOrgSwitcher}
-								>
-									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
-										/>
-									</svg>
-									<div>
-										<span>{this.switchOrgText}</span>
-										{this.user?.orgId && (
-											<span class="text-xs text-muted block">{this.user.orgSlug || this.user.orgId}</span>
-										)}
-										{!this.user?.orgId && <span class="text-xs text-muted block">{this.personalAccessText}</span>}
-									</div>
-								</button>
-							) : (
+							{this.orgSwitcherOpen ? (
 								<div class="p-3 space-y-2 max-h-48 overflow-y-auto">
 									{this.loadingOrgs ? (
 										<div class="flex justify-center py-2">
@@ -484,6 +462,28 @@ export class AdcAccessButton {
 										]
 									)}
 								</div>
+							) : (
+								<button
+									type="button"
+									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
+									role="menuitem"
+									onClick={this.handleOpenOrgSwitcher}
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"
+										/>
+									</svg>
+									<div>
+										<span>{this.switchOrgText}</span>
+										{this.user?.orgId && (
+											<span class="text-xs text-muted block">{this.user.orgSlug || this.user.orgId}</span>
+										)}
+										{!this.user?.orgId && <span class="text-xs text-muted block">{this.personalAccessText}</span>}
+									</div>
+								</button>
 							)}
 						</div>
 						{/* Mi cuenta */}

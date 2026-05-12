@@ -315,7 +315,7 @@ export default class MongoProvider extends BaseProvider {
 		const entry = SHARED_POOLS.get(physicalKey);
 		if (entry) {
 			const hostPort = `${entry.physical.host}:${entry.physical.port}`;
-			for (const key of [...this.#dbViewsCache.keys()]) {
+			for (const key of this.#dbViewsCache.keys()) {
 				if (key.startsWith(hostPort)) this.#dbViewsCache.delete(key);
 			}
 		}
@@ -356,7 +356,7 @@ export default class MongoProvider extends BaseProvider {
 		await super.stop(kernelKey);
 		this.isDisconnecting = true;
 
-		for (const physicalKey of [...this.#extraPhysicalKeys]) {
+		for (const physicalKey of this.#extraPhysicalKeys) {
 			this.#extraPhysicalKeys.delete(physicalKey);
 			await this.#releasePhysical(physicalKey);
 		}

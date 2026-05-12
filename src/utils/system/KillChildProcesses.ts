@@ -10,8 +10,15 @@ export default async function killAllChildProcesses(): Promise<void> {
 	const pid = process.pid;
 
 	try {
-		// En Linux/Unix, matar todos los procesos del grupo de procesos
-		if (process.platform !== "win32") {
+		// En Windows, usar taskkill
+		if (process.platform === "win32") {
+			try {
+				await execAsync(`taskkill /F /T /PID ${pid}`);
+			} catch {
+				// NOOP
+			}
+		} else {
+			// En Linux/Unix, matar todos los procesos del grupo de procesos
 			try {
 				// Primero intentar con SIGTERM
 				await execAsync(`pkill -TERM -P ${pid}`);
@@ -24,13 +31,6 @@ export default async function killAllChildProcesses(): Promise<void> {
 				await execAsync("pkill -9 -f 'stencil build --watch'");
 				await execAsync("pkill -9 -f 'node_modules/@stencil/core/sys/node/worker.js'");
 				Logger.info("Matando procesos de Stencil...");
-			} catch {
-				// NOOP
-			}
-		} else {
-			// En Windows, usar taskkill
-			try {
-				await execAsync(`taskkill /F /T /PID ${pid}`);
 			} catch {
 				// NOOP
 			}

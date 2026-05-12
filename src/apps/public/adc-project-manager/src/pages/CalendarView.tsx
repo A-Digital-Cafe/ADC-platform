@@ -78,18 +78,20 @@ export function CalendarView({ project, perms }: Readonly<Props>) {
 
 			{loading ? (
 				<adc-skeleton variant="rectangular" height="400px" />
-			) : !entity ? (
-				<p className="text-muted text-sm">{t("calendar.noSelection")}</p>
-			) : !entity.startDate || !entity.endDate ? (
-				<p className="text-muted text-sm">{t("calendar.noDates")}</p>
+			) : entity ? (
+				!entity.startDate || !entity.endDate ? (
+					<p className="text-muted text-sm">{t("calendar.noDates")}</p>
+				) : (
+					<CalendarGrid
+						project={project}
+						issues={relevantIssues}
+						startDate={new Date(entity.startDate)}
+						endDate={new Date(entity.endDate)}
+						onOpen={setEditingIssue}
+					/>
+				)
 			) : (
-				<CalendarGrid
-					project={project}
-					issues={relevantIssues}
-					startDate={new Date(entity.startDate)}
-					endDate={new Date(entity.endDate)}
-					onOpen={setEditingIssue}
-				/>
+				<p className="text-muted text-sm">{t("calendar.noSelection")}</p>
 			)}
 
 			{editingIssue && (

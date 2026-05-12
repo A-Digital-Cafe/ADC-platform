@@ -68,7 +68,7 @@ export function BoardColumn({
 					<h4 className="font-heading text-sm font-semibold text-text truncate">{column.name}</h4>
 					<span className="text-xs text-muted">
 						{issues.length}
-						{wipLimit !== undefined ? ` / ${wipLimit}` : ""}
+						{wipLimit === undefined ? "" : ` / ${wipLimit}`}
 					</span>
 				</div>
 				{column.isDone && (

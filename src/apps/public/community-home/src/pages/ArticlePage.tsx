@@ -21,7 +21,7 @@ export function ArticlePage({ slug }: { readonly slug: string }) {
 
 	const urlParams = new URLSearchParams(globalThis.location?.search);
 	const fromPathSlug = urlParams.get("fromPath");
-	const shareUrl = typeof globalThis !== "undefined" ? globalThis.location?.href : "";
+	const shareUrl = typeof globalThis === "undefined" ? "" : globalThis.location?.href;
 
 	const breadcrumbRef = useRef<HTMLElement & { adcBack?: unknown }>(null);
 
