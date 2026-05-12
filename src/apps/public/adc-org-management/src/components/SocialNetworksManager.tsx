@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import type { SocialNetwork } from "../utils/org-api.js";
 
 interface SocialNetworksManagerProps {
@@ -11,6 +11,7 @@ interface SocialNetworksManagerProps {
 /**
  * Componente gestor de redes sociales
  * Maneja: agregar, eliminar y editar redes sociales
+ * Usa componentes adc-input de la librería UI
  */
 export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 	socialNetworks,
@@ -18,15 +19,39 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 	onRemoveSocialNetwork,
 	onSocialNetworkChange,
 }) => {
+	const inputRefs = useRef<Map<string, any>>(new Map());
+
+	// Setup event listeners para adc-input components
+	useEffect(() => {
+		const unsubscribers: Array<() => void> = [];
+
+		socialNetworks.forEach((_, idx) => {
+			["platform", "url"].forEach((field) => {
+				const ref = inputRefs.current.get(`${field}-${idx}`);
+				if (ref) {
+					const handler = (e: CustomEvent<string>) => {
+						onSocialNetworkChange(idx, field as "platform" | "url", e.detail);
+					};
+					ref.addEventListener("adcChange", handler);
+					unsubscribers.push(() => ref.removeEventListener("adcChange", handler));
+				}
+			});
+		});
+
+		return () => {
+			unsubscribers.forEach((unsub) => unsub());
+		};
+	}, [socialNetworks, onSocialNetworkChange]);
+
 	return (
-		<div className="space-y-4 border-t border-border pt-6">
+		<div className="space-y-4">
 			<div className="flex items-center justify-between">
 				<div>
 					<h3 className="text-sm font-semibold text-text">Redes Sociales</h3>
 					<p className="text-xs text-muted mt-1">Agrega canales de comunicación</p>
 				</div>
 				<adc-button type="button" onClick={onAddSocialNetwork} class="px-3! py-2! text-sm!">
-					+ Agregar
+					<adc-icon-plus></adc-icon-plus> Agregar
 				</adc-button>
 			</div>
 
@@ -35,34 +60,31 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 				<div className="space-y-3">
 					{socialNetworks.map((social, idx) => (
 						<div key={idx} className="flex gap-3 items-end p-4 rounded-lg border border-border bg-background">
-							{/* Platform Select */}
+							{/* Platform Input */}
 							<div className="flex-1 min-w-0">
-								<label className="block text-xs font-semibold text-text mb-2">Plataforma</label>
-								<select
+								<adc-input
+									ref={(el: any) => {
+										if (el) inputRefs.current.set(`platform-${idx}`, el);
+									}}
+									inputId={`social-platform-${idx}`}
+									name={`social-platform-${idx}`}
+									type="text"
+									placeholder="ej: Twitter, LinkedIn, TikTok, Tumblr..."
 									value={social.platform}
-									onChange={(e) => onSocialNetworkChange(idx, "platform", e.target.value)}
-									className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text focus:outline-none focus:ring-2 focus:ring-primary transition"
-								>
-									<option value="twitter">𝕏 Twitter / X</option>
-									<option value="linkedin">💼 LinkedIn</option>
-									<option value="instagram">📸 Instagram</option>
-									<option value="facebook">👍 Facebook</option>
-									<option value="github">🐙 GitHub</option>
-									<option value="discord">💬 Discord</option>
-									<option value="youtube">📺 YouTube</option>
-									<option value="tiktok">🎵 TikTok</option>
-								</select>
+								/>
 							</div>
 
 							{/* URL Input */}
 							<div className="flex-1 min-w-0">
-								<label className="block text-xs font-semibold text-text mb-2">URL</label>
-								<input
+								<adc-input
+									ref={(el: any) => {
+										if (el) inputRefs.current.set(`url-${idx}`, el);
+									}}
+									inputId={`social-url-${idx}`}
+									name={`social-url-${idx}`}
 									type="url"
 									placeholder="https://..."
 									value={social.url}
-									onChange={(e) => onSocialNetworkChange(idx, "url", e.target.value)}
-									className="w-full px-3 py-2 rounded-lg border border-border bg-background text-text placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary transition"
 								/>
 							</div>
 
@@ -70,7 +92,7 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 							<button
 								type="button"
 								onClick={() => onRemoveSocialNetwork(idx)}
-								className="w-10 h-10 flex items-center justify-center rounded-lg border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 transition"
+								className="w-10 h-10 flex items-center justify-center rounded-lg border border-tdanger/50 bg-danger/10 text-tdanger/50 hover:bg-danger/20 transition"
 								title="Eliminar red social"
 							>
 								<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

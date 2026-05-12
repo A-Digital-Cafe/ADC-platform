@@ -1,47 +1,55 @@
 export default {
 	common: {
-		loading: "Loading..."
+		loading: "Loading...",
+		sending: "Sending..."
 	},
 	request: {
-		title: "Create Organization",
-		subtitle: "Request the creation of a new organization",
+		title: "Request New Organization",
+		subtitle: "Complete the form to request the creation of a new organization",
 		form: {
 			name: "Organization Name",
 			namePlaceholder: "Ex: My Company",
-			email: "Organization Email",
-			emailPlaceholder: "info@company.com",
-			slug: "URL Slug",
-			slugPlaceholder: "my-company",
-			slugHint: "Only lowercase letters, numbers and hyphens",
-			autoGenerate: "Auto-generate",
+			email: "Contact Email",
+			emailPlaceholder: "contact@company.com",
 			description: "Description",
-			descriptionPlaceholder: "Describe your organization...",
-			contactChannels: "Contact Methods",
-			submit: "Request Creation",
-			submitting: "Submitting..."
+			descriptionPlaceholder: "Describe your organization and its goals...",
+			contactChannels: "Social Networks (Optional)",
+			submit: "Submit Request",
+			submitting: "Submitting...",
+			cancel: "Cancel"
 		},
 		errors: {
-			slugRequired: "Slug is required",
-			slugInvalid: "Invalid slug",
-			submitFailed: "Error submitting"
+			nameRequired: "Please enter the organization name",
+			nameMinLength: "The name must be at least 3 characters long",
+			emailRequired: "Please enter your email",
+			emailInvalid: "Please enter a valid email",
+			urlInvalid: "Please enter a valid URL (ex: https://your-org.com)",
+			submitError: "Error submitting the request"
 		},
-		successMessage: "✓ Request sent successfully. Redirecting...",
-		info: "What happens next?",
-		infoItems: [
-			"Your request will be reviewed",
-			"You'll receive confirmation",
-			"You'll access the dashboard"
-		]
+		info: "Your request will be reviewed by an administrator. Once approved, you'll be able to access your organization and invite members.",
+		successTitle: "Request sent!",
+		successMessage: "Your organization request has been recorded and is pending review by the administrative team.",
+		successWhat: "What happens next?",
+		successItems: [
+			"The administration team will review your request.",
+			"You'll receive an email when your request is approved or if we need more information."
+		],
+		goHome: "Go to Home"
 	},
 	home: {
 		title: "My Organizations",
 		subtitle: "Manage and configure your organizations in ADC Platform",
+		requestNew: "Request New Organization",
+		requestNewDescription: "Complete the form so an administrator can review your request",
+		myOrganizations: "My Organizations",
+		submitInfo: "Your request will be reviewed by an administrator. Once approved, you'll be able to access your organization and invite members.",
+		submitButton: "Submit Request",
+		requestSuccess: "Request sent. An administrator will review it soon.",
 		empty: {
 			title: "You have no organizations",
-			description: "Create your first organization to start collaborating with your team",
-			button: "Create First Organization"
-		},
-		createNew: "Create New Organization"
+			description: "Request the creation of a new organization to start collaborating with your team",
+			button: "Request First Organization"
+		}
 	},
 	dashboard: {
 		loading: "Loading...",

@@ -3,6 +3,7 @@ import { useTranslation } from "@ui-library/utils/i18n-react";
 import { router } from "@common/utils/router.js";
 import { orgApi } from "../utils/org-api.js";
 import type { Organization } from "../utils/org-api.js";
+import { OrgRequestForm } from "../components/OrgRequestForm.js";
 
 /**
  * Vista home - Muestra las organizaciones del usuario
@@ -13,22 +14,22 @@ export default function HomeView() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	useEffect(() => {
-		const loadOrganizations = async () => {
-			try {
-				const result = await orgApi.getUserOrganizations();
-				if (result?.success && result.data?.organizations) {
-					setOrganizations(result.data.organizations);
-				}
-				setError(null);
-			} catch (err) {
-				console.error("Error loading organizations:", err);
-				setError(err instanceof Error ? err.message : "Error al cargar organizaciones");
-			} finally {
-				setLoading(false);
+	const loadOrganizations = async () => {
+		try {
+			const result = await orgApi.getUserOrganizations();
+			if (result?.success && result.data?.organizations) {
+				setOrganizations(result.data.organizations);
 			}
-		};
+			setError(null);
+		} catch (err) {
+			console.error("Error loading organizations:", err);
+			setError(err instanceof Error ? err.message : "Error al cargar organizaciones");
+		} finally {
+			setLoading(false);
+		}
+	};
 
+	useEffect(() => {
 		loadOrganizations();
 	}, []);
 
@@ -50,12 +51,15 @@ export default function HomeView() {
 			<div className="max-w-6xl mx-auto">
 				{/* Header */}
 				<div className="mb-12">
-					<h1 className="text-4xl font-bold text-text mb-3">
-						{t("home.title") || "Mis Organizaciones"}
-					</h1>
-					<p className="text-lg text-muted">
-						{t("home.subtitle") || "Gestiona y configura tus organizaciones en ADC Platform"}
-					</p>
+					<h1 className="text-4xl font-bold text-text mb-3">{t("home.title") || "Mis Organizaciones"}</h1>
+					<p className="text-lg text-muted">{t("home.subtitle") || "Gestiona y configura tus organizaciones en ADC Platform"}</p>
+				</div>
+
+				{/* Request Form - Always visible */}
+				<div className="mb-12 p-8 bg-surface rounded-xxl border border-border shadow-sm">
+					<h2 className="text-2xl font-bold text-text mb-2">{t("home.requestNew")}</h2>
+					<p className="text-muted text-sm mb-6">{t("home.requestNewDescription")}</p>
+					<OrgRequestForm onSuccess={loadOrganizations} />
 				</div>
 
 				{/* Error State */}
@@ -65,33 +69,12 @@ export default function HomeView() {
 					</div>
 				)}
 
-				{/* Empty State */}
-				{!hasOrganizations ? (
-					<div className="bg-surface rounded-xxl p-12 text-center border border-border shadow-sm">
-						<div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-							<svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5.581m0 0H9m5.581 0a2 2 0 100-4m0 4v2m0-6V9a2 2 0 10-4 0v6m4 0a2 2 0 100 4m0-4a2 2 0 110 4m0 0H9"
-								/>
-							</svg>
-						</div>
-						<h2 className="text-2xl font-bold text-text mb-3">
-							{t("home.empty.title") || "No tienes organizaciones"}
-						</h2>
-						<p className="text-muted mb-8 max-w-md mx-auto">
-							{t("home.empty.description") || "Crea tu primera organización para comenzar a colaborar con tu equipo"}
-						</p>
-						<adc-button type="button" onClick={() => router.navigate("/org-management/request")}>
-							{t("home.empty.button") || "Crear Primera Organización"}
-						</adc-button>
-					</div>
-				) : (
+				{/* Organizations Section */}
+				{hasOrganizations && (
 					<div>
+						<h2 className="text-2xl font-bold text-text mb-6">{t("home.myOrganizations") || "Mis Organizaciones"}</h2>
 						{/* Organizations Grid */}
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 							{organizations.map((org) => (
 								<div
 									key={org.orgId}
@@ -100,9 +83,7 @@ export default function HomeView() {
 									<div className="p-6">
 										{/* Org Header */}
 										<div className="mb-4">
-											<h3 className="text-lg font-bold text-text truncate">
-												{org.metadata?.orgName || org.slug}
-											</h3>
+											<h3 className="text-lg font-bold text-text truncate">{org.metadata?.orgName || org.slug}</h3>
 											<p className="text-sm text-muted">{org.slug}</p>
 										</div>
 
@@ -132,9 +113,7 @@ export default function HomeView() {
 
 										{/* Description */}
 										{org.metadata?.description && (
-											<p className="text-sm text-muted line-clamp-2 mb-4">
-												{org.metadata.description}
-											</p>
+											<p className="text-sm text-muted line-clamp-2 mb-4">{org.metadata.description}</p>
 										)}
 
 										{/* Action Buttons */}
@@ -149,13 +128,7 @@ export default function HomeView() {
 													Acceder al Panel
 												</adc-button>
 											) : (
-												<adc-button
-													type="button"
-													variant="primary"
-													disabled
-													class="flex-1"
-			
-												>
+												<adc-button type="button" variant="primary" disabled class="flex-1">
 													Pendiente de Aprobación
 												</adc-button>
 											)}
@@ -173,13 +146,6 @@ export default function HomeView() {
 									</div>
 								</div>
 							))}
-						</div>
-
-						{/* Create New Button */}
-						<div className="text-center">
-							<adc-button type="button" onClick={() => router.navigate("/org-management/request")}>
-								+ {t("home.createNew") || "Crear Nueva Organización"}
-							</adc-button>
 						</div>
 					</div>
 				)}

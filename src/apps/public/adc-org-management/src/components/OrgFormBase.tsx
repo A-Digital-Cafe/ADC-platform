@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useRef, useEffect } from "react";
 
 interface FormData {
 	orgName: string;
@@ -26,6 +26,7 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
 }) => {
 	const nameInputRef = useRef<any>(null);
 	const emailInputRef = useRef<any>(null);
+	const descriptionRef = useRef<any>(null);
 	const urlInputRef = useRef<any>(null);
 
 	// Setup event listeners for adc-input components
@@ -43,11 +44,13 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
 
 		const unsubscribeOrgName = setupInputListener(nameInputRef, "orgName");
 		const unsubscribeEmail = setupInputListener(emailInputRef, "email");
+		const unsubscribeDescription = setupInputListener(descriptionRef, "description");
 		const unsubscribeUrl = setupInputListener(urlInputRef, "url");
 
 		return () => {
 			unsubscribeOrgName?.();
 			unsubscribeEmail?.();
+			unsubscribeDescription?.();
 			unsubscribeUrl?.();
 		};
 	}, [onFormChange, onClearError]);
@@ -70,7 +73,7 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
 					placeholder="ej: ACME Corporation"
 					value={formData.orgName}
 				/>
-				<p className="text-xs text-muted">Este será el nombre público de tu organización</p>
+				<p className="text-xs text-muted">Nombre que deseas para la organización (será revisado por un administrador)</p>
 			</div>
 
 			{/* Email Field */}
@@ -86,7 +89,7 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
 					placeholder="contacto@tu-organizacion.com"
 					value={formData.email}
 				/>
-				<p className="text-xs text-muted">Email principal para contactar con tu organización</p>
+				<p className="text-xs text-muted">Email para que el administrador se comunique con ustedes</p>
 			</div>
 
 			{/* Description Field */}
@@ -94,17 +97,13 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
 				<label htmlFor="description" className="block text-sm font-semibold text-text">
 					Descripción
 				</label>
-				<textarea
-					id="description"
+				<adc-textarea
+					ref={descriptionRef}
+					textareaId="description"
 					name="description"
 					placeholder="Describe brevemente tu organización y sus objetivos"
 					value={formData.description}
-					onChange={(e) => {
-						onFormChange("description", e.target.value);
-						onClearError();
-					}}
 					rows={4}
-					className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition resize-none"
 				/>
 				<p className="text-xs text-muted">Máximo 500 caracteres</p>
 			</div>

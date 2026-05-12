@@ -6,7 +6,7 @@ import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { getSession } from "@ui-library/utils/session";
 
 // Pages
-import IntroView from "./pages/IntroView";
+
 import OrgRequestView from "./pages/OrgRequestView";
 import OrganizationDashboardView from "./pages/OrganizationDashboardView";
 import HomeView from "./pages/HomeView";
@@ -17,7 +17,7 @@ import { orgApi } from "./utils/org-api.js";
 // Components
 import { AuthGate } from "./components/AuthGate.js";
 
-type ViewType = "intro" | "home" | "request" | "dashboard" | "notfound";
+type ViewType = "home" | "request" | "dashboard" | "notfound";
 
 function parseRoute(path: string): { view: ViewType; slug?: string } {
 	const cleanPath = path.replace(/^\/+/, "").split("?")[0];
@@ -95,14 +95,12 @@ export default function App() {
 
 	if (!ready || !sessionReady) {
 		return (
-			
-				<div className="flex items-center justify-center min-h-screen">
-					<div className="text-center">
-						<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-						<p className="mt-2 text-muted">{t("common.loading") || "Cargando..."}</p>
-					</div>
+			<div className="flex items-center justify-center min-h-screen">
+				<div className="text-center">
+					<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+					<p className="mt-2 text-muted">{t("common.loading") || "Cargando..."}</p>
 				</div>
-		
+			</div>
 		);
 	}
 
@@ -122,7 +120,7 @@ export default function App() {
 						) : hasOrganizations ? (
 							<HomeView />
 						) : (
-							<IntroView />
+							<OrgRequestView />
 						)}
 					</AuthGate>
 				)}
@@ -152,7 +150,5 @@ export default function App() {
 				)}
 			</div>
 		</adc-layout>
-		
-		
 	);
 }

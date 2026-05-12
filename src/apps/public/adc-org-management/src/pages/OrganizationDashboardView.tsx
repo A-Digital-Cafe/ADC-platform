@@ -37,12 +37,12 @@ export default function OrganizationDashboardView({ slug }: OrganizationDashboar
 				const session = await getSession(true);
 
 				// Esperar un poco para que las cookies se actualicen
-				await new Promise(resolve => setTimeout(resolve, 100));
+				await new Promise((resolve) => setTimeout(resolve, 100));
 
 				// Cargar organización
 				const result = await orgApi.getOrganizationBySlug(slug);
 				const orgData = (result as any)?.data as Organization | undefined;
-				
+
 				if (result?.success && orgData) {
 					// Validar acceso:
 					// - Admin siempre puede acceder
@@ -51,25 +51,16 @@ export default function OrganizationDashboardView({ slug }: OrganizationDashboar
 					const userIsAdmin = canManageOrganizations(session.user?.perms);
 					const userIsCreator = orgData.createdByUserId && session.user?.id === orgData.createdByUserId;
 					const isApproved = orgData.approved === true;
-					
-					console.log("🔍 [OrganizationDashboardView] Access check:", {
-						slug,
-						userId: session.user?.id,
-						createdByUserId: orgData.createdByUserId,
-						userIsAdmin,
-						userIsCreator,
-						isApproved,
-					});
-					
+
 					// Acceso permitido si: es admin O es creador O (org está aprobada)
 					const canAccess = userIsAdmin || userIsCreator || isApproved;
-					
+
 					if (!canAccess) {
 						setAccessDenied(true);
 						setOrg(null);
 						return;
 					}
-					
+
 					setOrg(orgData);
 					setAccessDenied(false);
 				} else {
@@ -102,32 +93,29 @@ export default function OrganizationDashboardView({ slug }: OrganizationDashboar
 		setSidebarExpanded(!!isExpanded);
 	}, []);
 
-	const sidebarItems = useMemo(
-		() => {
-			const items = [
-				{
-					label: t("tabs.general") || "General",
-					iconSvg: `<svg class="w-6 h-6 mx-auto block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
-					action: "general",
-				},
-				{
-					label: t("tabs.apps") || "Aplicaciones",
-					iconSvg: `<svg class="w-6 h-6 mx-auto block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>`,
-					action: "apps",
-				},
-			];
-			
-			// Todos pueden ver y solicitar tiers pagos
-			items.push({
-				label: t("tabs.tiers") || "Planes Pagos",
-				iconSvg: `<svg class="w-6 h-6 mx-auto block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`,
-				action: "tiers",
-			});
-			
-			return items;
-		},
-		[t]
-	);
+	const sidebarItems = useMemo(() => {
+		const items = [
+			{
+				label: t("tabs.general") || "General",
+				iconSvg: `<svg class="w-6 h-6 mx-auto block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+				action: "general",
+			},
+			{
+				label: t("tabs.apps") || "Aplicaciones",
+				iconSvg: `<svg class="w-6 h-6 mx-auto block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>`,
+				action: "apps",
+			},
+		];
+
+		// Todos pueden ver y solicitar tiers pagos
+		items.push({
+			label: t("tabs.tiers") || "Planes Pagos",
+			iconSvg: `<svg class="w-6 h-6 mx-auto block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`,
+			action: "tiers",
+		});
+
+		return items;
+	}, [t]);
 
 	useEffect(() => {
 		const sidebar = sidebarRef.current;
@@ -162,12 +150,17 @@ export default function OrganizationDashboardView({ slug }: OrganizationDashboar
 					<div className="bg-warning/10 border border-warning/20 rounded-lg p-8 text-center">
 						<div className="w-16 h-16 rounded-full bg-warning/20 flex items-center justify-center mx-auto mb-4">
 							<svg className="w-8 h-8 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 4v2m0-12a9 9 0 11-18 0 9 9 0 0118 0z" />
+								<path
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									strokeWidth={2}
+									d="M12 9v2m0 4v2m0 4v2m0-12a9 9 0 11-18 0 9 9 0 0118 0z"
+								/>
 							</svg>
 						</div>
 						<h1 className="font-bold text-xl text-text mb-2">Acceso denegado</h1>
 						<p className="text-muted text-sm mb-6">
-							No tienes permiso para acceder a esta organización. 
+							No tienes permiso para acceder a esta organización.
 							<br />
 							<br />
 							Posibles motivos:
@@ -175,8 +168,7 @@ export default function OrganizationDashboardView({ slug }: OrganizationDashboar
 							• Tu solicitud aún está pendiente de aprobación
 							<br />
 							• Tu solicitud fue rechazada
-							<br />
-							• No eres el creador de esta organización
+							<br />• No eres el creador de esta organización
 						</p>
 						<adc-button type="button" onadcClick={() => router.navigate("/org-management")}>
 							Volver al inicio

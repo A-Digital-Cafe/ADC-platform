@@ -1,47 +1,55 @@
 export default {
 	common: {
-		loading: "Cargando..."
+		loading: "Cargando...",
+		sending: "Enviando..."
 	},
 	request: {
-		title: "Crear Organización",
-		subtitle: "Solicita la creación de una nueva organización",
+		title: "Solicitar Nueva Organización",
+		subtitle: "Completa el formulario para solicitar la creación de una nueva organización",
 		form: {
 			name: "Nombre de la Organización",
 			namePlaceholder: "Ej: Mi Empresa",
-			email: "Email de la Organización",
-			emailPlaceholder: "info@empresa.com",
-			slug: "URL Slug",
-			slugPlaceholder: "mi-empresa",
-			slugHint: "Solo letras minúsculas, números y guiones",
-			autoGenerate: "Auto-generar",
+			email: "Email de Contacto",
+			emailPlaceholder: "contacto@empresa.com",
 			description: "Descripción",
-			descriptionPlaceholder: "Describe tu organización...",
-			contactChannels: "Formas de contacto",
-			submit: "Solicitar Creación",
-			submitting: "Enviando..."
+			descriptionPlaceholder: "Describe tu organización y sus objetivos...",
+			contactChannels: "Redes Sociales (Opcional)",
+			submit: "Enviar Solicitud",
+			submitting: "Enviando...",
+			cancel: "Cancelar"
 		},
 		errors: {
-			slugRequired: "Slug es requerido",
-			slugInvalid: "Slug inválido",
-			submitFailed: "Error al enviar"
+			nameRequired: "Por favor ingresa el nombre de la organización",
+			nameMinLength: "El nombre debe tener al menos 3 caracteres",
+			emailRequired: "Por favor ingresa tu email",
+			emailInvalid: "Por favor ingresa un email válido",
+			urlInvalid: "Por favor ingresa una URL válida (ej: https://tu-org.com)",
+			submitError: "Error al enviar la solicitud"
 		},
-		successMessage: "✓ Solicitud enviada correctamente. Redirigiendo...",
-		info: "¿Qué sucede después?",
-		infoItems: [
-			"Tu solicitud será revisada",
-			"Recibirás confirmación",
-			"Accederás al dashboard"
-		]
+		info: "Tu solicitud será revisada por un administrador. Una vez aprobada, podrás acceder a tu organización e invitar miembros.",
+		successTitle: "¡Solicitud enviada!",
+		successMessage: "Tu solicitud de organización ha sido registrada y está pendiente de revisión por parte del equipo administrativo.",
+		successWhat: "¿Qué sucede ahora?",
+		successItems: [
+			"El equipo de administración revisará tu solicitud.",
+			"Recibirás un email cuando tu solicitud sea aprobada o si se necesita más información."
+		],
+		goHome: "Ir al Inicio"
 	},
 	home: {
 		title: "Mis Organizaciones",
 		subtitle: "Gestiona y configura tus organizaciones en ADC Platform",
+		requestNew: "Solicitar Nueva Organización",
+		requestNewDescription: "Completa el formulario para que un administrador pueda revisar tu solicitud",
+		myOrganizations: "Mis Organizaciones",
+		submitInfo: "Tu solicitud será revisada por un administrador. Una vez aprobada, podrás acceder a tu organización e invitar miembros.",
+		submitButton: "Enviar Solicitud",
+		requestSuccess: "Solicitud enviada. Un administrador la revisará pronto.",
 		empty: {
 			title: "No tienes organizaciones",
-			description: "Crea tu primera organización para comenzar a colaborar con tu equipo",
-			button: "Crear Primera Organización"
-		},
-		createNew: "Crear Nueva Organización"
+			description: "Solicita la creación de una nueva organización para comenzar a colaborar con tu equipo",
+			button: "Solicitar Primera Organización"
+		}
 	},
 	dashboard: {
 		loading: "Cargando...",
