@@ -286,7 +286,7 @@ export class OrgEndpoints {
 				}
 			} catch (error: any) {
 				// Si es error de permisos (no admin), ignorar - el usuario puede solicitar aunque no vea todas las orgs
-				if (error instanceof IdentityError && error.statusCode !== 409) {
+				if (error instanceof IdentityError && error.status !== 409) {
 					// Continuar sin validación cruzada
 				} else if (error instanceof IdentityError) {
 					throw error;
@@ -349,7 +349,11 @@ export class OrgEndpoints {
 								throw new IdentityError(500, "INVALID_BODY", "No se puede acceder al proyecto org-requests");
 							}
 						} else {
-							throw new IdentityError(500, "INVALID_BODY", `Error creando proyecto org-requests: ${createErr instanceof Error ? createErr.message : String(createErr)}`);
+							throw new IdentityError(
+								500,
+								"INVALID_BODY",
+								`Error creando proyecto org-requests: ${createErr instanceof Error ? createErr.message : String(createErr)}`
+							);
 						}
 					}
 				}
@@ -360,20 +364,36 @@ export class OrgEndpoints {
 			}
 
 			// Crear ticket en PM con metadata de solicitud
+			const socialNetworksText =
+				socialNetworks && socialNetworks.length > 0
+					? socialNetworks.map((s: any) => `- ${s.platform}: ${s.url}`).join("\n")
+					: "No especificadas";
+
+			const ticketDescription = `SOLICITUD DE CREACIÓN DE ORGANIZACIÓN
+
+					[INFORMACIÓN DE LA ORGANIZACIÓN]
+					Nombre: ${name}
+					Email: ${email}
+					Sitio Web: ${url || "No proporcionado"}
+
+					[DESCRIPCIÓN]
+					${description || "Sin descripción adicional"}
+
+					[REDES SOCIALES / CANALES]
+					${socialNetworksText}
+
+					[SOLICITANTE]
+					ID de Usuario: ${ctx.user.id}
+					Email: ${ctx.user.email || "No disponible"}`;
+
 			const ticket = await pm.issues.create(
 				project,
 				{
 					title: `Solicitud de Org: ${name}`,
-					description: `**Solicitud de creación de organización**\n\n**Nombre:** ${name}\n**Email:** ${email}\n**URL:** ${url || "N/A"}\n**Descripción:** ${description || "Sin descripción"}`,
+					description: ticketDescription.trim(),
 					category: "task",
 					customFields: {
 						type: "org_creation",
-						organizationSlug,
-						orgName: name,
-						email,
-						url: url || "",
-						description: description || "",
-						socialNetworks: socialNetworks || [],
 						requestedByUserId: ctx.user.id,
 					},
 				},
@@ -393,14 +413,9 @@ export class OrgEndpoints {
 				throw error;
 			}
 
-			throw new IdentityError(
-				error.status || 500,
-				error.errorKey || "INVALID_BODY",
-				error.message || `Error creando solicitud`
-			);
+			throw new IdentityError(error.status || 500, error.errorKey || "INVALID_BODY", error.message || `Error creando solicitud`);
 		}
 	}
-
 
 	/**
 	 * Obtener acceso a ProjectManagerService
