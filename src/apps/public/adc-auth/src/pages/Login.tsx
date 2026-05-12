@@ -3,7 +3,7 @@ import { authApi, type BlockedErrorData, type OrgOption } from "../utils/auth-ap
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { getBaseUrl } from "@common/utils/url-utils.js";
-import { sanitizeReturnUrl } from "../utils/safe-url.ts";
+import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
 
 /** Base URL for API calls */
 const API_BASE = getBaseUrl(3000);
@@ -78,7 +78,7 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 			}
 
 			if (globalThis.location) {
-				globalThis.location.href = sanitizeReturnUrl(returnUrl);
+				redirectToReturnUrl(returnUrl);
 			}
 		}
 
@@ -104,7 +104,7 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 		);
 
 		if (result.success && result.data && !result.data.requiresOrgSelection && globalThis.location) {
-			globalThis.location.href = sanitizeReturnUrl(returnUrl);
+			redirectToReturnUrl(returnUrl);
 		}
 
 		setLoading(false);

@@ -5,7 +5,7 @@ import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { showError } from "@ui-library/utils/error-handler";
 import { getBaseUrl } from "@common/utils/url-utils.js";
-import { sanitizeReturnUrl } from "../utils/safe-url.ts";
+import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
 
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
 const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,32}$/;
@@ -79,11 +79,6 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 		return () => clearTimeout(timeout);
 	}, [username]);
 
-	/**
-	 * Construye la URL de redirección tras registro exitoso (sanitizada inline).
-	 */
-	const getRedirectUrl = (): string => sanitizeReturnUrl(returnUrl);
-
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		clearErrors();
@@ -104,8 +99,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 		const result = await authApi.register(username, email, password);
 
 		if (result.success && globalThis.location) {
-			// Sink de redirección: destino re-sanitizado inline.
-			globalThis.location.href = getRedirectUrl();
+			redirectToReturnUrl(returnUrl);
 		}
 
 		setLoading(false);
