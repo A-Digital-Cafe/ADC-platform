@@ -207,7 +207,10 @@ export class AdcAccessButton {
 	 */
 	private applyAvatarUpdate(payload: AvatarUpdatePayload): void {
 		if (!this.user || this.user.id !== payload.userId) return;
-		const avatar = payload.avatar && payload.cacheKey ? `${payload.avatar}${payload.avatar.includes("?") ? "&" : "?"}v=${payload.cacheKey}` : payload.avatar;
+		const avatar =
+			payload.avatar && payload.cacheKey
+				? `${payload.avatar}${payload.avatar.includes("?") ? "&" : "?"}v=${payload.cacheKey}`
+				: payload.avatar;
 		this.user = { ...this.user, avatar: avatar ?? undefined };
 	}
 
@@ -361,7 +364,10 @@ export class AdcAccessButton {
 							height="40"
 						/>
 					) : (
-						<div class="w-12 h-12 rounded-full border-2 border-accent flex items-center justify-center text-muted bg-surface" aria-label="Sin avatar">
+						<div
+							class="w-12 h-12 rounded-full border-2 border-accent flex items-center justify-center text-muted bg-surface"
+							aria-label="Sin avatar"
+						>
 							<adc-icon-no-avatar size="1.5rem" />
 						</div>
 					)}

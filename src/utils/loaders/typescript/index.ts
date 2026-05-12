@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { IModuleLoader } from "../../../interfaces/modules/IModuleLoader.js";
 import { IModuleConfig } from "../../../interfaces/modules/IModule.js";
 import type { BaseProvider, IProvider } from "../../../providers/BaseProvider.ts";
-import type { IUtility } from "../../../utilities/BaseUtility.ts";
+import type { BaseUtility, IUtility } from "../../../utilities/BaseUtility.ts";
 import type { BaseService, IService } from "../../../services/BaseService.ts";
 
 import { Kernel } from "../../../kernel.js";
@@ -45,7 +45,7 @@ export default class TypeScriptLoader implements IModuleLoader {
 		const UtilityClass = await this.importClass<IUtility>(modulePath, "Utility");
 		const utilityInstance = new UtilityClass(this.enrichConfig(modulePath, config));
 		try {
-			(utilityInstance as any).setKernelKey?.(this.#kernelKey);
+			(utilityInstance as BaseUtility).setKernelKey?.(this.#kernelKey);
 			await utilityInstance.start?.(this.#kernelKey);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando utility ${utilityInstance.name}: ${error.message}`);
