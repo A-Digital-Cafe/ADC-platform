@@ -11,13 +11,11 @@ const identityApi = createAdcApi({
 	credentials: process.env.NODE_ENV === "development" ? "include" : "same-origin",
 });
 
-
 export interface SocialNetwork {
 	platform: string;
 	icon: string;
 	url: string;
 }
-
 
 export interface Organization extends BaseOrganization {
 	id: string;
@@ -46,15 +44,9 @@ export const orgApi = {
 	listOrganizations: () => identityApi.get<{ organizations: Organization[] }>("/organizations"),
 
 	/**
-	 * Get current user's organizations
-	 */
-	getUserOrganizations: () => identityApi.get<{ organizations: Organization[] }>("/user/organizations"),
-
-	/**
 	 * Get organization by slug or ID
 	 */
-	getOrganizationBySlug: (slugOrId: string) =>
-		identityApi.get<{ success: boolean; data: Organization }>(`/organizations/${slugOrId}`),
+	getOrganizationBySlug: (slugOrId: string) => identityApi.get<{ success: boolean; data: Organization }>(`/organizations/${slugOrId}`),
 
 	/**
 	 * Request new organization creation

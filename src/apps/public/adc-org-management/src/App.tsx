@@ -11,9 +11,6 @@ import OrgRequestView from "./pages/OrgRequestView";
 import OrganizationDashboardView from "./pages/OrganizationDashboardView";
 import HomeView from "./pages/HomeView";
 
-// API
-import { orgApi } from "./utils/org-api.js";
-
 // Components
 import { AuthGate } from "./components/AuthGate.js";
 
@@ -39,12 +36,9 @@ export default function App() {
 	const { t, ready } = useTranslation({ namespace: "adc-org-management", autoLoad: true });
 	const [currentPath, setCurrentPath] = useState(router.getCurrentPath() || "/org-management");
 	const [sessionReady, setSessionReady] = useState(false);
-	const [userOrganizations, setUserOrganizations] = useState<any[] | null>(null);
-	const [loadingOrgs, setLoadingOrgs] = useState(false);
 
 	const route = parseRoute(currentPath);
 	const isAtHome = route.view === "home";
-	const hasOrganizations = userOrganizations && userOrganizations.length > 0;
 
 	// Sincronizar con router
 	useEffect(() => {
@@ -69,30 +63,6 @@ export default function App() {
 		loadSession();
 	}, []);
 
-	// Cargar organizaciones cuando está en home
-	useEffect(() => {
-		if (!isAtHome || !sessionReady) return;
-
-		const loadOrganizations = async () => {
-			try {
-				setLoadingOrgs(true);
-				const result = await orgApi.getUserOrganizations();
-				if (result?.success && result.data?.organizations) {
-					setUserOrganizations(result.data.organizations);
-				} else {
-					setUserOrganizations([]);
-				}
-			} catch (err) {
-				console.error("Error loading organizations:", err);
-				setUserOrganizations([]);
-			} finally {
-				setLoadingOrgs(false);
-			}
-		};
-
-		loadOrganizations();
-	}, [isAtHome, sessionReady]);
-
 	if (!ready || !sessionReady) {
 		return (
 			<div className="flex items-center justify-center min-h-screen">
@@ -110,18 +80,7 @@ export default function App() {
 			<div className="w-full">
 				{route.view === "home" && (
 					<AuthGate>
-						{loadingOrgs ? (
-							<div className="flex items-center justify-center min-h-screen">
-								<div className="text-center">
-									<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4" />
-									<p className="text-muted">{t("common.loading") || "Cargando..."}</p>
-								</div>
-							</div>
-						) : hasOrganizations ? (
-							<HomeView />
-						) : (
-							<OrgRequestView />
-						)}
+						<HomeView />
 					</AuthGate>
 				)}
 				{route.view === "request" && (
