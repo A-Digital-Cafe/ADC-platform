@@ -78,16 +78,16 @@ function createCppModuleProxy(options: CppModuleOptions): IModule {
 			}
 
 			// Ignorar símbolos y propiedades de Promise
-			if (typeof prop === "symbol" || ["then", "catch", "finally", "toJSON"].includes(prop as string)) {
+			if (typeof prop === "symbol" || ["then", "catch", "finally", "toJSON"].includes(prop)) {
 				return undefined;
 			}
 
 			// Cualquier otro método: delegar a IPC
 			return async (...args: any[]) => {
-				return await ipcManager.call(options.name, options.version, "C++", prop as string, args);
+				return await ipcManager.call(options.name, options.version, "C++", prop, args);
 			};
 		},
-	}) as IModule;
+	});
 }
 
 /**

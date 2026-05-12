@@ -32,7 +32,7 @@ function buildScopePermissions<R extends string>(resource: R, scope: ScopeDef): 
 		EXECUTE: `${resource}.${scope.value}.${CRUDXAction.EXECUTE}`,
 		CRUD: `${resource}.${scope.value}.${CRUDXAction.CRUD}`,
 		ALL: `${resource}.${scope.value}.${CRUDXAction.ALL}`,
-	} as ScopePermissions<R>;
+	};
 }
 
 function buildSimplePermissions<R extends string>(resource: R): SimplePermissions<R> {
@@ -42,7 +42,7 @@ function buildSimplePermissions<R extends string>(resource: R): SimplePermission
 		UPDATE: `${resource}.update`,
 		DELETE: `${resource}.delete`,
 		EXECUTE: `${resource}.execute`,
-	} as SimplePermissions<R>;
+	};
 }
 
 function buildResourcePermissions(resource: ResourceDef) {

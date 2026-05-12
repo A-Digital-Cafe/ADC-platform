@@ -133,7 +133,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 			),
 		},
 		{
-			key: "orgId" as keyof Role,
+			key: "orgId",
 			label: t("roles.scope"),
 			render: (r: Role) =>
 				r.orgId ? (

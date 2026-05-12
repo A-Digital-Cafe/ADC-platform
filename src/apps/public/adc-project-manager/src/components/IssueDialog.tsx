@@ -61,7 +61,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 		linkedIssues: IssueLink[];
 	}>({
 		title: issue?.title ?? "",
-		description: Array.isArray(issue?.description) ? issue!.description : [],
+		description: Array.isArray(issue?.description) ? issue.description : [],
 		columnKey: issue?.columnKey ?? project.kanbanColumns.find((c) => c.isAuto)?.key ?? project.kanbanColumns[0]?.key ?? "todo",
 		sprintId: issue?.sprintId ?? "",
 		milestoneId: issue?.milestoneId ?? "",
@@ -86,7 +86,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	// hacer click se entra en edición. Se guarda con su propio botón y vuelve
 	// al modo solo-lectura. Issues nuevos arrancan directamente en edición.
 	const [descEditing, setDescEditing] = useState<boolean>(isNew);
-	const [savedDescription, setSavedDescription] = useState<Block[]>(Array.isArray(issue?.description) ? issue!.description : []);
+	const [savedDescription, setSavedDescription] = useState<Block[]>(Array.isArray(issue?.description) ? issue.description : []);
 	const [hasUnsavedDraft, setHasUnsavedDraft] = useState<boolean>(false);
 	const [draftDescription, setDraftDescription] = useState<Block[] | null>(null);
 	const [draftAttachmentIds, setDraftAttachmentIds] = useState<string[]>([]);

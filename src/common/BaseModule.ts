@@ -23,7 +23,7 @@ export abstract class BaseModule implements IModule {
 		this.config = {
 			name: "unknown",
 			...config,
-		} as IModuleConfig;
+		};
 	}
 
 	/**

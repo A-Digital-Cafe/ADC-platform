@@ -5,7 +5,6 @@ import type { Project } from "@common/types/project-manager/Project.ts";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
 import type { Sprint } from "@common/types/project-manager/Sprint.ts";
 import type { Milestone } from "@common/types/project-manager/Milestone.ts";
-import type { IssueListParams } from "../utils/pm-api.ts";
 import { useBacklogData } from "../hooks/useBacklogData.ts";
 import { CalendarGrid } from "../components/calendar/CalendarGrid.tsx";
 import { IssueDialog } from "../components/IssueDialog.tsx";
@@ -32,7 +31,7 @@ export function CalendarView({ project, perms }: Readonly<Props>) {
 	const { issues, sprints, milestones, loading, reload } = useBacklogData({
 		projectId: project.id,
 		q: "",
-		orderBy: "priority" as IssueListParams["orderBy"],
+		orderBy: "priority",
 	});
 
 	const entities: Array<Sprint | Milestone> = rangeType === "sprint" ? sprints : milestones;

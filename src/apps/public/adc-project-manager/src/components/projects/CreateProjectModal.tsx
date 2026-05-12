@@ -174,7 +174,7 @@ export function CreateProjectModal({ orgSlug, allowed, organizations, defaultOrg
 						<label className="block text-sm font-medium mb-1 text-text">{t("projects.orgId")}</label>
 						<adc-combobox
 							value={form.orgId ?? ""}
-							options={JSON.stringify(organizations!.map((o) => ({ label: o.slug, value: o.orgId })))}
+							options={JSON.stringify(organizations.map((o) => ({ label: o.slug, value: o.orgId })))}
 							onadcChange={(e: any) => setForm((f) => ({ ...f, orgId: (e.detail as string) || null }))}
 						/>
 					</div>

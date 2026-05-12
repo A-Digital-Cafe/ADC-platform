@@ -770,13 +770,13 @@ export class AdcBlocksEditor {
 		const newBlock: Block | null = (() => {
 			switch (kind) {
 				case "code":
-					return { type: "code", language: "text", content: "" } as Block;
+					return { type: "code", language: "text", content: "" };
 				case "quote":
-					return { type: "quote", text: "" } as Block;
+					return { type: "quote", text: "" };
 				case "callout":
-					return { type: "callout", tone: "info", text: "" } as Block;
+					return { type: "callout", tone: "info", text: "" };
 				case "divider":
-					return { type: "divider" } as Block;
+					return { type: "divider" };
 				default:
 					return null;
 			}

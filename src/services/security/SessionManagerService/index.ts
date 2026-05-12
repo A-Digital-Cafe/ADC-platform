@@ -178,11 +178,11 @@ export default class SessionManagerService extends BaseService {
 		// Inicializar singletons de endpoints
 		AuthEndpoints.init(
 			{
-				keyStore: this.#keyStore!,
-				tokenService: this.#tokenService!,
-				refreshTokenRepo: this.#refreshTokenRepo!,
-				loginTracker: this.#loginTracker!,
-				geoValidator: this.#geoValidator!,
+				keyStore: this.#keyStore,
+				tokenService: this.#tokenService,
+				refreshTokenRepo: this.#refreshTokenRepo,
+				loginTracker: this.#loginTracker,
+				geoValidator: this.#geoValidator,
 				identityService: this.#identityService,
 				internalIdentity: this.#internalIdentity,
 				cookieDomain: this.#cookieDomain,
@@ -193,10 +193,10 @@ export default class SessionManagerService extends BaseService {
 		);
 
 		OAuthEndpoints.init({
-			tokenService: this.#tokenService!,
-			geoValidator: this.#geoValidator!,
-			sessionManager: this.#sessionManager!,
-			oauthRegistry: this.#oauthRegistry!,
+			tokenService: this.#tokenService,
+			geoValidator: this.#geoValidator,
+			sessionManager: this.#sessionManager,
+			oauthRegistry: this.#oauthRegistry,
 			identityService: this.#identityService,
 			internalIdentity: this.#internalIdentity,
 			redis: this.#redis,

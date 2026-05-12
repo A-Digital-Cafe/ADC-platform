@@ -134,7 +134,7 @@ export function SprintCard({
 				<p className="text-xs text-muted mt-1">{t("sprints.issuesCount", { done: String(doneCount), total: String(totalCount) })}</p>
 			</div>
 			<div className="flex items-center gap-2">
-				<adc-badge color={STATUS_COLORS[sprint.status as keyof typeof STATUS_COLORS] ?? "gray"} size="sm">
+				<adc-badge color={STATUS_COLORS[sprint.status] ?? "gray"} size="sm">
 					{t(`sprints.${sprint.status}`)}
 				</adc-badge>
 				{canEdit && sprint.status === "planned" && (

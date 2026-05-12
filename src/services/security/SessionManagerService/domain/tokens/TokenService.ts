@@ -130,7 +130,7 @@ export class TokenService {
 		let result = await this.#jwtProvider.decryptWithKey(token, currentKey);
 
 		if (result.valid && result.payload) {
-			const payload = result.payload as TokenPayload;
+			const payload = result.payload;
 			return {
 				valid: true,
 				payload,
@@ -144,7 +144,7 @@ export class TokenService {
 			result = await this.#jwtProvider.decryptWithKey(token, previousKey);
 
 			if (result.valid && result.payload) {
-				const payload = result.payload as TokenPayload;
+				const payload = result.payload;
 				return {
 					valid: true,
 					payload,

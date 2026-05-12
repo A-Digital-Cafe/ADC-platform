@@ -186,7 +186,7 @@ export class AttachmentsManager {
 			status: "pending",
 			uploadedBy: ctx.userId,
 			createdAt: new Date(),
-		} as Partial<AttachmentDoc>);
+		});
 
 		const presigned = await this.#s3.getPresignedUploadUrl({
 			bucket: this.#bucket,

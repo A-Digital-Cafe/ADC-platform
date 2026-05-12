@@ -71,7 +71,7 @@ export function BacklogView({ project, perms, caller }: Readonly<Props>) {
 		const nextSprintId = section.targetId ?? undefined;
 		if (issue.sprintId === nextSprintId) return;
 		setIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, sprintId: nextSprintId } : i)));
-		const res = await pmApi.updateIssue(issueId, { sprintId: nextSprintId as string | undefined });
+		const res = await pmApi.updateIssue(issueId, { sprintId: nextSprintId });
 		if (!res.success) await reload();
 	};
 

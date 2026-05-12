@@ -218,7 +218,6 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			if (!isAllowedHttpMethod(request.method)) {
 				reply.header("Allow", getAllowHeader());
 				reply.code(405).send({ error: "METHOD_NOT_ALLOWED", message: `Method ${request.method} is not allowed` });
-				return;
 			}
 		});
 

@@ -31,7 +31,7 @@ export function GroupPicker({ selectedIds, onChange, orgId, disabled, label, res
 		if (!resolvedById) return {};
 		const seed: Record<string, ClientGroup> = {};
 		for (const [id, p] of Object.entries(resolvedById)) {
-			seed[id] = { id, name: p.name ?? "", description: p.description } as ClientGroup;
+			seed[id] = { id, name: p.name ?? "", description: p.description };
 		}
 		return seed;
 	});

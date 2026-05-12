@@ -283,7 +283,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		...(isAdmin && !orgId
 			? [
 					{
-						key: "orgMemberships" as keyof ClientUser,
+						key: "orgMemberships",
 						label: t("common.organization"),
 						render: (u: ClientUser) => (
 							<div className="flex flex-wrap gap-1">

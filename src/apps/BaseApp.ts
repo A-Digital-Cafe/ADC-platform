@@ -114,7 +114,7 @@ export abstract class BaseApp extends BaseModule implements IApp {
 			const byName = new Map(base.map((item) => [item.name, item]));
 			for (const item of instance) {
 				const existing = byName.get(item.name) || {};
-				byName.set(item.name, { ...existing, ...item } as IModuleConfig);
+				byName.set(item.name, { ...existing, ...item });
 			}
 			return Array.from(byName.values());
 		};

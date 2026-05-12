@@ -90,9 +90,9 @@ export abstract class BaseService extends BaseModule implements IService {
 							// Agregar como dependencia de la app actual
 							this.#kernel.registry.addModuleDependency("provider", providerConfig.name, providerConfig.custom);
 						} catch (error) {
-							const message = `Error cargando provider ${providerConfig.name}: ${error}`;
+							const message = `Error cargando provider ${providerConfig.name}`;
 							// failOnError puede venir del config.json del servicio
-							if (baseConfig.failOnError) throw new Error(message);
+							if (baseConfig.failOnError) throw new Error(message, { cause: error });
 							this.logger.logWarn(message);
 						}
 					}
@@ -116,9 +116,9 @@ export abstract class BaseService extends BaseModule implements IService {
 							this.#kernel.registry.registerUtility(baseName, utility, utilityConfig, null);
 						}
 					} catch (error: any) {
-						const message = `Error cargando utility ${utilityConfig.name}: ${error.message || error}`;
+						const message = `Error cargando utility ${utilityConfig.name}: ${error.message}`;
 						this.logger.logError(message);
-						if (baseConfig.failOnError) throw new Error(message);
+						if (baseConfig.failOnError) throw new Error(message, { cause: error });
 						else throw error; // Re-lanzar para que el servicio no se registre
 					}
 				}
@@ -131,7 +131,7 @@ export abstract class BaseService extends BaseModule implements IService {
 				providers: providersToUse,
 				utilities: utilitiesToLoad,
 				services: this.options?.services || baseConfig.services || [],
-			} as IModuleConfig;
+			};
 
 			// Marcar como inicializado
 			this.isInitialized = true;
