@@ -66,7 +66,7 @@ export const accountApi = {
 		const { data: user } = await api.get<ClientUser>("/users/me");
 
 		if (!user) {
-			throw new Error("No se pudo obtener el usuario autenticado");
+			throw new Error("AUTHENTICATED_USER_NOT_FOUND");
 		}
 
 		return accountApi.updateUser(user.id, { metadata });
@@ -76,7 +76,7 @@ export const accountApi = {
 		const { data: user } = await api.get<ClientUser>("/users/me");
 
 		if (!user) {
-			throw new Error("No se pudo obtener el usuario autenticado");
+			throw new Error("AUTHENTICATED_USER_NOT_FOUND");
 		}
 
 		return accountApi.deleteUser(user.id);
@@ -97,7 +97,7 @@ export const accountApi = {
 			idempotencyKey: createIdempotencyKey({ name: file.name, size: file.size, lastModified: file.lastModified }),
 		});
 		if (!presign.success || !presign.data) {
-			throw new Error("No se pudo iniciar la subida del avatar");
+			throw new Error("AVATAR_UPLOAD_START_FAILED");
 		}
 
 		// Subida directa al storage (S3) — sin credentials, sin csrf
@@ -107,7 +107,7 @@ export const accountApi = {
 			headers: presign.data.headers,
 		});
 		if (!putRes.ok) {
-			throw new Error(`Error al subir archivo (HTTP ${putRes.status})`);
+			throw new Error(`AVATAR_UPLOAD_HTTP_${putRes.status}`);
 		}
 
 		const confirm = await api.post<{ avatarSource: AvatarSource }>(
@@ -115,7 +115,7 @@ export const accountApi = {
 			{ idempotencyKey: presign.data.attachmentId }
 		);
 		if (!confirm.success || !confirm.data) {
-			throw new Error("No se pudo confirmar la subida del avatar");
+			throw new Error("AVATAR_UPLOAD_CONFIRM_FAILED");
 		}
 		return confirm.data;
 	},

@@ -353,7 +353,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			.replaceAll("*", ".*");
 
 		const regex = new RegExp(`^${regexPattern}$`);
-		const match = urlPath.match(regex);
+		const match = regex.exec(urlPath);
 
 		if (!match) {
 			return { matched: false, params: {} };
@@ -444,7 +444,8 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 				routes,
 				...options,
 			});
-			this.logger.logDebug(`Connect RPC registrado${options?.prefix ? ` con prefijo: ${options.prefix}` : ""}`);
+			const withPrefix = options?.prefix ? `con prefijo ${options.prefix}` : "";
+			this.logger.logDebug(`Connect RPC registrado${withPrefix}`);
 		} catch (error: any) {
 			this.logger.logError(`Error registrando Connect RPC: ${error.message}`);
 			throw error;

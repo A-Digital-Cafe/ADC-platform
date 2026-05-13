@@ -1,17 +1,21 @@
+import { useTranslation } from "@ui-library/utils/i18n-react";
+
 export default function NotificationView() {
+	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
+
 	return (
 		<div className="w-full flex flex-col pl-25 lg:pl-70">
 			{/* Title */}
 			<div className="mb-4">
-				<h2 className="font-bold text-text">Notificaciones</h2>
-				<p className="text-muted">Ver y gestionar tus notificaciones</p>
+				<h2 className="font-bold text-text">{t("notifications.title")}</h2>
+				<p className="text-muted">{t("notifications.subtitle")}</p>
 			</div>
 
 			<div className="bg-surface p-8 pb-6 rounded-xxl">
 				{/* Header */}
 				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">Todas las Notificaciones</h3>
-					<p className="text-sm text-muted">Aquí verás todas tus notificaciones</p>
+					<h3 className="mt-0! text-lg font-semibold text-text">{t("notifications.panelTitle")}</h3>
+					<p className="text-sm text-muted">{t("notifications.panelDescription")}</p>
 				</div>
 
 				{/* Empty state */}
@@ -30,9 +34,9 @@ export default function NotificationView() {
 					</div>
 
 					{/* Texto */}
-					<h4 className="text-lg font-semibold text-text mb-2">No hay notificaciones todavía</h4>
+					<h4 className="text-lg font-semibold text-text mb-2">{t("notifications.emptyTitle")}</h4>
 
-					<p className="text-muted max-w-md">Cuando recibas notificaciones, aparecerán aquí.</p>
+					<p className="text-muted max-w-md">{t("notifications.emptyDescription")}</p>
 				</div>
 			</div>
 		</div>

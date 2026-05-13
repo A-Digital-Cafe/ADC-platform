@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { accountApi } from "../utils/account-api";
 import { toast } from "../utils/toast";
+import { useTranslation } from "@ui-library/utils/i18n-react";
 export default function PrivacySecurityView() {
+	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
@@ -15,24 +17,24 @@ export default function PrivacySecurityView() {
 
 		// Validaciones
 		if (!currentPassword || !newPassword || !confirmPassword) {
-			toast.error("Todos los campos son obligatorios");
+			toast.error(t("privacy.fieldsRequired"));
 			return;
 		}
 
 		if (newPassword.length < 8) {
-			toast.warning("La nueva contraseña debe tener al menos 8 caracteres");
+			toast.warning(t("privacy.minLength"));
 			return;
 		}
 
 		if (newPassword !== confirmPassword) {
-			toast.error("Las contraseñas no coinciden");
+			toast.error(t("privacy.mismatch"));
 			return;
 		}
 
 		try {
 			await accountApi.changePassword(currentPassword, newPassword);
 
-			toast.success("Contraseña actualizada correctamente");
+			toast.success(t("privacy.updated"));
 
 			setCurrentPassword("");
 			setNewPassword("");
@@ -40,23 +42,23 @@ export default function PrivacySecurityView() {
 		} catch (error: any) {
 			console.error(error);
 
-			toast.error(error?.message || "Error al cambiar la contraseña");
+			toast.error(t("privacy.changeError"));
 		}
 	};
 	return (
 		<div className="w-full flex flex-col pl-25 lg:pl-70">
 			{/* Title */}
 			<div className="mb-4">
-				<h2 className="text-2xl font-bold text-text">Privacidad y Seguridad</h2>
-				<p className="text-muted">Gestiona tu contraseña y configuración de seguridad</p>
+				<h2 className="text-2xl font-bold text-text">{t("privacy.title")}</h2>
+				<p className="text-muted">{t("privacy.subtitle")}</p>
 			</div>
 
 			{/* Panel */}
 			<div className="bg-surface p-8 pb-6 rounded-xxl">
 				{/* Header */}
 				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">Cambiar Contraseña</h3>
-					<p className="text-sm text-muted">Asegúrate de que tu cuenta use una contraseña segura</p>
+					<h3 className="mt-0! text-lg font-semibold text-text">{t("privacy.panelTitle")}</h3>
+					<p className="text-sm text-muted">{t("privacy.panelDescription")}</p>
 				</div>
 
 				{/* Contenido centrado */}
@@ -65,7 +67,7 @@ export default function PrivacySecurityView() {
 						{/* Contraseña actual */}
 						<div>
 							<label htmlFor="current-password" className="block text-sm mb-1 text-text">
-								Contraseña Actual
+								{t("privacy.currentPassword")}
 							</label>
 
 							<div className="relative">
@@ -82,7 +84,7 @@ export default function PrivacySecurityView() {
 									onClick={() => setShowCurrent(!showCurrent)}
 									className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted"
 								>
-									{showCurrent ? "Ocultar" : "Ver"}
+									{showCurrent ? t("privacy.hidePassword") : t("privacy.showPassword")}
 								</button>
 							</div>
 						</div>
@@ -90,7 +92,7 @@ export default function PrivacySecurityView() {
 						{/* Nueva contraseña */}
 						<div>
 							<label htmlFor="new-password" className="block text-sm mb-1 text-text">
-								Nueva Contraseña
+								{t("privacy.newPassword")}
 							</label>
 
 							<div className="relative">
@@ -107,7 +109,7 @@ export default function PrivacySecurityView() {
 									onClick={() => setShowNew(!showNew)}
 									className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted"
 								>
-									{showNew ? "Ocultar" : "Ver"}
+									{showNew ? t("privacy.hidePassword") : t("privacy.showPassword")}
 								</button>
 							</div>
 						</div>
@@ -115,7 +117,7 @@ export default function PrivacySecurityView() {
 						{/* Confirmar contraseña */}
 						<div>
 							<label htmlFor="confirm-password" className="block text-sm mb-1 text-text">
-								Confirmar Nueva Contraseña
+								{t("privacy.confirmPassword")}
 							</label>
 
 							<div className="relative">
@@ -132,7 +134,7 @@ export default function PrivacySecurityView() {
 									onClick={() => setShowConfirm(!showConfirm)}
 									className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted"
 								>
-									{showConfirm ? "Ocultar" : "Ver"}
+									{showConfirm ? t("privacy.hidePassword") : t("privacy.showPassword")}
 								</button>
 							</div>
 						</div>
@@ -140,7 +142,7 @@ export default function PrivacySecurityView() {
 						{/* Submit */}
 						<div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4">
 							<adc-button type="submit" variant="primary">
-								Actualizar Contraseña
+								{t("privacy.submit")}
 							</adc-button>
 						</div>
 					</form>

@@ -136,7 +136,7 @@ export default class JWTProvider extends BaseProvider implements IJWTProviderMul
 
 	// Parsea string de expiración a segundos
 	#parseExpiration(exp: string): number {
-		const match = exp.match(/^(\d+)([smhdw])$/);
+		const match = /^(\d+)([smhdw])$/.exec(exp);
 		if (!match) return 7 * 24 * 60 * 60; // default 7 días
 
 		const value = Number.parseInt(match[1], 10);

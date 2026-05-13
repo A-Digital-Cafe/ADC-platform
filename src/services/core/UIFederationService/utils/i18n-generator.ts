@@ -16,10 +16,14 @@ export function generateI18nClientCode(module: RegisteredUIModule, _namespaceMod
 	// Estado global de traducciones
 	globalThis.__ADC_I18N__ = globalThis.__ADC_I18N__ || {
 		translations: {},
+		translationLocales: {},
+		pendingLoads: {},
 		locale: null,
 		loading: false,
 		loaded: false,
 	};
+	globalThis.__ADC_I18N__.translationLocales = globalThis.__ADC_I18N__.translationLocales || {};
+	globalThis.__ADC_I18N__.pendingLoads = globalThis.__ADC_I18N__.pendingLoads || {};
 	
 	// Detectar locale: localStorage > navegador > 'en'
 	function detectLocale() {
@@ -64,22 +68,36 @@ export function generateI18nClientCode(module: RegisteredUIModule, _namespaceMod
 		}
 
 		const state = globalThis.__ADC_I18N__;
+		state.translationLocales = state.translationLocales || {};
+		state.pendingLoads = state.pendingLoads || {};
 		const targetLocale = locale || state.locale || detectLocale();
 
 		state.locale = targetLocale;
+		state.loading = true;
 
 		try {
-			for (const ns of namespaces) {
-				// Skip si ya está cargado
-				if (state.translations[ns]) continue;
+			await Promise.all(namespaces.map(async function(ns) {
+				// Skip si ya está cargado para el locale actual
+				if (state.translations[ns] && state.translationLocales[ns] === targetLocale) return;
 
-				const url = \`/api/i18n/\${ns}?locale=\${targetLocale}\`;
-				const response = await fetch(url);
-				if (response.ok) {
-					state.translations[ns] = await response.json();
-					console.log(\`[i18n] Traducciones cargadas: \${ns} (\${targetLocale})\`);
+				const loadKey = targetLocale + ':' + ns;
+				if (!state.pendingLoads[loadKey]) {
+					state.pendingLoads[loadKey] = (async function() {
+						const url = '/api/i18n/' + encodeURIComponent(ns) + '?locale=' + encodeURIComponent(targetLocale);
+						const response = await fetch(url);
+						if (response.ok) {
+							state.translations[ns] = await response.json();
+							state.translationLocales[ns] = targetLocale;
+							console.log('[i18n] Traducciones cargadas: ' + ns + ' (' + targetLocale + ')');
+						}
+					})().finally(function() {
+						delete state.pendingLoads[loadKey];
+					});
 				}
-			}
+
+				await state.pendingLoads[loadKey];
+			}));
+			state.loaded = true;
 
 			globalThis.dispatchEvent(new CustomEvent('adc:i18n:loaded', {
 				detail: { locale: targetLocale, namespaces }
@@ -95,6 +113,8 @@ export function generateI18nClientCode(module: RegisteredUIModule, _namespaceMod
 			}
 		} catch (error) {
 			console.error('[i18n] Error cargando traducciones:', error);
+		} finally {
+			state.loading = false;
 		}
 	};
 	
@@ -104,8 +124,7 @@ export function generateI18nClientCode(module: RegisteredUIModule, _namespaceMod
 		const state = globalThis.__ADC_I18N__;
 		const loadedNamespaces = Object.keys(state.translations);
 
-		// Limpiar traducciones anteriores y recargar
-		state.translations = {};
+		state.locale = locale;
 		globalThis.loadTranslations(loadedNamespaces, locale);
 
 		if (navigator.serviceWorker?.controller) {
@@ -132,7 +151,7 @@ export function generateI18nClientCode(module: RegisteredUIModule, _namespaceMod
 	// Registrar Service Worker
 	if ('serviceWorker' in navigator) {
 		globalThis.addEventListener('load', () => {
-			navigator.serviceWorker.register('/adc-sw.js')
+			navigator.serviceWorker.register('/adc-sw.js', { updateViaCache: 'none' })
 				.then((registration) => {
 					console.log('[SW] Service Worker registrado:', registration.scope);
 					// El SW se notificará cuando cada app cargue sus traducciones via loadTranslations

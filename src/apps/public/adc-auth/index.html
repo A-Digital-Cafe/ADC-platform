@@ -14,7 +14,7 @@
   <script>
     (function () {
       function getCookie(name) {
-        var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        var m = new RegExp("(^| )" + name + "=([^;]+)").exec(document.cookie);
         return m ? m[2] : null;
       }
       var saved = getCookie('theme') || localStorage.getItem('theme');

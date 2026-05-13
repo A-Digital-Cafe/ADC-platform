@@ -793,6 +793,7 @@ export default class UIFederationService extends BaseService {
 			this.#httpProvider.registerRoute("GET", swPath, (_req: any, reply: any) => {
 				reply.header("Content-Type", "application/javascript");
 				reply.header("Service-Worker-Allowed", "/");
+				reply.header("Cache-Control", "no-store, max-age=0");
 				reply.send(swContent);
 			});
 			this.logger.logDebug(`Service Worker [${namespace}] registrado en ${swPath}`);

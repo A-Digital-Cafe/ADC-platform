@@ -136,15 +136,15 @@ export function CreateProjectModal({ orgSlug, allowed, organizations, defaultOrg
 					<label className="block text-sm font-medium mb-1 text-text">{t("projects.slug")}</label>
 					<div className="flex items-center gap-2">
 						<adc-input value={form.slug} onInput={(e: any) => handleSlugInput(e.target.value)} class="flex-1" />
-						<span aria-live="polite" className="min-w-6">
-							{slugStatus === "checking" && <span className="text-muted animate-pulse">…</span>}
+						<span aria-live="polite">
+							{slugStatus === "checking" && <span className="text-muted animate-pulse px-2">…</span>}
 							{slugStatus === "available" && (
-								<span className="text-tok" title={t("projects.slugAvailable")}>
+								<span className="text-tsuccess px-2" title={t("projects.slugAvailable")}>
 									✓
 								</span>
 							)}
 							{(slugStatus === "taken" || slugStatus === "invalid") && (
-								<span className="text-tdanger" title={t(`projects.slug${slugStatus === "taken" ? "Taken" : "Invalid"}`)}>
+								<span className="text-tdanger px-2" title={t(`projects.slug${slugStatus === "taken" ? "Taken" : "Invalid"}`)}>
 									✗
 								</span>
 							)}

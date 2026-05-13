@@ -64,7 +64,8 @@ export default class ExpressServerProvider extends BaseProvider implements IHttp
 			const middleware = expressConnectMiddleware({ routes });
 			const prefix = options?.prefix || "/";
 			this.app.use(prefix, middleware);
-			this.logger.logDebug(`Connect RPC registrado${options?.prefix ? ` con prefijo: ${options.prefix}` : ""}`);
+			const withPrefix = options?.prefix ? `con prefijo ${options.prefix}` : "";
+			this.logger.logDebug(`Connect RPC registrado${withPrefix}`);
 		} catch (error: any) {
 			this.logger.logError(`Error registrando Connect RPC: ${error.message}`);
 			throw error;

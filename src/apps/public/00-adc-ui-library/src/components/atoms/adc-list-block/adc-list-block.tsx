@@ -9,12 +9,12 @@ export class AdcListBlock {
 	@Prop() items: string[] = [];
 	@Prop() start?: number;
 	@Prop() ariaLabel?: string;
+	private static readonly keyPrefix = "list-item-";
 
 	render() {
 		const listClass = "pl-5 my-2 list-outside mb-2 ml-16";
-		const uuid = crypto.randomUUID();
 		const listItems = this.items.map((item, index) => (
-			<li key={uuid + index}>
+			<li key={AdcListBlock.keyPrefix + index}>
 				<adc-inline-tokens tokens={[]} fallback={item}></adc-inline-tokens>
 			</li>
 		));

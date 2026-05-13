@@ -99,18 +99,16 @@ export class AdcSkeleton {
 				};
 		}
 	}
-
+	private static readonly keyPrefix = "skeleton-line-";
 	render() {
 		const { classes, style } = this.getVariantStyles();
-
-		const uuid = crypto.randomUUID();
 
 		if (this.variant === "text" && this.lines > 1) {
 			return (
 				<Host class="flex flex-col gap-2">
 					{Array.from({ length: this.lines }).map((_, index) => (
 						<div
-							key={uuid + index}
+							key={AdcSkeleton.keyPrefix + index}
 							class={classes}
 							style={{
 								...style,

@@ -30,7 +30,7 @@ const DECLARATION_TONE = {
  * Wrapper estable para páginas internas. Mantiene un único nodo top-level
  * para evitar que slots de Stencil (`shadow:false`) repongan hijos al re-render.
  */
-export default function PageShell({ title, subtitle, standards, declaration, lastUpdated, breadcrumb, children }: PageShellProps) {
+export default function PageShell({ title, subtitle, standards, declaration, lastUpdated, breadcrumb, children }: Readonly<PageShellProps>) {
 	const breadcrumbRef = useRef<HTMLElement>(null);
 	const backHref = breadcrumb && breadcrumb.length > 1 ? breadcrumb.at(-2)?.href : undefined;
 	const breadcrumbItems = JSON.stringify(breadcrumb ?? []);

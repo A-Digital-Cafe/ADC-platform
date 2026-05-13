@@ -136,9 +136,8 @@ export class ModuleRegistry {
 	}
 
 	#registerModule(moduleType: ModuleType, name: string, instance: IModule, config: IModuleConfig, appName?: string | null): void {
-		const keyName = name !== instance.name ? name : instance.name;
 		const configForKey = config.custom || config.config || {};
-		const uniqueKey = this.getUniqueKey(keyName, configForKey);
+		const uniqueKey = this.getUniqueKey(name, configForKey);
 		this.#addModuleToRegistry(moduleType, name, uniqueKey, instance, appName);
 	}
 
