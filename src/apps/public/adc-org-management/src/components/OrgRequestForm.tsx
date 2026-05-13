@@ -5,6 +5,7 @@ import { toast } from "../utils/toast.js";
 import type { SocialNetwork } from "../utils/org-api.js";
 import { OrgFormBase } from "./OrgFormBase.js";
 import { SocialNetworksManager } from "./SocialNetworksManager.js";
+import { OrgRequestSuccess } from "./OrgRequestSuccess.js";
 
 interface FormData {
 	orgName: string;
@@ -33,6 +34,7 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 	const [socialNetworks, setSocialNetworks] = useState<Omit<SocialNetwork, "icon">[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [success, setSuccess] = useState(false);
 
 	// Form handlers
 	const handleFormChange = (field: keyof FormData, value: string) => {
@@ -130,6 +132,7 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 				setFormData({ orgName: "", email: "", description: "", url: "" });
 				setSocialNetworks([]);
 				toast.success(t("home.requestSuccess"));
+				setSuccess(true);
 				onSuccess?.();
 				return;
 			}
@@ -145,6 +148,18 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 		}
 	};
 
+	if (success) {
+		return (
+			<OrgRequestSuccess
+				onGoHome={() => {
+					setSuccess(false);
+					setFormData({ orgName: "", email: "", description: "", url: "" });
+					setSocialNetworks([]);
+				}}
+			/>
+		);
+	}
+
 	return (
 		<form onSubmit={handleSubmit} className="space-y-6">
 			<OrgFormBase formData={formData} error={error} onFormChange={handleFormChange} onClearError={handleClearError} />
@@ -159,7 +174,7 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 
 			{/* Info Box */}
 			<div className="bg-info border border-info rounded-lg p-4 flex gap-3">
-				<svg className="w-5 h-5 text-tinfo flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+				<svg className="w-5 h-5 text-tinfo shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
 					<path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
 				</svg>
 				<p className="text-sm text-tinfo">
