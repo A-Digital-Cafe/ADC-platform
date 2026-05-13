@@ -18,12 +18,7 @@ interface OrgFormBaseProps {
  * Componente de formulario base para datos de organización
  * Maneja: nombre, email, descripción y URL
  */
-export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
-	formData,
-	error,
-	onFormChange,
-	onClearError,
-}) => {
+export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFormChange, onClearError }) => {
 	const nameInputRef = useRef<any>(null);
 	const emailInputRef = useRef<any>(null);
 	const descriptionRef = useRef<any>(null);
@@ -42,9 +37,22 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({
 			}
 		};
 
+		const setupTextareaListener = (ref: React.RefObject<any>, field: keyof FormData) => {
+			if (ref.current) {
+				const textarea = ref.current.querySelector("textarea") || ref.current;
+				const handler = (e: Event) => {
+					const value = (e.target as HTMLTextAreaElement).value;
+					onFormChange(field, value);
+					onClearError();
+				};
+				textarea.addEventListener("input", handler);
+				return () => textarea?.removeEventListener("input", handler);
+			}
+		};
+
 		const unsubscribeOrgName = setupInputListener(nameInputRef, "orgName");
 		const unsubscribeEmail = setupInputListener(emailInputRef, "email");
-		const unsubscribeDescription = setupInputListener(descriptionRef, "description");
+		const unsubscribeDescription = setupTextareaListener(descriptionRef, "description");
 		const unsubscribeUrl = setupInputListener(urlInputRef, "url");
 
 		return () => {

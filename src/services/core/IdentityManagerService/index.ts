@@ -378,11 +378,11 @@ export default class IdentityManagerService extends BaseService {
 	 * Obtiene ProjectManagerService si está disponible
 	 * Usado por endpoints para crear tickets de solicitud de organización
 	 */
-	getProjectManager(): any {
+	getProjectManager(): import("../../data/ProjectManagerService/index.js").default | null {
 		try {
 			const kernel = (this as any)["_BaseModule__kernel"] || (this as any).kernel;
 			if (!kernel) return null;
-			return kernel.registry?.getService("ProjectManagerService");
+			return kernel.registry?.getService("ProjectManagerService") ?? null;
 		} catch {
 			return null;
 		}

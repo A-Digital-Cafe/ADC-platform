@@ -2,6 +2,8 @@ import { RegisterEndpoint, type EndpointCtx } from "../../EndpointManagerService
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
+import type ProjectManagerService from "../../../data/ProjectManagerService/index.js";
+import type { Block } from "@common/ADC/types/learning.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
 
@@ -364,41 +366,35 @@ export class OrgEndpoints {
 			}
 
 			// Crear ticket en PM con metadata de solicitud
-			const socialNetworksText =
-				socialNetworks && socialNetworks.length > 0
-					? socialNetworks.map((s: any) => `- ${s.platform}: ${s.url}`).join("\n")
-					: "No especificadas";
-
-			const ticketDescription = `SOLICITUD DE CREACIÓN DE ORGANIZACIÓN
-
-					[INFORMACIÓN DE LA ORGANIZACIÓN]
-					Nombre: ${name}
-					Email: ${email}
-					Sitio Web: ${url || "No proporcionado"}
-
-					[DESCRIPCIÓN]
-					${description || "Sin descripción adicional"}
-
-					[REDES SOCIALES / CANALES]
-					${socialNetworksText}
-
-					[SOLICITANTE]
-					ID de Usuario: ${ctx.user.id}
-					Email: ${ctx.user.email || "No disponible"}`;
+			const descriptionBlocks: Block[] = [
+				{ type: "heading", level: 3, text: "Información de la organización" },
+				{ type: "paragraph", text: `Nombre: ${name}` },
+				{ type: "paragraph", text: `Email: ${email}` },
+				{ type: "paragraph", text: `Sitio Web: ${url || "No proporcionado"}` },
+				{ type: "heading", level: 3, text: "Descripción" },
+				{ type: "paragraph", text: description || "Sin descripción adicional" },
+				{ type: "heading", level: 3, text: "Redes sociales / Canales" },
+				...(socialNetworks && socialNetworks.length > 0
+					? [{ type: "list" as const, ordered: false, items: socialNetworks.map((s) => `${s.platform}: ${s.url}`) }]
+					: [{ type: "paragraph" as const, text: "No especificadas" }]),
+				{ type: "heading", level: 3, text: "Solicitante" },
+				{ type: "paragraph", text: `ID de Usuario: ${ctx.user.id}` },
+				{ type: "paragraph", text: `Email: ${ctx.user.email || "No disponible"}` },
+			];
 
 			const ticket = await pm.issues.create(
 				project,
 				{
 					title: `Solicitud de Org: ${name}`,
-					description: ticketDescription.trim(),
+					description: descriptionBlocks,
 					category: "task",
 					customFields: {
 						type: "org_creation",
 						requestedByUserId: ctx.user.id,
 					},
 				},
-				ctx.token, // Pasar el token del usuario autenticado
-				{ userId: ctx.user.id, groupIds: [] }
+				ctx.token ?? undefined, // Pasar el token del usuario autenticado
+				{ userId: ctx.user.id, groupIds: [], tokenOrgId: ctx.user.orgId ?? null }
 			);
 
 			return {
@@ -418,14 +414,19 @@ export class OrgEndpoints {
 	}
 
 	/**
-	 * Obtener acceso a ProjectManagerService
+	 * Obtener acceso a ProjectManagerService de forma tipada
+	 * @returns ProjectManagerService si está disponible, null en caso contrario
 	 */
-	private static getProjectManager() {
+	private static getProjectManager(): ProjectManagerService | null {
 		try {
-			const kernel = (OrgEndpoints.#identity as any)?.kernel;
+			const identityService = OrgEndpoints.#identity;
+
+			const serviceWithKernel = identityService as unknown as { kernel: { registry: { getService: <T>(name: string) => T } } };
+			const kernel = serviceWithKernel.kernel;
+
 			if (!kernel) return null;
-			const pm = kernel.registry.getService("ProjectManagerService") as any;
-			return pm || null;
+
+			return kernel.registry.getService<ProjectManagerService>("ProjectManagerService") ?? null;
 		} catch {
 			return null;
 		}
