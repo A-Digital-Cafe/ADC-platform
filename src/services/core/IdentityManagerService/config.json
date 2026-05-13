@@ -45,6 +45,8 @@
 		}
 	],
 	"private": {
+		"orgRequestsProjectSlug": "org-requests",
+		"orgRequestsProjectName": "Organization Requests",
 		"discordGuildId": "${DISCORD_GUILD_ID}",
 		"discordRoleMap": {
 			"1402525398788739145": "Discord VIP",

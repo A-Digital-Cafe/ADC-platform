@@ -2,7 +2,6 @@ import { RegisterEndpoint, type EndpointCtx } from "../../EndpointManagerService
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
-import type ProjectManagerService from "../../../data/ProjectManagerService/index.js";
 import type { Block } from "@common/ADC/types/learning.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
@@ -295,74 +294,24 @@ export class OrgEndpoints {
 				}
 			}
 
-			const pm = OrgEndpoints.getProjectManager();
+			// Obtener proyecto org-requests (inicializado en startup del servicio)
+			const project = OrgEndpoints.#identity.getOrgRequestsProject();
+			if (!project) {
+				throw new IdentityError(
+					503,
+					"INVALID_BODY",
+					"El servicio de solicitudes de organización no está disponible. Intenta más tarde."
+				);
+			}
+
+			// Obtener ProjectManagerService
+			const pm = OrgEndpoints.#identity.getProjectManager();
 			if (!pm) {
-				throw new IdentityError(500, "INVALID_BODY", `ProjectManagerService no disponible`);
-			}
-
-			// Intentar obtener proyecto org-requests existente o crearlo bajo demanda
-			let project;
-			const cachedProjectId = process.env.ORG_MANAGEMENT_PROJECT_ID;
-			const projectOrgId = ctx.user?.orgId || null;
-
-			if (cachedProjectId) {
-				project = await pm.projects.getProject(cachedProjectId);
-			}
-
-			if (!project) {
-				try {
-					project = await pm.projects.getProjectBySlug("org-requests", projectOrgId, ctx.token ?? undefined);
-				} catch {
-					// No existe, crear bajo demanda
-					const pmCtx: any = {
-						userId: ctx.user.id,
-						groupIds: [],
-						tokenOrgId: null,
-						isGlobalAdmin: true,
-						hasGlobalPMRead: true,
-						hasGlobalPMWrite: true,
-						isOrgAdminOrPM: async () => true,
-					};
-
-					const newProject: any = {
-						slug: "org-requests",
-						name: "Organization Requests",
-						description: "Solicitudes de creación de organizaciones en ADC Platform",
-						visibility: "org",
-						orgId: projectOrgId,
-						kanbanColumns: [
-							{ id: "col-1", key: "todo", name: "Pendiente", order: 0, isAuto: true },
-							{ id: "col-2", key: "in-progress", name: "En revisión", order: 1 },
-							{ id: "col-3", key: "approved", name: "Aprobada", order: 2, isDone: true, color: "#10b981" },
-							{ id: "col-4", key: "rejected", name: "Rechazada", order: 3, isDone: true, color: "#ef4444" },
-						],
-						priorityStrategy: { id: "matrix-eisenhower" },
-						settings: {},
-					};
-
-					try {
-						project = await pm.projects.createProject(newProject, pmCtx);
-						process.env.ORG_MANAGEMENT_PROJECT_ID = project.id;
-					} catch (createErr: any) {
-						if (createErr?.message?.includes("ya existe")) {
-							try {
-								project = await pm.projects.getProjectBySlug("org-requests", projectOrgId, ctx.token ?? undefined);
-							} catch {
-								throw new IdentityError(500, "INVALID_BODY", "No se puede acceder al proyecto org-requests");
-							}
-						} else {
-							throw new IdentityError(
-								500,
-								"INVALID_BODY",
-								`Error creando proyecto org-requests: ${createErr instanceof Error ? createErr.message : String(createErr)}`
-							);
-						}
-					}
-				}
-			}
-
-			if (!project) {
-				throw new IdentityError(500, "INVALID_BODY", "No se pudo obtener ni crear el proyecto org-requests");
+				throw new IdentityError(
+					503,
+					"INVALID_BODY",
+					"El servicio de gestión de proyectos no está disponible. Intenta más tarde."
+				);
 			}
 
 			// Crear ticket en PM con metadata de solicitud
@@ -410,25 +359,6 @@ export class OrgEndpoints {
 			}
 
 			throw new IdentityError(error.status || 500, error.errorKey || "INVALID_BODY", error.message || `Error creando solicitud`);
-		}
-	}
-
-	/**
-	 * Obtener acceso a ProjectManagerService de forma tipada
-	 * @returns ProjectManagerService si está disponible, null en caso contrario
-	 */
-	private static getProjectManager(): ProjectManagerService | null {
-		try {
-			const identityService = OrgEndpoints.#identity;
-
-			const serviceWithKernel = identityService as unknown as { kernel: { registry: { getService: <T>(name: string) => T } } };
-			const kernel = serviceWithKernel.kernel;
-
-			if (!kernel) return null;
-
-			return kernel.registry.getService<ProjectManagerService>("ProjectManagerService") ?? null;
-		} catch {
-			return null;
 		}
 	}
 }

@@ -9,6 +9,8 @@ import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManage
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type SessionManagerService from "../../security/SessionManagerService/index.js";
 import type OperationsService from "../OperationsService/index.ts";
+import type ProjectManagerService from "../../../data/ProjectManagerService/index.js";
+import type { Project } from "@common/types/project-manager/Project.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
 import { UserEndpoints } from "./endpoints/users.js";
 import { RoleEndpoints } from "./endpoints/roles.js";
@@ -22,6 +24,12 @@ import type { AttachmentsManager } from "../../../utilities/attachments/attachme
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
+
+/**
+ * Identificador del usuario de sistema para operaciones de bootstrap sin token HTTP.
+ * Se usa en contextos privilegiados internos (inicialización de proyectos, etc.)
+ */
+const SYSTEM_USER_ID = "system" as const;
 
 /**
  * IdentityManagerService - Gestión centralizada de identidades, usuarios, roles y grupos
@@ -109,6 +117,12 @@ export default class IdentityManagerService extends BaseService {
 	readonly #getAuthVerifier: AuthVerifierGetter = () => this.#authVerifier;
 
 	#avatarAttachmentsManager: AttachmentsManager | null = null;
+
+	// Proyecto org-requests para solicitudes de organización (inicializado en startup)
+	#orgRequestsProject: Project | null = null;
+
+	// ProjectManagerService cacheado (se obtiene en #initializeOrgRequestsProject)
+	#projectManagerService: InstanceType<typeof ProjectManagerService> | null = null;
 
 	@EnableEndpoints({
 		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints],
@@ -240,6 +254,11 @@ export default class IdentityManagerService extends BaseService {
 			StatsEndpoints.init(this);
 			AvatarEndpoints.init(this, UserModel, this.#avatarAttachmentsManager);
 
+			// Inicializar proyecto org-requests de forma asincrónica (sin bloquear startup)
+			this.#initializeOrgRequestsProject().catch((err) => {
+				this.logger.logWarn("No se pudo inicializar proyecto org-requests en startup: " + (err as Error).message);
+			});
+
 			this.logger.logOk("IdentityManagerService iniciado con soporte multi-tenant y autenticación");
 		} catch (error: any) {
 			this.logger.logError("MongoDB no está disponible. IdentityManagerService requiere MongoDB.");
@@ -336,6 +355,148 @@ export default class IdentityManagerService extends BaseService {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
+	// Inicialización y gestión de ProjectManagerService y org-requests project
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Espera a que ProjectManagerService esté registrado en el kernel.
+	 * @param maxWaitMs Tiempo máximo de espera en millisegundos (default: 5000)
+	 * @returns ProjectManagerService o null si timeout
+	 */
+	private async waitForProjectManager(maxWaitMs: number = 5000): Promise<InstanceType<typeof ProjectManagerService> | null> {
+		const startTime = Date.now();
+		while (Date.now() - startTime < maxWaitMs) {
+			try {
+				// Intentar obtener sin que lance excepción
+				const pm = this.#kernelRef.registry.getService<InstanceType<typeof ProjectManagerService>>("ProjectManagerService");
+				if (pm) return pm;
+			} catch {
+				// Servicio aún no disponible, reintentar
+			}
+			await new Promise((resolve) => setTimeout(resolve, 500));
+		}
+		return null;
+	}
+
+	/**
+	 * Inicializa el proyecto org-requests durante el startup del servicio.
+	 * Se ejecuta de forma asincrónica sin bloquear el inicio.
+	 * Usa contexto de sistema (admin global) sin requerer token.
+	 * Si hay errores, solo se loguean como warnings.
+	 */
+	async #initializeOrgRequestsProject(): Promise<void> {
+		// Si ya está inicializado, no hacer nada
+		if (this.#orgRequestsProject) {
+			return;
+		}
+
+		try {
+			// Esperar a que ProjectManagerService esté disponible (máximo 10 segundos)
+			this.#projectManagerService = await this.waitForProjectManager(10000);
+			if (!this.#projectManagerService) {
+				this.logger.logWarn(
+					"ProjectManagerService no disponible en startup. Solicitudes de organización no disponibles."
+				);
+				return;
+			}
+
+			// Obtener configuración privada del servicio
+			const configPrivate = (this.config?.private || {}) as { orgRequestsProjectSlug?: string };
+			const projectSlug = configPrivate.orgRequestsProjectSlug || "org-requests";
+
+			// Intentar obtener proyecto existente
+			try {
+				const project = await this.#projectManagerService.projects.getProjectBySlug(
+					projectSlug,
+					null,
+					undefined
+				);
+				this.#orgRequestsProject = project;
+				this.logger.logOk(`Proyecto org-requests cargado en startup (slug: "${projectSlug}")`);
+				return;
+			} catch {
+				// Proyecto no existe, intentar crear
+			}
+
+			// Crear proyecto org-requests en bootstrap con contexto de sistema
+			const pmCtx = {
+				userId: SYSTEM_USER_ID,
+				groupIds: [],
+				tokenOrgId: null,
+				isGlobalAdmin: true,
+				hasGlobalPMRead: true,
+				hasGlobalPMWrite: true,
+				isOrgAdminOrPM: async () => true,
+			};
+
+			const projectName = configPrivate.orgRequestsProjectSlug || "Organization Requests";
+
+			const newProject = {
+				slug: projectSlug,
+				name: projectName,
+				description: "Solicitudes de creación de organizaciones en ADC Platform",
+				visibility: "private" as const,
+				ownerId: SYSTEM_USER_ID,
+				kanbanColumns: [
+					{ id: "col-1", key: "todo", name: "Pendiente", order: 0, isAuto: true },
+					{ id: "col-2", key: "in-progress", name: "En revisión", order: 1 },
+					{ id: "col-3", key: "approved", name: "Aprobada", order: 2, isDone: true, color: "#10b981" },
+					{ id: "col-4", key: "rejected", name: "Rechazada", order: 3, isDone: true, color: "#ef4444" },
+				],
+				priorityStrategy: { id: "matrix-eisenhower" },
+				settings: {},
+			};
+
+			try {
+				const project = await this.#projectManagerService.projects.createProject(newProject, pmCtx, undefined);
+				this.#orgRequestsProject = project;
+				this.logger.logOk(`Proyecto org-requests creado en startup (slug: "${projectSlug}")`);
+			} catch (createErr: any) {
+				// Verificar si el error es por duplicado (race condition)
+				if (createErr?.message?.includes("ya existe")) {
+					try {
+						const project = await this.#projectManagerService.projects.getProjectBySlug(
+							projectSlug,
+							null,
+							undefined
+						);
+						this.#orgRequestsProject = project;
+						this.logger.logOk(`Proyecto org-requests recuperado después de conflicto en startup`);
+					} catch (getErr: any) {
+						this.logger.logWarn(
+							`No se pudo recuperar proyecto org-requests después de conflicto: ${(getErr as Error).message}`
+						);
+					}
+				} else {
+					this.logger.logWarn(
+						`No se pudo crear proyecto org-requests en startup: ${(createErr as Error).message}`
+					);
+				}
+			}
+		} catch (error: any) {
+			this.logger.logWarn(
+				`Error durante inicialización de proyecto org-requests: ${(error as Error).message}`
+			);
+		}
+	}
+
+	/**
+	 * Acceso seguro a ProjectManagerService.
+	 * @returns ProjectManagerService si está disponible, null en caso contrario
+	 */
+	getProjectManager(): InstanceType<typeof ProjectManagerService> | null {
+		return this.#projectManagerService;
+	}
+
+	/**
+	 * Acceso seguro al proyecto org-requests.
+	 * @returns Proyecto org-requests si fue inicializado correctamente, null en caso contrario
+	 */
+	getOrgRequestsProject(): Project | null {
+		return this.#orgRequestsProject;
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
 	// Getters para acceso a managers globales
 	// ─────────────────────────────────────────────────────────────────────────────
 
@@ -372,20 +533,6 @@ export default class IdentityManagerService extends BaseService {
 	get permissions(): PermissionManager {
 		if (!this.#permissionManager) throw new Error("PermissionManager not initialized");
 		return this.#permissionManager;
-	}
-
-	/**
-	 * Obtiene ProjectManagerService si está disponible
-	 * Usado por endpoints para crear tickets de solicitud de organización
-	 */
-	getProjectManager(): import("../../data/ProjectManagerService/index.js").default | null {
-		try {
-			const kernel = (this as any)["_BaseModule__kernel"] || (this as any).kernel;
-			if (!kernel) return null;
-			return kernel.registry?.getService("ProjectManagerService") ?? null;
-		} catch {
-			return null;
-		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────

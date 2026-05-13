@@ -81,8 +81,15 @@ export class ProjectManager {
 	}
 
 	async createProject(input: Partial<Project> & Pick<Project, "name" | "slug">, ctx: PMCtx, token?: string): Promise<Project> {
-		// Toda creación requiere al menos token válido.
-		const userId = await this.#permissionChecker.resolveUserId(token);
+		// Resolver userId: permite sin token si es contexto de sistema (admin global + sin token)
+		let userId: string;
+		if (!token && ctx.isGlobalAdmin && ctx.userId) {
+			// Contexto de sistema: permitir sin token
+			userId = ctx.userId;
+		} else {
+			// Requerir token para cualquier otro caso
+			userId = await this.#permissionChecker.resolveUserId(token);
+		}
 		const callerId = ctx.userId || userId || "";
 
 		const visibility: ProjectVisibility = input.visibility ?? "private";
