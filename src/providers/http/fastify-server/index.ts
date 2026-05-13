@@ -150,6 +150,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private readonly globalRoutes: GlobalRoute[] = [];
 	private readonly globalStaticPaths = new Map<string, string>();
 	private defaultHost: RegisteredHost | null = null;
+	private readonly isDev = process.env.NODE_ENV === "development";
 
 	constructor() {
 		super();
@@ -183,7 +184,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 					this.logger.logWarn(`Error leyendo certificados SSL: ${error.message}. HTTP/2 deshabilitado.`);
 					delete fastifyOptions.http2;
 				}
-			} else if (process.env.NODE_ENV === "development") {
+			} else if (this.isDev) {
 				// En desarrollo, permitir HTTP/2 sin TLS (cleartext)
 				fastifyOptions.http2 = true;
 				fastifyOptions.http2SessionTimeout = 5000;
@@ -202,11 +203,10 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 	private async setupMiddleware(): Promise<void> {
 		// CORS - En desarrollo permitir credenciales desde cualquier localhost
-		const isDev = process.env.NODE_ENV === "development";
 		await this.app.register(
 			fastifyCors as any,
 			{
-				origin: createCorsOriginGuard(isDev, () => this.getRegisteredHosts()),
+				origin: createCorsOriginGuard(this.isDev, () => this.getRegisteredHosts()),
 				credentials: true,
 				methods: ALLOWED_HTTP_METHODS,
 				allowedHeaders: ALLOWED_CORS_HEADERS,
@@ -228,7 +228,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		await this.app.register(fastifyFormbody);
 
 		// Log de peticiones en desarrollo
-		if (process.env.NODE_ENV === "development") {
+		if (this.isDev) {
 			this.app.addHook("onRequest", async (request) => {
 				this.logger.logDebug(`${request.method} ${request.hostname}${request.url}`);
 			});
@@ -320,11 +320,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 		// Las rutas API no deben servirse como archivos estáticos
 		if (urlPath.startsWith("/api/")) {
-			this.logger.logWarn(
-				`[DEBUG] API 404: ${urlPath}, globalRoutes: ${this.globalRoutes.length}, registered: ${this.globalRoutes
-					.map((r) => r.path)
-					.join(", ")}`
-			);
+			if (this.isDev)
+				this.logger.logWarn(
+					`[DEBUG] API 404: ${urlPath}, globalRoutes: ${this.globalRoutes.length}, registered: ${this.globalRoutes
+						.map((r) => r.path)
+						.join(", ")}`
+				);
 			reply.code(404).send({ error: "API route not found", path: urlPath });
 			return;
 		}
