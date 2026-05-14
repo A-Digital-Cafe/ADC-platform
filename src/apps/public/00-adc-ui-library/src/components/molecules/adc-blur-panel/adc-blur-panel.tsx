@@ -1,4 +1,4 @@
-import { Component, h, Prop, Host } from "@stencil/core";
+import { Component, Prop, Host } from "@stencil/core";
 
 /**
  * Panel con efecto glassmorphism/blur

@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter } from "@stencil/core";
 
 type Align = "left" | "center" | "right";
 type AttachmentKind = "image" | "file";
@@ -225,7 +225,6 @@ export class AdcBlocksRenderer {
 	}
 
 	render() {
-		void h;
 		return <div>{this.blocks.map((block, index) => this.renderBlock(block, index))}</div>;
 	}
 }

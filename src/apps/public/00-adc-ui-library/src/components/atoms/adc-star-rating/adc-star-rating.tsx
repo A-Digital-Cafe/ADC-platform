@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State } from "@stencil/core";
 
 @Component({
 	tag: "adc-star-rating",

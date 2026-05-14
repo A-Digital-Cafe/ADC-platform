@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State, Watch } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, Watch } from "@stencil/core";
 import type { Block } from "../../organisms/adc-blocks-renderer/adc-blocks-renderer";
 
 export interface BlocksFormSubmitDetail {

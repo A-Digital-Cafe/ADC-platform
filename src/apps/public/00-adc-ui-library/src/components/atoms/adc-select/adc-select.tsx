@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State, Element } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, Element } from "@stencil/core";
 
 export interface SelectOption {
 	label: string;
@@ -59,7 +59,6 @@ export class AdcSelect {
 	};
 
 	render() {
-		void h;
 		return (
 			<div class="relative w-full">
 				{/* Hidden native select — enables React onChange to work */}

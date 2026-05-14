@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State } from "@stencil/core";
 import type { CommentEntry } from "../../atoms/adc-comment-item/adc-comment-item";
 import type { Block } from "../adc-blocks-renderer/adc-blocks-renderer";
 

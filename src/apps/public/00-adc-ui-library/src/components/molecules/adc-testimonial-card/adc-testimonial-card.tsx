@@ -1,4 +1,4 @@
-import { Component, Prop, h } from "@stencil/core";
+import { Component, Prop } from "@stencil/core";
 
 @Component({
 	tag: "adc-testimonial-card",
@@ -10,7 +10,7 @@ export class AdcTestimonialCard {
 
 	render() {
 		return (
-			<blockquote class="bg-surface shadow-cozy custom-surface rounded-xxl p-4 w-full max-w-[480px] mx-auto">
+			<blockquote class="bg-surface shadow-cozy custom-surface rounded-xxl p-4 w-full max-w-120 mx-auto">
 				<adc-text class="italic">
 					<slot></slot>
 				</adc-text>

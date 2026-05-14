@@ -1,4 +1,4 @@
-import { Component, Prop, State, h } from "@stencil/core";
+import { Component, Prop, State } from "@stencil/core";
 
 /**
  * Componente YouTube Facade para carga perezosa de videos

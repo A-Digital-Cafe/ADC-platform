@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter } from "@stencil/core";
 
 export interface BreadcrumbItem {
 	label: string;
@@ -56,7 +56,6 @@ export class AdcTopBreadcrumb {
 	};
 
 	render() {
-		void h;
 		const items = this.parsedItems;
 
 		return (

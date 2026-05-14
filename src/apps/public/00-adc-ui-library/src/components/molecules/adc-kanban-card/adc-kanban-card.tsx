@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter } from "@stencil/core";
 
 /**
  * Tarjeta genérica para boards de tipo Kanban. Es un contenedor visual:

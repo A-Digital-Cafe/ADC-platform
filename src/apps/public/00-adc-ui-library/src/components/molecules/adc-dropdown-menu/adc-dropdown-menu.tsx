@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State, Listen, Element } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, Listen, Element } from "@stencil/core";
 
 export interface DropdownMenuItem {
 	label: string;
@@ -77,7 +77,6 @@ export class AdcDropdownMenu {
 	private static readonly keyPrefix = "adc-dropdown-item-";
 
 	render() {
-		void h;
 		const alignClass = this.alignState === "right" ? "right-0" : "left-0";
 
 		return (

@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, Element } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, Element } from "@stencil/core";
 
 @Component({
 	tag: "adc-toggle-badge",

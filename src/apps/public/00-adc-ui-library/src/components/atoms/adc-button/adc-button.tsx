@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, Watch, Element, forceUpdate } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, Watch, Element, forceUpdate } from "@stencil/core";
 @Component({
 	tag: "adc-button",
 	shadow: false,

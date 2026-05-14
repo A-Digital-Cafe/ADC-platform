@@ -1,4 +1,4 @@
-import { Component, Prop, h, Element } from "@stencil/core";
+import { Component, Prop, Element } from "@stencil/core";
 import type { AccessMenuItem } from "../../molecules/adc-access-button/adc-access-button.js";
 import { isPrivateHost } from "../../../utils/url.js";
 const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");

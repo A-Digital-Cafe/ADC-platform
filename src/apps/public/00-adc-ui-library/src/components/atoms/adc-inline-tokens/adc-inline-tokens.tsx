@@ -1,4 +1,4 @@
-import { Component, Prop, h } from "@stencil/core";
+import { Component, Prop } from "@stencil/core";
 
 export interface InlineToken {
 	type: "text" | "bold" | "italic" | "strike" | "code";
@@ -57,7 +57,6 @@ export class AdcInlineTokens {
 	private static readonly keyPrefix = "token-";
 
 	render() {
-		void h;
 		// Si no hay tokens pre-parseados, parsear el fallback automáticamente
 		const effectiveTokens = this.tokens && this.tokens.length > 0 ? this.tokens : parseInlineTokens(this.fallback);
 

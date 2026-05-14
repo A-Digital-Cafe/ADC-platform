@@ -1,4 +1,4 @@
-import { Component, Prop, h, Fragment, Event, EventEmitter, State } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State } from "@stencil/core";
 import type { Block } from "../../organisms/adc-blocks-renderer/adc-blocks-renderer";
 import { buildAvatarUrl, fetchPublicProfile } from "../../../../utils/avatar.js";
 
@@ -139,14 +139,14 @@ export class AdcCommentItem {
 				)}
 				{this.canDelete &&
 					(this.confirmingDelete ? (
-						<Fragment>
+						<>
 							<button type="button" class="text-tdanger" onClick={this.confirmDelete}>
 								Confirmar
 							</button>
 							<button type="button" class="text-muted" onClick={this.cancelDelete}>
 								Cancelar
 							</button>
-						</Fragment>
+						</>
 					) : (
 						<button type="button" class="text-muted hover:text-tdanger" onClick={this.requestDelete}>
 							Eliminar

@@ -1,4 +1,4 @@
-import { Component, Prop, State, h, Event, EventEmitter, Listen, Element } from "@stencil/core";
+import { Component, Prop, State, Event, EventEmitter, Listen, Element } from "@stencil/core";
 import { isPrivateHost } from "../../../utils/url.js";
 import {
 	broadcastAuthChange,
@@ -307,7 +307,6 @@ export class AdcAccessButton {
 	}
 
 	render() {
-		void h;
 		if (this.loading) {
 			return (
 				<div class="w-12 h-12 rounded-full bg-muted animate-pulse" aria-live="polite" role="status">
