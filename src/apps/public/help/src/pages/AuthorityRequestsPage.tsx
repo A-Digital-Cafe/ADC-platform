@@ -8,6 +8,8 @@ interface WorkItem {
 	status: Status;
 	where: string;
 	next: string;
+	whereHref?: string;
+	whereLabel?: string;
 }
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -32,7 +34,9 @@ const WORK_ITEMS: WorkItem[] = [
 	{
 		title: "Canal de recepción",
 		status: "en-redaccion",
-		where: "Hoy se centraliza en /contact como canal provisional.",
+		where: "Hoy se centraliza en contacto como canal provisional.",
+		whereHref: "/contact#canales",
+		whereLabel: "Ver canales de contacto",
 		next: "Crear un flujo dedicado con identificador, fecha, solicitante, país/jurisdicción y tipo de solicitud.",
 	},
 	{
@@ -50,7 +54,9 @@ const WORK_ITEMS: WorkItem[] = [
 	{
 		title: "Minimización de respuesta",
 		status: "planificado",
-		where: "Relacionado con /privacy y retención de logs.",
+		where: "Relacionado con privacidad y retención de logs.",
+		whereHref: "/privacy#conservacion",
+		whereLabel: "Ver conservación y retención",
 		next: "Definir cómo entregar sólo lo requerido, con redacciones cuando corresponda y sin ampliar datos por conveniencia.",
 	},
 	{
@@ -63,6 +69,8 @@ const WORK_ITEMS: WorkItem[] = [
 		title: "Registro auditable",
 		status: "no-iniciado",
 		where: "Pendiente de modelo de datos y almacenamiento.",
+		whereHref: "/transparency#metricas-previstas",
+		whereLabel: "Ver métricas de transparencia",
 		next: "Registrar id, fecha, jurisdicción, tipo, decisión, base legal, datos entregados y vínculo con reporte de transparencia.",
 	},
 	{
@@ -83,17 +91,20 @@ export function AuthorityRequestsPage() {
 			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Valores", href: "/values" }, { label: "Autoridades" }]}
 		>
 			<p>
-				Esta página describe qué debe existir antes de considerar madura una política de respuesta a autoridades. No afirma que ADC ya
-				cuente con un proceso completo; funciona como checklist público y trazable.
+				Esta página describe qué debe existir antes de considerar madura una política de respuesta a autoridades. Es el Paso B del{" "}
+				<a href="/values#marco-gni">marco GNI</a>. No afirma que ADC ya cuente con un proceso completo; funciona como checklist público y
+				trazable.
 			</p>
 
 			<adc-callout tone="warning" role="note">
 				Mientras el proceso dedicado no esté cerrado, las solicitudes o reportes relacionados se reciben por{" "}
-				<a href="/contact">contacto</a> y se documentarán caso por caso.
+				<a href="/contact#canales">contacto</a> y se documentarán caso por caso.
 			</adc-callout>
 
 			<section className="mt-8">
-				<h2 className="text-2xl font-heading mb-3">Qué se debe definir</h2>
+				<h2 id="que-se-debe-definir" className="text-2xl font-heading mb-3">
+					Qué se debe definir
+				</h2>
 				<ul className="space-y-4">
 					{WORK_ITEMS.map((item) => (
 						<li key={item.title} className="border-l-2 pl-3">
@@ -104,6 +115,11 @@ export function AuthorityRequestsPage() {
 							<p className="mt-1 text-sm opacity-80">
 								<strong>Dónde está:</strong> {item.where}
 							</p>
+							{item.whereHref && item.whereLabel && (
+								<p className="mt-1 text-sm">
+									<a href={item.whereHref}>{item.whereLabel}</a>
+								</p>
+							)}
 							<p className="mt-1">
 								<strong>Qué falta:</strong> {item.next}
 							</p>
@@ -113,10 +129,12 @@ export function AuthorityRequestsPage() {
 			</section>
 
 			<section className="mt-10">
-				<h2 className="text-2xl font-heading mb-3">Relación con transparencia</h2>
+				<h2 id="relacion-con-transparencia" className="text-2xl font-heading mb-3">
+					Relación con transparencia
+				</h2>
 				<p>
-					Cada solicitud relevante debería alimentar el <a href="/transparency">reporte de transparencia</a> con métricas agregadas,
-					decisiones tomadas y límites de divulgación cuando publicar detalle pueda poner a alguien en riesgo.
+					Cada solicitud relevante debería alimentar el <a href="/transparency#metricas-previstas">reporte de transparencia</a> con
+					métricas agregadas, decisiones tomadas y límites de divulgación cuando publicar detalle pueda poner a alguien en riesgo.
 				</p>
 			</section>
 		</PageShell>

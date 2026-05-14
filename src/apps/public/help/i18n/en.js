@@ -16,6 +16,27 @@ export default {
 		terms: "Terms & Conditions",
 		cookies: "Cookies Policy",
 	},
+	common: {
+		back: "Back",
+	},
+	declaration: {
+		commitment: "Public commitment — not an external certification",
+		informational: "Reference information",
+		policy: "Active policy",
+	},
+	shell: {
+		brandCallout: {
+			beforeShort: "When we say",
+			beforeName: ", we mean",
+			beforeHome: ", the project published as",
+			afterHome: ". The acronym is the platform's short name, not a certification or a separate entity.",
+		},
+		commitmentCallout: {
+			beforeStrong: "This page describes a",
+			strong: "public commitment",
+			afterStrong: "and a roadmap. It does not imply certification by an external auditor. It keeps traceability and is reviewed periodically.",
+		},
+	},
 	disclaimer: "Public commitment — not an external certification.",
 	lastUpdated: "Last updated",
 };

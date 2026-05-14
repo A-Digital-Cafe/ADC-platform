@@ -23,7 +23,7 @@ const GNI_STEPS: Array<{ step: string; title: string; href: string; status: Step
 		href: "/hria",
 		status: "publicado",
 		purpose: "Identificar impactos sobre privacidad, libertad de expresión, seguridad personal, discriminación y grupos vulnerables.",
-		where: "La página /hria contiene el checklist público por bloque y estado.",
+		where: "La página HRIA contiene el checklist público por bloque y estado.",
 		pending: "Completar evidencia, responsables, fuentes, decisiones y revisión periódica.",
 	},
 	{
@@ -32,7 +32,7 @@ const GNI_STEPS: Array<{ step: string; title: string; href: string; status: Step
 		href: "/authority-requests",
 		status: "en-redaccion",
 		purpose: "Definir cómo evaluar solicitudes legales, gubernamentales o regulatorias sin perder proporcionalidad ni trazabilidad.",
-		where: "La página /authority-requests detalla canal provisional, criterios, registro auditable y escalado pendiente.",
+		where: "La página de respuesta a autoridades detalla canal provisional, criterios, registro auditable y escalado pendiente.",
 		pending: "Cerrar procedimiento operativo, modelo de registro, criterios de notificación y decisiones de rechazo/escalado.",
 	},
 	{
@@ -41,7 +41,7 @@ const GNI_STEPS: Array<{ step: string; title: string; href: string; status: Step
 		href: "/transparency",
 		status: "en-redaccion",
 		purpose: "Definir qué métricas publicar sobre solicitudes, moderación, derechos de privacidad, geofiltro, seguridad e incidentes.",
-		where: "La página /transparency lista métricas previstas y dependencias antes del primer reporte periódico.",
+		where: "La página de transparencia lista métricas previstas y dependencias antes del primer reporte periódico.",
 		pending: "Definir cadencia, granularidad segura, fuente de datos y formato de publicación.",
 	},
 ];
@@ -55,7 +55,7 @@ export function ValuesPage() {
 			declaration="commitment"
 			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Valores" }]}
 		>
-			<h2>Nuestros valores</h2>
+			<h2 id="nuestros-valores">Nuestros valores</h2>
 			<ul>
 				<li>
 					<strong>Inclusión:</strong> respetamos identidades, orientaciones y orígenes diversos.
@@ -71,7 +71,7 @@ export function ValuesPage() {
 				</li>
 			</ul>
 
-			<h2>Marco GNI (Global Network Initiative)</h2>
+			<h2 id="marco-gni">Marco GNI (Global Network Initiative)</h2>
 			<p>
 				Adoptamos como referencia los principios GNI sobre libertad de expresión y privacidad. Para que no quede como una lista
 				abstracta, cada paso tiene una página propia con qué se está documentando y qué falta cerrar.
@@ -88,7 +88,7 @@ export function ValuesPage() {
 						</h3>
 						<p>{item.purpose}</p>
 						<p className="text-sm opacity-80">
-							<strong>Dónde se trabaja:</strong> {item.where}
+							<strong>Dónde se trabaja:</strong> <a href={item.href}>{item.where}</a>
 						</p>
 						<p className="text-sm opacity-80">
 							<strong>Qué falta:</strong> {item.pending}
@@ -102,7 +102,7 @@ export function ValuesPage() {
 				actualizan a medida que haya decisiones confirmadas.
 			</adc-callout>
 
-			<h2>Espacio seguro para todos 🏳️‍🌈</h2>
+			<h2 id="espacio-seguro">Espacio seguro para todos 🏳️‍🌈</h2>
 			<p>
 				No toleramos discurso de odio, acoso ni discriminación por orientación sexual, identidad o expresión de género, etnia, religión,
 				discapacidad, edad u otras características protegidas.
@@ -115,7 +115,7 @@ export function ValuesPage() {
 				o en las que el contexto legal/de seguridad implica un riesgo elevado para nuestra comunidad.
 			</p>
 
-			<h2>Geofiltro activo</h2>
+			<h2 id="geofiltro-activo">Geofiltro activo</h2>
 			<p>
 				Como medida operativa, aplicamos un filtro a nivel <strong>Cloudflare</strong> que{" "}
 				<strong>bloquea el acceso desde los países listados abajo</strong> y aplica un <em>Managed Challenge</em> a bots o dispositivos
@@ -133,12 +133,12 @@ export function ValuesPage() {
 			</details>
 			<adc-callout tone="info" role="note">
 				La lista puede revisarse cuando cambien las condiciones legales o de seguridad. Si crees que tu país está bloqueado por error o
-				quieres reportar contexto adicional, contacta por los canales de <a href="/contact">contacto</a>.
+				quieres reportar contexto adicional, contacta por los canales de <a href="/contact#canales">contacto</a>.
 			</adc-callout>
 
-			<h2>Reportes</h2>
+			<h2 id="reportes">Reportes</h2>
 			<p>
-				Cualquier conducta contraria a estos valores puede reportarse por los canales de <a href="/contact">contacto</a>.
+				Cualquier conducta contraria a estos valores puede reportarse por los canales de <a href="/contact#canales">contacto</a>.
 			</p>
 		</PageShell>
 	);

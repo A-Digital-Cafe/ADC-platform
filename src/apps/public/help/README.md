@@ -8,7 +8,7 @@ y roadmap público de cumplimiento.
 ## Estructura
 
 - `src/pages/`: páginas estáticas versionadas (`/`, `/privacy`, `/cookies`, `/terms`, `/values`,
-  `/ethics`, `/contact`, `/roadmap`).
+  `/ethics`, `/hria`, `/authority-requests`, `/transparency`, `/contact`, `/roadmap`).
 - `src/components/`: layout interno con sidebar y header.
 - `src/data/`: contactos y metadatos compartidos.
 

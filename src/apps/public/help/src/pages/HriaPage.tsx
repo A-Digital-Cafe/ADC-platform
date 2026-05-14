@@ -8,9 +8,12 @@ interface HriaItem {
 	question: string;
 	status: Status;
 	needed: string;
+	relatedHref?: string;
+	relatedLabel?: string;
 }
 
 interface HriaSection {
+	id: string;
 	title: string;
 	intro: string;
 	items: HriaItem[];
@@ -30,6 +33,7 @@ const STATUS_COLOR = {
 
 const SECTIONS: HriaSection[] = [
 	{
+		id: "gobernanza-y-alcance",
 		title: "1. Gobernanza y alcance",
 		intro: "Definir qué cubre el HRIA, quién lo aprueba y cómo se mantiene vivo en el tiempo.",
 		items: [
@@ -68,6 +72,7 @@ const SECTIONS: HriaSection[] = [
 		],
 	},
 	{
+		id: "stakeholders-y-participacion",
 		title: "2. Stakeholders y participación",
 		intro: "Identificar a las personas titulares de derechos y construir un diálogo seguro con ellas.",
 		items: [
@@ -87,6 +92,7 @@ const SECTIONS: HriaSection[] = [
 		],
 	},
 	{
+		id: "areas-de-impacto-en-derechos-humanos",
 		title: "3. Áreas de impacto en derechos humanos",
 		intro: "Las cuatro dimensiones que ADC evalúa de forma continua mientras la plataforma evoluciona.",
 		items: [
@@ -118,6 +124,7 @@ const SECTIONS: HriaSection[] = [
 		],
 	},
 	{
+		id: "analisis-contexto-y-solicitudes-de-autoridades",
 		title: "4. Análisis, contexto y solicitudes de autoridades",
 		intro: "Cómo se priorizan los impactos y cómo se manejan solicitudes legales o gubernamentales.",
 		items: [
@@ -138,11 +145,14 @@ const SECTIONS: HriaSection[] = [
 				question:
 					"Procesos para solicitudes gubernamentales/legales: legitimidad, necesidad, proporcionalidad, transparencia y remedio.",
 				status: "no-iniciado",
-				needed: "Conectar este punto con /authority-requests: canal, verificación, proporcionalidad, minimización, notificación y registro.",
+				needed: "Conectar este punto con respuesta a autoridades: canal, verificación, proporcionalidad, minimización, notificación y registro.",
+				relatedHref: "/authority-requests",
+				relatedLabel: "Ver respuesta a autoridades",
 			},
 		],
 	},
 	{
+		id: "remedio-cadena-de-valor-y-diseno-de-producto",
 		title: "5. Remedio, cadena de valor y diseño de producto",
 		intro: "Mecanismos para reparar impactos y para incorporar derechos humanos a las decisiones técnicas.",
 		items: [
@@ -151,6 +161,8 @@ const SECTIONS: HriaSection[] = [
 				question: "Mecanismos de queja y remedio accesibles a personas afectadas, con vías de apelación.",
 				status: "en-redaccion",
 				needed: "Definir flujo de quejas, tiempos de respuesta, apelación, evidencia mínima y cierre documentado.",
+				relatedHref: "/contact#canales",
+				relatedLabel: "Ver canales de contacto provisionales",
 			},
 			{
 				id: "q013",
@@ -167,6 +179,7 @@ const SECTIONS: HriaSection[] = [
 		],
 	},
 	{
+		id: "mitigacion-seguimiento-y-transparencia",
 		title: "6. Mitigación, seguimiento y transparencia",
 		intro: "Cerrar el ciclo: actuar, medir y comunicar.",
 		items: [
@@ -187,7 +200,9 @@ const SECTIONS: HriaSection[] = [
 				question:
 					"Comunicación de resultados del HRIA: reporte público cuando es viable, interno cuando no, con justificación de redacciones.",
 				status: "planificado",
-				needed: "Decidir formato público o interno, criterios de redacción y vínculo con /transparency para comunicar sin crear riesgos.",
+				needed: "Decidir formato público o interno, criterios de redacción y vínculo con transparencia para comunicar sin crear riesgos.",
+				relatedHref: "/transparency",
+				relatedLabel: "Ver reporte de transparencia",
 			},
 		],
 	},
@@ -217,7 +232,9 @@ export function HriaPage() {
 
 			{SECTIONS.map((section) => (
 				<section key={section.title} className="mt-8">
-					<h2 className="text-2xl font-heading mb-1">{section.title}</h2>
+					<h2 id={section.id} className="text-2xl font-heading mb-1">
+						{section.title}
+					</h2>
 					<p className="opacity-80 mb-3">{section.intro}</p>
 					<ul className="space-y-3">
 						{section.items.map((item) => (
@@ -230,6 +247,11 @@ export function HriaPage() {
 								<p className="mt-1 text-sm opacity-80">
 									<strong>Qué falta hacer:</strong> {item.needed}
 								</p>
+								{item.relatedHref && item.relatedLabel && (
+									<p className="mt-1 text-sm">
+										<a href={item.relatedHref}>{item.relatedLabel}</a>
+									</p>
+								)}
 							</li>
 						))}
 					</ul>
@@ -237,14 +259,16 @@ export function HriaPage() {
 			))}
 
 			<section className="mt-10">
-				<h2 className="text-2xl font-heading mb-3">Relación con el mapa GNI</h2>
+				<h2 id="relacion-con-el-mapa-gni" className="text-2xl font-heading mb-3">
+					Relación con el mapa GNI
+				</h2>
 				<p>
 					El HRIA es el Paso A. El mapa completo con enlaces al Paso B (respuesta a autoridades) y Paso C (transparencia) está en{" "}
-					<a href="/values">/values</a>.
+					<a href="/values#marco-gni">Valores y Espacio Seguro</a>.
 				</p>
 				<p>
-					Para reportar impactos en derechos humanos o conductas contrarias a los <a href="/values">valores</a>, usa los canales de{" "}
-					<a href="/contact">contacto</a>.
+					Para reportar impactos en derechos humanos o conductas contrarias a los <a href="/values#reportes">valores</a>, usa los
+					canales de <a href="/contact#canales">contacto</a>.
 				</p>
 			</section>
 		</PageShell>

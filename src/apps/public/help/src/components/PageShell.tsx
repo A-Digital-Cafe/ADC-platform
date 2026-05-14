@@ -2,6 +2,7 @@ import "@ui-library/utils/react-jsx";
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { router } from "@common/utils/router.js";
+import { useTranslation } from "@ui-library/utils/i18n-react";
 import { BRAND, LAST_REVIEW } from "../data/contact";
 
 interface PageShellProps {
@@ -26,14 +27,24 @@ const DECLARATION_TONE = {
 	policy: "success",
 } as const satisfies Record<NonNullable<PageShellProps["declaration"]>, "info" | "warning" | "success" | "error">;
 
+function interpolateFallback(template: string, params?: Record<string, string>): string {
+	if (!params) return template;
+	return template.replaceAll(/\{\{(\w+)\}\}/g, (_, key: string) => params[key] ?? `{{${key}}}`);
+}
+
 /**
  * Wrapper estable para páginas internas. Mantiene un único nodo top-level
  * para evitar que slots de Stencil (`shadow:false`) repongan hijos al re-render.
  */
 export default function PageShell({ title, subtitle, standards, declaration, lastUpdated, breadcrumb, children }: Readonly<PageShellProps>) {
+	const { t } = useTranslation({ namespace: "help" });
 	const breadcrumbRef = useRef<HTMLElement>(null);
 	const backHref = breadcrumb && breadcrumb.length > 1 ? breadcrumb.at(-2)?.href : undefined;
 	const breadcrumbItems = JSON.stringify(breadcrumb ?? []);
+	const tx = (key: string, fallback: string, params?: Record<string, string>) => {
+		const value = t(key, params);
+		return value === key ? interpolateFallback(fallback, params) : value;
+	};
 
 	useEffect(() => {
 		const el = breadcrumbRef.current;
@@ -55,10 +66,13 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 	} else {
 		badgeColor = "blue";
 	}
+	const declarationLabel = declaration ? tx(`declaration.${declaration}`, DECLARATION_LABEL[declaration]) : undefined;
 
 	return (
 		<article className="max-w-4xl mx-auto pb-16">
-			{breadcrumb && breadcrumb.length > 0 && <adc-top-breadcrumb ref={breadcrumbRef} items={breadcrumbItems} back-label="Volver" />}
+			{breadcrumb && breadcrumb.length > 0 && (
+				<adc-top-breadcrumb ref={breadcrumbRef} items={breadcrumbItems} back-label={tx("common.back", "Volver")} />
+			)}
 
 			<header className="mb-6">
 				<h1 className="text-3xl font-heading mb-2">{title}</h1>
@@ -69,20 +83,28 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 							{s}
 						</adc-badge>
 					))}
-					{declaration && <adc-badge color={badgeColor}>{DECLARATION_LABEL[declaration]}</adc-badge>}
+					{declarationLabel && <adc-badge color={badgeColor}>{declarationLabel}</adc-badge>}
 				</div>
 			</header>
 
 			<adc-callout tone="info" role="note">
-				Cuando usamos <strong>{BRAND.short}</strong>, nos referimos a <strong>{BRAND.name}</strong>, el proyecto publicado como{" "}
-				<a href={BRAND.homeHref}>adigitalcafe.com</a>. La sigla es el nombre corto de la plataforma, no una certificación ni una entidad
-				separada.
+				{tx("shell.brandCallout.beforeShort", "Cuando usamos")} <strong>{BRAND.short}</strong>
+				{tx("shell.brandCallout.beforeName", ", nos referimos a")} <strong>{BRAND.name}</strong>
+				{tx("shell.brandCallout.beforeHome", ", el proyecto publicado como")} <a href={BRAND.homeHref}>adigitalcafe.com</a>
+				{tx(
+					"shell.brandCallout.afterHome",
+					". La sigla es el nombre corto de la plataforma, no una certificación ni una entidad separada."
+				)}
 			</adc-callout>
 
 			{declaration === "commitment" && (
 				<adc-callout tone={DECLARATION_TONE[declaration]} role="note">
-					Esta página describe un <strong>compromiso público</strong> y un roadmap. No implica certificación por un auditor externo.
-					Conserva trazabilidad y se revisa periódicamente.
+					{tx("shell.commitmentCallout.beforeStrong", "Esta página describe un")}{" "}
+					<strong>{tx("shell.commitmentCallout.strong", "compromiso público")}</strong>{" "}
+					{tx(
+						"shell.commitmentCallout.afterStrong",
+						"y un roadmap. No implica certificación por un auditor externo. Conserva trazabilidad y se revisa periódicamente."
+					)}
 				</adc-callout>
 			)}
 
@@ -90,7 +112,7 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 
 			<footer className="mt-10 text-sm opacity-70">
 				<p>
-					{`Última actualización: `}
+					{`${tx("lastUpdated", "Última actualización")}: `}
 					<time dateTime={lastUpdated ?? LAST_REVIEW}>{lastUpdated ?? LAST_REVIEW}</time>
 				</p>
 			</footer>

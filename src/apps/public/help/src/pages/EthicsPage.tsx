@@ -10,7 +10,7 @@ export function EthicsPage() {
 			declaration="commitment"
 			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Ética" }]}
 		>
-			<h2>Compromisos</h2>
+			<h2 id="compromisos">Compromisos</h2>
 			<ul>
 				<li>Respeto a las personas usuarias y a la comunidad.</li>
 				<li>Protección de datos personales y minimización en la recolección.</li>
@@ -19,60 +19,64 @@ export function EthicsPage() {
 				<li>No sobreprometer: no afirmamos cumplimiento, certificaciones o auditorías que no estén verificadas.</li>
 			</ul>
 
-			<h2>No sobreprometer</h2>
+			<h2 id="no-sobreprometer">No sobreprometer</h2>
 			<p>
-				Las páginas de ayuda, privacidad, seguridad y roadmap deben distinguir entre hechos confirmados, compromisos públicos y trabajo
-				pendiente. ADC no debe presentar como cumplido algo que todavía no fue implementado, revisado o confirmado.
+				Las páginas de ayuda, <a href="/privacy">privacidad</a>, <a href="/privacy#seguridad">seguridad</a> y{" "}
+				<a href="/roadmap">roadmap</a> deben distinguir entre hechos confirmados, compromisos públicos y trabajo pendiente. ADC no debe
+				presentar como cumplido algo que todavía no fue implementado, revisado o confirmado.
 			</p>
 
-			<h2>Privacidad por diseño</h2>
+			<h2 id="privacidad-por-diseno">Privacidad por diseño</h2>
 			<p>
-				Cada función nueva debe considerar minimización de datos, finalidad clara, retención razonable, controles de acceso y revisión de
-				subprocesadores antes de ampliar el tratamiento de datos personales.
+				Cada función nueva debe considerar minimización de datos, <a href="/privacy#finalidades">finalidad clara</a>, retención
+				razonable, controles de acceso y revisión de <a href="/privacy#infraestructura-y-subprocesadores">subprocesadores</a> antes de
+				ampliar el tratamiento de datos personales.
 			</p>
 
-			<h2>Seguridad responsable</h2>
+			<h2 id="seguridad-responsable">Seguridad responsable</h2>
 			<p>
 				Los reportes de vulnerabilidades hechos de buena fe deben tratarse con prioridad, respeto y coordinación. El canal actual para
-				reportarlos está en <a href="/contact">contacto</a>, mientras se define un sistema público de tickets.
+				reportarlos está en <a href="/contact#canales">contacto</a>, mientras se define un sistema público de tickets.
 			</p>
 
-			<h2>Debido proceso comunitario</h2>
+			<h2 id="debido-proceso-comunitario">Debido proceso comunitario</h2>
 			<p>
 				Las decisiones de moderación o suspensión deben buscar proporcionalidad, contexto y posibilidad de revisión cuando sea viable.
-				Las reglas aplicables a personas usuarias se describen en los <a href="/terms">términos</a>.
+				Las reglas aplicables a personas usuarias se describen en los <a href="/terms#conductas-prohibidas">términos</a>.
 			</p>
 
-			<h2>Derechos humanos / GNI</h2>
+			<h2 id="derechos-humanos-gni">Derechos humanos / GNI</h2>
 			<p>
-				Tomamos como referencia los principios GNI sobre privacidad y libertad de expresión. Para evaluar riesgos de seguridad por país
-				revisamos la base de ILGA sobre{" "}
+				Tomamos como referencia los <a href="/values#marco-gni">principios GNI</a> sobre privacidad y libertad de expresión. Para evaluar{" "}
+				<a href="/values#geofiltro-activo">riesgos de seguridad por país</a> revisamos la base de ILGA sobre{" "}
 				<a href="https://database.ilga.org/criminalisation-consensual-same-sex-sexual-acts" rel="noreferrer">
 					criminalización de relaciones consensuales entre personas del mismo sexo
 				</a>
-				. Las solicitudes, reportes o correcciones de contexto pueden enviarse desde <a href="/contact">contacto</a>.
+				. Las solicitudes, reportes o correcciones de contexto pueden enviarse desde <a href="/contact#canales">contacto</a>.
 			</p>
 
-			<h2>Accesibilidad e inclusión</h2>
+			<h2 id="accesibilidad-e-inclusion">Accesibilidad e inclusión</h2>
 			<p>
 				ADC debe diseñarse para personas con distintas capacidades, idiomas, identidades y contextos. La accesibilidad WCAG 2.1 AA se
-				mantiene como referencia de trabajo y sus avances se reflejan en el <a href="/roadmap">roadmap</a>.
+				mantiene como referencia de trabajo y sus avances se reflejan en el{" "}
+				<a href="/roadmap#capa-de-ingenieria-construccion">roadmap</a>.
 			</p>
 
-			<h2>Conflictos de interés</h2>
+			<h2 id="conflictos-de-interes">Conflictos de interés</h2>
 			<p>
 				Las decisiones técnicas, editoriales o comunitarias no deben ocultar intereses comerciales, publicidad, patrocinios o relaciones
 				externas relevantes. El subdominio <code>games</code> incorporará publicidad; esa decisión debe documentarse de forma separada y
-				clara, incluyendo proveedores, criterios de consentimiento y cualquier impacto sobre privacidad cuando estén definidos.
+				clara, incluyendo <a href="/cookies#cookies-opcionales">proveedores, criterios de consentimiento</a> y cualquier impacto sobre
+				privacidad cuando estén definidos.
 			</p>
 
-			<h2>Trazabilidad</h2>
+			<h2 id="trazabilidad">Trazabilidad</h2>
 			<p>
-				Cada política importante debe tener fecha de revisión, estado público y relación con una página, un pendiente interno o el
-				roadmap. Cuando una decisión cambie, el cambio debe poder explicarse con contexto suficiente.
+				Cada política importante debe tener fecha de revisión, estado público y relación con una página, un pendiente interno o el{" "}
+				<a href="/roadmap">roadmap</a>. Cuando una decisión cambie, el cambio debe poder explicarse con contexto suficiente.
 			</p>
 
-			<h2>Autodeclaración (ISO/IEC 17050-1)</h2>
+			<h2 id="autodeclaracion-iso-iec-17050-1">Autodeclaración (ISO/IEC 17050-1)</h2>
 			<p>
 				Bajo el espíritu de la norma ISO/IEC 17050-1 (autodeclaraciones de conformidad), declaramos como{" "}
 				<strong>compromiso público y no como certificación externa</strong> que trabajamos para alinear la plataforma con:
@@ -90,10 +94,10 @@ export function EthicsPage() {
 				avances concretos se reflejan en el <a href="/roadmap">roadmap</a>.
 			</adc-callout>
 
-			<h2>Sanciones internas</h2>
+			<h2 id="sanciones-internas">Sanciones internas</h2>
 			<p>
 				El incumplimiento de este código por parte del equipo puede acarrear medidas internas proporcionales. El incumplimiento por parte
-				de personas usuarias se rige por los <a href="/terms">términos</a>.
+				de personas usuarias se rige por los <a href="/terms#conductas-prohibidas">términos</a>.
 			</p>
 		</PageShell>
 	);
