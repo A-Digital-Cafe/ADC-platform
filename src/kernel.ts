@@ -156,6 +156,18 @@ export class Kernel {
 
 		this.#watchAppConfigs();
 
+		// Reinyectar import maps ahora que todos los módulos UI están cargados
+		try {
+			const uiFederation = this.registry.getService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
+			if (uiFederation) {
+				await uiFederation.refreshAllImportMaps(Kernel.#kernelKey);
+			} else {
+				this.#logger.logWarn("UIFederationService no encontrado");
+			}
+		} catch (error: any) {
+			this.#logger.logError(`Error reinyectando import maps: ${error.message}`);
+		}
+
 		setTimeout(() => {
 			this.#isStartingUp = false;
 			this.#logger.logInfo("HMR está activo.");

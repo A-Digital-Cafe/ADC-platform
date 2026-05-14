@@ -66,7 +66,7 @@ export abstract class BaseApp extends BaseModule implements IApp {
 			uiConfig.name = cleanModuleName;
 
 			this.logger.logInfo(`Registrando módulo UI: ${cleanModuleName}`);
-			await uiFederationService.registerUIModule(cleanModuleName, this.appDir, uiConfig);
+			await uiFederationService.registerUIModule(_kernelKey, cleanModuleName, this.appDir, uiConfig);
 			this.uiModuleRegistered = true;
 
 			this.logger.logOk(`Módulo UI ${cleanModuleName} registrado exitosamente`);
@@ -82,13 +82,13 @@ export abstract class BaseApp extends BaseModule implements IApp {
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
 	@OnlyKernel()
-	public async stop() {
+	public async stop(_kernelKey: symbol) {
 		// Desregistrar módulo UI si estaba registrado
 		this.logger.logDebug(`Deteniendo app ${this.name}`);
 		if (this.uiModuleRegistered && this.config?.uiModule) {
 			try {
 				const uiFederation = this.#kernel.registry.getService<UIFederationService>("UIFederationService");
-				await uiFederation.unregisterUIModule(this.config.uiModule.name);
+				await uiFederation.unregisterUIModule(_kernelKey, this.config.uiModule.name);
 			} catch (err) {
 				this.logger.logDebug("No se pudo desregistrar módulo UI", err);
 			}

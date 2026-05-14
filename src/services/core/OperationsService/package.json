@@ -2,5 +2,8 @@
 	"name": "operations-service",
 	"version": "1.0.0",
 	"private": true,
-	"type": "module"
+	"type": "module",
+	"dependencies": {
+		"mongoose": "^7.7.1"
+	}
 }

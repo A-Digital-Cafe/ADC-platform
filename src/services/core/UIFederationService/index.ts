@@ -14,6 +14,7 @@ import { runRegisterFlow } from "./utils/lifecycle/register-flow.js";
 import { updateImportMap } from "./utils/server/import-map-updater.js";
 import { setupImportMapEndpoints } from "./utils/server/endpoints.js";
 import { computeStats, refreshAllImportMaps, unregisterUIModule, type UIStats } from "./utils/server/service-operations.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 
 export default class UIFederationService extends BaseService {
 	public readonly name = "UIFederationService";
@@ -78,7 +79,10 @@ export default class UIFederationService extends BaseService {
 		this.logger.logOk("UIFederationService detenido");
 	}
 
-	async registerUIModule(name: string, appDir: string, uiConfig: UIModuleConfig): Promise<void> {
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
+	@OnlyKernel()
+	async registerUIModule(_kernelKey: symbol, name: string, appDir: string, uiConfig: UIModuleConfig): Promise<void> {
 		const namespace = uiConfig.uiNamespace || DEFAULT_NAMESPACE;
 		const framework = uiConfig.framework || "astro";
 
@@ -104,7 +108,10 @@ export default class UIFederationService extends BaseService {
 		await runRegisterFlow(module, this.#ctx());
 	}
 
-	unregisterUIModule(name: string, namespace?: string): Promise<void> {
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
+	@OnlyKernel()
+	unregisterUIModule(_kernelKey: symbol, name: string, namespace?: string): Promise<void> {
 		return unregisterUIModule(name, this.#ctx(), namespace);
 	}
 
@@ -112,7 +119,10 @@ export default class UIFederationService extends BaseService {
 		return this.#importMaps.get(namespace || DEFAULT_NAMESPACE) || { imports: {} };
 	}
 
-	refreshAllImportMaps(): Promise<void> {
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
+	@OnlyKernel()
+	refreshAllImportMaps(_kernelKey: symbol): Promise<void> {
 		return refreshAllImportMaps(this.#ctx());
 	}
 
