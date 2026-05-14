@@ -1,8 +1,6 @@
 /**
  * Render functions for adc-custom-error component
  */
-
-import {} from "@stencil/core";
 import type { DisplayedError, ErrorSeverity } from "./types.js";
 
 /** Maps severity level to Tailwind CSS classes */

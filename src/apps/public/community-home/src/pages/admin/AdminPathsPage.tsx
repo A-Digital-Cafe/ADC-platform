@@ -176,11 +176,17 @@ function PathsAdminBody() {
 					{paths.map((p) => (
 						<li
 							key={p.slug}
-							className="px-4 py-3 bg-surface rounded-xxl flex items-center justify-between gap-3 cursor-pointer hover:bg-alt transition-colors"
-							onClick={() => startEdit(p.slug)}
+							className="px-4 py-3 bg-surface rounded-xxl flex items-center justify-between gap-3 hover:bg-alt transition-colors"
 						>
-							<span className="truncate">{p.title}</span>
-							<span className="flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
+							<button
+								type="button"
+								className="min-w-0 flex-1 truncate text-left bg-transparent border-0 p-0 text-text cursor-pointer"
+								onClick={() => startEdit(p.slug)}
+								aria-label={`Editar ${p.title}`}
+							>
+								{p.title}
+							</button>
+							<span className="flex gap-1 items-center">
 								<adc-button-rounded aria-label={`Editar ${p.title}`} onClick={() => startEdit(p.slug)}>
 									<adc-icon-edit />
 								</adc-button-rounded>

@@ -42,6 +42,7 @@ export function BoardColumn({
 	return (
 		<section
 			className={`${baseCls} ${activeCls}`}
+			aria-label={column.name}
 			onDragOver={
 				isDragEnabled && onDragOver
 					? (e) => {

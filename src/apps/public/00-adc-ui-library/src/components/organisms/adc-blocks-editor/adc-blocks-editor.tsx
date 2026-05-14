@@ -887,7 +887,8 @@ export class AdcBlocksEditor {
 		return (
 			<div class="flex flex-col gap-0 bg-surface rounded-xxl border border-alt">
 				<div class="flex flex-wrap gap-1 items-center px-2 pt-2 pb-2 border-b border-alt bg-surface relative">
-					<div class="inline-flex items-center gap-0.5" role="group" aria-label="Formato">
+					<fieldset class="inline-flex items-center gap-0.5 border-0 p-0 m-0 min-w-0">
+						<legend class="sr-only">Formato</legend>
 						{this.renderToolButton({
 							label: "Negrita",
 							shortcut: "Ctrl+B",
@@ -909,11 +910,12 @@ export class AdcBlocksEditor {
 							onClick: () => this.execMark("code"),
 							children: <span class="font-mono text-xs">{"</>"}</span>,
 						})}
-					</div>
+					</fieldset>
 
 					<span class="w-px h-5 bg-alt mx-1" aria-hidden="true" />
 
-					<div class="inline-flex items-center gap-0.5" role="group" aria-label="Estructura de línea">
+					<fieldset class="inline-flex items-center gap-0.5 border-0 p-0 m-0 min-w-0">
+						<legend class="sr-only">Estructura de línea</legend>
 						{this.renderToolButton({
 							label: "Párrafo",
 							onClick: () => this.transformCurrentBlock("p"),
@@ -1000,11 +1002,12 @@ export class AdcBlocksEditor {
 								</div>
 							)}
 						</div>
-					</div>
+					</fieldset>
 
 					<span class="w-px h-5 bg-alt mx-1" aria-hidden="true" />
 
-					<div class="inline-flex items-center gap-0.5 relative" role="group" aria-label="Insertar bloque">
+					<fieldset class="inline-flex items-center gap-0.5 relative border-0 p-0 m-0 min-w-0">
+						<legend class="sr-only">Insertar bloque</legend>
 						{this.renderToolButton({
 							label: "Insertar bloque",
 							active: this.blockMenuOpen,
@@ -1039,11 +1042,12 @@ export class AdcBlocksEditor {
 								))}
 							</div>
 						)}
-					</div>
+					</fieldset>
 
 					<span class="w-px h-5 bg-alt mx-1" aria-hidden="true" />
 
-					<div class="inline-flex items-center gap-0.5" role="group" aria-label="Adjuntos">
+					<fieldset class="inline-flex items-center gap-0.5 border-0 p-0 m-0 min-w-0">
+						<legend class="sr-only">Adjuntos</legend>
 						{this.renderToolButton({
 							label: "Adjuntar imagen",
 							onClick: () => this.adcRequestAttachment.emit({ kind: "image" }),
@@ -1054,7 +1058,7 @@ export class AdcBlocksEditor {
 							onClick: () => this.adcRequestAttachment.emit({ kind: "file" }),
 							children: <span aria-hidden="true">📎</span>,
 						})}
-					</div>
+					</fieldset>
 
 					<span class="ml-auto inline-flex items-center gap-2 pr-1">
 						<small class={`text-xs tabular-nums ${lowOnChars ? "text-tdanger" : "text-muted"}`}>{remaining}</small>
@@ -1069,6 +1073,7 @@ export class AdcBlocksEditor {
 					aria-label={this.placeholder}
 					aria-multiline="true"
 					aria-disabled={this.disabled ? "true" : "false"}
+					tabIndex={this.disabled ? -1 : 0}
 					style={{ minHeight: `${this.minHeight}px` }}
 					class="adc-blocks-editor__input w-full px-3 py-2 bg-background text-text outline-none focus-within:ring-1 focus-within:ring-primary whitespace-pre-wrap wrap-break-word"
 					onInput={this.handleInput}
