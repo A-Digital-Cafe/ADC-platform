@@ -8,5 +8,5 @@
 			"@ui-library/*": ["./../00-web-ui-library/src/*"]
 		}
 	},
-	"include": ["src/**/*", "*.ts", "./../00-web-ui-library/utils/react-jsx.d.ts"]
+	"include": ["src/**/*", "*.ts", "./../00-web-ui-library/utils/react-jsx.ts"]
 }
