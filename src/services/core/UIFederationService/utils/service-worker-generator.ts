@@ -4,13 +4,10 @@ function createCacheRevision(module: RegisteredUIModule, namespaceModules: Map<s
 	const uiLibraryRevisions = Array.from(namespaceModules.values())
 		.filter((mod) => mod.uiConfig.framework === "stencil")
 		.map((mod) => `${mod.name}-${mod.registeredAt || 0}`)
-		.sort()
+		.sort((a, b) => a.localeCompare(b))
 		.join("-");
 
-	return `${module.name}-${module.registeredAt || Date.now()}-${uiLibraryRevisions || "no-ui-library"}`.replaceAll(
-		/[^a-zA-Z0-9_-]/g,
-		"-"
-	);
+	return `${module.name}-${module.registeredAt || Date.now()}-${uiLibraryRevisions || "no-ui-library"}`.replaceAll(/[^a-zA-Z0-9_-]/g, "-");
 }
 
 /**
