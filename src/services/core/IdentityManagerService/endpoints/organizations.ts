@@ -276,11 +276,7 @@ export class OrgEndpoints {
 			const pm = OrgEndpoints.identity.getProjectManager();
 
 			if (!pm) {
-				throw new IdentityError(
-					503,
-					"INVALID_BODY",
-					"El servicio de gestión de proyectos no está disponible. Intenta más tarde."
-				);
+				throw new IdentityError(503, "INVALID_BODY", "El servicio de gestión de proyectos no está disponible. Intenta más tarde.");
 			}
 
 			// Crear ticket en PM con metadata de solicitud
