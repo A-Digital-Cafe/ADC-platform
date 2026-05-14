@@ -11,7 +11,10 @@ const INLINE_PATTERN = /\*\*[^*]+?\*\*|~~[^~]+?~~|`[^`]+?`|\*[^*]+?\*/g;
 // Decodifica secuencias \u003C, \u003E, \u0026 guardadas para evitar XSS
 function decodeEscapes(s?: string): string {
 	if (typeof s !== "string") return s ?? "";
-	return s.replaceAll("\\u003C", "<").replaceAll("\\u003E", ">").replaceAll("\\u0026", "&");
+	return s
+		.replaceAll(String.raw`\u003C`, "<")
+		.replaceAll(String.raw`\u003E`, ">")
+		.replaceAll(String.raw`\u0026`, "&");
 }
 
 // Parsea texto con formato inline a tokens

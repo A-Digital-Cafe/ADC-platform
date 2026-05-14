@@ -22,8 +22,19 @@ export class AdcColorLabel {
 	/** Si es true, usa borde y fondo transparente (outline) */
 	@Prop() outline: boolean = false;
 
+	private readonly sizeClass = (size: string) => {
+		switch (size) {
+			case "xs":
+				return "px-1.5 py-0 text-[10px]";
+			case "md":
+				return "px-2.5 py-1 text-sm";
+			default:
+				return "px-2 py-0.5 text-xs";
+		}
+	};
+
 	render() {
-		const sizeClass = this.size === "xs" ? "px-1.5 py-0 text-[10px]" : this.size === "md" ? "px-2.5 py-1 text-sm" : "px-2 py-0.5 text-xs";
+		const sizeClass = this.sizeClass(this.size);
 		const base = "flex items-center gap-1 rounded-full font-text font-medium";
 		const variant = this.outline ? "bg-transparent border" : "";
 		return (

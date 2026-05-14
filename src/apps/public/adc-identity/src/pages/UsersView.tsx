@@ -96,7 +96,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		}
 
 		// No validar si el username es el del usuario actual (editando)
-		if (editingUser && formUsername === editingUser.username) {
+		if (formUsername === editingUser?.username) {
 			setUsernameStatus("idle");
 			return;
 		}
@@ -200,7 +200,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		setModalOpen(true);
 	};
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		clearErrors();
 		setSubmitting(true);

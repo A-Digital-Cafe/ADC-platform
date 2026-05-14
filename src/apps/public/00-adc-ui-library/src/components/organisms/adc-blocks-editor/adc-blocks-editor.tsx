@@ -84,7 +84,7 @@ export class AdcBlocksEditor {
 	// ── Markdown ↔ HTML ──────────────────────────────────────────────────────
 
 	private static escapeHtml(s: string): string {
-		return s.replaceAll(/&/g, "&amp;").replaceAll(/</g, "&lt;").replaceAll(/>/g, "&gt;");
+		return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 	}
 
 	/** Convierte markdown inline a HTML seguro. Tokens soportados: **bold**, *italic*, `code`. */
@@ -99,7 +99,7 @@ export class AdcBlocksEditor {
 
 	/** Recorre un nodo y emite markdown para texto + strong/em/code. Cualquier otro tag: extraer texto. */
 	private static nodeToMarkdown(node: Node): string {
-		if (node.nodeType === Node.TEXT_NODE) return (node.textContent || "").replaceAll(/\u200B/g, "");
+		if (node.nodeType === Node.TEXT_NODE) return (node.textContent || "").replaceAll("\u200B", "");
 		if (node.nodeType !== Node.ELEMENT_NODE) return "";
 		const el = node as HTMLElement;
 		const tag = el.tagName.toLowerCase();

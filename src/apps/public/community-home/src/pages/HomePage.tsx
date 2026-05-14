@@ -26,7 +26,7 @@ export function HomePage() {
 					Entrar al Discord
 				</adc-button>
 
-				<adc-quote class="pr-[64px]">{BRAND.slogan}</adc-quote>
+				<adc-quote class="pr-16">{BRAND.slogan}</adc-quote>
 			</section>
 
 			<section className="grid gap-4 sm:grid-cols-3 mt-12" aria-label="Características principales">

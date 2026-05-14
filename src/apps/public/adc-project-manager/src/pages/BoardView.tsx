@@ -3,8 +3,6 @@ import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Project } from "@common/types/project-manager/Project.ts";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
-import type { Sprint } from "@common/types/project-manager/Sprint.ts";
-import type { Milestone } from "@common/types/project-manager/Milestone.ts";
 import type { TransitionCommentSubmitDetail } from "../components/TransitionCommentModal.tsx";
 import { TransitionCommentModal } from "../components/TransitionCommentModal.tsx";
 import { useBacklogData } from "../hooks/useBacklogData.ts";
@@ -119,8 +117,8 @@ export function BoardView({ project, perms, caller }: Readonly<Props>) {
 									key={col.id}
 									column={col}
 									issues={colIssues}
-									sprints={sprints as Sprint[]}
-									milestones={milestones as Milestone[]}
+									sprints={sprints}
+									milestones={milestones}
 									customFieldDefs={project.customFieldDefs}
 									wipLimit={wipLimit}
 									overLimit={overLimit}

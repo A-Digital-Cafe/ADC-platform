@@ -79,7 +79,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 		return () => clearTimeout(timeout);
 	}, [username]);
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		clearErrors();
 

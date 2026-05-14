@@ -39,6 +39,8 @@ export class ModuleLoader {
 		return this.#envCache.get(modulePath);
 	}
 
+	private static readonly kvRegex = new RegExp(/^([^=]+)=(.*)$/);
+
 	/**
 	 * Lee y parsea un archivo .env sin inyectarlo a process.env
 	 * @param envPath - Ruta al archivo .env
@@ -59,7 +61,7 @@ export class ModuleLoader {
 				}
 
 				// Buscar el patrón KEY=VALUE
-				const match = trimmedLine.match(/^([^=]+)=(.*)$/);
+				const match = ModuleLoader.kvRegex.exec(trimmedLine);
 				if (match) {
 					const key = match[1].trim();
 					let value = match[2].trim();

@@ -67,7 +67,7 @@ interface PathMatchResult {
  * "cloud.local.com" -> /^cloud\.local\.com$/
  */
 function hostPatternToRegex(pattern: string): RegExp {
-	const escaped = pattern.replaceAll(".", "\\.").replaceAll("*", "(.+)");
+	const escaped = pattern.replaceAll(".", String.raw`\.`).replaceAll("*", "(.+)");
 	return new RegExp(`^${escaped}$`, "i");
 }
 

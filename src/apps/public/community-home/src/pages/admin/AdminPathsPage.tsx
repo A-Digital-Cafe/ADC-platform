@@ -71,7 +71,7 @@ function PathsAdminBody() {
 		setForm(initialForm());
 	}
 
-	async function handleSubmit(ev: React.FormEvent) {
+	async function handleSubmit(ev: React.SubmitEvent) {
 		ev.preventDefault();
 		setSaving(true);
 		try {
@@ -104,6 +104,10 @@ function PathsAdminBody() {
 			if (editing === slug) resetForm();
 		}
 	}
+	let btnLabel;
+	if (saving) btnLabel = "Guardando...";
+	else if (editing) btnLabel = "Guardar";
+	else btnLabel = "Crear";
 
 	return (
 		<div className="p-8 grid gap-6 md:grid-cols-2">
@@ -162,12 +166,7 @@ function PathsAdminBody() {
 					{/* Usamos `label` en vez de slot: adc-button (shadow:false) tiene un MutationObserver
 					    que dispara forceUpdate ante cambios de slot y, bajo React.StrictMode, el texto
 					    puede quedar fuera del slot-fb y no renderizarse. `label` es un prop reactivo. */}
-					<adc-button
-						type="submit"
-						disabled={saving}
-						aria-label={editing ? "Guardar path" : "Crear path"}
-						label={saving ? "Guardando..." : editing ? "Guardar" : "Crear"}
-					/>
+					<adc-button type="submit" disabled={saving} aria-label={editing ? "Guardar path" : "Crear path"} label={btnLabel} />
 					{editing && <adc-button type="button" variant="accent" aria-label="Cancelar edición" onClick={resetForm} label="Cancelar" />}
 				</div>
 			</form>

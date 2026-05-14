@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { router } from "@common/utils/router.js";
 import { contentAPI, type Article, type LearningPath } from "../utils/content-api";
 
@@ -70,6 +70,46 @@ export function ArticlesPage() {
 		pink: "bg-pink-200 text-pink-700",
 	};
 
+	let articlesComponent: React.ReactNode;
+	if (loading)
+		articlesComponent = (
+			<div className="text-center py-8">
+				<p>Cargando artículos...</p>
+			</div>
+		);
+	else if (articles.length == 0)
+		articlesComponent = (
+			<div className="text-center bg-surface rounded-xxl p-8 shadow-cozy mt-4">
+				<p className="text-text">No hay artículos.</p>
+			</div>
+		);
+	else
+		articlesComponent = (
+			<>
+				<div className="mt-4 grid gap-x-4 gap-y-16 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+					{articles.map((article) => (
+						<adc-content-card
+							key={article.slug}
+							title={article.title}
+							banner-url={article.image?.url}
+							banner-alt={article.image?.alt}
+							href={`/articles/${article.slug}`}
+							onClick={(e: React.MouseEvent) => {
+								e.preventDefault();
+								router.navigate(`/articles/${article.slug}`);
+							}}
+							compact
+						/>
+					))}
+				</div>
+				{totalPages > 1 && (
+					<div className="flex justify-center mt-8">
+						<adc-pagination ref={paginationRef} currentPage={page} totalPages={totalPages} />
+					</div>
+				)}
+			</>
+		);
+
 	return (
 		<div className="px-8">
 			<h1 className="text-3xl font-heading mb-4">Artículos</h1>
@@ -101,39 +141,7 @@ export function ArticlesPage() {
 				</div>
 			)}
 
-			{loading ? (
-				<div className="text-center py-8">
-					<p>Cargando artículos...</p>
-				</div>
-			) : articles.length > 0 ? (
-				<>
-					<div className="mt-4 grid gap-x-4 gap-y-16 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-						{articles.map((article) => (
-							<adc-content-card
-								key={article.slug}
-								title={article.title}
-								banner-url={article.image?.url}
-								banner-alt={article.image?.alt}
-								href={`/articles/${article.slug}`}
-								onClick={(e: React.MouseEvent) => {
-									e.preventDefault();
-									router.navigate(`/articles/${article.slug}`);
-								}}
-								compact
-							/>
-						))}
-					</div>
-					{totalPages > 1 && (
-						<div className="flex justify-center mt-8">
-							<adc-pagination ref={paginationRef} currentPage={page} totalPages={totalPages} />
-						</div>
-					)}
-				</>
-			) : (
-				<div className="text-center bg-surface rounded-xxl p-8 shadow-cozy mt-4">
-					<p className="text-text">No hay artículos.</p>
-				</div>
-			)}
+			{articlesComponent}
 		</div>
 	);
 }

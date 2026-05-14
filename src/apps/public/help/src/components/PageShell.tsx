@@ -47,6 +47,15 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 		return () => el.removeEventListener("adcBack", handler);
 	}, [backHref]);
 
+	let badgeColor: "orange" | "green" | "blue";
+	if (declaration === "commitment") {
+		badgeColor = "orange";
+	} else if (declaration === "policy") {
+		badgeColor = "green";
+	} else {
+		badgeColor = "blue";
+	}
+
 	return (
 		<article className="max-w-4xl mx-auto pb-16">
 			{breadcrumb && breadcrumb.length > 0 && <adc-top-breadcrumb ref={breadcrumbRef} items={breadcrumbItems} back-label="Volver" />}
@@ -60,11 +69,7 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 							{s}
 						</adc-badge>
 					))}
-					{declaration && (
-						<adc-badge color={declaration === "commitment" ? "orange" : declaration === "policy" ? "green" : "blue"}>
-							{DECLARATION_LABEL[declaration]}
-						</adc-badge>
-					)}
+					{declaration && <adc-badge color={badgeColor}>{DECLARATION_LABEL[declaration]}</adc-badge>}
 				</div>
 			</header>
 

@@ -87,6 +87,33 @@ export function MembersModal({
 		if (success) loadMembers();
 	};
 
+	let membersComponent: React.ReactElement;
+	if (loadingMembers)
+		membersComponent = (
+			<div className="flex justify-center py-4">
+				<adc-spinner />
+			</div>
+		);
+	else if (members.length === 0) membersComponent = <p className="text-sm text-muted py-2">{noMembersText}</p>;
+	else
+		membersComponent = (
+			<ul className="divide-y divide-surface">
+				{members.map((member) => (
+					<li key={member.id} className="flex items-center justify-between py-2">
+						<adc-user-summary username={member.username} email={member.email} />
+						<adc-button-rounded
+							variant="danger"
+							aria-label={t("common.delete")}
+							onClick={() => handleRemoveMember(member.id)}
+							size="md"
+						>
+							<adc-icon-close size="0.875rem" />
+						</adc-button-rounded>
+					</li>
+				))}
+			</ul>
+		);
+
 	return (
 		<adc-modal ref={modalRef} open modalTitle={title} size="md">
 			<div className="space-y-4">
@@ -117,30 +144,7 @@ export function MembersModal({
 						</div>
 					)}
 				</div>
-
-				{loadingMembers ? (
-					<div className="flex justify-center py-4">
-						<adc-spinner />
-					</div>
-				) : members.length === 0 ? (
-					<p className="text-sm text-muted py-2">{noMembersText}</p>
-				) : (
-					<ul className="divide-y divide-surface">
-						{members.map((member) => (
-							<li key={member.id} className="flex items-center justify-between py-2">
-								<adc-user-summary username={member.username} email={member.email} />
-								<adc-button-rounded
-									variant="danger"
-									aria-label={t("common.delete")}
-									onClick={() => handleRemoveMember(member.id)}
-									size="md"
-								>
-									<adc-icon-close size="0.875rem" />
-								</adc-button-rounded>
-							</li>
-						))}
-					</ul>
-				)}
+				{membersComponent}
 			</div>
 			<div slot="footer" className="flex justify-end">
 				<adc-button variant="accent" onClick={onClose}>

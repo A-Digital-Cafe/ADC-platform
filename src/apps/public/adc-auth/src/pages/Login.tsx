@@ -55,7 +55,7 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 		if (el) el.addEventListener("adcClose", () => setShowOrgSelector(false));
 	}, []);
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		clearErrors();
 		setLoading(true);

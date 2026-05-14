@@ -1,10 +1,12 @@
-import { Schema, type Connection, type Model } from "mongoose";
+import type { Connection, Model, Schema } from "mongoose";
 import type { Attachment, AttachmentStatus } from "../../../../common/types/attachments/Attachment.js";
 
 export type AttachmentDoc = Omit<Attachment, "id"> & { _id: string };
+type SchemaBackedConnection = Connection & { base: { Schema: typeof import("mongoose").Schema } };
 
-function buildAttachmentSchema(): Schema<AttachmentDoc> {
-	const schema = new Schema<AttachmentDoc>(
+function buildAttachmentSchema(connection: Connection): Schema<AttachmentDoc> {
+	const SchemaCtor = (connection as SchemaBackedConnection).base.Schema;
+	const schema = new SchemaCtor<AttachmentDoc>(
 		{
 			_id: { type: String, required: true } as any,
 			basePath: { type: String, required: true, maxlength: 80 },
@@ -37,7 +39,7 @@ function buildAttachmentSchema(): Schema<AttachmentDoc> {
 	schema.index({ basePath: 1, subPath: 1, ownerId: 1 });
 	schema.index({ status: 1, createdAt: 1 });
 
-	return schema as Schema<AttachmentDoc>;
+	return schema;
 }
 
 export function getOrCreateAttachmentModel(connection: Connection, collectionName: string): Model<AttachmentDoc> {
@@ -45,7 +47,7 @@ export function getOrCreateAttachmentModel(connection: Connection, collectionNam
 	try {
 		return connection.model<AttachmentDoc>(modelName);
 	} catch {
-		const schema = buildAttachmentSchema();
+		const schema = buildAttachmentSchema(connection);
 		schema.set("collection", collectionName);
 		return connection.model<AttachmentDoc>(modelName, schema);
 	}

@@ -19,7 +19,7 @@ function isLocalOrigin(origin: string): boolean {
 }
 
 function hostPatternMatches(pattern: string, hostname: string): boolean {
-	const escaped = pattern.replaceAll(".", "\\.").replaceAll("*", "[^.]+?");
+	const escaped = pattern.replaceAll(".", String.raw`\.`).replaceAll("*", "[^.]+?");
 	return new RegExp(`^${escaped}$`, "i").test(hostname);
 }
 

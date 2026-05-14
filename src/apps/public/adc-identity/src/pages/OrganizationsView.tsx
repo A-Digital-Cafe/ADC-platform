@@ -88,7 +88,7 @@ export function OrganizationsView({ perms }: { readonly perms: Permission[] }) {
 		setModalOpen(true);
 	};
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		clearErrors();
 		setSubmitting(true);

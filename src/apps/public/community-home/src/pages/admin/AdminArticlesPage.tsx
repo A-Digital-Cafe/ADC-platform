@@ -57,7 +57,39 @@ function ArticlesList({ authorId }: { readonly authorId?: string }) {
 	}, []);
 
 	const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
+	let articlesComponent;
+	if (articles === null) articlesComponent = <p className="text-muted">Cargando...</p>;
+	else if (articles.length === 0) articlesComponent = <p className="text-muted">No hay artículos.</p>;
+	else
+		articlesComponent = (
+			<>
+				<ul className="flex flex-col gap-2">
+					{articles.map((a) => {
+						const s = status(a);
+						return (
+							<li key={a.slug} className="p-3 bg-surface rounded-xxl shadow-cozy flex items-center justify-between gap-2">
+								<a
+									href={`/admin/articles/${a.slug}`}
+									onClick={(e) => {
+										e.preventDefault();
+										router.navigate(`/admin/articles/${a.slug}`);
+									}}
+									className="underline text-text"
+								>
+									{a.title}
+								</a>
+								<span className={`text-sm font-medium ${s.cls}`}>{s.text}</span>
+							</li>
+						);
+					})}
+				</ul>
+				{totalPages > 1 && (
+					<div className="flex justify-center mt-6">
+						<adc-pagination ref={paginationRef} currentPage={page} totalPages={totalPages} />
+					</div>
+				)}
+			</>
+		);
 	return (
 		<div className="p-8">
 			<h1>{heading}</h1>
@@ -71,39 +103,7 @@ function ArticlesList({ authorId }: { readonly authorId?: string }) {
 				</button>
 				<adc-search-input ref={searchRef} value={searchQuery} placeholder="Buscar..." class="max-w-70" />
 			</div>
-			{articles === null ? (
-				<p className="text-muted">Cargando...</p>
-			) : articles.length === 0 ? (
-				<p className="text-muted">No hay artículos.</p>
-			) : (
-				<>
-					<ul className="flex flex-col gap-2">
-						{articles.map((a) => {
-							const s = status(a);
-							return (
-								<li key={a.slug} className="p-3 bg-surface rounded-xxl shadow-cozy flex items-center justify-between gap-2">
-									<a
-										href={`/admin/articles/${a.slug}`}
-										onClick={(e) => {
-											e.preventDefault();
-											router.navigate(`/admin/articles/${a.slug}`);
-										}}
-										className="underline text-text"
-									>
-										{a.title}
-									</a>
-									<span className={`text-sm font-medium ${s.cls}`}>{s.text}</span>
-								</li>
-							);
-						})}
-					</ul>
-					{totalPages > 1 && (
-						<div className="flex justify-center mt-6">
-							<adc-pagination ref={paginationRef} currentPage={page} totalPages={totalPages} />
-						</div>
-					)}
-				</>
-			)}
+			{articlesComponent}
 		</div>
 	);
 }
