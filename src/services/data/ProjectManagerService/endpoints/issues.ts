@@ -61,11 +61,11 @@ async function attachAssigneeProfiles<T extends Issue | Issue[]>(service: Projec
 }
 
 export class IssueEndpoints {
-	static #service: ProjectManagerService;
-	static #kernelKey: symbol;
+	private static service: ProjectManagerService;
+	private static kernelKey: symbol;
 	static init(service: ProjectManagerService, kernelKey: symbol): void {
-		IssueEndpoints.#service ??= service;
-		IssueEndpoints.#kernelKey ??= kernelKey;
+		IssueEndpoints.service ??= service;
+		IssueEndpoints.kernelKey ??= kernelKey;
 	}
 
 	@RegisterEndpoint({
@@ -74,8 +74,8 @@ export class IssueEndpoints {
 		deferAuth: true,
 	})
 	static async list(ctx: EndpointCtx<{ projectId: string }>) {
-		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
+		const service = IssueEndpoints.service;
+		const caller = await service.resolveCaller(IssueEndpoints.kernelKey, ctx);
 		const project = await service.projects.getProject(ctx.params.projectId, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 
@@ -101,8 +101,8 @@ export class IssueEndpoints {
 	})
 	static async create(ctx: EndpointCtx<{ projectId: string }, Partial<Issue> & { title: string }>) {
 		if (!ctx.data?.title) throw new ProjectManagerError(400, "MISSING_FIELDS", "`title` es requerido");
-		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
+		const service = IssueEndpoints.service;
+		const caller = await service.resolveCaller(IssueEndpoints.kernelKey, ctx);
 		const project = await service.projects.getProject(ctx.params.projectId, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 		const data = { ...ctx.data };
@@ -110,7 +110,7 @@ export class IssueEndpoints {
 		// que comments (ownership + permiso). En `create` el issue aún no existe,
 		// así que evaluamos el contexto contra el proyecto + un issue "sintético".
 		if (Array.isArray(data.description) && data.description.length) {
-			const pmCtx = await service.buildPMCtx(IssueEndpoints.#kernelKey, ctx);
+			const pmCtx = await service.buildPMCtx(IssueEndpoints.kernelKey, ctx);
 			const syntheticAttachmentCtx = {
 				userId: ctx.user?.id ?? "",
 				tokenOrgId: ctx.user?.orgId ?? null,
@@ -135,8 +135,8 @@ export class IssueEndpoints {
 		deferAuth: true,
 	})
 	static async get(ctx: EndpointCtx<{ id: string }>) {
-		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
+		const service = IssueEndpoints.service;
+		const caller = await service.resolveCaller(IssueEndpoints.kernelKey, ctx);
 		const issue = await service.issues.get(ctx.params.id, ctx.token ?? undefined, caller);
 		if (!issue) throw new ProjectManagerError(404, "ISSUE_NOT_FOUND", "Issue no encontrado");
 		return await attachAssigneeProfiles(service, issue);
@@ -149,13 +149,13 @@ export class IssueEndpoints {
 		options: { rateLimit: ISSUE_UPDATE_RATE_LIMIT },
 	})
 	static async update(ctx: EndpointCtx<{ id: string }, Partial<Issue> & { reason?: string }>) {
-		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
+		const service = IssueEndpoints.service;
+		const caller = await service.resolveCaller(IssueEndpoints.kernelKey, ctx);
 		const { reason, ...updates } = ctx.data ?? {};
 		// Si se actualiza la descripción, validar adjuntos contra el contexto real
 		// del issue (project + issue resueltos).
 		if (Array.isArray(updates.description)) {
-			const built = await buildIssueResourceCtx(service, IssueEndpoints.#kernelKey, ctx, { requireAuth: true });
+			const built = await buildIssueResourceCtx(service, IssueEndpoints.kernelKey, ctx, { requireAuth: true });
 			updates.description = await validateAndSanitizeIssueDescription(service, built.attachmentCtx, updates.description);
 		}
 		const updated = await service.issues.update(ctx.params.id, updates, reason, ctx.token ?? undefined, caller);
@@ -174,8 +174,8 @@ export class IssueEndpoints {
 		options: { rateLimit: ISSUE_DELETE_RATE_LIMIT },
 	})
 	static async delete(ctx: EndpointCtx<{ id: string }>) {
-		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
+		const service = IssueEndpoints.service;
+		const caller = await service.resolveCaller(IssueEndpoints.kernelKey, ctx);
 		await service.issues.delete(ctx.params.id, ctx.token ?? undefined, caller);
 		return { ok: true };
 	}
@@ -190,8 +190,8 @@ export class IssueEndpoints {
 		ctx: EndpointCtx<{ id: string }, { columnKey: string; reason?: string; commentBlocks?: Block[]; commentAttachmentIds?: string[] }>
 	) {
 		if (!ctx.data?.columnKey) throw new ProjectManagerError(400, "MISSING_FIELDS", "`columnKey` es requerido");
-		const service = IssueEndpoints.#service;
-		const kernelKey = IssueEndpoints.#kernelKey;
+		const service = IssueEndpoints.service;
+		const kernelKey = IssueEndpoints.kernelKey;
 		const caller = await service.resolveCaller(kernelKey, ctx);
 
 		// Pre-resolución para validar la transición y comprobar el flag del proyecto
@@ -232,8 +232,8 @@ export class IssueEndpoints {
 		deferAuth: true,
 	})
 	static async history(ctx: EndpointCtx<{ id: string }>) {
-		const service = IssueEndpoints.#service;
-		const caller = await service.resolveCaller(IssueEndpoints.#kernelKey, ctx);
+		const service = IssueEndpoints.service;
+		const caller = await service.resolveCaller(IssueEndpoints.kernelKey, ctx);
 		const issue = await service.issues.get(ctx.params.id, ctx.token ?? undefined, caller);
 		if (!issue) throw new ProjectManagerError(404, "ISSUE_NOT_FOUND", "Issue no encontrado");
 		return { updateLog: issue.updateLog };

@@ -162,10 +162,10 @@ function sanitizeUserForContext(user: NonNullable<Awaited<ReturnType<IdentityMan
  * Registrados automáticamente por @EnableEndpoints en IdentityManagerService
  */
 export class UserEndpoints {
-	static #identity: IdentityManagerService;
+	private static identity: IdentityManagerService;
 
 	static init(identity: IdentityManagerService): void {
-		UserEndpoints.#identity ??= identity;
+		UserEndpoints.identity ??= identity;
 	}
 
 	@RegisterEndpoint({
@@ -175,7 +175,7 @@ export class UserEndpoints {
 	static async checkUsername(ctx: EndpointCtx<{ username: string }>) {
 		const { username } = ctx.params;
 
-		const exists = await UserEndpoints.#identity.users.existUserByName(username);
+		const exists = await UserEndpoints.identity.users.existUserByName(username);
 
 		if (!exists) {
 			throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
@@ -201,7 +201,7 @@ export class UserEndpoints {
 			.split(",")
 			.map((s) => s.trim())
 			.filter(Boolean);
-		const profiles = await UserEndpoints.#identity.users.getPublicProfiles(ids);
+		const profiles = await UserEndpoints.identity.users.getPublicProfiles(ids);
 		const out: Record<string, { username?: string; avatar: string | null }> = {};
 		for (const [id, p] of profiles) out[id] = p;
 		return { profiles: out };
@@ -215,7 +215,7 @@ export class UserEndpoints {
 	static async listUsers(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		const users = await UserEndpoints.#identity.users.getAllUsers(ctx.token!, orgId);
+		const users = await UserEndpoints.identity.users.getAllUsers(ctx.token!, orgId);
 
 		// Recoger todos los roleIds referenciados por los usuarios (incluidos orgMemberships)
 		const roleIdSet = new Set<string>();
@@ -225,7 +225,7 @@ export class UserEndpoints {
 			}
 		}
 
-		const roles = await UserEndpoints.#identity.roles.getRolesByIds([...roleIdSet], ctx.token!, orgId);
+		const roles = await UserEndpoints.identity.roles.getRolesByIds([...roleIdSet], ctx.token!, orgId);
 
 		return {
 			users: users.map((user) => sanitizeUserForContext(user, orgId)),
@@ -242,7 +242,7 @@ export class UserEndpoints {
 		const q = ctx.query?.q?.trim();
 		if (!q || q.length < 2) return [];
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		const users = await UserEndpoints.#identity.users.searchUsers(q, 10, ctx.token!, orgId);
+		const users = await UserEndpoints.identity.users.searchUsers(q, 10, ctx.token!, orgId);
 
 		return users.map((user) => sanitizeUserForContext(user, orgId));
 	}
@@ -256,7 +256,7 @@ export class UserEndpoints {
 			throw new AuthError(401, "UNAUTHORIZED", "No hay usuario autenticado");
 		}
 
-		const user = await UserEndpoints.#identity.users.getUser(ctx.user.id, ctx.token!);
+		const user = await UserEndpoints.identity.users.getUser(ctx.user.id, ctx.token!);
 		if (!user) {
 			throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		}
@@ -270,7 +270,7 @@ export class UserEndpoints {
 	})
 	static async getMyPreferences(ctx: EndpointCtx) {
 		if (!ctx.user) throw new AuthError(401, "UNAUTHORIZED", "No hay usuario autenticado");
-		const user = await UserEndpoints.#identity.users.getUser(ctx.user.id, ctx.token!);
+		const user = await UserEndpoints.identity.users.getUser(ctx.user.id, ctx.token!);
 		if (!user) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		const preferences = (user.metadata?.preferences as Record<string, unknown>) ?? {};
 		return { preferences };
@@ -286,11 +286,11 @@ export class UserEndpoints {
 		if (typeof patch !== "object" || Array.isArray(patch)) {
 			throw new IdentityError(400, "INVALID_BODY", "El body debe ser un objeto plano");
 		}
-		const user = await UserEndpoints.#identity.users.getUser(ctx.user.id, ctx.token!);
+		const user = await UserEndpoints.identity.users.getUser(ctx.user.id, ctx.token!);
 		if (!user) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		const currentPrefs = (user.metadata?.preferences as Record<string, unknown>) ?? {};
 		const nextPrefs = { ...currentPrefs, ...patch };
-		const updated = await UserEndpoints.#identity.users.updateOwnMetadata(ctx.user.id, { preferences: nextPrefs }, ctx.token!);
+		const updated = await UserEndpoints.identity.users.updateOwnMetadata(ctx.user.id, { preferences: nextPrefs }, ctx.token!);
 		return { preferences: (updated.metadata?.preferences as Record<string, unknown>) ?? {} };
 	}
 
@@ -301,8 +301,8 @@ export class UserEndpoints {
 	})
 	static async getUser(ctx: EndpointCtx<{ userId: string }>) {
 		const callerOrgId = ctx.user?.orgId;
-		await assertUserOrgAccess(UserEndpoints.#identity, ctx.params.userId, callerOrgId, ctx.token!);
-		const user = await UserEndpoints.#identity.users.getUser(ctx.params.userId, ctx.token!);
+		await assertUserOrgAccess(UserEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		const user = await UserEndpoints.identity.users.getUser(ctx.params.userId, ctx.token!);
 		if (!user) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		return sanitizeUserForContext(user, callerOrgId);
 	}
@@ -327,18 +327,18 @@ export class UserEndpoints {
 			throw new AuthError(400, "WEAK_PASSWORD", "La nueva contraseña debe tener al menos 8 caracteres");
 		}
 
-		const user = await UserEndpoints.#identity.users.getUser(ctx.user.id, ctx.token!);
+		const user = await UserEndpoints.identity.users.getUser(ctx.user.id, ctx.token!);
 		if (!user) {
 			throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		}
 
-		const isValid = await UserEndpoints.#identity.users.verifyUserPassword(user.id, currentPassword);
+		const isValid = await UserEndpoints.identity.users.verifyUserPassword(user.id, currentPassword);
 
 		if (!isValid) {
 			throw new AuthError(401, "INVALID_PASSWORD", "Contraseña actual incorrecta");
 		}
 
-		await UserEndpoints.#identity.users.updatePassword(user.id, newPassword, ctx.token!);
+		await UserEndpoints.identity.users.updatePassword(user.id, newPassword, ctx.token!);
 
 		return { success: true };
 	}
@@ -358,17 +358,17 @@ export class UserEndpoints {
 		const callerOrgId = ctx.user?.orgId || ctx.data?.orgId;
 		// Validar que los roleIds asignados sean del contexto correcto
 		if (ctx.data.roleIds?.length) {
-			await validateRoleIdsContext(UserEndpoints.#identity, ctx.data.roleIds, callerOrgId, ctx.token!);
+			await validateRoleIdsContext(UserEndpoints.identity, ctx.data.roleIds, callerOrgId, ctx.token!);
 		}
 		const globalRoleIds = callerOrgId ? [] : ctx.data.roleIds;
-		const user = await UserEndpoints.#identity.users.createUser(ctx.data.username, ctx.data.password, globalRoleIds, ctx.token!);
+		const user = await UserEndpoints.identity.users.createUser(ctx.data.username, ctx.data.password, globalRoleIds, ctx.token!);
 		// Si se crea desde modo org, asociar automáticamente a la organización
 		if (callerOrgId) {
-			await UserEndpoints.#identity.users.addOrgMembership(user.id, callerOrgId, ctx.data.roleIds || [], ctx.token!);
+			await UserEndpoints.identity.users.addOrgMembership(user.id, callerOrgId, ctx.data.roleIds || [], ctx.token!);
 		}
-		const createdUser = callerOrgId ? await UserEndpoints.#identity.users.getUser(user.id, ctx.token!) : user;
+		const createdUser = callerOrgId ? await UserEndpoints.identity.users.getUser(user.id, ctx.token!) : user;
 		if (!createdUser) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
-		UserEndpoints.#identity.permissions.invalidateUser(createdUser.id);
+		UserEndpoints.identity.permissions.invalidateUser(createdUser.id);
 		return sanitizeUserForContext(createdUser, callerOrgId);
 	}
 
@@ -392,16 +392,16 @@ export class UserEndpoints {
 	) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
 
-		await assertUserOrgAccess(UserEndpoints.#identity, ctx.params.userId, callerOrgId, ctx.token!);
+		await assertUserOrgAccess(UserEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
 
 		// Obtener usuario actual para validaciones comparativas
-		const currentUser = await UserEndpoints.#identity.users.getUser(ctx.params.userId, ctx.token!);
+		const currentUser = await UserEndpoints.identity.users.getUser(ctx.params.userId, ctx.token!);
 		if (!currentUser) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 
 		const updates = { ...ctx.data };
 
 		// Validar campos inmutables/sensibles ANTES de cualquier modificación
-		await validateImmutableFields(UserEndpoints.#identity, currentUser, updates, callerOrgId);
+		await validateImmutableFields(UserEndpoints.identity, currentUser, updates, callerOrgId);
 
 		// Prevent updating sensitive fields via API
 		delete (updates as any).passwordHash;
@@ -409,7 +409,7 @@ export class UserEndpoints {
 
 		// Validar que los roleIds asignados sean del contexto correcto
 		if (updates.roleIds?.length) {
-			await validateRoleIdsContext(UserEndpoints.#identity, updates.roleIds, callerOrgId, ctx.token!);
+			await validateRoleIdsContext(UserEndpoints.identity, updates.roleIds, callerOrgId, ctx.token!);
 		}
 
 		if (callerOrgId) {
@@ -428,18 +428,18 @@ export class UserEndpoints {
 			delete (safeUpdates as any).roleIds;
 			delete (safeUpdates as any).groupIds;
 
-			const user = await UserEndpoints.#identity.users.updateUser(
+			const user = await UserEndpoints.identity.users.updateUser(
 				ctx.params.userId,
 				{ ...safeUpdates, orgMemberships: nextMemberships },
 				ctx.token!
 			);
-			UserEndpoints.#identity.permissions.invalidateUser(user.id);
+			UserEndpoints.identity.permissions.invalidateUser(user.id);
 			return sanitizeUserForContext(user, callerOrgId);
 		}
 
 		// Global admin: permitir todas las actualizaciones validadas
-		const user = await UserEndpoints.#identity.users.updateUser(ctx.params.userId, updates, ctx.token!);
-		UserEndpoints.#identity.permissions.invalidateUser(user.id);
+		const user = await UserEndpoints.identity.users.updateUser(ctx.params.userId, updates, ctx.token!);
+		UserEndpoints.identity.permissions.invalidateUser(user.id);
 		return sanitizeUserForContext(user);
 	}
 
@@ -450,14 +450,14 @@ export class UserEndpoints {
 	})
 	static async deleteUser(ctx: EndpointCtx<{ userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		await assertUserOrgAccess(UserEndpoints.#identity, ctx.params.userId, callerOrgId, ctx.token!);
+		await assertUserOrgAccess(UserEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
 		if (callerOrgId) {
-			await UserEndpoints.#identity.users.removeOrgMembership(ctx.params.userId, callerOrgId, ctx.token!);
-			UserEndpoints.#identity.permissions.invalidateUser(ctx.params.userId);
+			await UserEndpoints.identity.users.removeOrgMembership(ctx.params.userId, callerOrgId, ctx.token!);
+			UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 			return { success: true };
 		}
-		await UserEndpoints.#identity.users.deleteUser(ctx.params.userId, ctx.token!);
-		UserEndpoints.#identity.permissions.invalidateUser(ctx.params.userId);
+		await UserEndpoints.identity.users.deleteUser(ctx.params.userId, ctx.token!);
+		UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
 	}
 }

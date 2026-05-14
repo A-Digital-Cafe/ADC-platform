@@ -13,7 +13,7 @@ function findUILibrary(modules: Map<string, RegisteredUIModule>, targetModule: R
 
 	for (const depName of uiDependencies) {
 		const depModule = modules.get(depName);
-		if (depModule && depModule.uiConfig.framework === "stencil") {
+		if (depModule?.uiConfig.framework === "stencil") {
 			return depModule;
 		}
 	}

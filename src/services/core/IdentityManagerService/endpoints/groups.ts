@@ -47,10 +47,10 @@ async function validateRoleIdsContext(identity: IdentityManagerService, roleIds:
 
 // Endpoints HTTP para gestión de grupos
 export class GroupEndpoints {
-	static #identity: IdentityManagerService;
+	private static identity: IdentityManagerService;
 
 	static init(identity: IdentityManagerService): void {
-		GroupEndpoints.#identity ??= identity;
+		GroupEndpoints.identity ??= identity;
 	}
 
 	@RegisterEndpoint({
@@ -61,7 +61,7 @@ export class GroupEndpoints {
 	static async listGroups(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		return GroupEndpoints.#identity.groups.getAllGroups(ctx.token!, orgId);
+		return GroupEndpoints.identity.groups.getAllGroups(ctx.token!, orgId);
 	}
 
 	@RegisterEndpoint({
@@ -73,7 +73,7 @@ export class GroupEndpoints {
 		const q = ctx.query?.q?.trim();
 		if (!q || q.length < 2) return [];
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		const groups = await GroupEndpoints.#identity.groups.searchGroups(q, 10, ctx.token!, orgId);
+		const groups = await GroupEndpoints.identity.groups.searchGroups(q, 10, ctx.token!, orgId);
 		return groups;
 	}
 
@@ -83,7 +83,7 @@ export class GroupEndpoints {
 		permissions: [P.IDENTITY.GROUPS.READ],
 	})
 	static async getGroup(ctx: EndpointCtx<{ groupId: string }>) {
-		const group = await GroupEndpoints.#identity.groups.getGroup(ctx.params.groupId, ctx.token!);
+		const group = await GroupEndpoints.identity.groups.getGroup(ctx.params.groupId, ctx.token!);
 		if (!group) throw new IdentityError(404, "GROUP_NOT_FOUND", "Grupo no encontrado");
 		const callerOrgId = ctx.user?.orgId;
 		if (callerOrgId && group.orgId !== callerOrgId) {
@@ -106,16 +106,16 @@ export class GroupEndpoints {
 		// Org admin usa orgId del token; global admin puede especificar en body
 		const orgId = ctx.user?.orgId || ctx.data?.orgId;
 		if (ctx.data.roleIds?.length) {
-			await validateRoleIdsContext(GroupEndpoints.#identity, ctx.data.roleIds, orgId, ctx.token!);
+			await validateRoleIdsContext(GroupEndpoints.identity, ctx.data.roleIds, orgId, ctx.token!);
 		}
-		const group = await GroupEndpoints.#identity.groups.createGroup(
+		const group = await GroupEndpoints.identity.groups.createGroup(
 			ctx.data.name,
 			ctx.data.description || "",
 			ctx.data.roleIds,
 			ctx.token!,
 			orgId
 		);
-		GroupEndpoints.#identity.permissions.invalidateGroup(group.id);
+		GroupEndpoints.identity.permissions.invalidateGroup(group.id);
 		return group;
 	}
 
@@ -131,12 +131,12 @@ export class GroupEndpoints {
 		>
 	) {
 		const callerOrgId = ctx.user?.orgId;
-		await assertGroupOrgAccess(GroupEndpoints.#identity, ctx.params.groupId, callerOrgId, ctx.token!);
+		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
 		if (ctx.data?.roleIds?.length) {
-			await validateRoleIdsContext(GroupEndpoints.#identity, ctx.data.roleIds, callerOrgId, ctx.token!);
+			await validateRoleIdsContext(GroupEndpoints.identity, ctx.data.roleIds, callerOrgId, ctx.token!);
 		}
-		const group = await GroupEndpoints.#identity.groups.updateGroup(ctx.params.groupId, ctx.data || {}, ctx.token!);
-		GroupEndpoints.#identity.permissions.invalidateGroup(ctx.params.groupId);
+		const group = await GroupEndpoints.identity.groups.updateGroup(ctx.params.groupId, ctx.data || {}, ctx.token!);
+		GroupEndpoints.identity.permissions.invalidateGroup(ctx.params.groupId);
 		return group;
 	}
 
@@ -146,9 +146,9 @@ export class GroupEndpoints {
 		permissions: [P.IDENTITY.GROUPS.DELETE],
 	})
 	static async deleteGroup(ctx: EndpointCtx<{ groupId: string }>) {
-		await assertGroupOrgAccess(GroupEndpoints.#identity, ctx.params.groupId, ctx.user?.orgId, ctx.token!);
-		await GroupEndpoints.#identity.groups.deleteGroup(ctx.params.groupId, ctx.token!);
-		GroupEndpoints.#identity.permissions.invalidateGroup(ctx.params.groupId);
+		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, ctx.user?.orgId, ctx.token!);
+		await GroupEndpoints.identity.groups.deleteGroup(ctx.params.groupId, ctx.token!);
+		GroupEndpoints.identity.permissions.invalidateGroup(ctx.params.groupId);
 		return { success: true };
 	}
 
@@ -158,8 +158,8 @@ export class GroupEndpoints {
 		permissions: [P.IDENTITY.GROUPS.READ],
 	})
 	static async listGroupMembers(ctx: EndpointCtx<{ groupId: string }>) {
-		await assertGroupOrgAccess(GroupEndpoints.#identity, ctx.params.groupId, ctx.user?.orgId, ctx.token!);
-		return GroupEndpoints.#identity.groups.getGroupUsers(ctx.params.groupId, ctx.token!);
+		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, ctx.user?.orgId, ctx.token!);
+		return GroupEndpoints.identity.groups.getGroupUsers(ctx.params.groupId, ctx.token!);
 	}
 
 	@RegisterEndpoint({
@@ -169,10 +169,10 @@ export class GroupEndpoints {
 	})
 	static async addUserToGroup(ctx: EndpointCtx<{ groupId: string; userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		await assertGroupOrgAccess(GroupEndpoints.#identity, ctx.params.groupId, callerOrgId, ctx.token!);
-		await assertUserInOrg(GroupEndpoints.#identity, ctx.params.userId, callerOrgId, ctx.token!);
-		await GroupEndpoints.#identity.groups.addUserToGroup(ctx.params.userId, ctx.params.groupId, ctx.token!);
-		GroupEndpoints.#identity.permissions.invalidateUser(ctx.params.userId);
+		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
+		await assertUserInOrg(GroupEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		await GroupEndpoints.identity.groups.addUserToGroup(ctx.params.userId, ctx.params.groupId, ctx.token!);
+		GroupEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
 	}
 
@@ -183,10 +183,10 @@ export class GroupEndpoints {
 	})
 	static async removeUserFromGroup(ctx: EndpointCtx<{ groupId: string; userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		await assertGroupOrgAccess(GroupEndpoints.#identity, ctx.params.groupId, callerOrgId, ctx.token!);
-		await assertUserInOrg(GroupEndpoints.#identity, ctx.params.userId, callerOrgId, ctx.token!);
-		await GroupEndpoints.#identity.groups.removeUserFromGroup(ctx.params.userId, ctx.params.groupId, ctx.token!);
-		GroupEndpoints.#identity.permissions.invalidateUser(ctx.params.userId);
+		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
+		await assertUserInOrg(GroupEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		await GroupEndpoints.identity.groups.removeUserFromGroup(ctx.params.userId, ctx.params.groupId, ctx.token!);
+		GroupEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
 	}
 }

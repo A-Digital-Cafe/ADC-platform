@@ -19,7 +19,7 @@ export class DockerManager {
 		try {
 			this.#dockerPath =
 				os.platform() === "win32"
-					? "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe"
+					? String.raw`C:\Program Files\Docker\Docker\resources\bin\docker.exe`
 					: execFileSync("/usr/bin/which", ["docker"]).toString().trim();
 		} catch (error) {
 			this.#logger.logError(`Failed to locate Docker binary: ${error}`);
@@ -53,12 +53,11 @@ export class DockerManager {
 			docker.on("close", (code) => {
 				if (code === 0) {
 					this.#logger.logOk(`Servicios Docker iniciados para ${name}`);
-					const map =
-						type === "app"
-							? this.#appDockerComposeMap
-							: type === "service"
-								? this.#serviceDockerComposeMap
-								: this.#commonDockerComposeMap;
+
+					let map;
+					if (type === "app") map = this.#appDockerComposeMap;
+					else if (type === "service") map = this.#serviceDockerComposeMap;
+					else map = this.#commonDockerComposeMap;
 					map.set(name, dir);
 					setTimeout(() => resolve(), 3000);
 				} else {

@@ -535,12 +535,12 @@ ${exposesEntries}
 	 */
 	protected getI18nTemplate(context: IBuildContext): string {
 		const indexHtmlPath = normalizeForConfig(path.join(context.module.appDir, "index.html"));
-		return `
+		return String.raw`
             scriptLoading: 'blocking',
             inject: 'body',
             templateContent: () => {
                 const html = fs.readFileSync('${indexHtmlPath}', 'utf-8');
-                return html.replace('</head>', '    <script src="/adc-i18n.js"></script>\\n  </head>');
+                return html.replace('</head>', '    <script src="/adc-i18n.js"></script>\n  </head>');
             },`;
 	}
 
@@ -572,7 +572,7 @@ ${exposesEntries}
 		const uiDependencies = module.uiConfig.uiDependencies || [];
 		for (const depName of uiDependencies) {
 			const depModule = registeredModules.get(depName);
-			if (depModule && depModule.uiConfig.framework === "stencil") {
+			if (depModule?.uiConfig.framework === "stencil") {
 				const depPublicDir = normalizeForConfig(path.join(depModule.appDir, "public"));
 				staticConfigs.push(`{
             directory: '${depPublicDir}',

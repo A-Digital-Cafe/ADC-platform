@@ -50,7 +50,7 @@ export class AstroStrategy extends BaseCLIStrategy {
 
 		const finalConfig = {
 			...astroDefaults,
-			...(module.uiConfig.astroConfig || {}),
+			...module.uiConfig.astroConfig,
 			outDir: `./${outputDir}`,
 		};
 
@@ -64,7 +64,7 @@ export class AstroStrategy extends BaseCLIStrategy {
 		];
 
 		const buildConfig = {
-			...(finalConfig.build || {}),
+			...finalConfig.build,
 			format: "directory",
 		};
 

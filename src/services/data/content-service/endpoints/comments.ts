@@ -46,29 +46,25 @@ const REACT_RATE_LIMIT = { max: 60, timeWindow: 60_000 };
 const DRAFT_RATE_LIMIT = { max: 60, timeWindow: 60_000 };
 
 export class CommentEndpoints {
-	static #articleModel: Model<Article>;
-	static #commentsManager: CommentsManager | null = null;
-	static #identity: IdentityManagerService | null = null;
+	private static articleModel: Model<Article>;
+	private static commentsManager: CommentsManager | null = null;
+	private static identity: IdentityManagerService | null = null;
 
 	static init(articleModel: Model<Article>, commentsManager: CommentsManager, identity: IdentityManagerService | null = null): void {
-		CommentEndpoints.#articleModel ??= articleModel;
-		CommentEndpoints.#commentsManager ??= commentsManager;
-		CommentEndpoints.#identity ??= identity;
-	}
-
-	static get articleModel(): Model<Article> {
-		return CommentEndpoints.#articleModel;
+		CommentEndpoints.articleModel ??= articleModel;
+		CommentEndpoints.commentsManager ??= commentsManager;
+		CommentEndpoints.identity ??= identity;
 	}
 
 	static #manager(): CommentsManager {
-		if (!CommentEndpoints.#commentsManager) {
+		if (!CommentEndpoints.commentsManager) {
 			throw new HttpError(503, "COMMENTS_UNAVAILABLE", "Comentarios no disponibles");
 		}
-		return CommentEndpoints.#commentsManager;
+		return CommentEndpoints.commentsManager;
 	}
 
 	static async #attachFreshAuthorProfiles(page: CommentsPage): Promise<CommentsPage> {
-		const identity = CommentEndpoints.#identity;
+		const identity = CommentEndpoints.identity;
 		if (!identity || page.items.length === 0) return page;
 		const authorIds = Array.from(new Set(page.items.map((c) => c.authorId).filter(Boolean)));
 		if (authorIds.length === 0) return page;
@@ -89,7 +85,7 @@ export class CommentEndpoints {
 	}
 
 	static async #attachFreshAuthorProfileToCtx(commentCtx: { userId: string; authorName?: string; authorImage?: string | null }) {
-		const identity = CommentEndpoints.#identity;
+		const identity = CommentEndpoints.identity;
 		if (!identity || !commentCtx.userId) return;
 		try {
 			const profiles = await identity.users.getPublicProfiles([commentCtx.userId]);

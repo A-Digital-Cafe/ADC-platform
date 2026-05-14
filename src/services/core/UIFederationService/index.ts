@@ -371,7 +371,7 @@ export default class UIFederationService extends BaseService {
 		// Si se proporciona namespace, usar ese directamente
 		if (namespace) {
 			const namespaceModules = this.registeredModules.get(namespace);
-			if (namespaceModules && namespaceModules.has(name)) {
+			if (namespaceModules?.has(name)) {
 				namespaceModules.delete(name);
 				this.#updateImportMap(namespace);
 				this.logger.logOk(`Módulo UI ${name} [${namespace}] desregistrado`);
@@ -750,7 +750,7 @@ export default class UIFederationService extends BaseService {
 
 	async #injectImportMapsInModuleHTMLs(moduleName: string, namespace: string): Promise<void> {
 		const module = this.#getModule(namespace, moduleName);
-		if (!module || !module.outputPath) return;
+		if (!module?.outputPath) return;
 
 		const namespaceModules = this.#getNamespaceModules(namespace);
 		const importMap = generateCompleteImportMap(namespaceModules, this.port, namespace);
@@ -775,7 +775,7 @@ export default class UIFederationService extends BaseService {
 			});
 			this.logger.logDebug(`i18n Client [${namespace}] registrado en ${i18nPath}`);
 		} catch (error: any) {
-			this.logger.logDebug(`Endpoint i18n ya registrado para ${namespace}`);
+			this.logger.logDebug(`Endpoint i18n ya registrado para ${namespace}: ${error.message}`);
 		}
 	}
 
@@ -798,7 +798,7 @@ export default class UIFederationService extends BaseService {
 			});
 			this.logger.logDebug(`Service Worker [${namespace}] registrado en ${swPath}`);
 		} catch (error: any) {
-			this.logger.logDebug(`Endpoint SW ya registrado para ${namespace}`);
+			this.logger.logDebug(`Endpoint SW ya registrado para ${namespace}: ${error.message}`);
 		}
 	}
 }

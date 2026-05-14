@@ -265,7 +265,8 @@ function TypeMenu({ onPick, onClose }: { readonly onPick: (type: BlockType) => v
 	const ref = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		function onDocClick(ev: MouseEvent) {
-			if (!ref.current?.contains(ev.target as Node)) onClose();
+			if (!(ev.target instanceof Node)) return;
+			if (!ref.current?.contains(ev.target)) onClose();
 		}
 		function onKey(ev: KeyboardEvent) {
 			if (ev.key === "Escape") onClose();

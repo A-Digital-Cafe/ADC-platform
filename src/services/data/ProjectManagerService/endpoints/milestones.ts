@@ -8,11 +8,11 @@ const MILESTONE_UPDATE_RATE_LIMIT = { max: 30, timeWindow: 60_000 };
 const MILESTONE_DELETE_RATE_LIMIT = { max: 10, timeWindow: 60_000 };
 
 export class MilestoneEndpoints {
-	static #service: ProjectManagerService;
-	static #kernelKey: symbol;
+	private static service: ProjectManagerService;
+	private static kernelKey: symbol;
 	static init(service: ProjectManagerService, kernelKey: symbol): void {
-		MilestoneEndpoints.#service ??= service;
-		MilestoneEndpoints.#kernelKey ??= kernelKey;
+		MilestoneEndpoints.service ??= service;
+		MilestoneEndpoints.kernelKey ??= kernelKey;
 	}
 
 	@RegisterEndpoint({
@@ -21,8 +21,8 @@ export class MilestoneEndpoints {
 		deferAuth: true,
 	})
 	static async list(ctx: EndpointCtx<{ projectId: string }>) {
-		const service = MilestoneEndpoints.#service;
-		const caller = await service.resolveCaller(MilestoneEndpoints.#kernelKey, ctx);
+		const service = MilestoneEndpoints.service;
+		const caller = await service.resolveCaller(MilestoneEndpoints.kernelKey, ctx);
 		return { milestones: await service.milestones.list(ctx.params.projectId, ctx.token ?? undefined, caller) };
 	}
 
@@ -34,8 +34,8 @@ export class MilestoneEndpoints {
 	})
 	static async create(ctx: EndpointCtx<{ projectId: string }, Partial<Milestone> & { name: string }>) {
 		if (!ctx.data?.name) throw new ProjectManagerError(400, "MISSING_FIELDS", "`name` es requerido");
-		const service = MilestoneEndpoints.#service;
-		const caller = await service.resolveCaller(MilestoneEndpoints.#kernelKey, ctx);
+		const service = MilestoneEndpoints.service;
+		const caller = await service.resolveCaller(MilestoneEndpoints.kernelKey, ctx);
 		return service.milestones.create(ctx.params.projectId, ctx.data, ctx.token ?? undefined, caller);
 	}
 
@@ -46,8 +46,8 @@ export class MilestoneEndpoints {
 		options: { rateLimit: MILESTONE_UPDATE_RATE_LIMIT },
 	})
 	static async update(ctx: EndpointCtx<{ id: string }, Partial<Milestone>>) {
-		const service = MilestoneEndpoints.#service;
-		const caller = await service.resolveCaller(MilestoneEndpoints.#kernelKey, ctx);
+		const service = MilestoneEndpoints.service;
+		const caller = await service.resolveCaller(MilestoneEndpoints.kernelKey, ctx);
 		return service.milestones.update(ctx.params.id, ctx.data ?? {}, ctx.token ?? undefined, caller);
 	}
 
@@ -58,8 +58,8 @@ export class MilestoneEndpoints {
 		options: { rateLimit: MILESTONE_DELETE_RATE_LIMIT },
 	})
 	static async delete(ctx: EndpointCtx<{ id: string }>) {
-		const service = MilestoneEndpoints.#service;
-		const caller = await service.resolveCaller(MilestoneEndpoints.#kernelKey, ctx);
+		const service = MilestoneEndpoints.service;
+		const caller = await service.resolveCaller(MilestoneEndpoints.kernelKey, ctx);
 		await service.milestones.delete(ctx.params.id, ctx.token ?? undefined, caller);
 		return { ok: true };
 	}

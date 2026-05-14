@@ -83,7 +83,8 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 	// Estabilizar namespaces para evitar re-renders infinitos
 	const namespacesKey = Array.isArray(namespace) ? namespace.join(",") : namespace || "";
 	const namespaces = useMemo(() => {
-		return Array.isArray(namespace) ? namespace : namespace ? [namespace] : [];
+		if (Array.isArray(namespace)) return namespace;
+		return namespace ? [namespace] : [];
 	}, [namespacesKey]);
 
 	// Counter para forzar re-cálculo de t() cuando las traducciones cambian
@@ -92,7 +93,10 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 	const [ready, setReady] = useState(() => {
 		// Check if translations are already loaded
 		// Nota: usamos namespace directamente aquí porque namespaces aún no está calculado
-		const ns = Array.isArray(namespace) ? namespace : namespace ? [namespace] : [];
+		let ns: string[];
+		if (Array.isArray(namespace)) ns = namespace;
+		else if (namespace) ns = [namespace];
+		else ns = [];
 		return areNamespacesLoaded(ns);
 	});
 

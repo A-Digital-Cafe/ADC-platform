@@ -44,11 +44,11 @@ async function assertCanEditDescription(service: ProjectManagerService, kernelKe
 }
 
 export class IssueDescriptionEndpoints {
-	static #service: ProjectManagerService;
-	static #kernelKey: symbol;
+	private static service: ProjectManagerService;
+	private static kernelKey: symbol;
 	static init(service: ProjectManagerService, kernelKey: symbol): void {
-		IssueDescriptionEndpoints.#service ??= service;
-		IssueDescriptionEndpoints.#kernelKey ??= kernelKey;
+		IssueDescriptionEndpoints.service ??= service;
+		IssueDescriptionEndpoints.kernelKey ??= kernelKey;
 	}
 
 	@RegisterEndpoint({
@@ -58,8 +58,8 @@ export class IssueDescriptionEndpoints {
 		options: { rateLimit: DRAFT_RATE_LIMIT },
 	})
 	static async getDraft(ctx: EndpointCtx<{ id: string }>) {
-		const svc = IssueDescriptionEndpoints.#service;
-		const built = await assertCanEditDescription(svc, IssueDescriptionEndpoints.#kernelKey, ctx);
+		const svc = IssueDescriptionEndpoints.service;
+		const built = await assertCanEditDescription(svc, IssueDescriptionEndpoints.kernelKey, ctx);
 		const draft = await svc.issueDescriptionDrafts.get(built.commentCtx.userId, {
 			targetType: DRAFT_TARGET_TYPE,
 			targetId: built.issue.id,
@@ -74,8 +74,8 @@ export class IssueDescriptionEndpoints {
 		options: { rateLimit: DRAFT_RATE_LIMIT, skipIdempotency: true },
 	})
 	static async saveDraft(ctx: EndpointCtx<{ id: string }, SaveDescriptionDraftBody>) {
-		const svc = IssueDescriptionEndpoints.#service;
-		const built = await assertCanEditDescription(svc, IssueDescriptionEndpoints.#kernelKey, ctx);
+		const svc = IssueDescriptionEndpoints.service;
+		const built = await assertCanEditDescription(svc, IssueDescriptionEndpoints.kernelKey, ctx);
 
 		const rawBlocks = ctx.data?.blocks;
 		if (!Array.isArray(rawBlocks)) {
@@ -99,8 +99,8 @@ export class IssueDescriptionEndpoints {
 		options: { rateLimit: DRAFT_RATE_LIMIT, skipIdempotency: true },
 	})
 	static async deleteDraft(ctx: EndpointCtx<{ id: string }>) {
-		const svc = IssueDescriptionEndpoints.#service;
-		const built = await assertCanEditDescription(svc, IssueDescriptionEndpoints.#kernelKey, ctx);
+		const svc = IssueDescriptionEndpoints.service;
+		const built = await assertCanEditDescription(svc, IssueDescriptionEndpoints.kernelKey, ctx);
 		await svc.issueDescriptionDrafts.delete(built.commentCtx.userId, {
 			targetType: DRAFT_TARGET_TYPE,
 			targetId: built.issue.id,
