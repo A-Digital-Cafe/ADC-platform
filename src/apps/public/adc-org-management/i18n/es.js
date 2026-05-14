@@ -23,7 +23,10 @@ export default {
 			nameMinLength: "El nombre debe tener al menos 3 caracteres",
 			emailRequired: "Por favor ingresa tu email",
 			emailInvalid: "Por favor ingresa un email válido",
+			descriptionTooLong: "La descripción no puede superar los 2000 caracteres",
 			urlInvalid: "Por favor ingresa una URL válida (ej: https://tu-org.com)",
+			socialNetworkInvalid: "Cada red social debe tener nombre y URL",
+			socialNetworkUrlInvalid: "Las URLs de redes sociales deben ser válidas",
 			submitError: "Error al enviar la solicitud"
 		},
 		info: "Tu solicitud será revisada por un administrador. Una vez aprobada, podrás acceder a tu organización e invitar miembros.",

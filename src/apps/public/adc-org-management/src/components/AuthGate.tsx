@@ -1,18 +1,15 @@
 import { useEffect, useState } from "react";
-import { router } from "@common/utils/router.js";
-import { getSession, type SessionData } from "@ui-library/utils/session";
+import { getSession } from "@ui-library/utils/session";
 
 interface Props {
 	readonly children: React.ReactNode;
 }
 
 export function AuthGate({ children }: Props) {
-	const [session, setSession] = useState<SessionData | null>(null);
 	const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
 	useEffect(() => {
 		getSession().then((s) => {
-			setSession(s);
 			const authenticated = !!s?.user?.id;
 			setIsAuthenticated(authenticated);
 		});

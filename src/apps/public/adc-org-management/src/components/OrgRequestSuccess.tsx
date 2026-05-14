@@ -1,14 +1,10 @@
-import React from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 
 interface OrgRequestSuccessProps {
-	onGoHome: () => void;
+	readonly onGoHome: () => void;
 }
 
-/**
- * Pantalla de éxito para solicitud de organización
- */
-export const OrgRequestSuccess: React.FC<OrgRequestSuccessProps> = ({ onGoHome }) => {
+export function OrgRequestSuccess({ onGoHome }: OrgRequestSuccessProps) {
 	const { t } = useTranslation({ namespace: "adc-org-management", autoLoad: true });
 
 	return (
@@ -36,7 +32,6 @@ export const OrgRequestSuccess: React.FC<OrgRequestSuccessProps> = ({ onGoHome }
 				</div>
 			</div>
 
-			{/* Action Buttons */}
 			<div className="flex gap-3 w-full justify-center">
 				<adc-button type="button" onClick={onGoHome} variant="primary">
 					{t("request.goHome")}
@@ -44,4 +39,4 @@ export const OrgRequestSuccess: React.FC<OrgRequestSuccessProps> = ({ onGoHome }
 			</div>
 		</div>
 	);
-};
+}

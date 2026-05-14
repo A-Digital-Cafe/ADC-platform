@@ -1,7 +1,7 @@
 import type MongoProvider from "../../../providers/object/mongo/index.js";
 import { BaseService } from "../../BaseService.js";
 import { projectSchema, sprintSchema, milestoneSchema, issueSchema } from "./domain/index.js";
-import { ProjectManager, SprintManager, MilestoneManager, IssueManager } from "./dao/index.js";
+import { ProjectManager, SprintManager, MilestoneManager, IssueManager, OrganizationRequestManager } from "./dao/index.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
 import type { EndpointCtx } from "../../core/EndpointManagerService/index.js";
@@ -13,6 +13,7 @@ import { IssueEndpoints } from "./endpoints/issues.js";
 import { IssueDescriptionEndpoints } from "./endpoints/issueDescription.js";
 import { IssueCommentsEndpoints } from "./endpoints/comments.js";
 import { IssueAttachmentsEndpoints } from "./endpoints/attachments.js";
+import { OrganizationRequestEndpoints } from "./endpoints/orgRequests.js";
 import { PMScopes } from "@common/types/project-manager/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
@@ -40,6 +41,7 @@ export default class ProjectManagerService extends BaseService {
 	#sprintManager: SprintManager | null = null;
 	#milestoneManager: MilestoneManager | null = null;
 	#issueManager: IssueManager | null = null;
+	#organizationRequestManager: OrganizationRequestManager | null = null;
 	#issueAttachmentsManager: AttachmentsManager | null = null;
 	#issueCommentsManager: CommentsManager | null = null;
 	#issueDescriptionDrafts: DraftsRepository | null = null;
@@ -47,7 +49,6 @@ export default class ProjectManagerService extends BaseService {
 	#authVerifier: IAuthVerifier | null = null;
 	#identity: IdentityManagerService | null = null;
 	#internalRoles: ReturnType<IdentityManagerService["_internal"]>["roles"] | null = null;
-	#kernelKey: symbol | null = null;
 
 	private mongoProvider!: MongoProvider;
 	readonly #kernelRef: Kernel;
@@ -68,11 +69,11 @@ export default class ProjectManagerService extends BaseService {
 			IssueDescriptionEndpoints,
 			IssueCommentsEndpoints,
 			IssueAttachmentsEndpoints,
+			OrganizationRequestEndpoints,
 		],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
-		this.#kernelKey = kernelKey;
 
 		this.mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
 		await this.waitForMongo();
@@ -89,7 +90,12 @@ export default class ProjectManagerService extends BaseService {
 		const projectInternals = this.#projectManager.getInternals(kernelKey);
 		this.#sprintManager = new SprintManager(SprintModel, projectInternals, this.logger, this.#getAuthVerifier);
 		this.#milestoneManager = new MilestoneManager(MilestoneModel, projectInternals, this.logger, this.#getAuthVerifier);
-		this.#issueManager = new IssueManager(IssueModel, projectInternals, this.logger, this.#getAuthVerifier);
+		this.#issueManager = new IssueManager(IssueModel, projectInternals, kernelKey, this.logger, this.#getAuthVerifier);
+		this.#organizationRequestManager = new OrganizationRequestManager(
+			this.#projectManager,
+			this.#issueManager,
+			(this.config?.private ?? {}) as { organizationRequestsProjectId?: string }
+		);
 
 		this.#authVerifier = this.#identity.createAuthVerifier();
 
@@ -141,6 +147,7 @@ export default class ProjectManagerService extends BaseService {
 		IssueDescriptionEndpoints.init(this, kernelKey);
 		IssueCommentsEndpoints.init(this, kernelKey);
 		IssueAttachmentsEndpoints.init(this, kernelKey);
+		OrganizationRequestEndpoints.init(this, kernelKey);
 
 		this.logger.logOk("ProjectManagerService iniciado");
 	}
@@ -242,6 +249,10 @@ export default class ProjectManagerService extends BaseService {
 		if (!this.#issueManager) throw new Error("IssueManager not initialized");
 		return this.#issueManager;
 	}
+	get organizationRequests(): OrganizationRequestManager {
+		if (!this.#organizationRequestManager) throw new Error("OrganizationRequestManager not initialized");
+		return this.#organizationRequestManager;
+	}
 	get identity(): IdentityManagerService {
 		if (!this.#identity) throw new Error("IdentityManagerService not initialized");
 		return this.#identity;
@@ -269,35 +280,9 @@ export default class ProjectManagerService extends BaseService {
 		return this.#issueDescriptionDrafts;
 	}
 
-	/**
-	 * Acceso interno privilegiado a ProjectManagerService sin requerir token.
-	 * Solo disponible para otros servicios del kernel con kernelKey válida.
-	 * Patrón consistente con IdentityManagerService._internal()
-	 */
-	_internal(kernelKey: symbol): {
-		projects: {
-			getProjectBySlug(slug: string, orgId: string | null): Promise<Project | null>;
-		};
-	} {
-		if (kernelKey !== this.#kernelKey) {
-			throw new Error("Acceso denegado: kernelKey inválida");
-		}
-
-		return {
-			projects: {
-				getProjectBySlug: async (slug: string, orgId: string | null): Promise<Project | null> => {
-					// Acceso sin autenticación para servicios kernel internos
-					const internals = this.#projectManager!.getInternals(kernelKey);
-					return internals.fetchProjectBySlug(slug, orgId);
-				},
-			},
-		};
-	}
-
 	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
-		this.#kernelKey = null;
 		this.#authVerifier = null;
 		this.logger.logOk("ProjectManagerService detenido");
 	}

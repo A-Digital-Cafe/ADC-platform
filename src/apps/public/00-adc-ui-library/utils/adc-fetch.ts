@@ -17,7 +17,6 @@ import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 export { clearErrors } from "./error-handler.js";
 
 export interface AdcFetchResult<T = undefined> {
-	organizations: import("../../adc-org-management/src/utils/org-api.js").Organization[] | undefined;
 	success: boolean;
 	data?: T;
 	errorKey?: string;

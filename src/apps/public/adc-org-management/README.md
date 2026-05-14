@@ -1,8 +1,7 @@
 # adc-org-management
 
-Microfrontend para gestión de organizaciones. Formulario de solicitud y dashboard con pestañas.
+Microfrontend para solicitar la creación de organizaciones.
 
-**Rutas:** `/org-management` (solicitar) → `/organization/:slug` (dashboard con General, Apps, Admin)
+**Rutas:** `/org-management` y `/org-management/request`.
 
-**Integración:** IdentityService (orgs), ProjectManagerService (tickets).
-
+**Integración:** crea tickets vía `ProjectManagerService` (`/api/pm/organization-requests`).

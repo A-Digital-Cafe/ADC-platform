@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect, type RefObject } from "react";
 
 interface FormData {
 	orgName: string;
@@ -8,25 +8,20 @@ interface FormData {
 }
 
 interface OrgFormBaseProps {
-	formData: FormData;
-	error: string | null;
-	onFormChange: (field: keyof FormData, value: string) => void;
-	onClearError: () => void;
+	readonly formData: FormData;
+	readonly error: string | null;
+	readonly onFormChange: (field: keyof FormData, value: string) => void;
+	readonly onClearError: () => void;
 }
 
-/**
- * Componente de formulario base para datos de organización
- * Maneja: nombre, email, descripción y URL
- */
-export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFormChange, onClearError }) => {
+export function OrgFormBase({ formData, error, onFormChange, onClearError }: OrgFormBaseProps) {
 	const nameInputRef = useRef<any>(null);
 	const emailInputRef = useRef<any>(null);
 	const descriptionRef = useRef<any>(null);
 	const urlInputRef = useRef<any>(null);
 
-	// Setup event listeners for adc-input components
 	useEffect(() => {
-		const setupInputListener = (ref: React.RefObject<any>, field: keyof FormData) => {
+		const setupInputListener = (ref: RefObject<any>, field: keyof FormData) => {
 			if (ref.current) {
 				const handler = (e: CustomEvent<string>) => {
 					onFormChange(field, e.detail);
@@ -37,7 +32,7 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFor
 			}
 		};
 
-		const setupTextareaListener = (ref: React.RefObject<any>, field: keyof FormData) => {
+		const setupTextareaListener = (ref: RefObject<any>, field: keyof FormData) => {
 			if (ref.current) {
 				const textarea = ref.current.querySelector("textarea") || ref.current;
 				const handler = (e: Event) => {
@@ -65,10 +60,8 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFor
 
 	return (
 		<div className="space-y-6">
-			{/* Error Alert */}
 			{error && <div className="bg-danger/10 border border-danger/20 rounded-lg p-4 text-sm text-danger">{error}</div>}
 
-			{/* Organization Name Field */}
 			<div className="space-y-2">
 				<label htmlFor="orgName" className="block text-sm font-semibold text-text">
 					Nombre de la Organización <span className="text-danger">*</span>
@@ -84,7 +77,6 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFor
 				<p className="text-xs text-muted">Nombre que deseas para la organización (será revisado por un administrador)</p>
 			</div>
 
-			{/* Email Field */}
 			<div className="space-y-2">
 				<label htmlFor="email" className="block text-sm font-semibold text-text">
 					Email de Contacto <span className="text-danger">*</span>
@@ -100,7 +92,6 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFor
 				<p className="text-xs text-muted">Email para que el administrador se comunique con ustedes</p>
 			</div>
 
-			{/* Description Field */}
 			<div className="space-y-2">
 				<label htmlFor="description" className="block text-sm font-semibold text-text">
 					Descripción
@@ -113,10 +104,9 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFor
 					value={formData.description}
 					rows={4}
 				/>
-				<p className="text-xs text-muted">Máximo 500 caracteres</p>
+				<p className="text-xs text-muted">Máximo 2000 caracteres</p>
 			</div>
 
-			{/* URL Field */}
 			<div className="space-y-2">
 				<label htmlFor="url" className="block text-sm font-semibold text-text">
 					URL de la Organización
@@ -133,4 +123,4 @@ export const OrgFormBase: React.FC<OrgFormBaseProps> = ({ formData, error, onFor
 			</div>
 		</div>
 	);
-};
+}

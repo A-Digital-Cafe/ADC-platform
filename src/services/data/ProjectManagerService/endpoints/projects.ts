@@ -5,8 +5,6 @@ import type { Project, KanbanColumn, ProjectSettings, PriorityStrategy } from "@
 import type { CustomFieldDef } from "@common/types/project-manager/CustomField.ts";
 import type { IssueLinkType } from "@common/types/project-manager/IssueLink.ts";
 import { normalizeSlug } from "@common/utils/project-manager/slug.ts";
-import { CRUDXAction } from "@common/types/Actions.ts";
-import { IdentityScopes } from "@common/types/identity/permissions.ts";
 
 const PROJECT_CREATE_RATE_LIMIT = { max: 10, timeWindow: 60_000 };
 const PROJECT_WRITE_RATE_LIMIT = { max: 10, timeWindow: 60_000 };
@@ -21,12 +19,6 @@ async function resolveOrgSlug(service: ProjectManagerService, orgSlug: string, t
 	const org = await identity.organizations.getOrganization(slug, token);
 	if (!org) throw new ProjectManagerError(404, "ORG_ACCESS_DENIED", `Organización '${orgSlug}' no encontrada`);
 	return org.orgId;
-}
-
-async function canReadGlobalOrgRequests(service: ProjectManagerService, ctx: EndpointCtx): Promise<boolean> {
-	const userId = ctx.user?.id;
-	if (!userId || ctx.user?.orgId) return false;
-	return service.identity.permissions.hasPermission(userId, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
 }
 
 export class ProjectEndpoints {
@@ -44,27 +36,7 @@ export class ProjectEndpoints {
 	})
 	static async list(ctx: EndpointCtx) {
 		const service = ProjectEndpoints.service;
-		let projects = await service.listProjectsForCaller(ProjectEndpoints.kernelKey, ctx);
-
-		if (await canReadGlobalOrgRequests(service, ctx)) {
-			// Si es admin, asegurar que "org-requests" esté incluido aunque no sea miembro
-			const hasOrgRequests = projects.some((project) => project.slug === "org-requests");
-			if (!hasOrgRequests) {
-				try {
-					// Buscar y agregar "org-requests" de forma segura
-					const orgRequestsProject = await service.projects.getProjectBySlugForAdmin("org-requests", null, ctx.token ?? undefined);
-					if (orgRequestsProject) {
-						projects = [...projects, orgRequestsProject];
-					}
-				} catch {
-					// Si no existe, ignorar
-				}
-			}
-		} else {
-			// Excluir "org-requests" para usuarios sin permiso admin
-			projects = projects.filter((project) => project.slug !== "org-requests");
-		}
-
+		const projects = await service.listProjectsForCaller(ProjectEndpoints.kernelKey, ctx);
 		return { projects };
 	}
 
@@ -93,23 +65,6 @@ export class ProjectEndpoints {
 		const projectSlug = normalizeSlug(ctx.params.projectSlug);
 		if (!projectSlug) throw new ProjectManagerError(400, "INVALID_SLUG", `Slug de proyecto inválido: '${ctx.params.projectSlug}'`);
 		const orgId = await resolveOrgSlug(service, ctx.params.orgSlug, ctx.token ?? undefined);
-
-		// Validación especial: proyecto "org-requests" solo para admins
-		if (projectSlug === "org-requests") {
-			if (!(await canReadGlobalOrgRequests(service, ctx))) {
-				throw new ProjectManagerError(
-					403,
-					"PROJECT_ACCESS_DENIED",
-					"Solo los administradores pueden acceder al proyecto de solicitudes de organizaciones"
-				);
-			}
-
-			const projectInternals = service.projects.getInternals(ProjectEndpoints.kernelKey);
-			const project = await projectInternals.fetchProjectBySlug(projectSlug, orgId);
-			if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
-			return project;
-		}
-
 		const project = await service.projects.getProjectBySlug(projectSlug, orgId, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 		return project;

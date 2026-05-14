@@ -1,42 +1,53 @@
-import React, { useRef, useEffect } from "react";
-import type { SocialNetwork } from "../utils/org-api.js";
+import { useRef, useEffect } from "react";
+import type { OrganizationRequestSocialNetwork } from "../utils/pm-api.js";
 
-interface SocialNetworksManagerProps {
-	socialNetworks: Omit<SocialNetwork, "icon">[];
-	onAddSocialNetwork: () => void;
-	onRemoveSocialNetwork: (idx: number) => void;
-	onSocialNetworkChange: (idx: number, field: "platform" | "url", value: string) => void;
+type SocialNetworkField = "platform" | "url";
+
+export interface EditableOrganizationRequestSocialNetwork extends OrganizationRequestSocialNetwork {
+	readonly clientId: string;
 }
 
-/**
- * Componente gestor de redes sociales
- * Maneja: agregar, eliminar y editar redes sociales
- * Usa componentes adc-input de la librería UI
- */
-export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
+interface SocialNetworksManagerProps {
+	readonly socialNetworks: readonly EditableOrganizationRequestSocialNetwork[];
+	readonly onAddSocialNetwork: () => void;
+	readonly onRemoveSocialNetwork: (idx: number) => void;
+	readonly onSocialNetworkChange: (idx: number, field: SocialNetworkField, value: string) => void;
+}
+
+function bindAdcChange(element: EventTarget | undefined, onChange: (value: string) => void): (() => void) | undefined {
+	if (!element) return undefined;
+	const handler: EventListener = (event) => onChange((event as CustomEvent<string>).detail);
+	element.addEventListener("adcChange", handler);
+	return () => element.removeEventListener("adcChange", handler);
+}
+
+function bindSocialNetworkField(
+	element: EventTarget | undefined,
+	idx: number,
+	field: SocialNetworkField,
+	onSocialNetworkChange: SocialNetworksManagerProps["onSocialNetworkChange"]
+): (() => void) | undefined {
+	return bindAdcChange(element, (value) => onSocialNetworkChange(idx, field, value));
+}
+
+export function SocialNetworksManager({
 	socialNetworks,
 	onAddSocialNetwork,
 	onRemoveSocialNetwork,
 	onSocialNetworkChange,
-}) => {
+}: SocialNetworksManagerProps) {
 	const inputRefs = useRef<Map<string, any>>(new Map());
 
-	// Setup event listeners para adc-input components
 	useEffect(() => {
 		const unsubscribers: Array<() => void> = [];
 
-		socialNetworks.forEach((_, idx) => {
-			["platform", "url"].forEach((field) => {
+		for (let idx = 0; idx < socialNetworks.length; idx += 1) {
+			for (const field of ["platform", "url"] as const) {
 				const ref = inputRefs.current.get(`${field}-${idx}`);
-				if (ref) {
-					const handler = (e: CustomEvent<string>) => {
-						onSocialNetworkChange(idx, field as "platform" | "url", e.detail);
-					};
-					ref.addEventListener("adcChange", handler);
-					unsubscribers.push(() => ref.removeEventListener("adcChange", handler));
-				}
-			});
-		});
+				const unbind = bindSocialNetworkField(ref, idx, field, onSocialNetworkChange);
+				if (unbind) unsubscribers.push(unbind);
+			}
+		}
 
 		return () => {
 			unsubscribers.forEach((unsub) => unsub());
@@ -55,12 +66,10 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 				</adc-button>
 			</div>
 
-			{/* Social Networks List */}
 			{socialNetworks.length > 0 && (
 				<div className="space-y-3">
 					{socialNetworks.map((social, idx) => (
-						<div key={idx} className="flex gap-3 items-end p-4 rounded-lg border border-border bg-background">
-							{/* Platform Input */}
+						<div key={social.clientId} className="flex gap-3 items-end p-4 rounded-lg border border-border bg-background">
 							<div className="flex-1 min-w-0">
 								<adc-input
 									ref={(el: any) => {
@@ -74,7 +83,6 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 								/>
 							</div>
 
-							{/* URL Input */}
 							<div className="flex-1 min-w-0">
 								<adc-input
 									ref={(el: any) => {
@@ -88,7 +96,6 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 								/>
 							</div>
 
-							{/* Remove Button */}
 							<button
 								type="button"
 								onClick={() => onRemoveSocialNetwork(idx)}
@@ -116,4 +123,4 @@ export const SocialNetworksManager: React.FC<SocialNetworksManagerProps> = ({
 			)}
 		</div>
 	);
-};
+}

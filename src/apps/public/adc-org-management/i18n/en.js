@@ -23,7 +23,10 @@ export default {
 			nameMinLength: "The name must be at least 3 characters long",
 			emailRequired: "Please enter your email",
 			emailInvalid: "Please enter a valid email",
+			descriptionTooLong: "The description cannot exceed 2000 characters",
 			urlInvalid: "Please enter a valid URL (ex: https://your-org.com)",
+			socialNetworkInvalid: "Each social network must include a name and URL",
+			socialNetworkUrlInvalid: "Social network URLs must be valid",
 			submitError: "Error submitting the request"
 		},
 		info: "Your request will be reviewed by an administrator. Once approved, you'll be able to access your organization and invite members.",

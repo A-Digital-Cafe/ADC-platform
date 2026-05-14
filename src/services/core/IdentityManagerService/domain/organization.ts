@@ -7,12 +7,12 @@ export const organizationSchema = new Schema<Organization>({
 	region: { type: String, required: true, default: "default/default" },
 	tier: { type: String, enum: ["default"], default: "default" },
 	status: { type: String, enum: ["active", "inactive", "blocked"], default: "active" },
-	approved: { type: Boolean, default: false }, 
+	approved: { type: Boolean, default: false },
 	permissions: [
 		{
 			resource: { type: String, required: true },
-			action: { type: Number, required: true }, 
-			scope: { type: Number, required: true }, 
+			action: { type: Number, required: true }, // Bitfield
+			scope: { type: Number, required: true }, // Bitfield
 		},
 	],
 	metadata: Schema.Types.Mixed, // Contiene email, description, url
@@ -24,4 +24,3 @@ export const organizationSchema = new Schema<Organization>({
 organizationSchema.index({ status: 1, createdAt: -1 });
 organizationSchema.index({ approved: 1, createdAt: -1 });
 organizationSchema.index({ slug: 1 });
-

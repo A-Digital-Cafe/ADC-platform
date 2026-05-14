@@ -1,10 +1,9 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
-import { orgApi } from "../utils/org-api.js";
+import { orgRequestApi, type CreateOrganizationRequestInput, type OrganizationRequestSocialNetwork } from "../utils/pm-api.js";
 import { toast } from "../utils/toast.js";
-import type { SocialNetwork } from "../utils/org-api.js";
 import { OrgFormBase } from "./OrgFormBase.js";
-import { SocialNetworksManager } from "./SocialNetworksManager.js";
+import { SocialNetworksManager, type EditableOrganizationRequestSocialNetwork } from "./SocialNetworksManager.js";
 import { OrgRequestSuccess } from "./OrgRequestSuccess.js";
 
 interface FormData {
@@ -15,14 +14,70 @@ interface FormData {
 }
 
 interface OrgRequestFormProps {
-	onSuccess?: () => void;
+	readonly onSuccess?: () => void;
 }
 
-/**
- * Formulario para solicitar nueva organización
- * Puede ser embebido en HomeView o usado en OrgRequestView como página standalone
- */
-export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => {
+interface SubmitEventLike {
+	preventDefault: () => void;
+}
+
+type Translate = (key: string) => string;
+
+interface ValidationResult {
+	readonly error?: string;
+	readonly data?: CreateOrganizationRequestInput;
+}
+
+function createClientId(): string {
+	return typeof crypto !== "undefined" && "randomUUID" in crypto
+		? crypto.randomUUID()
+		: `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isValidHttpUrl(value: string): boolean {
+	try {
+		const parsedUrl = new URL(value);
+		return ["http:", "https:"].includes(parsedUrl.protocol);
+	} catch {
+		return false;
+	}
+}
+
+function normalizeSocialNetworks(socialNetworks: readonly OrganizationRequestSocialNetwork[]): OrganizationRequestSocialNetwork[] {
+	return socialNetworks
+		.map(({ platform, url }) => ({ platform: platform.trim(), url: url.trim() }))
+		.filter(({ platform, url }) => platform || url);
+}
+
+function validateRequestData(formData: FormData, socialNetworks: readonly OrganizationRequestSocialNetwork[], t: Translate): ValidationResult {
+	const name = formData.orgName.trim();
+	const email = formData.email.trim();
+	const description = formData.description.trim();
+	const url = formData.url.trim();
+
+	if (!name) return { error: t("request.errors.nameRequired") };
+	if (name.length < 3) return { error: t("request.errors.nameMinLength") };
+	if (!email) return { error: t("request.errors.emailRequired") };
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: t("request.errors.emailInvalid") };
+	if (description.length > 2000) return { error: t("request.errors.descriptionTooLong") };
+	if (url && !isValidHttpUrl(url)) return { error: t("request.errors.urlInvalid") };
+
+	const normalizedSocialNetworks = normalizeSocialNetworks(socialNetworks);
+	if (normalizedSocialNetworks.some((item) => !item.platform || !item.url)) return { error: t("request.errors.socialNetworkInvalid") };
+	if (normalizedSocialNetworks.some((item) => !isValidHttpUrl(item.url))) return { error: t("request.errors.socialNetworkUrlInvalid") };
+
+	return {
+		data: {
+			name,
+			email,
+			description: description || undefined,
+			url: url || undefined,
+			socialNetworks: normalizedSocialNetworks.length > 0 ? normalizedSocialNetworks : undefined,
+		},
+	};
+}
+
+export function OrgRequestForm({ onSuccess }: OrgRequestFormProps) {
 	const { t } = useTranslation({ namespace: "adc-org-management", autoLoad: true });
 	const [formData, setFormData] = useState<FormData>({
 		orgName: "",
@@ -31,12 +86,11 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 		url: "",
 	});
 
-	const [socialNetworks, setSocialNetworks] = useState<Omit<SocialNetwork, "icon">[]>([]);
+	const [socialNetworks, setSocialNetworks] = useState<EditableOrganizationRequestSocialNetwork[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState(false);
 
-	// Form handlers
 	const handleFormChange = (field: keyof FormData, value: string) => {
 		setFormData((prev) => ({ ...prev, [field]: value }));
 	};
@@ -45,11 +99,11 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 		setError(null);
 	};
 
-	// Social network handlers
 	const handleAddSocialNetwork = () => {
 		setSocialNetworks((prev) => [
 			...prev,
 			{
+				clientId: createClientId(),
 				platform: "",
 				url: "",
 			},
@@ -64,71 +118,24 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 		setSocialNetworks((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
 	};
 
-	// Form submission
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: SubmitEventLike) => {
 		e.preventDefault();
 		setError(null);
 		setLoading(true);
 
-		// Validar nombre
-		if (!formData.orgName.trim()) {
-			const msg = t("request.errors.nameRequired");
+		const validation = validateRequestData(formData, socialNetworks, t);
+		if (validation.error || !validation.data) {
+			const msg = validation.error ?? t("request.errors.submitError");
 			setError(msg);
 			toast.error(msg);
 			setLoading(false);
 			return;
-		}
-
-		if (formData.orgName.trim().length < 3) {
-			const msg = t("request.errors.nameMinLength");
-			setError(msg);
-			toast.error(msg);
-			setLoading(false);
-			return;
-		}
-
-		// Validar email
-		if (!formData.email.trim()) {
-			const msg = t("request.errors.emailRequired");
-			setError(msg);
-			toast.error(msg);
-			setLoading(false);
-			return;
-		}
-
-		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-		if (!emailRegex.test(formData.email)) {
-			const msg = t("request.errors.emailInvalid");
-			setError(msg);
-			toast.error(msg);
-			setLoading(false);
-			return;
-		}
-
-		// Validar URL (opcional)
-		if (formData.url.trim()) {
-			try {
-				new URL(formData.url);
-			} catch {
-				const msg = t("request.errors.urlInvalid");
-				setError(msg);
-				toast.error(msg);
-				setLoading(false);
-				return;
-			}
 		}
 
 		try {
-			const result = await orgApi.requestOrganization({
-				name: formData.orgName,
-				email: formData.email,
-				description: formData.description,
-				url: formData.url,
-				socialNetworks: socialNetworks.length > 0 ? socialNetworks : undefined,
-			});
+			const result = await orgRequestApi.create(validation.data);
 
-			if ((result as any)?.data?.success || (result as any)?.success) {
-				// Limpiar formulario
+			if (result.success && result.data) {
 				setFormData({ orgName: "", email: "", description: "", url: "" });
 				setSocialNetworks([]);
 				toast.success(t("home.requestSuccess"));
@@ -139,9 +146,8 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 
 			toast.error(t("request.errors.submitError"));
 			setLoading(false);
-		} catch (err) {
-			console.error("❌ Error al enviar:", err);
-			const errorMsg = err instanceof Error ? err.message : t("request.errors.submitError");
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : t("request.errors.submitError");
 			setError(errorMsg);
 			toast.error(errorMsg);
 			setLoading(false);
@@ -163,7 +169,7 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 	return (
 		<form onSubmit={handleSubmit} className="space-y-6">
 			<OrgFormBase formData={formData} error={error} onFormChange={handleFormChange} onClearError={handleClearError} />
-            <div className="border-t border-border" />
+			<div className="border-t border-border" />
 
 			<SocialNetworksManager
 				socialNetworks={socialNetworks}
@@ -172,17 +178,17 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 				onSocialNetworkChange={handleSocialNetworkChange}
 			/>
 
-			{/* Info Box */}
 			<div className="bg-info border border-info rounded-lg p-4 flex gap-3">
 				<svg className="w-5 h-5 text-tinfo shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-					<path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+					<path
+						fillRule="evenodd"
+						d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+						clipRule="evenodd"
+					/>
 				</svg>
-				<p className="text-sm text-tinfo">
-					{t("home.submitInfo")}
-				</p>
+				<p className="text-sm text-tinfo">{t("home.submitInfo")}</p>
 			</div>
 
-			{/* Submit Buttons */}
 			<div className="flex gap-3 pt-4">
 				<adc-button type="submit" disabled={loading} class="w-full">
 					{loading ? t("common.sending") : t("request.form.submit")}
@@ -190,4 +196,4 @@ export const OrgRequestForm: React.FC<OrgRequestFormProps> = ({ onSuccess }) => 
 			</div>
 		</form>
 	);
-};
+}

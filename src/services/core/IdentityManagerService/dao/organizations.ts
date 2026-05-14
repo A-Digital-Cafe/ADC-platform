@@ -13,13 +13,17 @@ import type OperationsService from "../../../core/OperationsService/index.ts";
 import type { Step } from "../../../core/OperationsService/types.ts";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
 
+function isDuplicateKeyError(error: unknown): error is { code: number } {
+	return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+}
+
 export class OrgManager {
 	readonly #permissionChecker: PermissionChecker;
 	readonly #operations: OperationsService;
 	readonly #getAuthVerifier: AuthVerifierGetter;
 
 	constructor(
-		private readonly orgModel: Model<any>,
+		private readonly orgModel: Model<Organization>,
 		private readonly roleManager: RoleManager,
 		private readonly groupManager: GroupManager,
 		private readonly userManager: UserManager,
@@ -61,14 +65,15 @@ export class OrgManager {
 				region: regionPath,
 				tier: "default",
 				status: "active",
+				approved: true,
 				metadata,
 			});
 
 			this.logger.logOk(`[OrgManager] Organización creada: ${normalizedSlug} en ${regionPath}`);
 			return this.#toOrganization(org);
-		} catch (error: any) {
-			if (error.code === 11000) {
-				throw new Error(`Organización ${slug} ya existe`);
+		} catch (error) {
+			if (isDuplicateKeyError(error)) {
+				throw new Error(`Organización ${slug} ya existe`, { cause: error });
 			}
 			throw error;
 		}
@@ -102,7 +107,7 @@ export class OrgManager {
 
 		if (!org) return null;
 
-		const resolvedOrgId = org.orgId as string;
+		const resolvedOrgId = org.orgId;
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS, {
 			allowIf: (_uid, { orgId: tokenOrgId }) => !!tokenOrgId && tokenOrgId === resolvedOrgId,
 		});
@@ -185,41 +190,6 @@ export class OrgManager {
 		return orgs.map((org: any) => this.#toOrganization(org));
 	}
 
-	/** Obtiene las organizaciones de un usuario (donde es miembro) */
-	async getUserOrganizations(userId: string, token?: string): Promise<Organization[]> {
-		// El endpoint ya validó que el usuario esté autenticado
-		// Aquí NO validamos permisos - solo obtenemos sus orgs
-		
-		try {
-			// Obtener el usuario y sus membresías de org
-			// Acceder directamente sin pasar por métodos que validan permisos
-			const userManager = this.userManager as any;
-			const userModel = userManager.userModel;
-			
-			if (!userModel) {
-				return [];
-			}
-
-			const user = await userModel.findOne({ id: userId }).select("orgMemberships").lean();
-			if (!user) {
-				return [];
-			}
-
-			// Extraer orgIds de las membresías
-			const orgIds = (user as any).orgMemberships?.map((m: any) => m.orgId) || [];
-			if (orgIds.length === 0) {
-				return [];
-			}
-
-			// Obtener las organizaciones por sus IDs
-			const orgs = await this.orgModel.find({ orgId: { $in: orgIds } }).lean();
-			return orgs.map((org: any) => this.#toOrganization(org));
-		} catch (error) {
-			// Cualquier error → retorna array vacío (mejor que fallar con 500)
-			return [];
-		}
-	}
-
 	/**
 	 * Genera el nombre de la base de datos para una organización
 	 * Formato: org_{slug}
@@ -229,7 +199,6 @@ export class OrgManager {
 	}
 
 	#toOrganization(doc: any): Organization {
-		// Convertir documento Mongoose a objeto plano si es necesario
 		const plainDoc = typeof doc?.toObject === "function" ? doc.toObject() : doc;
 
 		return {
@@ -238,25 +207,11 @@ export class OrgManager {
 			region: plainDoc.region,
 			tier: plainDoc.tier,
 			status: plainDoc.status,
+			approved: plainDoc.approved ?? false,
 			permissions: plainDoc.permissions,
 			metadata: plainDoc.metadata,
 			createdAt: plainDoc.createdAt,
 			updatedAt: plainDoc.updatedAt,
 		};
-	}
-
-
-
-	/**
-	 * Derivar un slug válido de un nombre de organización
-	 */
-	#deriveSlug(orgName: string): string {
-		return orgName
-			.toLowerCase()
-			.trim()
-			.replace(/[^a-z0-9\s-]/g, "") // Remove special chars
-			.replace(/\s+/g, "-") // Replace spaces with hyphens
-			.replace(/-+/g, "-") // Replace multiple hyphens with single
-			.replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
 	}
 }
