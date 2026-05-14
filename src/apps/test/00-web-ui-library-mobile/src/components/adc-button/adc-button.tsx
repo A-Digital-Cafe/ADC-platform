@@ -6,7 +6,7 @@ import { Component, Prop, h, Event, EventEmitter, Host } from "@stencil/core";
 })
 export class AdcButton {
 	@Prop() disabled: boolean = false;
-	@Prop() ariaLabel: string = "generic-button";
+	@Prop() ariaLabel: string | null = "generic-button";
 	@Prop() buttonType: "button" | "submit" | "reset" = "button";
 	@Prop() variant: "primary" | "secondary" = "primary";
 

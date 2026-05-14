@@ -1,8 +1,17 @@
 import { RspackBaseStrategy } from "./base.js";
 import type { IBuildContext } from "../types.js";
+import { buildCssRule } from "../shared/rspack-css-rule.js";
+import { getI18nTemplate } from "../shared/rspack-helpers.js";
 
 /**
- * Estrategia Rspack para Vue con Module Federation
+ * Estrategia Rspack para Vue con Module Federation.
+ *
+ * Particularidades respecto a otros frameworks:
+ *  - Usa `vue-loader` para procesar `.vue` (su pitcher requiere `type: 'javascript/auto'` en css).
+ *  - Desactiva `experiments.css` (vue-loader 17.x es incompatible con `experiments.css` de Rspack
+ *    porque requiere `experimentalInlineMatchResource`, flag sólo de webpack).
+ *  - Sobrescribe `getAdditionalRules()` para eliminar la regla `scheme: 'data'` que vue-loader clona
+ *    internamente y rechaza con "Properties scheme are unknown".
  */
 export class VueRspackStrategy extends RspackBaseStrategy {
 	readonly name = "Vue (Rspack)";
@@ -31,49 +40,23 @@ const { ModuleFederationPlugin } = rspack.container;
 	}
 
 	protected getModuleRules(isProduction: boolean, postcssConfigPath: string): string {
-		const developmentValue = isProduction ? "false" : "true";
-
-		const cssRule = postcssConfigPath
-			? `
+		const development = isProduction ? "false" : "true";
+		return String.raw`
             {
-                test: /\\.css$/,
-                use: [
-                    'style-loader',
-                    'css-loader',
-                    {
-                        loader: 'postcss-loader',
-                        options: {
-                            postcssOptions: {
-                                config: '${postcssConfigPath.replaceAll("\\", "/")}',
-                            },
-                        },
-                    },
-                ],
-                type: 'javascript/auto',
-            }`
-			: `
-            {
-                test: /\\.css$/,
-                use: ['style-loader', 'css-loader'],
-                type: 'javascript/auto',
-            }`;
-
-		return `
-            {
-                test: /\\.tsx?$/,
+                test: /\.tsx?$/,
                 use: {
                     loader: 'builtin:swc-loader',
                     options: {
                         jsc: {
                             parser: { syntax: 'typescript', tsx: true },
-                            transform: { react: { runtime: 'automatic', development: ${developmentValue}, refresh: false } },
+                            transform: { react: { runtime: 'automatic', development: ${development}, refresh: false } },
                         },
                     },
                 },
                 exclude: /node_modules/,
-            },${cssRule},
+            },${buildCssRule(postcssConfigPath)},
             {
-                test: /\\.vue$/,
+                test: /\.vue$/,
                 loader: 'vue-loader',
                 options: {
                     compilerOptions: {
@@ -86,44 +69,25 @@ const { ModuleFederationPlugin } = rspack.container;
     `;
 	}
 
-	/**
-	 * Disable native CSS experiments for Vue apps.
-	 * vue-loader 17.x is incompatible with Rspack's `experiments.css`
-	 * because its pitcher requires `experimentalInlineMatchResource`,
-	 * which is a webpack-only flag not supported by Rspack.
-	 * CSS is already handled via style-loader/css-loader with `type: 'javascript/auto'`.
-	 */
 	protected getExperiments(): string {
 		return `
         css: false,`;
 	}
 
-	/**
-	 * Exclude the `scheme: 'data'` rule because vue-loader 17.x clones all webpack rules
-	 * internally via its pitcher and does not recognize the `scheme` property,
-	 * causing "Properties scheme are unknown" errors.
-	 */
 	protected getAdditionalRules(): string {
 		return "";
 	}
 
 	protected getPlugins(context: IBuildContext, isHost: boolean, _usedFrameworks: Set<string>): string {
 		const hasI18n = context.module.uiConfig.i18n;
+		const i18nScript = isHost && hasI18n ? getI18nTemplate(context) : `\n            template: './index.html',`;
 
-		const i18nScript =
-			isHost && hasI18n
-				? this.getI18nTemplate(context)
-				: `
-            template: './index.html',`;
-
-		// Solo hosts necesitan HtmlRspackPlugin (remotes solo exponen assets)
 		const htmlPlugin = isHost
 			? `
         new rspack.HtmlRspackPlugin({${i18nScript}
         }),`
 			: "";
 
-		// Vue feature flags siempre necesarios para Vue
 		return `
         new rspack.DefinePlugin({
             __VUE_OPTIONS_API__: true,

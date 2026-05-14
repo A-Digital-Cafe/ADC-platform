@@ -24,19 +24,16 @@ export const getCommonPublicDir = () => path.resolve(process.cwd(), "src", "comm
  * 3. Fallback a "localhost"
  */
 export const getServerHost = (): string => {
-	// Override manual via env var
 	if (process.env.ADC_HOST) {
 		return process.env.ADC_HOST;
 	}
 
-	// Buscar primera IP de red válida
 	const interfaces = os.networkInterfaces();
 	for (const name of Object.keys(interfaces)) {
 		const netInterface = interfaces[name];
 		if (!netInterface) continue;
 
 		for (const iface of netInterface) {
-			// Solo IPv4, no internal (loopback)
 			if (iface.family === "IPv4" && !iface.internal) {
 				return iface.address;
 			}

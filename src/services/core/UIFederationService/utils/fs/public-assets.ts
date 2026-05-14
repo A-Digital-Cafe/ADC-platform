@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { RegisteredUIModule } from "../types.js";
-import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
+import type { RegisteredUIModule } from "../../types.js";
+import type { ILogger } from "../../../../../interfaces/utils/ILogger.js";
 import { getCommonPublicDir } from "./path-resolver.js";
 
 interface PublicAssetsContext {
@@ -18,9 +18,7 @@ interface PublicAssetsContext {
 /** Set para trackear directorios ya registrados (evitar duplicados) */
 const registeredPublicDirs = new Set<string>();
 
-/**
- * Determina si un módulo es una UI library (Stencil)
- */
+/** Determina si un módulo es una UI library (Stencil) */
 function isUILibrary(module: RegisteredUIModule): boolean {
 	return module.uiConfig.framework === "stencil";
 }
@@ -36,10 +34,10 @@ export async function registerPublicAssets(ctx: PublicAssetsContext): Promise<vo
 	const { module, namespaceModules, logger, serveStatic } = ctx;
 	const uiDependencies = module.uiConfig.uiDependencies || [];
 
-	// 1. Registrar common/public como fallback global (ej: favicon por defecto)
+	// 1. common/public como fallback global (ej: favicon por defecto)
 	await tryRegisterPublicDir(getCommonPublicDir(), "common", "/", logger, serveStatic, true);
 
-	// 2. Registrar assets públicos de las dependencias (ej: UI libraries)
+	// 2. Assets públicos de las dependencias (ej: UI libraries)
 	for (const depName of uiDependencies) {
 		const depModule = namespaceModules.get(depName);
 		if (depModule) {
@@ -48,7 +46,7 @@ export async function registerPublicAssets(ctx: PublicAssetsContext): Promise<vo
 		}
 	}
 
-	// 3. Registrar assets públicos del propio módulo (mayor prioridad, sobreescribe common)
+	// 3. Assets públicos del propio módulo (mayor prioridad)
 	const basePath = isUILibrary(module) ? "/ui" : "/pub";
 	await tryRegisterPublicDir(module.appDir, module.name, basePath, logger, serveStatic);
 }
@@ -70,7 +68,6 @@ async function tryRegisterPublicDir(
 
 	const publicDir = isDirect ? appDir : path.join(appDir, "public");
 
-	// Evitar registrar el mismo directorio múltiples veces
 	if (registeredPublicDirs.has(publicDir)) {
 		logger?.logDebug?.(`Public assets de ${moduleName} ya registrados`);
 		return publicDir;
@@ -80,14 +77,12 @@ async function tryRegisterPublicDir(
 		const stat = await fs.stat(publicDir);
 		if (!stat.isDirectory()) return null;
 
-		// Registrar según el tipo de módulo
 		serveStatic(basePath, publicDir);
 		registeredPublicDirs.add(publicDir);
 
 		logger?.logOk?.(`Public assets de ${moduleName} servidos en ${basePath}/`);
 		return publicDir;
 	} catch {
-		// No hay carpeta public/, es opcional
 		logger?.logDebug?.(`${moduleName} no tiene carpeta public/`);
 		return null;
 	}

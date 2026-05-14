@@ -2,7 +2,7 @@ import { Config } from '@stencil/core';
 
 /**
  * Stencil config para adc-ui-library
- * 
+ *
  * Generado automáticamente por UIFederationService.
  * Los componentes usan CSS puro (compatible con Shadow DOM).
  */

@@ -1,5 +1,6 @@
 import { ViteBaseStrategy } from "./base.js";
 import type { IBuildContext } from "../types.js";
+import { createImportMapPlugin, createFederationResolverPlugin } from "../shared/vite-federation.js";
 
 /**
  * Estrategia Vite para Vue
@@ -40,7 +41,7 @@ export class VueViteStrategy extends ViteBaseStrategy {
 
 		if (isDev) {
 			// Plugins de desarrollo
-			plugins.push(this.createImportMapPlugin(context), this.createFederationResolverPlugin(context));
+			plugins.push(createImportMapPlugin(context), createFederationResolverPlugin(context));
 
 			// Plugin de Module Federation para dev (si no es host)
 			const isHost = context.module.uiConfig.isHost;

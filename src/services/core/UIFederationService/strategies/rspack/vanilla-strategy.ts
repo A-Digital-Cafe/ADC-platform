@@ -1,8 +1,10 @@
 import { RspackBaseStrategy } from "./base.js";
 import type { IBuildContext } from "../types.js";
+import { buildCssRule } from "../shared/rspack-css-rule.js";
+import { getI18nTemplate } from "../shared/rspack-helpers.js";
 
 /**
- * Estrategia Rspack para JavaScript Vanilla con Module Federation
+ * Estrategia Rspack para JavaScript Vanilla con Module Federation.
  */
 export class VanillaRspackStrategy extends RspackBaseStrategy {
 	readonly name = "Vanilla JS (Rspack)";
@@ -30,62 +32,28 @@ const { ModuleFederationPlugin } = rspack.container;
 	}
 
 	protected getModuleRules(_isProduction: boolean, postcssConfigPath: string): string {
-		const cssRule = postcssConfigPath
-			? `
+		return String.raw`
             {
-                test: /\\.css$/,
-                use: [
-                    'style-loader',
-                    'css-loader',
-                    {
-                        loader: 'postcss-loader',
-                        options: {
-                            postcssOptions: {
-                                config: '${postcssConfigPath.replaceAll("\\", "/")}',
-                            },
-                        },
-                    },
-                ],
-                type: 'javascript/auto',
-            }`
-			: `
-            {
-                test: /\\.css$/,
-                use: ['style-loader', 'css-loader'],
-                type: 'javascript/auto',
-            }`;
-
-		return `
-            {
-                test: /\\.js$/,
+                test: /\.js$/,
                 exclude: /node_modules/,
                 type: 'javascript/auto',
-            },${cssRule}
+            },${buildCssRule(postcssConfigPath)}
     `;
 	}
 
 	protected getPlugins(context: IBuildContext, isHost: boolean, usedFrameworks: Set<string>): string {
 		const hasI18n = context.module.uiConfig.i18n;
+		const i18nScript = isHost && hasI18n ? getI18nTemplate(context) : `\n            template: './index.html',`;
 
-		const i18nScript =
-			isHost && hasI18n
-				? this.getI18nTemplate(context)
-				: `
-            template: './index.html',`;
-
-		// Vue/React feature flags si los remotes los usan
-		let featureFlags = "";
-
-		if (usedFrameworks.has("vue")) {
-			featureFlags += `
+		const featureFlags = usedFrameworks.has("vue")
+			? `
         new rspack.DefinePlugin({
             __VUE_OPTIONS_API__: true,
             __VUE_PROD_DEVTOOLS__: false,
             __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
-        }),`;
-		}
+        }),`
+			: "";
 
-		// Solo hosts necesitan HtmlRspackPlugin (remotes solo exponen assets)
 		const htmlPlugin = isHost
 			? `
         new rspack.HtmlRspackPlugin({${i18nScript}
