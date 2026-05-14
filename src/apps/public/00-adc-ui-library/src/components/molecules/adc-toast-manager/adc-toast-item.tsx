@@ -1,4 +1,3 @@
-import {} from "@stencil/core";
 import type { DisplayedToast } from "./types.js";
 
 function getVariantClass(variant?: string): string {

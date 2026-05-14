@@ -52,7 +52,7 @@ export function ArticleForm({ article }: Props) {
 		setForm((f) => ({ ...f, [key]: v }));
 	}
 
-	async function handleSubmit(ev: React.FormEvent) {
+	async function handleSubmit(ev: React.SubmitEvent) {
 		ev.preventDefault();
 		setSaving(true);
 		try {
@@ -77,6 +77,11 @@ export function ArticleForm({ article }: Props) {
 			setSaving(false);
 		}
 	}
+
+	let submitBtnLabel = "Publicar";
+
+	if (saving) submitBtnLabel = "Guardando...";
+	else if (article) submitBtnLabel = "Guardar";
 
 	return (
 		<form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -164,7 +169,7 @@ export function ArticleForm({ article }: Props) {
 				</>
 			)}
 			<adc-button type="submit" disabled={saving}>
-				{saving ? "Guardando..." : article ? "Guardar" : "Publicar"}
+				{submitBtnLabel}
 			</adc-button>
 		</form>
 	);

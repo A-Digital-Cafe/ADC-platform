@@ -26,7 +26,8 @@ function getCookieOptions(config: CsrfRuntimeConfig): SetCookie["options"] {
 
 function getHeaderValue(req: FastifyRequest<any>, name: string): string | undefined {
 	const value = req.headers[name] ?? (req.headers as Record<string, unknown>)[name.toUpperCase()];
-	return Array.isArray(value) ? value[0] : typeof value === "string" ? value : undefined;
+	if (Array.isArray(value)) return value[0];
+	return typeof value === "string" ? value : undefined;
 }
 
 function hasBrowserCookie(req: FastifyRequest<any>): boolean {

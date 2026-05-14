@@ -46,11 +46,13 @@ function buildFindings(endpoints, clients) {
 
 function directFetchTable(fetches) {
 	if (fetches.length === 0) return "No direct `fetch()` calls found outside `adc-fetch` internals.";
-	return ["| File | Call |", "| --- | --- |", ...fetches.map((item) => `| ${item.file}:${item.line} | ${item.call.replaceAll("|", "\\|")} |`)].join("\n");
+	const itemPartStr = (item) => item.call.replaceAll("|", String.raw`\|`);
+	return ["| File | Call |", "| --- | --- |", ...fetches.map((item) => `| ${item.file}:${item.line} | ${itemPartStr(item)} |`)].join("\n");
 }
 
 export function formatMatrix(endpoints, clients) {
 	const findings = buildFindings(endpoints, clients);
+	const stubsEndpoints = ` (${findings.stubs.map(routeRef).join(", ")})`;
 	const lines = [
 		"# Backend Security Matrix",
 		"",
@@ -62,7 +64,7 @@ export function formatMatrix(endpoints, clients) {
 		"",
 		`- Unmatched public API client calls: ${findings.unmatchedClients.length}.`,
 		`- Mutative public API calls missing idempotency when backend requires it: ${findings.clientMissingIdempotency.length}.`,
-		`- Stub endpoints: ${findings.stubs.length}${findings.stubs.length ? ` (${findings.stubs.map(routeRef).join(", ")})` : ""}.`,
+		`- Stub endpoints: ${findings.stubs.length}${findings.stubs.length ? stubsEndpoints : ""}.`,
 		"- Rate limit labels are effective only when the Redis provider is available at runtime.",
 		"",
 		"## Summary",

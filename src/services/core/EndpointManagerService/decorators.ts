@@ -42,7 +42,7 @@ function getEndpointMetadata(target: object): EndpointMetadata[] {
 	// Para métodos estáticos, target ES el constructor (la clase)
 	// Para métodos de instancia, target es el prototype, y target.constructor es la clase
 	const constructor = typeof target === "function" ? target : target.constructor;
-	if (!Object.prototype.hasOwnProperty.call(constructor, REGISTERED_ENDPOINTS)) {
+	if (!Object.hasOwn(constructor, REGISTERED_ENDPOINTS)) {
 		Object.defineProperty(constructor, REGISTERED_ENDPOINTS, {
 			value: [],
 			writable: false,

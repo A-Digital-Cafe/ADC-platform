@@ -149,7 +149,7 @@ export function BlocksEditor({ value, onChange }: Props) {
 							onInsert={(type) => insert(type, 0)}
 						/>
 						{blocks.map((block, index) => (
-							<div key={index}>
+							<div key={"block-" + index}>
 								<BlockRow
 									block={block}
 									isEditing={editingIndex === index}

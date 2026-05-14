@@ -9,7 +9,6 @@ import type { UpdateLogEntry } from "@common/types/project-manager/UpdateLogEntr
 import type { CustomFieldValue } from "@common/types/project-manager/CustomField.ts";
 import type { IssueLink } from "@common/types/project-manager/IssueLink.ts";
 import type { Block } from "@common/ADC/types/learning.ts";
-import type { Block as StencilBlock } from "@ui-library/utils/react-jsx";
 import type { TransitionCommentSubmitDetail } from "./TransitionCommentModal.tsx";
 import { TransitionCommentModal } from "./TransitionCommentModal.tsx";
 import { pmApi } from "../utils/pm-api.ts";
@@ -67,7 +66,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 		milestoneId: issue?.milestoneId ?? "",
 		urgency: issue?.priority.urgency ?? 2,
 		importance: issue?.priority.importance ?? 2,
-		difficulty: (issue?.priority.difficulty ?? 3) as number,
+		difficulty: issue?.priority.difficulty ?? 3,
 		reason: "",
 		assigneeIds: issue?.assigneeIds ?? [],
 		assigneeGroupIds: issue?.assigneeGroupIds ?? [],
@@ -237,7 +236,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 	return (
 		<adc-modal ref={modalRef} open modalTitle={isNew ? t("issues.newIssue") : `${issue?.key} · ${t("common.edit")}`} size="xl">
 			<div className="p-4 space-y-4">
-				{/* Título arriba de todo */}
+				{/* Título superior */}
 				<div>
 					<label className="block text-sm font-medium mb-1 text-text">{t("issues.issueTitle")}</label>
 					<adc-input value={form.title} onInput={(e: any) => setForm({ ...form, title: e.target.value })} disabled={!canEdit} />
@@ -266,7 +265,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 						{descEditing ? (
 							<adc-blocks-form
 								placeholder={t("issues.descriptionPlaceholder") ?? "Describe el issue con bloques..."}
-								initialBlocks={form.description as StencilBlock[]}
+								initialBlocks={form.description}
 								initialAttachmentIds={descAttachmentIds}
 								attachmentUrls={descAttachmentUrls}
 								disabled={!canEdit}
@@ -377,7 +376,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 								{savedDescription.length === 0 ? (
 									<span className="text-muted text-sm italic">{t("issues.descriptionEmpty") ?? "Sin descripci\u00f3n"}</span>
 								) : (
-									<adc-blocks-renderer blocks={savedDescription as StencilBlock[]} attachmentUrls={descAttachmentUrls} />
+									<adc-blocks-renderer blocks={savedDescription} attachmentUrls={descAttachmentUrls} />
 								)}
 							</button>
 						)}
@@ -522,7 +521,7 @@ export function IssueDialog({ project, issue, perms, caller, sprints = [], miles
 							) : (
 								<ul className="rounded p-2 max-h-80 overflow-auto text-xs space-y-1">
 									{history.map((h, idx) => (
-										<li key={`history-${idx}`} className="border-b border-text/15 pb-1">
+										<li key={"history-" + idx} className="border-b border-text/15 pb-1">
 											<span className="font-mono text-muted">{new Date(h.at).toLocaleString()}</span>{" "}
 											<span className="font-semibold">{h.field}</span>:{" "}
 											<span className="text-muted">{JSON.stringify(h.oldValue)}</span> →{" "}

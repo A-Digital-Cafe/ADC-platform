@@ -64,7 +64,7 @@ export function CalendarGrid({ project, issues, endDate, onOpen }: Readonly<Prop
 	const isOverdue = today > endDay;
 
 	const days = useMemo(() => enumerateDays(viewStart, DAYS_VISIBLE), [viewStart]);
-	const viewEnd = days[days.length - 1];
+	const viewEnd = days.at(-1)!;
 
 	const byDay = useMemo(() => {
 		const map = new Map<string, Issue[]>();
@@ -132,7 +132,7 @@ export function CalendarGrid({ project, issues, endDate, onOpen }: Readonly<Prop
 					const isWeekend = idx === 0 || idx === 6;
 					return (
 						<div
-							key={`hdr-${idx}`}
+							key={"hdr-" + idx}
 							className={`text-[10px] uppercase font-semibold text-center py-1 ${isWeekend ? "text-muted" : "text-text"}`}
 						>
 							{label}
@@ -160,13 +160,14 @@ export function CalendarGrid({ project, issues, endDate, onOpen }: Readonly<Prop
 							{dayIssues.map((issue) => {
 								const col = columnByKey.get(issue.columnKey);
 								const pendingAtEnd = isEndDay && !issue.closedAt;
-								const toneCls = pendingAtEnd
-									? isOverdue
+								let toneCls;
+								if (pendingAtEnd) {
+									toneCls = isOverdue
 										? "bg-tdanger/15 border-tdanger/40 text-tdanger"
-										: "bg-muted/10 border-muted/30 text-muted"
-									: col?.isDone
-										? "bg-tsuccess/15 border-tsuccess/40 text-tsuccess"
-										: "bg-tinfo/15 border-tinfo/40 text-tinfo";
+										: "bg-muted/10 border-muted/30 text-muted";
+								} else if (col?.isDone) toneCls = "bg-tsuccess/15 border-tsuccess/40 text-tsuccess";
+								else toneCls = "bg-tinfo/15 border-tinfo/40 text-tinfo";
+
 								return (
 									<button
 										key={issue.id}

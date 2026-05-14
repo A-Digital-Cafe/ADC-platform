@@ -85,7 +85,7 @@
 
 .adc-btn--warning {
 	background-color: #f59e0b;
-	color: white;
+	color: #1f2937;
 	--ring-color: #fbbf24;
 }
 
@@ -99,7 +99,7 @@
 
 .adc-btn--danger {
 	background-color: #ef4444;
-	color: white;
+	color: #111827;
 	--ring-color: #f87171;
 }
 
@@ -114,7 +114,7 @@
 /* Estado deshabilitado */
 .adc-btn--disabled {
 	background-color: #d1d5db;
-	color: #6b7280;
+	color: #374151;
 	cursor: not-allowed;
 }
 

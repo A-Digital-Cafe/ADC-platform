@@ -75,7 +75,7 @@ export default function ProfileView() {
 		if (!userId) return undefined;
 		const teardown = setupAvatarSync((payload: AvatarUpdatePayload) => {
 			if (payload.userId !== userId) return;
-			void loadAvatarOptions();
+			loadAvatarOptions();
 			setAvatarCacheKey((k) => Math.max(k, payload.cacheKey ?? 0) + 1);
 		});
 		return teardown;
@@ -105,7 +105,7 @@ export default function ProfileView() {
 		})();
 	}, [loadAvatarOptions]);
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		if (!hasChanges) {
 			toast.info(t("profile.noChangesToast"));

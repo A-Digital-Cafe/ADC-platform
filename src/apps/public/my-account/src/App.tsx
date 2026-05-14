@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import "@ui-library/utils/react-jsx";
 import { router } from "@common/utils/router.js";
 import { getSession } from "@ui-library/utils/session";
@@ -103,62 +103,64 @@ export default function App() {
 		};
 	}, [handleSidebarItemClick, handleExpandToggle, sessionChecked, authenticated]);
 
-	return (
-		<adc-layout>
-			{sessionChecked ? (
-				authenticated ? (
-					<div className="flex min-h-screen bg-background">
-						{/* Expand button */}
-						<div
-							className={`
+	let render: React.ReactNode;
+	if (sessionChecked) {
+		if (authenticated)
+			render = (
+				<div className="flex min-h-screen bg-background">
+					{/* Expand button */}
+					<div
+						className={`
 					fixed top-1/2 z-50 lg:hidden
 					-translate-y-1/2 transition-all duration-300
 					${sidebarExpanded ? "left-70" : "left-22"}
 				`}
-						>
-							<adc-button-expand ref={buttonRef} isExpanded={sidebarExpanded} />
-						</div>
+					>
+						<adc-button-expand ref={buttonRef} isExpanded={sidebarExpanded} />
+					</div>
 
-						{/* Sidebar */}
-						<adc-sidebar
-							ref={sidebarRef}
-							items={Object.entries(SECTIONS).map(([key, value]) => ({
-								label: t(value.labelKey),
-								iconSvg: value.icon,
-								action: key,
-							}))}
-							collapsed={!sidebarExpanded}
-							activeItem={activeSection}
-							title={t("nav.title")}
-							subtitle={t("nav.subtitle")}
-						/>
+					{/* Sidebar */}
+					<adc-sidebar
+						ref={sidebarRef}
+						items={Object.entries(SECTIONS).map(([key, value]) => ({
+							label: t(value.labelKey),
+							iconSvg: value.icon,
+							action: key,
+						}))}
+						collapsed={!sidebarExpanded}
+						activeItem={activeSection}
+						title={t("nav.title")}
+						subtitle={t("nav.subtitle")}
+					/>
 
-						{/* Main */}
-						<main
-							className={`
+					{/* Main */}
+					<main
+						className={`
 					flex-1 transition-all duration-300
 					${sidebarExpanded ? "lg:ml-74" : "lg:mx-20"}
 				`}
-						>
-							<div className="w-full p-adc-lg">
-								<div className="animate-fade-in">
-									<ActiveComponent />
-								</div>
+					>
+						<div className="w-full p-adc-lg">
+							<div className="animate-fade-in">
+								<ActiveComponent />
 							</div>
-						</main>
-					</div>
-				) : (
-					<div className="max-w-3xl mx-auto px-4 py-16 text-center">
-						<h1 className="font-heading text-2xl font-bold text-text mb-4">{t("auth.accessRequired")}</h1>
-						<p className="text-muted">{t("auth.signInRequired")}</p>
-					</div>
-				)
-			) : (
-				<div className="max-w-3xl mx-auto px-4 py-8">
-					<adc-skeleton variant="rectangular" height="48px" class="mb-6" />
-					<adc-skeleton variant="rectangular" height="400px" />
+						</div>
+					</main>
 				</div>
-			)}
-		</adc-layout>
-	);
+			);
+		else
+			render = (
+				<div className="max-w-3xl mx-auto px-4 py-16 text-center">
+					<h1 className="font-heading text-2xl font-bold text-text mb-4">{t("auth.accessRequired")}</h1>
+					<p className="text-muted">{t("auth.signInRequired")}</p>
+				</div>
+			);
+	} else
+		render = (
+			<div className="max-w-3xl mx-auto px-4 py-8">
+				<adc-skeleton variant="rectangular" height="48px" class="mb-6" />
+				<adc-skeleton variant="rectangular" height="400px" />
+			</div>
+		);
+	return <adc-layout>{render}</adc-layout>;
 }

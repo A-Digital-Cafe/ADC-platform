@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Project } from "@common/types/project-manager/Project.ts";
 import type { BadgeOption, CustomFieldDef, CustomFieldType } from "@common/types/project-manager/CustomField.ts";
-import { LABEL_COLORS, type LabelColor } from "@common/types/project-manager/LabelColors.ts";
+import { LABEL_COLORS } from "@common/types/project-manager/LabelColors.ts";
 import { shortId } from "../../utils/ids.ts";
 import { pmApi } from "../../utils/pm-api.ts";
 
@@ -39,7 +39,7 @@ export function CustomFieldsSection({ project, canEdit, onSaved }: Readonly<Prop
 				d.id === fieldId
 					? {
 							...d,
-							badgeOptions: [...(d.badgeOptions ?? []), { name: t("settings.newBadgeOption"), color: "blue" as LabelColor }],
+							badgeOptions: [...(d.badgeOptions ?? []), { name: t("settings.newBadgeOption"), color: "blue" }],
 						}
 					: d
 			)
@@ -128,7 +128,10 @@ export function CustomFieldsSection({ project, canEdit, onSaved }: Readonly<Prop
 								<label className="block text-xs text-muted">{t("settings.badgeOptions")}</label>
 								<ul className="space-y-1.5">
 									{(d.badgeOptions ?? []).map((opt, idx) => (
-										<li key={idx} className="flex items-center gap-2 p-1.5 border border-border rounded-md bg-surface">
+										<li
+											key={"opt" + idx}
+											className="flex items-center gap-2 p-1.5 border border-border rounded-md bg-surface"
+										>
 											<adc-input
 												value={opt.name}
 												onInput={(e: any) => updateBadgeOption(d.id, idx, { name: e.target.value })}
@@ -156,7 +159,7 @@ export function CustomFieldsSection({ project, canEdit, onSaved }: Readonly<Prop
 												className="ml-auto text-tdanger font-bold text-sm disabled:opacity-30"
 												aria-label={t("common.delete")}
 											>
-												×
+												x
 											</button>
 										</li>
 									))}
