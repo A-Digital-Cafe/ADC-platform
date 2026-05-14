@@ -121,8 +121,8 @@ export default class IdentityManagerService extends BaseService {
 	// Proyecto org-requests para solicitudes de organización (inicializado en startup)
 	#orgRequestsProject: Project | null = null;
 
-	// ProjectManagerService cacheado (se obtiene en #initializeOrgRequestsProject)
-	#projectManagerService: InstanceType<typeof ProjectManagerService> | null = null;
+	// Acceso sin autenticación a ProjectManagerService (via _internal())
+	#internalProjectManager: ReturnType<InstanceType<typeof ProjectManagerService>["_internal"]> | null = null;
 
 	@EnableEndpoints({
 		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints],
@@ -367,10 +367,9 @@ export default class IdentityManagerService extends BaseService {
 		const startTime = Date.now();
 		while (Date.now() - startTime < maxWaitMs) {
 			try {
-				// Intentar obtener sin que lance excepción
 				const pm = this.#kernelRef.registry.getService<InstanceType<typeof ProjectManagerService>>("ProjectManagerService");
 				if (pm) return pm;
-			} catch {
+			} catch (err: any) {
 				// Servicio aún no disponible, reintentar
 			}
 			await new Promise((resolve) => setTimeout(resolve, 500));
@@ -382,118 +381,144 @@ export default class IdentityManagerService extends BaseService {
 	 * Inicializa el proyecto org-requests durante el startup del servicio.
 	 * Se ejecuta de forma asincrónica sin bloquear el inicio.
 	 * Usa contexto de sistema (admin global) sin requerer token.
-	 * Si hay errores, solo se loguean como warnings.
+	 *
+	 * IMPORTANTE: Usa el canal interno (_internal) de PM para acceso sin autenticación.
+	 * Esto es el patrón correcto de comunicación kernel-to-kernel sin ciclos de dependencia.
 	 */
 	async #initializeOrgRequestsProject(): Promise<void> {
-		// Si ya está inicializado, no hacer nada
-		if (this.#orgRequestsProject) {
-			return;
-		}
+		if (this.#orgRequestsProject) return;
 
 		try {
-			// Esperar a que ProjectManagerService esté disponible (máximo 10 segundos)
-			this.#projectManagerService = await this.waitForProjectManager(10000);
-			if (!this.#projectManagerService) {
-				this.logger.logWarn(
-					"ProjectManagerService no disponible en startup. Solicitudes de organización no disponibles."
-				);
-				return;
-			}
-
-			// Obtener configuración privada del servicio
 			const configPrivate = (this.config?.private || {}) as { orgRequestsProjectSlug?: string };
 			const projectSlug = configPrivate.orgRequestsProjectSlug || "org-requests";
 
-			// Intentar obtener proyecto existente
-			try {
-				const project = await this.#projectManagerService.projects.getProjectBySlug(
-					projectSlug,
-					null,
-					undefined
-				);
-				this.#orgRequestsProject = project;
-				this.logger.logOk(`Proyecto org-requests cargado en startup (slug: "${projectSlug}")`);
-				return;
-			} catch {
-				// Proyecto no existe, intentar crear
-			}
-
-			// Crear proyecto org-requests en bootstrap con contexto de sistema
-			const pmCtx = {
-				userId: SYSTEM_USER_ID,
-				groupIds: [],
-				tokenOrgId: null,
-				isGlobalAdmin: true,
-				hasGlobalPMRead: true,
-				hasGlobalPMWrite: true,
-				isOrgAdminOrPM: async () => true,
-			};
-
-			const projectName = configPrivate.orgRequestsProjectSlug || "Organization Requests";
-
-			const newProject = {
-				slug: projectSlug,
-				name: projectName,
-				description: "Solicitudes de creación de organizaciones en ADC Platform",
-				visibility: "private" as const,
-				ownerId: SYSTEM_USER_ID,
-				kanbanColumns: [
-					{ id: "col-1", key: "todo", name: "Pendiente", order: 0, isAuto: true },
-					{ id: "col-2", key: "in-progress", name: "En revisión", order: 1 },
-					{ id: "col-3", key: "approved", name: "Aprobada", order: 2, isDone: true, color: "#10b981" },
-					{ id: "col-4", key: "rejected", name: "Rechazada", order: 3, isDone: true, color: "#ef4444" },
-				],
-				priorityStrategy: { id: "matrix-eisenhower" },
-				settings: {},
-			};
-
-			try {
-				const project = await this.#projectManagerService.projects.createProject(newProject, pmCtx, undefined);
-				this.#orgRequestsProject = project;
-				this.logger.logOk(`Proyecto org-requests creado en startup (slug: "${projectSlug}")`);
-			} catch (createErr: any) {
-				// Verificar si el error es por duplicado (race condition)
-				if (createErr?.message?.includes("ya existe")) {
-					try {
-						const project = await this.#projectManagerService.projects.getProjectBySlug(
-							projectSlug,
-							null,
-							undefined
-						);
-						this.#orgRequestsProject = project;
-						this.logger.logOk(`Proyecto org-requests recuperado después de conflicto en startup`);
-					} catch (getErr: any) {
-						this.logger.logWarn(
-							`No se pudo recuperar proyecto org-requests después de conflicto: ${(getErr as Error).message}`
-						);
+			await this.waitForProjectManager(10000);
+			const pm = this.getProjectManager();
+			if (pm) {
+				try {
+					const internalPM = this.getInternalProjectManager();
+					if (internalPM) {
+						const existingInPM = await internalPM.projects.getProjectBySlug(projectSlug, null);
+						if (existingInPM) {
+							this.#orgRequestsProject = existingInPM;
+							return;
+						}
 					}
-				} else {
-					this.logger.logWarn(
-						`No se pudo crear proyecto org-requests en startup: ${(createErr as Error).message}`
-					);
+				} catch (getErr: any) {
+					// Continuar con creación
+				}
+
+				const pmCtx = {
+					userId: SYSTEM_USER_ID,
+					groupIds: [],
+					tokenOrgId: null,
+					isGlobalAdmin: true,
+					hasGlobalPMRead: true,
+					hasGlobalPMWrite: true,
+					isOrgAdminOrPM: async () => true,
+				};
+
+				const newProject = {
+					slug: projectSlug,
+					name: "Organization Requests",
+					description: "Solicitudes de creación de organizaciones en ADC Platform",
+					visibility: "private" as const,
+					ownerId: SYSTEM_USER_ID,
+					kanbanColumns: [
+						{ id: "col-1", key: "todo", name: "Pendiente", order: 0, isAuto: true },
+						{ id: "col-2", key: "in-progress", name: "En revisión", order: 1 },
+						{ id: "col-3", key: "approved", name: "Aprobada", order: 2, isDone: true, color: "#10b981" },
+						{ id: "col-4", key: "rejected", name: "Rechazada", order: 3, isDone: true, color: "#ef4444" },
+					],
+					priorityStrategy: { id: "matrix-eisenhower" },
+					settings: {},
+				};
+
+				try {
+					const createdProject = await pm.projects.createProject(newProject, pmCtx);
+					this.#orgRequestsProject = createdProject;
+					return;
+				} catch (createErr: any) {
+					if (createErr?.message?.includes("ya existe")) {
+						try {
+							const internalPM = this.getInternalProjectManager();
+							if (internalPM) {
+								const recovered = await internalPM.projects.getProjectBySlug(projectSlug, null);
+								if (recovered) {
+									this.#orgRequestsProject = recovered;
+									return;
+								}
+							}
+						} catch (recErr: any) {
+							// Ignorar, proyecto no será cacheado
+						}
+					}
 				}
 			}
 		} catch (error: any) {
-			this.logger.logWarn(
-				`Error durante inicialización de proyecto org-requests: ${(error as Error).message}`
-			);
+			this.logger.logWarn(`Fallo inicializando proyecto org-requests: ${error.message}`);
 		}
 	}
 
 	/**
 	 * Acceso seguro a ProjectManagerService.
+	 * Si no está en cache, intenta obtenerlo dinámicamente del kernel.
 	 * @returns ProjectManagerService si está disponible, null en caso contrario
 	 */
+	/**
+	 * Obtiene ProjectManagerService directamente del registry (singleton).
+	 * El registry es la fuente de verdad, no cacheamos aquí.
+	 */
 	getProjectManager(): InstanceType<typeof ProjectManagerService> | null {
-		return this.#projectManagerService;
+		try {
+			return this.#kernelRef.registry.getService<InstanceType<typeof ProjectManagerService>>("ProjectManagerService");
+		} catch (err: any) {
+			return null;
+		}
+	}
+
+	/**
+	 * Obtiene acceso privilegiado sin autenticación a ProjectManagerService.
+	 * Usa el canal interno (_internal) que requiere kernelKey válida.
+	 * Es el patrón correcto para servicios kernel que necesiten interactuar internamente.
+	 */
+	getInternalProjectManager(): ReturnType<InstanceType<typeof ProjectManagerService>["_internal"]> | null {
+		if (this.#internalProjectManager) return this.#internalProjectManager;
+
+		try {
+			const pm = this.getProjectManager();
+			if (!pm || !this.#kernelKey) return null;
+			this.#internalProjectManager = pm._internal(this.#kernelKey);
+			return this.#internalProjectManager;
+		} catch (err: any) {
+			return null;
+		}
 	}
 
 	/**
 	 * Acceso seguro al proyecto org-requests.
-	 * @returns Proyecto org-requests si fue inicializado correctamente, null en caso contrario
+	 * Si no está en cache, intenta lazy-load desde ProjectManagerService con acceso sin autenticación.
+	 * @returns Proyecto org-requests si está disponible en PM, null en caso contrario
 	 */
-	getOrgRequestsProject(): Project | null {
-		return this.#orgRequestsProject;
+	async getOrgRequestsProject(): Promise<Project | null> {
+		if (this.#orgRequestsProject) return this.#orgRequestsProject;
+
+		const configPrivate = (this.config?.private || {}) as { orgRequestsProjectSlug?: string };
+		const projectSlug = configPrivate.orgRequestsProjectSlug || "org-requests";
+
+		try {
+			const internalPM = this.getInternalProjectManager();
+			if (!internalPM) return null;
+
+			const project = await internalPM.projects.getProjectBySlug(projectSlug, null);
+			if (project) {
+				this.#orgRequestsProject = project;
+				return project;
+			}
+			return null;
+		} catch (err: any) {
+			return null;
+		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────

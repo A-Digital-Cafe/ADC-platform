@@ -254,8 +254,8 @@ export class OrgEndpoints {
 							orgId: result.orgId,
 						};
 					}
-				} catch {
-					// Silent fail - let the subsequent validation handle it
+				} catch (err) {
+					// Silent fail
 				}
 			}
 
@@ -288,14 +288,15 @@ export class OrgEndpoints {
 			} catch (error: any) {
 				// Si es error de permisos (no admin), ignorar - el usuario puede solicitar aunque no vea todas las orgs
 				if (error instanceof IdentityError && error.status !== 409) {
-					// Continuar sin validación cruzada
+					// Continuar
 				} else if (error instanceof IdentityError) {
 					throw error;
 				}
 			}
 
 			// Obtener proyecto org-requests (inicializado en startup del servicio)
-			const project = OrgEndpoints.#identity.getOrgRequestsProject();
+			const project = await OrgEndpoints.#identity.getOrgRequestsProject();
+
 			if (!project) {
 				throw new IdentityError(
 					503,
@@ -306,6 +307,7 @@ export class OrgEndpoints {
 
 			// Obtener ProjectManagerService
 			const pm = OrgEndpoints.#identity.getProjectManager();
+
 			if (!pm) {
 				throw new IdentityError(
 					503,

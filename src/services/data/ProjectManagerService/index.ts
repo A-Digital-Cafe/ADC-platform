@@ -47,6 +47,7 @@ export default class ProjectManagerService extends BaseService {
 	#authVerifier: IAuthVerifier | null = null;
 	#identity: IdentityManagerService | null = null;
 	#internalRoles: ReturnType<IdentityManagerService["_internal"]>["roles"] | null = null;
+	#kernelKey: symbol | null = null;
 
 	private mongoProvider!: MongoProvider;
 	readonly #kernelRef: Kernel;
@@ -71,6 +72,7 @@ export default class ProjectManagerService extends BaseService {
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
+		this.#kernelKey = kernelKey;
 
 		this.mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
 		await this.waitForMongo();
@@ -267,9 +269,35 @@ export default class ProjectManagerService extends BaseService {
 		return this.#issueDescriptionDrafts;
 	}
 
+	/**
+	 * Acceso interno privilegiado a ProjectManagerService sin requerir token.
+	 * Solo disponible para otros servicios del kernel con kernelKey válida.
+	 * Patrón consistente con IdentityManagerService._internal()
+	 */
+	_internal(kernelKey: symbol): {
+		projects: {
+			getProjectBySlug(slug: string, orgId: string | null): Promise<Project | null>;
+		};
+	} {
+		if (kernelKey !== this.#kernelKey) {
+			throw new Error("Acceso denegado: kernelKey inválida");
+		}
+
+		return {
+			projects: {
+				getProjectBySlug: async (slug: string, orgId: string | null): Promise<Project | null> => {
+					// Acceso sin autenticación para servicios kernel internos
+					const internals = this.#projectManager!.getInternals(kernelKey);
+					return internals.fetchProjectBySlug(slug, orgId);
+				},
+			},
+		};
+	}
+
 	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
+		this.#kernelKey = null;
 		this.#authVerifier = null;
 		this.logger.logOk("ProjectManagerService detenido");
 	}
