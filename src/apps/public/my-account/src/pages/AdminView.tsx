@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { accountApi } from "../utils/account-api";
 import { toast } from "../utils/toast";
+import { useTranslation } from "@ui-library/utils/i18n-react";
 
 const AUTH_URL = "http://localhost:3012";
 
 export default function AdminView() {
+	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
 	const [modalOpen, setModalOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 
 	const handleLogout = async () => {
 		const res = await accountApi.logout();
 		if (!res.success) {
-			toast.warning("Error cerrando sesión, redirigiendo igual...");
+			toast.warning(t("admin.logoutWarning"));
 		}
 
 		globalThis.location.href = `${AUTH_URL}/login`;
@@ -23,13 +25,13 @@ export default function AdminView() {
 		try {
 			await accountApi.deleteCurrentUser();
 
-			toast.success("Cuenta eliminada correctamente");
+			toast.success(t("admin.deleteSuccess"));
 
 			setTimeout(() => handleLogout(), 1500);
 		} catch (err) {
-			console.error("Error eliminando cuenta", err);
+			console.error(err);
 
-			toast.error("Ocurrió un error al eliminar la cuenta");
+			toast.error(t("admin.deleteError"));
 		} finally {
 			setDeleting(false);
 			setModalOpen(false);
@@ -41,7 +43,7 @@ export default function AdminView() {
 			{modalOpen && (
 				<adc-modal
 					open
-					modalTitle="Confirmar eliminación de cuenta"
+					modalTitle={t("admin.modalTitle")}
 					size="lg"
 					dismissOnBackdrop={!deleting}
 					dismissOnEscape={!deleting}
@@ -57,17 +59,17 @@ export default function AdminView() {
 								/>
 							</svg>
 						</div>
-						<h3 className="text-xl font-semibold text-center text-tdanger mb-2">¿Eliminar cuenta?</h3>
+						<h3 className="text-xl font-semibold text-center text-tdanger mb-2">{t("admin.modalHeading")}</h3>
 						<p className="mb-4 text-base text-center text-text max-w-xl">
-							Esta acción <span className="font-bold text-tdanger">no se puede deshacer</span> y eliminará permanentemente todos
-							tus datos. ¿Estás seguro de que querés continuar?
+							{t("admin.deleteConfirmPrefix")} <span className="font-bold text-tdanger">{t("admin.deleteConfirmEmphasis")}</span>{" "}
+							{t("admin.deleteConfirmSuffix")}
 						</p>
 						<div className="flex flex-row justify-center gap-4 w-full mt-4">
 							<adc-button type="button" class="min-w-35" disabled={deleting} onClick={() => setModalOpen(false)}>
-								Cancelar
+								{t("admin.cancel")}
 							</adc-button>
 							<adc-button type="button" class="min-w-35" disabled={deleting} onClick={handleDeleteAccount}>
-								{deleting ? "Eliminando..." : "Eliminar cuenta"}
+								{deleting ? t("admin.deleting") : t("admin.deleteAction")}
 							</adc-button>
 						</div>
 					</div>
@@ -76,8 +78,8 @@ export default function AdminView() {
 			<div className="w-full flex flex-col pl-25 lg:pl-70">
 				{/* Title */}
 				<div className="mb-4">
-					<h2 className="text-2xl font-bold text-text">Administración</h2>
-					<p className="text-muted">Opciones avanzadas de gestión de cuenta</p>
+					<h2 className="text-2xl font-bold text-text">{t("admin.title")}</h2>
+					<p className="text-muted">{t("admin.subtitle")}</p>
 				</div>
 
 				{/* Container */}
@@ -101,8 +103,8 @@ export default function AdminView() {
 						</div>
 
 						<div>
-							<h3 className="text-base font-semibold text-text">Eliminar cuenta</h3>
-							<p className="text-sm text-muted">Esta acción eliminará permanentemente todos tus datos.</p>
+							<h3 className="text-base font-semibold text-text">{t("admin.deleteAccountTitle")}</h3>
+							<p className="text-sm text-muted">{t("admin.deleteAccountDescription")}</p>
 						</div>
 					</div>
 
@@ -116,15 +118,13 @@ export default function AdminView() {
 								<span className="text-xs font-bold">!</span>
 							</div>
 
-							<p className="text-sm leading-relaxed">
-								Asegúrate de descargar cualquier dato que quieras conservar. Una vez eliminada la cuenta, no podrás recuperarla.
-							</p>
+							<p className="text-sm leading-relaxed">{t("admin.warning")}</p>
 						</div>
 
 						{/* Action */}
 						<div className="flex items-center justify-end flex-wrap gap-3">
 							<adc-button type="button" onClick={() => setModalOpen(true)}>
-								Eliminar cuenta
+								{t("admin.openDelete")}
 							</adc-button>
 						</div>
 					</div>

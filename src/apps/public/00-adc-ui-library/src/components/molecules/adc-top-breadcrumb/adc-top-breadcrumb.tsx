@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter } from "@stencil/core";
 
 export interface BreadcrumbItem {
 	label: string;
@@ -55,8 +55,9 @@ export class AdcTopBreadcrumb {
 		e.stopPropagation();
 	};
 
+	private static readonly keyPrefix = "breadcrumb-item-";
+
 	render() {
-		void h;
 		const items = this.parsedItems;
 
 		return (
@@ -71,10 +72,14 @@ export class AdcTopBreadcrumb {
 						{items.map((item, idx) => {
 							const isLast = idx === items.length - 1;
 							if (isLast || !item.href) {
-								return <li aria-current={isLast ? "page" : undefined}>{item.label}</li>;
+								return (
+									<li key={AdcTopBreadcrumb.keyPrefix + idx} aria-current={isLast ? "page" : undefined}>
+										{item.label}
+									</li>
+								);
 							}
 							return (
-								<li>
+								<li key={AdcTopBreadcrumb.keyPrefix + idx}>
 									<a href={item.href} onClick={(e) => this.handleItemClick(e, item.href)}>
 										{item.label}
 									</a>

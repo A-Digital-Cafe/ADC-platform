@@ -1,7 +1,0 @@
-{
-	"postman.settings.dotenv-detection-notification-visibility": false,
-	"sonarlint.connectedMode.project": {
-		"connectionId": "abbytec",
-		"projectKey": "abbytec_ADC-platform"
-	}
-}

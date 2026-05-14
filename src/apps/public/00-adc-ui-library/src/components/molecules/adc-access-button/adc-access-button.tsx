@@ -1,4 +1,4 @@
-import { Component, Prop, State, h, Event, EventEmitter, Listen, Element } from "@stencil/core";
+import { Component, Prop, State, Event, EventEmitter, Listen, Element } from "@stencil/core";
 import { isPrivateHost } from "../../../utils/url.js";
 import {
 	broadcastAuthChange,
@@ -23,6 +23,7 @@ export interface AccessMenuItem {
 	href: string;
 	icon?: string;
 }
+const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");
 
 /**
  * Botón de acceso que muestra:
@@ -35,8 +36,7 @@ export interface AccessMenuItem {
 })
 export class AdcAccessButton {
 	/** URL base del auth (en dev: localhost:3012, en prod: auth.adigitalcafe.com) */
-	@Prop() authUrl: string =
-		`${globalThis.location?.protocol}//auth.adigitalcafe.com${globalThis.location?.port ? `:${globalThis.location?.port}` : ""}`;
+	@Prop() authUrl: string = `${globalThis.location?.protocol}//auth.adigitalcafe.com${port()}`;
 
 	/** URL base de la API (en dev: http://hostname:3000, en prod: vacío para usar relativo) */
 	@Prop() apiBaseUrl: string = isPrivateHost(globalThis.location?.hostname ?? "")
@@ -206,11 +206,9 @@ export class AdcAccessButton {
 	 * Evita rotar el JWT/CSRF y re-renderiza únicamente el avatar visible.
 	 */
 	private applyAvatarUpdate(payload: AvatarUpdatePayload): void {
-		if (!this.user || this.user.id !== payload.userId) return;
-		const avatar =
-			payload.avatar && payload.cacheKey
-				? `${payload.avatar}${payload.avatar.includes("?") ? "&" : "?"}v=${payload.cacheKey}`
-				: payload.avatar;
+		if (this.user?.id !== payload.userId) return;
+		let avatar = payload.avatar;
+		if (payload.avatar && payload.cacheKey) avatar = `${payload.avatar}${payload.avatar.includes("?") ? "&" : "?"}v=${payload.cacheKey}`;
 		this.user = { ...this.user, avatar: avatar ?? undefined };
 	}
 
@@ -309,7 +307,6 @@ export class AdcAccessButton {
 	}
 
 	render() {
-		void h;
 		if (this.loading) {
 			return (
 				<div class="w-12 h-12 rounded-full bg-muted animate-pulse" aria-live="polite" role="status">
@@ -418,7 +415,7 @@ export class AdcAccessButton {
 											<button
 												type="button"
 												key="personal-access-btn"
-												class={`w-full flex items-center gap-2 px-3 py-2 rounded text-left text-sm hover:bg-accent/10 transition-colors cursor-pointer ${!this.user?.orgId ? "bg-accent/15 font-semibold" : ""}`}
+												class={`w-full flex items-center gap-2 px-3 py-2 rounded text-left text-sm hover:bg-accent/10 transition-colors cursor-pointer ${this.user?.orgId ? "" : "bg-accent/15 font-semibold"}`}
 												onClick={() => this.handleSwitchOrg()}
 											>
 												<svg

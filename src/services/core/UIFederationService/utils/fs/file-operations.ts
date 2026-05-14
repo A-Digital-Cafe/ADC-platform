@@ -20,38 +20,27 @@ export async function copyDirectory(source: string, target: string): Promise<voi
 	}
 }
 
+/** Copia el contenido (flat) de un directorio si existe. */
+async function copyFlatIfExists(sourceDir: string, outputDir: string, logger: any, label: string): Promise<void> {
+	try {
+		await fs.access(sourceDir);
+		const entries = await fs.readdir(sourceDir);
+		for (const entry of entries) {
+			await fs.copyFile(path.join(sourceDir, entry), path.join(outputDir, entry));
+		}
+		logger?.logDebug(`${label} copiados desde ${sourceDir}`);
+	} catch {
+		logger?.logDebug(`No hay ${label} en ${sourceDir}`);
+	}
+}
+
 /**
  * Copia archivos públicos de una app al output.
  * Primero copia common/public (fallback global), luego la carpeta public/ del app (override).
  */
 export async function copyPublicFiles(appDir: string, outputDir: string, logger?: any): Promise<void> {
-	const commonPublicDir = getCommonPublicDir();
-	try {
-		await fs.access(commonPublicDir);
-		const commonEntries = await fs.readdir(commonPublicDir);
-		for (const entry of commonEntries) {
-			const sourcePath = path.join(commonPublicDir, entry);
-			const targetPath = path.join(outputDir, entry);
-			await fs.copyFile(sourcePath, targetPath);
-		}
-		logger?.logDebug(`Assets comunes copiados desde ${commonPublicDir}`);
-	} catch {
-		logger?.logDebug(`No hay directorio common/public`);
-	}
-
-	const publicDir = path.join(appDir, "public");
-	try {
-		await fs.access(publicDir);
-		const entries = await fs.readdir(publicDir);
-		for (const entry of entries) {
-			const sourcePath = path.join(publicDir, entry);
-			const targetPath = path.join(outputDir, entry);
-			await fs.copyFile(sourcePath, targetPath);
-		}
-		logger?.logDebug(`Archivos públicos copiados desde ${publicDir}`);
-	} catch {
-		logger?.logDebug(`No hay directorio public/ en ${appDir}`);
-	}
+	await copyFlatIfExists(getCommonPublicDir(), outputDir, logger, "Assets comunes");
+	await copyFlatIfExists(path.join(appDir, "public"), outputDir, logger, "Archivos públicos");
 }
 
 /**
@@ -59,11 +48,7 @@ export async function copyPublicFiles(appDir: string, outputDir: string, logger?
  */
 export async function runCommand(command: string, args: string[], cwd: string, logger?: any): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const process = spawn(command, args, {
-			cwd,
-			stdio: "pipe",
-			shell: false,
-		});
+		const process = spawn(command, args, { cwd, stdio: "pipe", shell: false });
 
 		let output = "";
 		let errorOutput = "";
@@ -78,18 +63,14 @@ export async function runCommand(command: string, args: string[], cwd: string, l
 
 		process.on("close", (code) => {
 			if (code === 0) {
-				if (output) {
-					logger?.logDebug(`Build output: ${output.slice(-200)}`);
-				}
+				if (output) logger?.logDebug(`Build output: ${output.slice(-200)}`);
 				resolve();
 			} else {
 				logger?.logError(`Comando falló con código ${code}`);
 				logger?.logError(`Directorio: ${cwd}`);
 				logger?.logError(`Comando: ${command} ${args.join(" ")}`);
 				if (output) logger?.logError(`Stdout: ${output.slice(0, 1000)}`);
-
 				if (errorOutput) logger?.logError(`Stderr: ${errorOutput.slice(0, 1000)}`);
-
 				reject(new Error(`Comando falló: ${command} ${args.join(" ")}`));
 			}
 		});
@@ -109,7 +90,6 @@ export async function processHTMLFiles(dir: string, callback: (filePath: string,
 	try {
 		await fs.access(dir);
 	} catch {
-		// Directorio no existe (ej: dev server sirviendo desde memoria)
 		return;
 	}
 

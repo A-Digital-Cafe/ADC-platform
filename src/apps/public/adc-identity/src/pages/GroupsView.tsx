@@ -101,7 +101,7 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 		setModalOpen(true);
 	};
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		clearErrors();
 		setSubmitting(true);

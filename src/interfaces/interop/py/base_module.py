@@ -40,7 +40,7 @@ class BaseModule(ABC):
             env_config = json.loads(config_str)
             self.config.update(env_config)
         except json.JSONDecodeError:
-            print(f"[BaseModule] Error parseando ADC_MODULE_CONFIG", file=sys.stderr)
+            print("[BaseModule] Error parseando ADC_MODULE_CONFIG", file=sys.stderr)
 
     @property
     def name(self) -> str:
@@ -72,16 +72,16 @@ class BaseModule(ABC):
         ipc_server.set_handler(handler)
 
         # Iniciar el servidor (bloqueante)
-        self.logger.info(f"Iniciando servidor IPC...")
+        self.logger.info("Iniciando servidor IPC...")
         ipc_server.start()
 
     def start(self) -> None:
         """Inicia el módulo (hook para lógica de inicio)"""
-        self.logger.info(f"Iniciando módulo...")
+        self.logger.info("Iniciando módulo...")
 
     def stop(self) -> None:
         """Detiene el módulo"""
-        self.logger.info(f"Deteniendo módulo...")
+        self.logger.info("Deteniendo módulo...")
 
 
 class BaseUtility(BaseModule):

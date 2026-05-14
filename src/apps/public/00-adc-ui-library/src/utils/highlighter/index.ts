@@ -15,7 +15,10 @@ import {
  */
 export function decodeEscapes(s?: string): string {
 	if (typeof s !== "string") return s ?? "";
-	return s.replaceAll("\\u003C", "<").replaceAll("\\u003E", ">").replaceAll("\\u0026", "&");
+	return s
+		.replaceAll(String.raw`\u003C`, "<")
+		.replaceAll(String.raw`\u003E`, ">")
+		.replaceAll(String.raw`\u0026`, "&");
 }
 
 // =============================================================================

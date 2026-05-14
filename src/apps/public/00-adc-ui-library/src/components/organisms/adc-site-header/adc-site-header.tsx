@@ -1,7 +1,7 @@
-import { Component, Prop, h, Element } from "@stencil/core";
+import { Component, Prop, Element } from "@stencil/core";
 import type { AccessMenuItem } from "../../molecules/adc-access-button/adc-access-button.js";
 import { isPrivateHost } from "../../../utils/url.js";
-
+const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");
 @Component({
 	tag: "adc-site-header",
 	shadow: false,
@@ -13,8 +13,7 @@ export class AdcSiteHeader {
 	@Prop() logoAlt: string = "";
 	@Prop() homeHref: string = "/";
 
-	@Prop() authUrl: string =
-		`${globalThis.location?.protocol}//auth.adigitalcafe.com${globalThis.location?.port ? `:${globalThis.location?.port}` : ""}`;
+	@Prop() authUrl: string = `${globalThis.location?.protocol}//auth.adigitalcafe.com${port()}`;
 
 	@Prop() apiBaseUrl: string = isPrivateHost(globalThis.location?.hostname ?? "")
 		? `${globalThis.location?.protocol}//${globalThis.location?.hostname}:3000`

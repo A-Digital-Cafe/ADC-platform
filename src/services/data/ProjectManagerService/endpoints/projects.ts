@@ -5,6 +5,8 @@ import type { Project, KanbanColumn, ProjectSettings, PriorityStrategy } from "@
 import type { CustomFieldDef } from "@common/types/project-manager/CustomField.ts";
 import type { IssueLinkType } from "@common/types/project-manager/IssueLink.ts";
 import { normalizeSlug } from "@common/utils/project-manager/slug.ts";
+import { CRUDXAction } from "@common/types/Actions.ts";
+import { IdentityScopes } from "@common/types/identity/permissions.ts";
 
 const PROJECT_CREATE_RATE_LIMIT = { max: 10, timeWindow: 60_000 };
 const PROJECT_WRITE_RATE_LIMIT = { max: 10, timeWindow: 60_000 };
@@ -21,12 +23,18 @@ async function resolveOrgSlug(service: ProjectManagerService, orgSlug: string, t
 	return org.orgId;
 }
 
+async function canReadGlobalOrgRequests(service: ProjectManagerService, ctx: EndpointCtx): Promise<boolean> {
+	const userId = ctx.user?.id;
+	if (!userId || ctx.user?.orgId) return false;
+	return service.identity.permissions.hasPermission(userId, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
+}
+
 export class ProjectEndpoints {
-	static #service: ProjectManagerService;
-	static #kernelKey: symbol;
+	private static service: ProjectManagerService;
+	private static kernelKey: symbol;
 	static init(service: ProjectManagerService, kernelKey: symbol): void {
-		ProjectEndpoints.#service ??= service;
-		ProjectEndpoints.#kernelKey ??= kernelKey;
+		ProjectEndpoints.service ??= service;
+		ProjectEndpoints.kernelKey ??= kernelKey;
 	}
 
 	@RegisterEndpoint({
@@ -35,26 +43,16 @@ export class ProjectEndpoints {
 		deferAuth: true,
 	})
 	static async list(ctx: EndpointCtx) {
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
-		let projects = await service.listProjectsForCaller(ProjectEndpoints.#kernelKey, ctx);
-		
-		// Manejo especial de "org-requests" para admins
-		const { CRUDXAction } = await import("@common/types/Actions.ts");
-		const { IdentityScopes } = await import("@common/types/identity/permissions.ts");
-		
-		const userId = ctx.user?.id;
-		const hasAdminPermission = userId
-			? await service.identity.permissions.hasPermission(userId, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS)
-			: false;
-		
-		if (hasAdminPermission) {
+		const service = ProjectEndpoints.service;
+		let projects = await service.listProjectsForCaller(ProjectEndpoints.kernelKey, ctx);
+
+		if (await canReadGlobalOrgRequests(service, ctx)) {
 			// Si es admin, asegurar que "org-requests" esté incluido aunque no sea miembro
-			const hasOrgRequests = projects.some(p => p.slug === "org-requests");
+			const hasOrgRequests = projects.some((project) => project.slug === "org-requests");
 			if (!hasOrgRequests) {
 				try {
 					// Buscar y agregar "org-requests" de forma segura
-					const orgRequestsProject = await service.projects.getProjectBySlugForAdmin("org-requests", null, ctx.token);
+					const orgRequestsProject = await service.projects.getProjectBySlugForAdmin("org-requests", null, ctx.token ?? undefined);
 					if (orgRequestsProject) {
 						projects = [...projects, orgRequestsProject];
 					}
@@ -64,9 +62,9 @@ export class ProjectEndpoints {
 			}
 		} else {
 			// Excluir "org-requests" para usuarios sin permiso admin
-			projects = projects.filter(p => p.slug !== "org-requests");
+			projects = projects.filter((project) => project.slug !== "org-requests");
 		}
-		
+
 		return { projects };
 	}
 
@@ -76,7 +74,7 @@ export class ProjectEndpoints {
 		deferAuth: true,
 	})
 	static async checkSlug(ctx: EndpointCtx<{ orgSlug: string; projectSlug: string }>) {
-		const service = ProjectEndpoints.#service;
+		const service = ProjectEndpoints.service;
 		const projectSlug = normalizeSlug(ctx.params.projectSlug);
 		if (!projectSlug) return { available: false };
 		const orgId = await resolveOrgSlug(service, ctx.params.orgSlug, ctx.token ?? undefined);
@@ -90,34 +88,28 @@ export class ProjectEndpoints {
 		deferAuth: true,
 	})
 	static async getBySlug(ctx: EndpointCtx<{ orgSlug: string; projectSlug: string }>) {
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		const projectSlug = normalizeSlug(ctx.params.projectSlug);
 		if (!projectSlug) throw new ProjectManagerError(400, "INVALID_SLUG", `Slug de proyecto inválido: '${ctx.params.projectSlug}'`);
 		const orgId = await resolveOrgSlug(service, ctx.params.orgSlug, ctx.token ?? undefined);
-		
+
 		// Validación especial: proyecto "org-requests" solo para admins
 		if (projectSlug === "org-requests") {
-			const { CRUDXAction } = await import("@common/types/Actions.ts");
-			const { IdentityScopes } = await import("@common/types/identity/permissions.ts");
-			
-			// Verificar que el usuario tiene permiso ORGANIZATIONS.READ (admin global)
-			const userId = ctx.user?.id;
-			const hasAdminPermission = userId
-				? await service.identity.permissions.hasPermission(userId, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS)
-				: false;
-			
-			if (!hasAdminPermission) {
-				throw new ProjectManagerError(403, "PROJECT_ACCESS_DENIED", "Solo los administradores pueden acceder al proyecto de solicitudes de organizaciones");
+			if (!(await canReadGlobalOrgRequests(service, ctx))) {
+				throw new ProjectManagerError(
+					403,
+					"PROJECT_ACCESS_DENIED",
+					"Solo los administradores pueden acceder al proyecto de solicitudes de organizaciones"
+				);
 			}
-			
-			// ✅ ADMIN ACCESS GRANTED: Fetch project using internal method (already authorized)
-			const projectInternals = service.projects.getInternals(ProjectEndpoints.#kernelKey);
+
+			const projectInternals = service.projects.getInternals(ProjectEndpoints.kernelKey);
 			const project = await projectInternals.fetchProjectBySlug(projectSlug, orgId);
 			if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 			return project;
 		}
-		
+
 		const project = await service.projects.getProjectBySlug(projectSlug, orgId, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 		return project;
@@ -137,8 +129,8 @@ export class ProjectEndpoints {
 		}
 		const slug = normalizeSlug(ctx.data.slug);
 		if (!slug) throw new ProjectManagerError(400, "INVALID_SLUG", `Slug inválido: '${ctx.data.slug}'`);
-		const service = ProjectEndpoints.#service;
-		const pmCtx = await service.buildPMCtx(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const pmCtx = await service.buildPMCtx(ProjectEndpoints.kernelKey, ctx);
 		// Defensa en profundidad: ignoramos `ownerId` provisto por el cliente.
 		const { ownerId: _ignored, ...safeInput } = ctx.data;
 		const project = await service.projects.createProject({ ...safeInput, slug, ownerId: pmCtx.userId }, pmCtx, ctx.token ?? undefined);
@@ -151,8 +143,8 @@ export class ProjectEndpoints {
 		deferAuth: true,
 	})
 	static async get(ctx: EndpointCtx<{ id: string }>) {
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		const project = await service.projects.getProject(ctx.params.id, ctx.token ?? undefined, caller);
 		if (!project) throw new ProjectManagerError(404, "PROJECT_NOT_FOUND", "Proyecto no encontrado");
 		return project;
@@ -165,8 +157,8 @@ export class ProjectEndpoints {
 		options: { rateLimit: PROJECT_WRITE_RATE_LIMIT },
 	})
 	static async update(ctx: EndpointCtx<{ id: string }, Partial<Project>>) {
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(ctx.params.id, ctx.data ?? {}, ctx.token ?? undefined, caller);
 	}
 
@@ -177,8 +169,8 @@ export class ProjectEndpoints {
 		options: { rateLimit: PROJECT_DELETE_RATE_LIMIT },
 	})
 	static async delete(ctx: EndpointCtx<{ id: string }>) {
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		await service.projects.deleteProject(ctx.params.id, ctx.token ?? undefined, caller);
 		return { ok: true };
 	}
@@ -194,8 +186,8 @@ export class ProjectEndpoints {
 		if (!Array.isArray(data.memberUserIds) || !Array.isArray(data.memberGroupIds)) {
 			throw new ProjectManagerError(400, "INVALID_FIELD", "`memberUserIds` y `memberGroupIds` deben ser arrays");
 		}
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(
 			ctx.params.id,
 			{ memberUserIds: data.memberUserIds, memberGroupIds: data.memberGroupIds },
@@ -213,8 +205,8 @@ export class ProjectEndpoints {
 	static async updateColumns(ctx: EndpointCtx<{ id: string }, { kanbanColumns: KanbanColumn[] }>) {
 		const columns = ctx.data?.kanbanColumns;
 		if (!Array.isArray(columns)) throw new ProjectManagerError(400, "INVALID_FIELD", "`kanbanColumns` debe ser un array");
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(ctx.params.id, { kanbanColumns: columns }, ctx.token ?? undefined, caller);
 	}
 
@@ -232,8 +224,8 @@ export class ProjectEndpoints {
 				throw new ProjectManagerError(400, "INVALID_FIELD", `Campo '${def.name}' tipo 'label' requiere opciones`);
 			}
 		}
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(ctx.params.id, { customFieldDefs: defs }, ctx.token ?? undefined, caller);
 	}
 
@@ -246,8 +238,8 @@ export class ProjectEndpoints {
 	static async updateLinkTypes(ctx: EndpointCtx<{ id: string }, { issueLinkTypes: IssueLinkType[] }>) {
 		const types = ctx.data?.issueLinkTypes;
 		if (!Array.isArray(types)) throw new ProjectManagerError(400, "INVALID_FIELD", "`issueLinkTypes` debe ser un array");
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(ctx.params.id, { issueLinkTypes: types }, ctx.token ?? undefined, caller);
 	}
 
@@ -260,8 +252,8 @@ export class ProjectEndpoints {
 	static async updatePriorityStrategy(ctx: EndpointCtx<{ id: string }, { priorityStrategy: PriorityStrategy }>) {
 		const strategy = ctx.data?.priorityStrategy;
 		if (!strategy?.id) throw new ProjectManagerError(400, "INVALID_FIELD", "`priorityStrategy.id` es requerido");
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(ctx.params.id, { priorityStrategy: strategy }, ctx.token ?? undefined, caller);
 	}
 
@@ -276,8 +268,8 @@ export class ProjectEndpoints {
 		if (!settings || typeof settings !== "object") {
 			throw new ProjectManagerError(400, "INVALID_FIELD", "`settings` debe ser un objeto");
 		}
-		const service = ProjectEndpoints.#service;
-		const caller = await service.resolveCaller(ProjectEndpoints.#kernelKey, ctx);
+		const service = ProjectEndpoints.service;
+		const caller = await service.resolveCaller(ProjectEndpoints.kernelKey, ctx);
 		return service.projects.updateProject(ctx.params.id, { settings }, ctx.token ?? undefined, caller);
 	}
 }

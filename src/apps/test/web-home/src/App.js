@@ -117,7 +117,7 @@ export default class HomeApp {
 				this.stats = result.data;
 			}
 		} catch (error) {
-			console.log('[Home] API no disponible, usando datos mock');
+			console.log('[Home] API no disponible, usando datos mock', error);
 			this.stats = {
 				totalUsers: 150,
 				totalGroups: 89,

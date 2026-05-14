@@ -1,4 +1,4 @@
-import { Component, Prop, h, Host } from "@stencil/core";
+import { Component, Prop, Host } from "@stencil/core";
 
 @Component({
 	tag: "adc-icon-vip",

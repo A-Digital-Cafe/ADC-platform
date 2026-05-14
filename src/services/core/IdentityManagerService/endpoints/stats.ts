@@ -10,10 +10,10 @@ import type IdentityManagerService from "../index.js";
  * los permisos bitfield, `isAdmin`, `isOrgAdmin` y `groupIds` vía `GET /api/auth/session`.
  */
 export class StatsEndpoints {
-	static #identity: IdentityManagerService;
+	private static identity: IdentityManagerService;
 
 	static init(identity: IdentityManagerService): void {
-		StatsEndpoints.#identity ??= identity;
+		StatsEndpoints.identity ??= identity;
 	}
 
 	@RegisterEndpoint({
@@ -25,6 +25,6 @@ export class StatsEndpoints {
 		if (ctx.user?.orgId) {
 			throw new IdentityError(403, "GLOBAL_ONLY", "Las estadísticas globales requieren acceso global (modo personal)");
 		}
-		return StatsEndpoints.#identity.getStats(ctx.token!);
+		return StatsEndpoints.identity.getStats(ctx.token!);
 	}
 }

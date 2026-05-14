@@ -1,4 +1,4 @@
-import { Component, Prop, h } from "@stencil/core";
+import { Component, Prop } from "@stencil/core";
 
 export interface InlineToken {
 	type: "text" | "bold" | "italic" | "strike" | "code";
@@ -11,7 +11,10 @@ const INLINE_PATTERN = /\*\*[^*]+?\*\*|~~[^~]+?~~|`[^`]+?`|\*[^*]+?\*/g;
 // Decodifica secuencias \u003C, \u003E, \u0026 guardadas para evitar XSS
 function decodeEscapes(s?: string): string {
 	if (typeof s !== "string") return s ?? "";
-	return s.replaceAll("\\u003C", "<").replaceAll("\\u003E", ">").replaceAll("\\u0026", "&");
+	return s
+		.replaceAll(String.raw`\u003C`, "<")
+		.replaceAll(String.raw`\u003E`, ">")
+		.replaceAll(String.raw`\u0026`, "&");
 }
 
 // Parsea texto con formato inline a tokens
@@ -54,33 +57,30 @@ function parseInlineTokens(raw?: string): InlineToken[] {
 export class AdcInlineTokens {
 	@Prop() tokens: InlineToken[] = [];
 	@Prop() fallback: string = "";
+	private static readonly keyPrefix = "token-";
 
 	render() {
-		void h;
 		// Si no hay tokens pre-parseados, parsear el fallback automáticamente
 		const effectiveTokens = this.tokens && this.tokens.length > 0 ? this.tokens : parseInlineTokens(this.fallback);
 
 		if (effectiveTokens.length === 0) {
 			return <span style={{ display: "contents" }}>{this.fallback}</span>;
 		}
-
-		const uuid = crypto.randomUUID();
-
 		return (
 			<span style={{ display: "contents" }}>
 				{effectiveTokens.map((token, idx) => {
 					switch (token.type) {
 						case "bold":
-							return <strong key={uuid + idx}>{token.content}</strong>;
+							return <strong key={AdcInlineTokens.keyPrefix + idx}>{token.content}</strong>;
 						case "italic":
-							return <em key={uuid + idx}>{token.content}</em>;
+							return <em key={AdcInlineTokens.keyPrefix + idx}>{token.content}</em>;
 						case "strike":
-							return <s key={uuid + idx}>{token.content}</s>;
+							return <s key={AdcInlineTokens.keyPrefix + idx}>{token.content}</s>;
 						case "code":
-							return <code key={uuid + idx}>{token.content}</code>;
+							return <code key={AdcInlineTokens.keyPrefix + idx}>{token.content}</code>;
 						default:
 							return (
-								<span key={uuid + idx} style={{ display: "contents" }}>
+								<span key={AdcInlineTokens.keyPrefix + idx} style={{ display: "contents" }}>
 									{token.content}
 								</span>
 							);

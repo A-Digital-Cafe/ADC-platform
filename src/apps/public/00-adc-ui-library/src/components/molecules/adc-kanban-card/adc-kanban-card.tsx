@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, Host } from "@stencil/core";
 
 /**
  * Tarjeta genérica para boards de tipo Kanban. Es un contenedor visual:
@@ -49,7 +49,7 @@ export class AdcKanbanCard {
 		const tabIndex = this.clickable ? 0 : undefined;
 
 		return (
-			<div
+			<Host
 				class={`relative block rounded-lg bg-surface border border-border shadow-sm p-3 space-y-1.5 hover:shadow-md transition-shadow ${cursorCls} ${mutedCls} ${draggingCls}`}
 				style={accentStyle}
 				role={role}
@@ -67,7 +67,7 @@ export class AdcKanbanCard {
 				<div class="flex items-center justify-between gap-2">
 					<slot name="footer"></slot>
 				</div>
-			</div>
+			</Host>
 		);
 	}
 }

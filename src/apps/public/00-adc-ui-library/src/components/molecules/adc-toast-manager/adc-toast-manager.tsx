@@ -15,7 +15,7 @@
  * }));
  */
 
-import { Component, State, Element, h } from "@stencil/core";
+import { Component, State, Element } from "@stencil/core";
 import type { ADCToastEvent, DisplayedToast } from "./types.js";
 import { renderToastItem } from "./adc-toast-item.js";
 

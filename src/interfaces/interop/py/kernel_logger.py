@@ -29,7 +29,7 @@ class KernelLogger:
 
     def _format_message(self, level: str, message: str) -> str:
         """Formatea el mensaje con el módulo y nivel"""
-        return f"[{self.module_name}] {message}"
+        return f"[{level}] [{self.module_name}] {message}"
 
     def _write_log(self, level: str, message: str) -> None:
         """Escribe el log a stderr en un formato que el kernel pueda capturar"""

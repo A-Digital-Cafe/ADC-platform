@@ -12,7 +12,7 @@ function appUrl(devPort: number, prodHostname: string): string {
 
 /** Built-in app definitions */
 export const DEFAULT_APPS: AppMenuItem[] = [
-	{ id: "community", name: "Community", url: appUrl(3010, "s-community.adigitalcafe.com") },
+	{ id: "community", name: "Community", url: appUrl(3010, "community.adigitalcafe.com") },
 	{ id: "identity", name: "Identity", url: appUrl(3014, "identity.adigitalcafe.com"), requires: canAccessIdentity },
 	{ id: "projects", name: "Projects", url: appUrl(3018, "projects.adigitalcafe.com") },
 ];

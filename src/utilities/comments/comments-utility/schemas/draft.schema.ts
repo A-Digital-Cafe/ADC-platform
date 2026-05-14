@@ -1,4 +1,4 @@
-import { Schema, type Connection, type Model } from "mongoose";
+import type { Connection, Model, Schema } from "mongoose";
 import type { CommentDraft } from "../../../../common/types/comments/Comment.js";
 
 /**
@@ -9,9 +9,11 @@ export type CommentDraftDoc = Omit<CommentDraft, "id" | "updatedAt"> & {
 	_id: string;
 	updatedAt: Date;
 };
+type SchemaBackedConnection = Connection & { base: { Schema: typeof import("mongoose").Schema } };
 
-export function buildCommentDraftSchema(): Schema<CommentDraftDoc> {
-	const schema = new Schema<CommentDraftDoc>(
+export function buildCommentDraftSchema(connection: Connection): Schema<CommentDraftDoc> {
+	const SchemaCtor = (connection as SchemaBackedConnection).base.Schema;
+	const schema = new SchemaCtor<CommentDraftDoc>(
 		{
 			_id: { type: String, required: true } as any,
 			ownerId: { type: String, required: true, maxlength: 64, index: true },
@@ -19,7 +21,7 @@ export function buildCommentDraftSchema(): Schema<CommentDraftDoc> {
 			targetId: { type: String, required: true, maxlength: 80 },
 			parentId: { type: String, default: null },
 			editingCommentId: { type: String, default: null },
-			blocks: { type: [Schema.Types.Mixed], default: [] } as any,
+			blocks: { type: [SchemaCtor.Types.Mixed], default: [] } as any,
 			attachmentIds: { type: [String], default: [] },
 			updatedAt: { type: Date, required: true, default: () => new Date() },
 		},
@@ -40,7 +42,7 @@ export function buildCommentDraftSchema(): Schema<CommentDraftDoc> {
 	// TTL: Mongo borra drafts no actualizados en 7 días.
 	schema.index({ updatedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 7 });
 
-	return schema as unknown as Schema<CommentDraftDoc>;
+	return schema;
 }
 
 export function getOrCreateCommentDraftModel(connection: Connection, collectionName: string): Model<CommentDraftDoc> {
@@ -48,7 +50,7 @@ export function getOrCreateCommentDraftModel(connection: Connection, collectionN
 	try {
 		return connection.model<CommentDraftDoc>(modelName);
 	} catch {
-		const schema = buildCommentDraftSchema();
+		const schema = buildCommentDraftSchema(connection);
 		schema.set("collection", collectionName);
 		return connection.model<CommentDraftDoc>(modelName, schema);
 	}

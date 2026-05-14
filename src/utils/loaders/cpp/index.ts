@@ -163,12 +163,12 @@ export default class CppLoader implements IModuleLoader {
 
 		await new Promise<void>((resolve, reject) => {
 			cmakeProcess.on("exit", (code) => {
-				if (code !== 0) {
-					Logger.error(`[CppLoader] CMake falló (código ${code}):`, cmakeError.trim());
-					reject(new Error(`CMake falló con código ${code}`));
-				} else {
+				if (code === 0) {
 					if (cmakeOutput.trim()) Logger.debug("[CppLoader] CMake:", cmakeOutput.trim());
 					resolve();
+				} else {
+					Logger.error(`[CppLoader] CMake falló (código ${code}):`, cmakeError.trim());
+					reject(new Error(`CMake falló con código ${code}`));
 				}
 			});
 		});

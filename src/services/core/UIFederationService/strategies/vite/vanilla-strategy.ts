@@ -3,8 +3,9 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { ViteBaseStrategy } from "./base.js";
 import type { IBuildContext, IBuildResult } from "../types.js";
-import { copyDirectory } from "../../utils/file-operations.js";
-import { getBinPath } from "../../utils/path-resolver.ts";
+import { copyDirectory } from "../../utils/fs/file-operations.js";
+import { getBinPath } from "../../utils/fs/path-resolver.ts";
+import { createImportMapPlugin, createFederationResolverPlugin } from "../shared/vite-federation.js";
 
 /**
  * Estrategia Vite para JavaScript Vanilla
@@ -100,7 +101,7 @@ export class VanillaViteStrategy extends ViteBaseStrategy {
 		const plugins: any[] = [];
 
 		if (isDev) {
-			plugins.push(this.createImportMapPlugin(context), this.createFederationResolverPlugin(context));
+			plugins.push(createImportMapPlugin(context), createFederationResolverPlugin(context));
 		}
 
 		return plugins;

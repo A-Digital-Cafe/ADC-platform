@@ -1,4 +1,4 @@
-import { Schema, type Connection, type Model } from "mongoose";
+import type { Connection, Model, Schema } from "mongoose";
 import type { Comment } from "../../../../common/types/comments/Comment.js";
 
 /**
@@ -12,9 +12,11 @@ export type CommentDoc = Omit<Comment, "id" | "createdAt" | "updatedAt" | "attac
 	createdAt: Date;
 	updatedAt?: Date;
 };
+type SchemaBackedConnection = Connection & { base: { Schema: typeof import("mongoose").Schema } };
 
-function buildCommentSchema(): Schema<CommentDoc> {
-	const schema = new Schema<CommentDoc>(
+function buildCommentSchema(connection: Connection): Schema<CommentDoc> {
+	const SchemaCtor = (connection as SchemaBackedConnection).base.Schema;
+	const schema = new SchemaCtor<CommentDoc>(
 		{
 			_id: { type: String, required: true } as any,
 			targetType: { type: String, required: true, maxlength: 40, index: true },
@@ -25,12 +27,12 @@ function buildCommentSchema(): Schema<CommentDoc> {
 			authorId: { type: String, required: true, maxlength: 64, index: true },
 			authorName: { type: String, maxlength: 64 },
 			authorImage: { type: String, maxlength: 512 },
-			blocks: { type: [Schema.Types.Mixed], default: [] } as any,
+			blocks: { type: [SchemaCtor.Types.Mixed], default: [] } as any,
 			attachmentIds: { type: [String], default: [] },
-			reactions: { type: Schema.Types.Mixed, default: {} } as any,
+			reactions: { type: SchemaCtor.Types.Mixed, default: {} } as any,
 			replyCount: { type: Number, default: 0, min: 0 },
 			label: { type: String, maxlength: 40 },
-			meta: { type: Schema.Types.Mixed },
+			meta: { type: SchemaCtor.Types.Mixed },
 			createdAt: { type: Date, required: true, default: () => new Date() },
 			updatedAt: { type: Date },
 			edited: { type: Boolean, default: false },
@@ -52,7 +54,7 @@ function buildCommentSchema(): Schema<CommentDoc> {
 	schema.index({ targetType: 1, targetId: 1, parentId: 1, _id: -1 });
 	schema.index({ threadRootId: 1, _id: 1 });
 
-	return schema as unknown as Schema<CommentDoc>;
+	return schema;
 }
 
 export function getOrCreateCommentModel(connection: Connection, collectionName: string): Model<CommentDoc> {
@@ -60,7 +62,7 @@ export function getOrCreateCommentModel(connection: Connection, collectionName: 
 	try {
 		return connection.model<CommentDoc>(modelName);
 	} catch {
-		const schema = buildCommentSchema();
+		const schema = buildCommentSchema(connection);
 		schema.set("collection", collectionName);
 		return connection.model<CommentDoc>(modelName, schema);
 	}

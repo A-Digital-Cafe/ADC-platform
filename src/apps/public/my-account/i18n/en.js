@@ -1,16 +1,104 @@
 export default {
-  profile: {
-    title: "Profile",
-    name: "First Name",
-    lastName: "Last Name",
-    birthDate: "Birth Date",
-    submit: "Save Changes",
-    submitting: "Saving...",
-    uploadAvatar: "Upload Avatar",
-    avatarHint: "JPG, PNG, or GIF (max 2MB)"
+  nav: {
+    profile: "Profile",
+    notifications: "Notifications",
+    privacySecurity: "Privacy and security",
+    appearance: "Appearance",
+    admin: "Administration",
+    title: "My account",
+    subtitle: "Manage your settings"
   },
-  messages: {
-    updated: "Profile updated",
-    error: "Error updating profile"
+  auth: {
+    accessRequired: "Access required",
+    signInRequired: "You must sign in to view your account."
+  },
+  profile: {
+    loading: "Loading profile...",
+    title: "Personal information",
+    subtitle: "Update your profile and avatar",
+    panelTitle: "Profile details",
+    panelDescription: "You can update your personal information",
+    avatarAlt: "Avatar",
+    removeCustomAvatar: "Remove custom avatar",
+    avatarSourceLabel: "Show avatar from:",
+    replaceCustomAvatar: "Replace custom avatar",
+    uploadCustomAvatar: "Upload custom avatar",
+    avatarHint: "JPG, PNG, GIF, or WebP (max 2MB)",
+    name: "First name",
+    lastName: "Last name",
+    birthDate: "Birth date",
+    saveChanges: "Save changes",
+    noChangesButton: "No changes",
+    noChangesToast: "There are no changes to save",
+    updated: "Profile updated successfully",
+    updateError: "An error occurred while updating the profile",
+    avatarUpdated: "Avatar updated",
+    avatarChangeError: "Could not change the avatar",
+    unsupportedFile: "Unsupported file type (JPG, PNG, GIF, or WebP)",
+    fileTooLarge: "The file is larger than 2MB",
+    avatarUploaded: "Avatar uploaded",
+    uploadError: "Could not upload the avatar",
+    customAvatarDeleted: "Custom avatar removed",
+    customAvatarDeleteError: "Could not remove the avatar",
+    avatarSources: {
+      default: "Automatic avatar",
+      custom: "Custom",
+      none: "No avatar",
+      linked: "Linked: {{provider}}"
+    }
+  },
+  privacy: {
+    title: "Privacy and security",
+    subtitle: "Manage your password and security settings",
+    panelTitle: "Change password",
+    panelDescription: "Make sure your account uses a secure password",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    confirmPassword: "Confirm new password",
+    showPassword: "Show",
+    hidePassword: "Hide",
+    submit: "Update password",
+    fieldsRequired: "All fields are required",
+    minLength: "The new password must be at least 8 characters",
+    mismatch: "Passwords do not match",
+    updated: "Password updated successfully",
+    changeError: "Error changing password"
+  },
+  notifications: {
+    title: "Notifications",
+    subtitle: "View and manage your notifications",
+    panelTitle: "All notifications",
+    panelDescription: "You will see all your notifications here",
+    emptyTitle: "No notifications yet",
+    emptyDescription: "When you receive notifications, they will appear here."
+  },
+  appearance: {
+    title: "Appearance",
+    subtitle: "Customize how the panel looks",
+    panelTitle: "Theme preference",
+    panelDescription: "Choose your preferred color theme",
+    lightLabel: "Light",
+    lightDescription: "Clean and bright",
+    darkLabel: "Dark",
+    darkDescription: "Easy on the eyes"
+  },
+  admin: {
+    title: "Administration",
+    subtitle: "Advanced account management options",
+    deleteAccountTitle: "Delete account",
+    deleteAccountDescription: "This action will permanently delete all your data.",
+    warning: "Make sure to download any data you want to keep. Once the account is deleted, you will not be able to recover it.",
+    openDelete: "Delete account",
+    modalTitle: "Confirm account deletion",
+    modalHeading: "Delete account?",
+    deleteConfirmPrefix: "This action",
+    deleteConfirmEmphasis: "cannot be undone",
+    deleteConfirmSuffix: "and will permanently delete all your data. Are you sure you want to continue?",
+    cancel: "Cancel",
+    deleteAction: "Delete account",
+    deleting: "Deleting...",
+    logoutWarning: "Error signing out, redirecting anyway...",
+    deleteSuccess: "Account deleted successfully",
+    deleteError: "An error occurred while deleting the account"
   }
 };

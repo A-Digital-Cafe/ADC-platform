@@ -1,6 +1,5 @@
 // src/index.ts
 import { Kernel } from "./kernel.js";
-import UIFederationService from "./services/core/UIFederationService/index.ts";
 import { Logger } from "./utils/logger/Logger.js";
 import killAllChildProcesses from "./utils/system/KillChildProcesses.ts";
 
@@ -83,18 +82,6 @@ async function main() {
 
 	// Ahora sí iniciar el kernel (las señales ya están registradas)
 	await kernel.start();
-
-	// Reinyectar import maps ahora que todos los módulos UI están cargados
-	try {
-		const uiFederation = kernel.registry.getService<UIFederationService>("UIFederationService");
-		if (uiFederation) {
-			await uiFederation.refreshAllImportMaps();
-		} else {
-			Logger.warn("UIFederationService no encontrado");
-		}
-	} catch (error: any) {
-		Logger.error(`Error reinyectando import maps: ${error.message}`);
-	}
 
 	Logger.ok("---------------------------------------");
 	Logger.ok("Kernel en funcionamiento.");

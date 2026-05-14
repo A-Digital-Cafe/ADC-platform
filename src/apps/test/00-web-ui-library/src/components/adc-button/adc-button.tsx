@@ -13,6 +13,7 @@ import { Component, Prop, h, Event, EventEmitter, Host } from "@stencil/core";
 })
 export class AdcButton {
 	@Prop() disabled: boolean = false;
+	@Prop() ariaLabel: string | null = "generic-button";
 	@Prop() buttonType: "button" | "submit" | "reset" = "button";
 	@Prop() variant: "primary" | "secondary" | "success" | "warning" | "danger" = "primary";
 	@Prop() size: "sm" | "md" | "lg" = "md";
@@ -33,7 +34,7 @@ export class AdcButton {
 
 		return (
 			<Host>
-				<button type={this.buttonType} onClick={this.handleClick} disabled={this.disabled} class={classes}>
+				<button aria-label={this.ariaLabel} type={this.buttonType} onClick={this.handleClick} disabled={this.disabled} class={classes}>
 					<slot></slot>
 				</button>
 			</Host>

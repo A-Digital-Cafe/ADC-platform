@@ -1,0 +1,12 @@
+{
+	"extends": "../../../../tsconfig.base.json",
+	"compilerOptions": {
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"paths": {
+			"@ui-library/*": ["./../00-web-ui-library/src/*"]
+		}
+	},
+	"include": ["src/**/*", "*.ts", "./../00-web-ui-library/utils/react-jsx.ts"]
+}

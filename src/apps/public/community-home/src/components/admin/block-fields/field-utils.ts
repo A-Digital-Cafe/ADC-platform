@@ -21,7 +21,9 @@ export function patchBlock<T extends Block>(block: T, patch: Partial<Omit<T, "ty
 }
 
 export function alignLabel(align: TextAlign): string {
-	return align === "left" ? "Izquierda" : align === "center" ? "Centro" : "Derecha";
+	if (align === "left") return "Izquierda";
+	if (align === "center") return "Centro";
+	return "Derecha";
 }
 
 export function titleCase(value: string): string {

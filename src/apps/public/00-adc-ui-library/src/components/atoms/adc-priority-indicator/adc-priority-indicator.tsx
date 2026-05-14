@@ -1,4 +1,4 @@
-import { Component, Prop, h } from "@stencil/core";
+import { Component, Prop } from "@stencil/core";
 
 /**
  * Indicador visual compacto de prioridad (urgencia + importancia + dificultad).

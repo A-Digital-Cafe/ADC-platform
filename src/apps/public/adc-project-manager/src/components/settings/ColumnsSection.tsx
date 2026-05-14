@@ -16,6 +16,11 @@ export function ColumnsSection({ project, canEdit, onSaved }: Readonly<Props>) {
 	const [requireComment, setRequireComment] = useState<boolean>(project.settings?.requireCommentOnFinalTransition === true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const requireCommentLabel = t("settings.requireCommentOnFinalTransition") ?? "Requerir comentario al cerrar";
+	const requireCommentHint =
+		t("settings.requireCommentOnFinalTransitionHint") ??
+		"Si está activo, mover un issue a una columna final requiere dejar un comentario que documente la razón.";
+	const requireCommentInputId = "require-comment-on-final-transition";
 
 	const update = (id: string, patch: Partial<KanbanColumn>) => {
 		setCols((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -115,21 +120,26 @@ export function ColumnsSection({ project, canEdit, onSaved }: Readonly<Props>) {
 				))}
 			</ul>
 			<div className="pt-3 border-t border-border">
-				<label className="flex items-start gap-2 text-sm cursor-pointer">
+				<label
+					htmlFor={requireCommentInputId}
+					aria-label={requireCommentLabel}
+					className="flex items-start gap-2 text-sm cursor-pointer"
+				>
 					<input
+						id={requireCommentInputId}
 						type="checkbox"
 						checked={requireComment}
 						onChange={(e) => setRequireComment(e.target.checked)}
 						disabled={!canEdit}
+						aria-describedby="require-comment-on-final-transition-hint"
 						className="mt-1"
 					/>
 					<span>
-						<span className="font-medium block">
-							{t("settings.requireCommentOnFinalTransition") ?? "Requerir comentario al cerrar"}
+						<span id="require-comment-on-final-transition-label" className="font-medium block">
+							{requireCommentLabel}
 						</span>
-						<span className="text-xs text-muted">
-							{t("settings.requireCommentOnFinalTransitionHint") ??
-								"Si está activo, mover un issue a una columna final requiere dejar un comentario que documente la razón."}
+						<span id="require-comment-on-final-transition-hint" className="text-xs text-muted">
+							{requireCommentHint}
 						</span>
 					</span>
 				</label>

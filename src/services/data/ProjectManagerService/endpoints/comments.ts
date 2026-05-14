@@ -62,7 +62,10 @@ async function attachFreshAuthorProfiles(service: ProjectManagerService, page: C
  * Hacemos esta lectura sólo en el write de comentario, que es mucho menos
  * frecuente que validar tokens.
  */
-async function attachFreshAuthorProfileToCtx(service: ProjectManagerService, commentCtx: { userId: string; authorName?: string; authorImage?: string | null }) {
+async function attachFreshAuthorProfileToCtx(
+	service: ProjectManagerService,
+	commentCtx: { userId: string; authorName?: string; authorImage?: string | null }
+) {
 	if (!commentCtx.userId) return;
 	try {
 		const profiles = await service.identity.users.getPublicProfiles([commentCtx.userId]);
@@ -76,12 +79,12 @@ async function attachFreshAuthorProfileToCtx(service: ProjectManagerService, com
 }
 
 export class IssueCommentsEndpoints {
-	static #service: ProjectManagerService;
-	static #kernelKey: symbol;
+	private static service: ProjectManagerService;
+	private static kernelKey: symbol;
 
 	static init(service: ProjectManagerService, kernelKey: symbol): void {
-		IssueCommentsEndpoints.#service ??= service;
-		IssueCommentsEndpoints.#kernelKey ??= kernelKey;
+		IssueCommentsEndpoints.service ??= service;
+		IssueCommentsEndpoints.kernelKey ??= kernelKey;
 	}
 
 	@RegisterEndpoint({
@@ -90,8 +93,8 @@ export class IssueCommentsEndpoints {
 		deferAuth: true,
 	})
 	static async list(ctx: EndpointCtx<{ id: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx);
+		const svc = IssueCommentsEndpoints.service;
+		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx);
 		const cursor = ctx.query.cursor || null;
 		// Si la query no especifica `parentId`, devolvemos todos los comentarios
 		// del issue en flat (incluye replies bajo padres eliminados). El cliente
@@ -115,8 +118,8 @@ export class IssueCommentsEndpoints {
 		deferAuth: true,
 	})
 	static async thread(ctx: EndpointCtx<{ id: string; rootId: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx);
+		const svc = IssueCommentsEndpoints.service;
+		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx);
 		const cursor = ctx.query.cursor || null;
 		const limit = ctx.query.limit ? Number(ctx.query.limit) : undefined;
 		const page = await svc.issueComments.getThread(commentCtx, ctx.params.rootId, { cursor, limit });
@@ -129,8 +132,8 @@ export class IssueCommentsEndpoints {
 		deferAuth: true,
 	})
 	static async count(ctx: EndpointCtx<{ id: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx);
+		const svc = IssueCommentsEndpoints.service;
+		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx);
 		const total = await svc.issueComments.count(commentCtx, { targetType: TARGET_TYPE, targetId: issue.id });
 		return { total };
 	}
@@ -143,8 +146,8 @@ export class IssueCommentsEndpoints {
 	})
 	static async create(ctx: EndpointCtx<{ id: string }, CreateBody>) {
 		if (!ctx.data?.blocks?.length) throw new ProjectManagerError(400, "MISSING_FIELDS", "`blocks` requerido");
-		const svc = IssueCommentsEndpoints.#service;
-		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		await attachFreshAuthorProfileToCtx(svc, commentCtx);
 		return svc.issueComments.create(commentCtx, {
 			targetType: TARGET_TYPE,
@@ -164,8 +167,8 @@ export class IssueCommentsEndpoints {
 	})
 	static async update(ctx: EndpointCtx<{ id: string; commentId: string }, UpdateBody>) {
 		if (!ctx.data?.blocks?.length) throw new ProjectManagerError(400, "MISSING_FIELDS", "`blocks` requerido");
-		const svc = IssueCommentsEndpoints.#service;
-		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		return svc.issueComments.update(commentCtx, ctx.params.commentId, {
 			blocks: ctx.data.blocks,
 			attachmentIds: ctx.data.attachmentIds,
@@ -179,8 +182,8 @@ export class IssueCommentsEndpoints {
 		options: { rateLimit: COMMENT_RATE_LIMIT },
 	})
 	static async delete(ctx: EndpointCtx<{ id: string; commentId: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		await svc.issueComments.delete(commentCtx, ctx.params.commentId);
 		return { ok: true };
 	}
@@ -192,8 +195,8 @@ export class IssueCommentsEndpoints {
 		options: { rateLimit: REACT_RATE_LIMIT },
 	})
 	static async react(ctx: EndpointCtx<{ id: string; commentId: string; emoji: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		const emoji = decodeURIComponent(ctx.params.emoji);
 		return svc.issueComments.react(commentCtx, ctx.params.commentId, emoji);
 	}
@@ -205,8 +208,8 @@ export class IssueCommentsEndpoints {
 		options: { rateLimit: REACT_RATE_LIMIT },
 	})
 	static async unreact(ctx: EndpointCtx<{ id: string; commentId: string; emoji: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		const emoji = decodeURIComponent(ctx.params.emoji);
 		return svc.issueComments.unreact(commentCtx, ctx.params.commentId, emoji);
 	}
@@ -217,8 +220,8 @@ export class IssueCommentsEndpoints {
 		deferAuth: true,
 	})
 	static async getDraft(ctx: EndpointCtx<{ id: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
 		const editingCommentId = ctx.query.editingCommentId === undefined ? null : ctx.query.editingCommentId || null;
 		const draft = await svc.issueComments.getDraft(commentCtx, {
@@ -238,8 +241,8 @@ export class IssueCommentsEndpoints {
 	})
 	static async saveDraft(ctx: EndpointCtx<{ id: string }, DraftBody>) {
 		if (!Array.isArray(ctx.data?.blocks)) throw new ProjectManagerError(400, "MISSING_FIELDS", "`blocks` requerido");
-		const svc = IssueCommentsEndpoints.#service;
-		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		return svc.issueComments.saveDraft(
 			commentCtx,
 			{
@@ -259,8 +262,8 @@ export class IssueCommentsEndpoints {
 		options: { skipIdempotency: true },
 	})
 	static async deleteDraft(ctx: EndpointCtx<{ id: string }>) {
-		const svc = IssueCommentsEndpoints.#service;
-		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.#kernelKey, ctx, { requireAuth: true });
+		const svc = IssueCommentsEndpoints.service;
+		const { issue, commentCtx } = await buildIssueResourceCtx(svc, IssueCommentsEndpoints.kernelKey, ctx, { requireAuth: true });
 		const parentId = ctx.query.parentId === undefined ? null : ctx.query.parentId || null;
 		const editingCommentId = ctx.query.editingCommentId === undefined ? null : ctx.query.editingCommentId || null;
 		await svc.issueComments.deleteDraft(commentCtx, {

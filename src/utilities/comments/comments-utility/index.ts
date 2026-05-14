@@ -1,20 +1,10 @@
 import type { Connection } from "mongoose";
 import { BaseUtility } from "../../BaseUtility.js";
 import { getOrCreateCommentModel } from "./schemas/comment.schema.js";
-import { getOrCreateCommentDraftModel, buildCommentDraftSchema } from "./schemas/draft.schema.js";
-import { DraftsRepository, buildDraftId, type DraftKey, type DraftPayload } from "./helpers/drafts.js";
-import {
-	CommentsManager,
-	type CommentsManagerOptions,
-	type CommentPermissionChecker,
-	type CommentPermissionContext,
-	type CommentAction,
-	type CreateInput,
-	type UpdateInput,
-	type ListOptions,
-	type ThreadOptions,
-} from "./managers/CommentsManager.js";
+import { getOrCreateCommentDraftModel } from "./schemas/draft.schema.js";
+import { CommentsManager, type CommentsManagerOptions } from "./managers/CommentsManager.js";
 
+export { CommentsManager } from "./managers/CommentsManager.js";
 export type {
 	CommentsManagerOptions,
 	CommentPermissionChecker,
@@ -24,10 +14,10 @@ export type {
 	UpdateInput,
 	ListOptions,
 	ThreadOptions,
-	DraftKey,
-	DraftPayload,
-};
-export { CommentsManager, DraftsRepository, buildDraftId, getOrCreateCommentDraftModel, buildCommentDraftSchema };
+} from "./managers/CommentsManager.js";
+export { DraftsRepository, buildDraftId } from "./helpers/drafts.js";
+export type { DraftKey, DraftPayload } from "./helpers/drafts.js";
+export { getOrCreateCommentDraftModel, buildCommentDraftSchema } from "./schemas/draft.schema.js";
 export type { CommentDraftDoc } from "./schemas/draft.schema.js";
 
 export interface CreateCommentsManagerOptions extends Omit<CommentsManagerOptions, "commentModel" | "draftModel"> {

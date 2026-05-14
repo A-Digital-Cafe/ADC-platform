@@ -86,8 +86,8 @@ export default class LangManagerService extends BaseService implements ILangMana
 			translations,
 			dependencies,
 		});
-
-		this.logger.logOk(`[i18n] ${namespace}: ${locales.join(", ")}${dependencies?.length ? ` (deps: ${dependencies.join(", ")})` : ""}`);
+		const depsText = dependencies?.length ? ` (deps: ${dependencies.join(", ")})` : "";
+		this.logger.logOk(`[i18n] ${namespace}: ${locales.join(", ")}${depsText}`);
 	}
 
 	async unregisterNamespace(namespace: string): Promise<void> {

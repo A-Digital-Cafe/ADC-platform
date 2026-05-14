@@ -48,7 +48,7 @@ export function ProjectSettingsView({ project, perms, caller, onChanged }: Reado
 	useEffect(() => {
 		const el = tabsRef.current;
 		if (!el) return;
-		const handler = (e: Event) => handleTabChange((e as CustomEvent<string>).detail as SettingsTab);
+		const handler = (e: Event) => handleTabChange((e as CustomEvent<SettingsTab>).detail);
 		el.addEventListener("adcTabChange", handler);
 		return () => el.removeEventListener("adcTabChange", handler);
 	}, [handleTabChange]);

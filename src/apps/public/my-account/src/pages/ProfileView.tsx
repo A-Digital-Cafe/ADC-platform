@@ -3,11 +3,23 @@ import { accountApi, type AvatarOption, type AvatarSource } from "../utils/accou
 import { toast } from "../utils/toast";
 import { buildAvatarUrl } from "@ui-library/utils/avatar";
 import { broadcastAvatarUpdate, setupAvatarSync, type AvatarUpdatePayload } from "@ui-library/utils/auth-sync";
+import { useTranslation } from "@ui-library/utils/i18n-react";
 
 const ACCEPTED_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 
+type Translate = (key: string, params?: Record<string, string>) => string;
+
+function getAvatarOptionLabel(option: AvatarOption, t: Translate): string {
+	if (option.id === "default") return t("profile.avatarSources.default");
+	if (option.id === "custom") return t("profile.avatarSources.custom");
+	if (option.id === "none") return t("profile.avatarSources.none");
+	if (option.id.startsWith("linked:")) return t("profile.avatarSources.linked", { provider: option.label });
+	return option.label;
+}
+
 export default function ProfileView() {
+	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
 	const [form, setForm] = useState({ name: "", lastName: "", birthDate: "" });
 	const [original, setOriginal] = useState({ name: "", lastName: "", birthDate: "" });
 	const [loading, setLoading] = useState(true);
@@ -63,7 +75,7 @@ export default function ProfileView() {
 		if (!userId) return undefined;
 		const teardown = setupAvatarSync((payload: AvatarUpdatePayload) => {
 			if (payload.userId !== userId) return;
-			void loadAvatarOptions();
+			loadAvatarOptions();
 			setAvatarCacheKey((k) => Math.max(k, payload.cacheKey ?? 0) + 1);
 		});
 		return teardown;
@@ -86,27 +98,27 @@ export default function ProfileView() {
 				}
 				await loadAvatarOptions();
 			} catch (err) {
-				console.error("Error al obtener usuario:", err);
+				console.error(err);
 			} finally {
 				setLoading(false);
 			}
 		})();
 	}, [loadAvatarOptions]);
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		if (!hasChanges) {
-			toast.info("No hay cambios para guardar");
+			toast.info(t("profile.noChangesToast"));
 			return;
 		}
 		try {
 			await accountApi.updateCurrentUser({ name: form.name, lastName: form.lastName, birthDate: form.birthDate });
 			setOriginal(form);
-			toast.success("Perfil actualizado correctamente!");
+			toast.success(t("profile.updated"));
 		} catch {
 			globalThis.dispatchEvent(
 				new CustomEvent("adc-error", {
-					detail: { errorKey: "update_profile_error", message: "Ocurrió un error al actualizar el perfil" },
+					detail: { errorKey: "update_profile_error", message: t("profile.updateError") },
 				})
 			);
 		}
@@ -138,10 +150,10 @@ export default function ProfileView() {
 			if (res.success && res.data) {
 				setAvatarSource(res.data.avatarSource);
 				emitAvatarUpdate(res.data.avatarSource, avatarOptions);
-				toast.success("Avatar actualizado");
+				toast.success(t("profile.avatarUpdated"));
 			}
 		} catch {
-			toast.error("No se pudo cambiar el avatar");
+			toast.error(t("profile.avatarChangeError"));
 		} finally {
 			setAvatarBusy(false);
 		}
@@ -153,11 +165,11 @@ export default function ProfileView() {
 		if (fileInputRef.current) fileInputRef.current.value = "";
 		if (!file) return;
 		if (!ACCEPTED_MIMES.includes(file.type)) {
-			toast.error("Tipo de archivo no soportado (JPG, PNG, GIF o WebP)");
+			toast.error(t("profile.unsupportedFile"));
 			return;
 		}
 		if (file.size > MAX_AVATAR_BYTES) {
-			toast.error("El archivo supera los 2MB");
+			toast.error(t("profile.fileTooLarge"));
 			return;
 		}
 		setAvatarBusy(true);
@@ -168,9 +180,9 @@ export default function ProfileView() {
 			setAvatarCacheKey(nextCacheKey);
 			// Tras un upload, el backend selecciona automáticamente "custom".
 			emitAvatarUpdate("custom", options, nextCacheKey);
-			toast.success("Avatar subido");
-		} catch (err) {
-			toast.error((err as Error).message || "No se pudo subir el avatar");
+			toast.success(t("profile.avatarUploaded"));
+		} catch {
+			toast.error(t("profile.uploadError"));
 		} finally {
 			setAvatarBusy(false);
 		}
@@ -185,33 +197,36 @@ export default function ProfileView() {
 			// Tras eliminar custom, si la fuente activa era custom el backend la limpió:
 			// emitimos el estado resultante para el resto de la UI.
 			emitAvatarUpdate(selected || "default", options);
-			toast.success("Avatar custom eliminado");
+			toast.success(t("profile.customAvatarDeleted"));
 		} catch {
-			toast.error("No se pudo eliminar el avatar");
+			toast.error(t("profile.customAvatarDeleteError"));
 		} finally {
 			setAvatarBusy(false);
 		}
 	};
 
-	const selectorOptionsJson = useMemo(() => JSON.stringify(avatarOptions.map((o) => ({ value: o.id, label: o.label }))), [avatarOptions]);
+	const selectorOptionsJson = useMemo(
+		() => JSON.stringify(avatarOptions.map((o) => ({ value: o.id, label: getAvatarOptionLabel(o, t) }))),
+		[avatarOptions, t]
+	);
 
 	if (loading) {
-		return <p className="p-4">Cargando perfil...</p>;
+		return <p className="p-4">{t("profile.loading")}</p>;
 	}
 
 	return (
 		<div className="w-full flex flex-col pl-25 lg:pl-70">
 			{/* Title */}
 			<div className="mb-4">
-				<h2 className="font-bold text-text">Información Personal</h2>
-				<p className="text-muted">Actualiza tu perfil y avatar</p>
+				<h2 className="font-bold text-text">{t("profile.title")}</h2>
+				<p className="text-muted">{t("profile.subtitle")}</p>
 			</div>
 
 			{/* Panel */}
 			<div className="bg-surface p-8 pb-6 rounded-xxl">
 				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">Datos del perfil</h3>
-					<p className="text-sm text-muted">Puedes modificar tu información personal</p>
+					<h3 className="mt-0! text-lg font-semibold text-text">{t("profile.panelTitle")}</h3>
+					<p className="text-sm text-muted">{t("profile.panelDescription")}</p>
 				</div>
 
 				<div className="max-w-3xl mx-auto">
@@ -225,15 +240,15 @@ export default function ProfileView() {
 							) : (
 								<img
 									src={previewUrl}
-									alt="Avatar"
+									alt={t("profile.avatarAlt")}
 									className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-accent"
 								/>
 							)}
 							{customOption && avatarSource === "custom" && (
 								<button
 									type="button"
-									aria-label="Eliminar avatar custom"
-									title="Eliminar avatar custom"
+									aria-label={t("profile.removeCustomAvatar")}
+									title={t("profile.removeCustomAvatar")}
 									disabled={avatarBusy}
 									onClick={handleRemoveCustom}
 									className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-red-500 text-white text-sm font-bold flex items-center justify-center shadow-md hover:bg-red-600 disabled:opacity-50"
@@ -245,7 +260,7 @@ export default function ProfileView() {
 
 						{avatarOptions.length > 1 && (
 							<div className="w-full max-w-xs mt-4">
-								<label className="block text-xs text-muted mb-1">Mostrar avatar de:</label>
+								<label className="block text-xs text-muted mb-1">{t("profile.avatarSourceLabel")}</label>
 								<adc-select
 									value={avatarSource || ""}
 									options={selectorOptionsJson}
@@ -255,11 +270,11 @@ export default function ProfileView() {
 						)}
 
 						<input ref={fileInputRef} type="file" accept={ACCEPTED_MIMES.join(",")} className="hidden" onChange={handleFilePicked} />
-						<adc-button class="mt-4" variant="primary" disabled={avatarBusy} onClick={() => fileInputRef.current?.click()}>
-							{customOption ? "Reemplazar avatar custom" : "Subir avatar custom"}
+						<adc-button className="mt-4" variant="primary" disabled={avatarBusy} onClick={() => fileInputRef.current?.click()}>
+							{customOption ? t("profile.replaceCustomAvatar") : t("profile.uploadCustomAvatar")}
 						</adc-button>
 
-						<p className="text-xs text-muted mt-2 text-center">JPG, PNG, GIF o WebP (máx. 2MB)</p>
+						<p className="text-xs text-muted mt-2 text-center">{t("profile.avatarHint")}</p>
 					</div>
 
 					{/* Form */}
@@ -267,24 +282,22 @@ export default function ProfileView() {
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<div>
 								<label htmlFor="profile-name" className="block text-sm mb-1 text-text">
-									Nombre
+									{t("profile.name")}
 								</label>
 								<adc-input
 									inputId="profile-name"
 									value={form.name}
-									class="w-full"
 									onInput={(e) => handleChange("name", (e.target as HTMLInputElement).value)}
 								/>
 							</div>
 
 							<div>
 								<label htmlFor="profile-lastName" className="block text-sm mb-1 text-text">
-									Apellido
+									{t("profile.lastName")}
 								</label>
 								<adc-input
 									inputId="profile-lastName"
 									value={form.lastName}
-									class="w-full"
 									onInput={(e) => handleChange("lastName", (e.target as HTMLInputElement).value)}
 								/>
 							</div>
@@ -292,20 +305,19 @@ export default function ProfileView() {
 
 						<div>
 							<label htmlFor="profile-birthDate" className="block text-sm mb-1 text-text">
-								Fecha de Nacimiento
+								{t("profile.birthDate")}
 							</label>
 							<adc-input
 								inputId="profile-birthDate"
 								type="date"
 								value={form.birthDate}
-								class="w-full"
 								onInput={(e) => handleChange("birthDate", (e.target as HTMLInputElement).value)}
 							/>
 						</div>
 
 						<div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4">
 							<adc-button type="submit" variant="primary" disabled={!hasChanges}>
-								{hasChanges ? "Guardar Cambios" : "Sin cambios"}
+								{hasChanges ? t("profile.saveChanges") : t("profile.noChangesButton")}
 							</adc-button>
 						</div>
 					</form>

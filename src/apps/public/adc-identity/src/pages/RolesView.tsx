@@ -80,7 +80,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 		setModalOpen(true);
 	};
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.SubmitEvent) => {
 		e.preventDefault();
 		clearErrors();
 		setSubmitting(true);

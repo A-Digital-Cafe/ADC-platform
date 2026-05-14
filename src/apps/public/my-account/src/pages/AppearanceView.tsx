@@ -1,13 +1,15 @@
 import { useTheme } from "../hooks/useTheme";
+import { useTranslation } from "@ui-library/utils/i18n-react";
 
 export default function AppearanceView() {
+	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
 	const { mode, changeTheme } = useTheme();
 
-	const THEMES = [
+	const themes = [
 		{
 			key: "light",
-			label: "Claro",
-			description: "Limpio y brillante",
+			label: t("appearance.lightLabel"),
+			description: t("appearance.lightDescription"),
 			icon: (
 				<svg className="w-6 h-6 text-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<circle cx="12" cy="12" r="4" strokeWidth="2" />
@@ -21,8 +23,8 @@ export default function AppearanceView() {
 		},
 		{
 			key: "dark",
-			label: "Oscuro",
-			description: "Suave para la vista",
+			label: t("appearance.darkLabel"),
+			description: t("appearance.darkDescription"),
 			icon: (
 				<svg className="w-6 h-6 text-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
@@ -35,19 +37,19 @@ export default function AppearanceView() {
 		<div className="w-full flex flex-col pl-25 lg:pl-70">
 			{/* Title */}
 			<div className="mb-4">
-				<h2 className="text-2xl font-bold text-text">Apariencia</h2>
-				<p className="text-muted">Personaliza cómo se ve el panel</p>
+				<h2 className="text-2xl font-bold text-text">{t("appearance.title")}</h2>
+				<p className="text-muted">{t("appearance.subtitle")}</p>
 			</div>
 
 			{/* Panel */}
 			<div className="bg-surface p-8 pb-6 rounded-xxl">
 				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">Preferencia de Tema</h3>
-					<p className="text-sm text-muted">Elige tu tema de color preferido</p>
+					<h3 className="mt-0! text-lg font-semibold text-text">{t("appearance.panelTitle")}</h3>
+					<p className="text-sm text-muted">{t("appearance.panelDescription")}</p>
 				</div>
 
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-					{THEMES.map((theme) => {
+					{themes.map((theme) => {
 						const isActive = mode === theme.key;
 
 						return (

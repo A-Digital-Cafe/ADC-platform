@@ -1,4 +1,4 @@
-import { Component, h } from "@stencil/core";
+import { Component } from "@stencil/core";
 
 @Component({
 	tag: "adc-divider",
@@ -6,6 +6,6 @@ import { Component, h } from "@stencil/core";
 })
 export class AdcDivider {
 	render() {
-		return <hr class="my-4 border-surface my-2" aria-label="Separador" />;
+		return <hr class="my-4 border-surface" aria-label="Separador" />;
 	}
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Project } from "@common/types/project-manager/Project.ts";
@@ -107,6 +107,35 @@ export function BacklogView({ project, perms, caller }: Readonly<Props>) {
 			/>
 		);
 	};
+	let viewComponent: React.ReactElement;
+	if (loading || !prefsLoaded) viewComponent = <adc-skeleton variant="rectangular" height="400px" />;
+	else if (issues.length === 0) viewComponent = <p className="text-muted text-center py-8">{t("issues.noIssues")}</p>;
+	else if (groupBy === "none")
+		viewComponent = (
+			<div className="overflow-visible">
+				<BacklogTable
+					issues={issues}
+					project={project}
+					perms={perms}
+					caller={caller}
+					isDragEnabled={false}
+					onOpen={setEditingIssue}
+					onMove={handleMove}
+				/>
+			</div>
+		);
+	else
+		viewComponent = (
+			<div className="space-y-4">
+				<CompletedGroupUmbrella
+					sections={sections.filter((s) => s.isCompleted)}
+					isCollapsed={collapsed[COMPLETED_UMBRELLA_KEY] ?? true}
+					onToggleCollapsed={() => toggleCollapsed(COMPLETED_UMBRELLA_KEY, true)}
+					renderSection={renderSection}
+				/>
+				{sections.filter((s) => !s.isCompleted).map((s) => renderSection(s, false))}
+			</div>
+		);
 
 	return (
 		<div className="space-y-4">
@@ -125,34 +154,7 @@ export function BacklogView({ project, perms, caller }: Readonly<Props>) {
 					) : undefined
 				}
 			/>
-
-			{loading || !prefsLoaded ? (
-				<adc-skeleton variant="rectangular" height="400px" />
-			) : issues.length === 0 ? (
-				<p className="text-muted text-center py-8">{t("issues.noIssues")}</p>
-			) : groupBy === "none" ? (
-				<div className="overflow-visible">
-					<BacklogTable
-						issues={issues}
-						project={project}
-						perms={perms}
-						caller={caller}
-						isDragEnabled={false}
-						onOpen={setEditingIssue}
-						onMove={handleMove}
-					/>
-				</div>
-			) : (
-				<div className="space-y-4">
-					<CompletedGroupUmbrella
-						sections={sections.filter((s) => s.isCompleted)}
-						isCollapsed={collapsed[COMPLETED_UMBRELLA_KEY] ?? true}
-						onToggleCollapsed={() => toggleCollapsed(COMPLETED_UMBRELLA_KEY, true)}
-						renderSection={renderSection}
-					/>
-					{sections.filter((s) => !s.isCompleted).map((s) => renderSection(s, false))}
-				</div>
-			)}
+			{viewComponent}
 			{isDragEnabled && <p className="text-xs text-muted">{t("issues.moveHint")}</p>}
 			{showDialog && (
 				<IssueDialog

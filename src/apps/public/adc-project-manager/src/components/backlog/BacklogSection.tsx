@@ -1,4 +1,5 @@
 import { useTranslation } from "@ui-library/utils/i18n-react";
+import type { HTMLAttributes } from "react";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Project } from "@common/types/project-manager/Project.ts";
 import type { Issue } from "@common/types/project-manager/Issue.ts";
@@ -31,6 +32,35 @@ interface Props {
 	onDrop?: (issueId: string) => void;
 }
 
+type DropHandlers = Pick<HTMLAttributes<HTMLElement>, "onDragOver" | "onDragLeave" | "onDrop">;
+
+function getDropHandlers({
+	isDragEnabled,
+	onDragOver,
+	onDragLeave,
+	onDrop,
+}: Pick<Props, "isDragEnabled" | "onDragOver" | "onDragLeave" | "onDrop">): DropHandlers {
+	if (!isDragEnabled) return {};
+
+	return {
+		onDragOver: onDragOver
+			? (event) => {
+					event.preventDefault();
+					event.dataTransfer.dropEffect = "move";
+					onDragOver();
+				}
+			: undefined,
+		onDragLeave,
+		onDrop: onDrop
+			? (event) => {
+					event.preventDefault();
+					const id = event.dataTransfer.getData("text/plain");
+					if (id) onDrop(id);
+				}
+			: undefined,
+	};
+}
+
 export function BacklogSection({
 	section,
 	project,
@@ -49,28 +79,12 @@ export function BacklogSection({
 }: Readonly<Props>) {
 	const { t } = useTranslation({ namespace: "adc-project-manager" });
 	const total = section.issues.length;
+	const dropHandlers = getDropHandlers({ isDragEnabled, onDragOver, onDragLeave, onDrop });
 
 	return (
 		<section
-			onDragOver={
-				isDragEnabled && onDragOver
-					? (e) => {
-							e.preventDefault();
-							e.dataTransfer.dropEffect = "move";
-							onDragOver();
-						}
-					: undefined
-			}
-			onDragLeave={isDragEnabled ? onDragLeave : undefined}
-			onDrop={
-				isDragEnabled && onDrop
-					? (e) => {
-							e.preventDefault();
-							const id = e.dataTransfer.getData("text/plain");
-							if (id) onDrop(id);
-						}
-					: undefined
-			}
+			aria-label={section.label}
+			{...dropHandlers}
 			className={isDropActive ? "rounded-md ring-2 ring-primary/60 bg-primary/5" : undefined}
 		>
 			<button

@@ -6,6 +6,7 @@ import { Component, Prop, h, Event, EventEmitter, Host } from "@stencil/core";
 })
 export class AdcButton {
 	@Prop() disabled: boolean = false;
+	@Prop() ariaLabel: string | null = "generic-button";
 	@Prop() buttonType: "button" | "submit" | "reset" = "button";
 	@Prop() variant: "primary" | "secondary" = "primary";
 
@@ -17,12 +18,17 @@ export class AdcButton {
 
 	render() {
 		const isPrimary = this.variant === "primary";
-		const backgroundColor = this.disabled ? "#4a5568" : isPrimary ? "#805ad5" : "#2d3748";
+		let backgroundColor;
+		if (this.disabled) backgroundColor = "#4a5568";
+		else if (isPrimary) backgroundColor = "#805ad5";
+		else backgroundColor = "#2d3748";
+
 		const hoverColor = isPrimary ? "#6b46c1" : "#1a202c";
 
 		return (
 			<Host>
 				<button
+					aria-label={this.ariaLabel}
 					type={this.buttonType}
 					onClick={() => this.handleClick}
 					disabled={this.disabled}

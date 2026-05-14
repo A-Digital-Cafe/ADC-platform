@@ -20,7 +20,7 @@ for cfg in $configs; do
   
   npx tsgo -p "$cfg" --noEmit
   if [[ $? -ne 0 ]]; then
-    echo "❌ Error en $cfg"
+    echo "❌ Error en $cfg" >&2
     fail=1
   else
     echo "✅ $cfg OK"

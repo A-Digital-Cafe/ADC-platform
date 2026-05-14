@@ -87,7 +87,9 @@ export class Kernel {
 						const config = JSON.parse(configContent);
 
 						const kernelMode = config.kernelMode;
-						const priority = kernelMode === true ? 1 : typeof kernelMode === "number" ? kernelMode : null;
+						let priority = null;
+						if (kernelMode === true) priority = 1;
+						else if (typeof kernelMode === "number") priority = kernelMode;
 
 						if (priority !== null) {
 							const indexTs = path.join(fullPath, "index.ts");
@@ -153,6 +155,18 @@ export class Kernel {
 		this.#watchLayer(this.#appsPath, this.#loadApp.bind(this), this.#unloadApp.bind(this), ["BaseApp.ts"]);
 
 		this.#watchAppConfigs();
+
+		// Reinyectar import maps ahora que todos los módulos UI están cargados
+		try {
+			const uiFederation = this.registry.getService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
+			if (uiFederation) {
+				await uiFederation.refreshAllImportMaps(Kernel.#kernelKey);
+			} else {
+				this.#logger.logWarn("UIFederationService no encontrado");
+			}
+		} catch (error: any) {
+			this.#logger.logError(`Error reinyectando import maps: ${error.message}`);
+		}
 
 		setTimeout(() => {
 			this.#isStartingUp = false;
@@ -401,7 +415,8 @@ export class Kernel {
 		}
 
 		if (levels.length > 1) {
-			this.#logger.logDebug(`Niveles de carga: ${levels.map((l, i) => `L${i}(${l.length})`).join(" -> ")}`);
+			const levelsStr = levels.map((l, i) => `L${i}(${l.length})`).join(" -> ");
+			this.#logger.logDebug(`Niveles de carga: ${levelsStr}`);
 		}
 
 		return levels;
@@ -459,11 +474,8 @@ export class Kernel {
 
 	#getConfigName(configFile: string): string {
 		const configNameRaw = path.basename(configFile, ".json");
-		return configNameRaw === "config"
-			? "default"
-			: configNameRaw.startsWith("config-")
-				? configNameRaw.substring("config-".length)
-				: configNameRaw;
+		if (configNameRaw === "config") return "default";
+		return configNameRaw.startsWith("config-") ? configNameRaw.substring("config-".length) : configNameRaw;
 	}
 
 	async #initializeAndRunApp(app: IApp, filePath: string, instanceName: string, configPath?: string): Promise<void> {

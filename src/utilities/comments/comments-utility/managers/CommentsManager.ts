@@ -322,7 +322,7 @@ export class CommentsManager {
 		const hasMore = docs.length > limit;
 		const slice = docs.slice(0, limit);
 		const items = await this.#hydrate(ctx, slice);
-		return { items, nextCursor: hasMore ? String(slice[slice.length - 1]._id) : null };
+		return { items, nextCursor: hasMore ? String(slice.at(-1)?._id) : null };
 	}
 
 	async getThread(ctx: CommentPermissionContext, threadRootId: string, opts: ThreadOptions = {}): Promise<CommentsPage> {
@@ -338,7 +338,7 @@ export class CommentsManager {
 		const hasMore = docs.length > limit;
 		const slice = docs.slice(0, limit);
 		const items = await this.#hydrate(ctx, slice);
-		return { items, nextCursor: hasMore ? String(slice[slice.length - 1]._id) : null };
+		return { items, nextCursor: hasMore ? String(slice.at(-1)?._id) : null };
 	}
 
 	async getById(ctx: CommentPermissionContext, commentId: string): Promise<Comment | null> {

@@ -24,10 +24,10 @@ async function assertRoleOrgAccess(identity: IdentityManagerService, roleId: str
  * Endpoints HTTP para gestión de roles
  */
 export class RoleEndpoints {
-	static #identity: IdentityManagerService;
+	private static identity: IdentityManagerService;
 
 	static init(identity: IdentityManagerService): void {
-		RoleEndpoints.#identity ??= identity;
+		RoleEndpoints.identity ??= identity;
 	}
 
 	@RegisterEndpoint({
@@ -39,9 +39,9 @@ export class RoleEndpoints {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
 		if (orgId) {
-			await RoleEndpoints.#identity.roles.initializePredefinedRoles(orgId);
+			await RoleEndpoints.identity.roles.initializePredefinedRoles(orgId);
 		}
-		return RoleEndpoints.#identity.roles.getAllRoles(ctx.token!, orgId);
+		return RoleEndpoints.identity.roles.getAllRoles(ctx.token!, orgId);
 	}
 
 	@RegisterEndpoint({
@@ -50,7 +50,7 @@ export class RoleEndpoints {
 		permissions: [P.IDENTITY.ROLES.READ],
 	})
 	static async getRole(ctx: EndpointCtx<{ roleId: string }>) {
-		const role = await RoleEndpoints.#identity.roles.getRole(ctx.params.roleId, ctx.token!);
+		const role = await RoleEndpoints.identity.roles.getRole(ctx.params.roleId, ctx.token!);
 		if (!role) throw new IdentityError(404, "ROLE_NOT_FOUND", "Rol no encontrado");
 		// En modo org: solo ver roles predefinidos o de tu org
 		const callerOrgId = ctx.user?.orgId;
@@ -73,14 +73,14 @@ export class RoleEndpoints {
 		}
 		// Org admin usa orgId del token; global admin puede especificar en body
 		const orgId = ctx.user?.orgId || ctx.data?.orgId;
-		const role = await RoleEndpoints.#identity.roles.createRole(
+		const role = await RoleEndpoints.identity.roles.createRole(
 			ctx.data.name,
 			ctx.data.description || "",
 			ctx.data.permissions,
 			ctx.token!,
 			orgId
 		);
-		RoleEndpoints.#identity.permissions.invalidateRole(role.id);
+		RoleEndpoints.identity.permissions.invalidateRole(role.id);
 		return role;
 	}
 
@@ -90,9 +90,9 @@ export class RoleEndpoints {
 		permissions: [P.IDENTITY.ROLES.UPDATE],
 	})
 	static async updateRole(ctx: EndpointCtx<{ roleId: string }, Partial<{ name: string; description: string; permissions: any[] }>>) {
-		await assertRoleOrgAccess(RoleEndpoints.#identity, ctx.params.roleId, ctx.user?.orgId, ctx.token!);
-		const role = await RoleEndpoints.#identity.roles.updateRole(ctx.params.roleId, ctx.data || {}, ctx.token!);
-		RoleEndpoints.#identity.permissions.invalidateRole(ctx.params.roleId);
+		await assertRoleOrgAccess(RoleEndpoints.identity, ctx.params.roleId, ctx.user?.orgId, ctx.token!);
+		const role = await RoleEndpoints.identity.roles.updateRole(ctx.params.roleId, ctx.data || {}, ctx.token!);
+		RoleEndpoints.identity.permissions.invalidateRole(ctx.params.roleId);
 		return role;
 	}
 
@@ -104,10 +104,10 @@ export class RoleEndpoints {
 	})
 	static async deleteRole(ctx: EndpointCtx<{ roleId: string }>) {
 		try {
-			await assertRoleOrgAccess(RoleEndpoints.#identity, ctx.params.roleId, ctx.user?.orgId, ctx.token!);
+			await assertRoleOrgAccess(RoleEndpoints.identity, ctx.params.roleId, ctx.user?.orgId, ctx.token!);
 			const resumeFromStep = (ctx as any)._stepperResumeIdx as number | undefined;
-			await RoleEndpoints.#identity.roles.deleteRole(ctx.params.roleId, ctx.token!, resumeFromStep);
-			RoleEndpoints.#identity.permissions.invalidateRole(ctx.params.roleId);
+			await RoleEndpoints.identity.roles.deleteRole(ctx.params.roleId, ctx.token!, resumeFromStep);
+			RoleEndpoints.identity.permissions.invalidateRole(ctx.params.roleId);
 			return { success: true };
 		} catch (error: any) {
 			if (error.message?.includes("no encontrado")) {

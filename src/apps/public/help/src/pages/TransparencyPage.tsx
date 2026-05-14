@@ -8,6 +8,8 @@ interface ReportItem {
 	status: Status;
 	metric: string;
 	needed: string;
+	relatedHref?: string;
+	relatedLabel?: string;
 }
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -29,43 +31,57 @@ const REPORT_ITEMS: ReportItem[] = [
 		title: "Solicitudes de autoridades",
 		status: "planificado",
 		metric: "Cantidad recibida, aceptada, rechazada o parcialmente respondida, por tipo y jurisdicción cuando sea seguro publicarlo.",
-		needed: "Depende del registro auditable definido en /authority-requests.",
+		needed: "Depende del registro auditable definido en respuesta a autoridades.",
+		relatedHref: "/authority-requests#que-se-debe-definir",
+		relatedLabel: "Ver checklist de autoridades",
 	},
 	{
 		title: "Moderación y reportes comunitarios",
 		status: "planificado",
 		metric: "Reportes recibidos, categorías generales, medidas tomadas y apelaciones cuando exista el flujo.",
 		needed: "Definir canal dedicado y categorías estables de reporte.",
+		relatedHref: "/values#reportes",
+		relatedLabel: "Ver reportes comunitarios",
 	},
 	{
 		title: "Derechos de privacidad",
 		status: "planificado",
 		metric: "Solicitudes de acceso, rectificación, supresión, limitación, oposición o portabilidad en forma agregada.",
-		needed: "Cerrar el flujo público de derechos GDPR indicado en /privacy.",
+		needed: "Cerrar el flujo público de derechos GDPR indicado en privacidad.",
+		relatedHref: "/privacy#tus-derechos",
+		relatedLabel: "Ver derechos de privacidad",
 	},
 	{
 		title: "Geofiltro y seguridad por país",
 		status: "aplicado",
 		metric: "Cambios relevantes en la lista de países bloqueados, motivos generales y revisión de contexto.",
-		needed: "Lista publicada en /values y sincronizada con la regla activa de Cloudflare. Revisar periódicamente si el contexto de algún país cambia.",
+		needed: "Lista publicada en valores y sincronizada con la regla activa de Cloudflare. Revisar periódicamente si el contexto de algún país cambia.",
+		relatedHref: "/values#geofiltro-activo",
+		relatedLabel: "Ver geofiltro activo",
 	},
 	{
 		title: "Incidentes y disponibilidad",
 		status: "no-iniciado",
 		metric: "Incidentes relevantes, impacto, duración, causa general y acciones posteriores.",
 		needed: "Crear status page/SLA antes de publicar métricas operativas consistentes.",
+		relatedHref: "/roadmap#capa-de-transparencia-operaciones",
+		relatedLabel: "Ver roadmap de operaciones",
 	},
 	{
 		title: "Seguridad y bug bounty",
 		status: "planificado",
 		metric: "Reportes de vulnerabilidades recibidos, estados y tiempos de respuesta en forma agregada.",
 		needed: "Crear tickets públicos con id, fecha, hash y estado.",
+		relatedHref: "/contact#canales",
+		relatedLabel: "Ver canal de reportes",
 	},
 	{
 		title: "Publicidad en games",
 		status: "planificado",
 		metric: "Proveedor, modalidad técnica, consentimiento, cookies o identificadores si los hubiera.",
 		needed: "Definir implementación publicitaria antes de activar documentación específica.",
+		relatedHref: "/cookies#cookies-opcionales",
+		relatedLabel: "Ver cookies opcionales",
 	},
 ];
 
@@ -79,8 +95,8 @@ export function TransparencyPage() {
 			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Valores", href: "/values" }, { label: "Transparencia" }]}
 		>
 			<p>
-				Esta página define la estructura mínima de un reporte periódico. Todavía no sustituye un reporte emitido: muestra qué métricas
-				deben existir y qué dependencias faltan para publicarlo con rigor.
+				Esta página define la estructura mínima de un reporte periódico, como Paso C del <a href="/values#marco-gni">marco GNI</a>.
+				Todavía no sustituye un reporte emitido: muestra qué métricas deben existir y qué dependencias faltan para publicarlo con rigor.
 			</p>
 
 			<adc-callout tone="info" role="note">
@@ -89,7 +105,9 @@ export function TransparencyPage() {
 			</adc-callout>
 
 			<section className="mt-8">
-				<h2 className="text-2xl font-heading mb-3">Métricas previstas</h2>
+				<h2 id="metricas-previstas" className="text-2xl font-heading mb-3">
+					Métricas previstas
+				</h2>
 				<ul className="space-y-4">
 					{REPORT_ITEMS.map((item) => (
 						<li key={item.title} className="border-l-2 pl-3">
@@ -103,16 +121,24 @@ export function TransparencyPage() {
 							<p className="mt-1 text-sm opacity-80">
 								<strong>Qué falta:</strong> {item.needed}
 							</p>
+							{item.relatedHref && item.relatedLabel && (
+								<p className="mt-1 text-sm">
+									<a href={item.relatedHref}>{item.relatedLabel}</a>
+								</p>
+							)}
 						</li>
 					))}
 				</ul>
 			</section>
 
 			<section className="mt-10">
-				<h2 className="text-2xl font-heading mb-3">Cadencia pendiente</h2>
+				<h2 id="cadencia-pendiente" className="text-2xl font-heading mb-3">
+					Cadencia pendiente
+				</h2>
 				<p>
 					La cadencia del reporte (mensual, trimestral o semestral) todavía debe definirse. La decisión debería considerar volumen real
-					de solicitudes, capacidad de revisión y riesgo de publicar datos demasiado granulares.
+					de solicitudes, capacidad de revisión y riesgo de publicar datos demasiado granulares. La planificación vive en el{" "}
+					<a href="/roadmap#capa-de-transparencia-operaciones">roadmap operativo</a>.
 				</p>
 			</section>
 		</PageShell>

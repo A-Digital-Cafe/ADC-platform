@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State, Watch } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, Watch } from "@stencil/core";
 
 export interface ComboboxOption {
 	label: string;
@@ -93,7 +93,7 @@ export class AdcCombobox {
 	};
 
 	private readonly handleBlur = () => {
-		// Delay so mousedown on an option fires before the dropdown closes
+		// Delay so option clicks fire before the dropdown closes.
 		setTimeout(() => {
 			this.isOpen = false;
 			this.searchQuery = "";
@@ -137,15 +137,14 @@ export class AdcCombobox {
 				{this.isOpen && options.length > 0 && (
 					<ul class="absolute z-9999 w-full mt-1 bg-background border border-text/15 rounded-xxl shadow-cozy max-h-60 overflow-auto">
 						{options.map((option) => (
-							<li
-								key={option.value}
-								class="px-3 py-1 text-[12px] font-text text-text cursor-pointer hover:bg-text/10 select-none"
-								onMouseDown={(e: MouseEvent) => {
-									e.preventDefault();
-									this.handleSelect(option);
-								}}
-							>
-								{option.label}
+							<li key={option.value}>
+								<button
+									type="button"
+									class="w-full px-3 py-1 text-left text-[12px] font-text text-text cursor-pointer hover:bg-text/10 select-none bg-transparent border-0"
+									onClick={() => this.handleSelect(option)}
+								>
+									{option.label}
+								</button>
 							</li>
 						))}
 					</ul>

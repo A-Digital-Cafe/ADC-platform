@@ -1,4 +1,4 @@
-import { Component, Prop, h } from "@stencil/core";
+import { Component, Prop } from "@stencil/core";
 import { IS_DEV } from "../../../utils/url.js";
 const host = () => globalThis.location?.hostname ?? "localhost";
 const proto = () => globalThis.location?.protocol ?? "http:";

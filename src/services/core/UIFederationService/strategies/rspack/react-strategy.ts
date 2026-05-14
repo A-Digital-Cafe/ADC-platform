@@ -1,8 +1,10 @@
 import { RspackBaseStrategy } from "./base.js";
 import type { IBuildContext } from "../types.js";
+import { buildCssRule } from "../shared/rspack-css-rule.js";
+import { getI18nTemplate } from "../shared/rspack-helpers.js";
 
 /**
- * Estrategia Rspack para React con Module Federation
+ * Estrategia Rspack para React con Module Federation.
  */
 export class ReactRspackStrategy extends RspackBaseStrategy {
 	readonly name = "React (Rspack)";
@@ -30,58 +32,27 @@ const { ModuleFederationPlugin } = rspack.container;
 	}
 
 	protected getModuleRules(isProduction: boolean, postcssConfigPath: string): string {
-		const developmentValue = isProduction ? "false" : "true";
-
-		const cssRule = postcssConfigPath
-			? `
+		const development = isProduction ? "false" : "true";
+		return String.raw`
             {
-                test: /\\.css$/,
-                use: [
-                    'style-loader',
-                    'css-loader',
-                    {
-                        loader: 'postcss-loader',
-                        options: {
-                            postcssOptions: {
-                                config: '${postcssConfigPath.replaceAll("\\", "/")}',
-                            },
-                        },
-                    },
-                ],
-                type: 'javascript/auto',
-            }`
-			: `
-            {
-                test: /\\.css$/,
-                use: ['style-loader', 'css-loader'],
-                type: 'javascript/auto',
-            }`;
-
-		return `
-            {
-                test: /\\.tsx?$/,
+                test: /\.tsx?$/,
                 use: {
                     loader: 'builtin:swc-loader',
                     options: {
                         jsc: {
                             parser: { syntax: 'typescript', tsx: true },
-                            transform: { react: { runtime: 'automatic', development: ${developmentValue}, refresh: false } },
+                            transform: { react: { runtime: 'automatic', development: ${development}, refresh: false } },
                         },
                     },
                 },
                 exclude: /node_modules/,
-            },${cssRule}
+            },${buildCssRule(postcssConfigPath)}
     `;
 	}
 
 	protected getPlugins(context: IBuildContext, isHost: boolean, usedFrameworks: Set<string>): string {
 		const hasI18n = context.module.uiConfig.i18n;
-
-		const i18nScript =
-			isHost && hasI18n
-				? this.getI18nTemplate(context)
-				: `
-            template: './index.html',`;
+		const i18nScript = isHost && hasI18n ? getI18nTemplate(context) : `\n            template: './index.html',`;
 
 		// Vue feature flags solo si algún remote usa Vue
 		const vueFeatureFlags = usedFrameworks.has("vue")
@@ -93,7 +64,6 @@ const { ModuleFederationPlugin } = rspack.container;
         }),`
 			: "";
 
-		// Solo hosts necesitan HtmlRspackPlugin (remotes solo exponen assets)
 		const htmlPlugin = isHost
 			? `
         new rspack.HtmlRspackPlugin({${i18nScript}

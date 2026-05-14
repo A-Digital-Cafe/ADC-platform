@@ -67,12 +67,12 @@ function extractPureCss(cssContent, name) {
 	let result = `/**\n * Base CSS for ${name}.\n * Generated automatically without Tailwind directives.\n */\n\n`;
 	let cleaned = cssContent.replaceAll(/@import\s+["']tailwindcss["'];?\s*/g, "");
 
-	const layerBaseMatch = cleaned.match(/@layer\s+base\s*\{([\s\S]*?)\n\}/);
+	const layerBaseMatch = /@layer\s+base\s*\{([\s\S]*?)\n\}/.exec(cleaned);
 	if (layerBaseMatch) {
 		result += `/* Base styles */\n${layerBaseMatch[1].trim()}\n\n`;
 	}
 
-	const layerComponentsMatch = cleaned.match(/@layer\s+components\s*\{([\s\S]*?)\n\}/);
+	const layerComponentsMatch = /@layer\s+components\s*\{([\s\S]*?)\n\}/.exec(cleaned);
 	if (layerComponentsMatch) {
 		result += `/* Component styles */\n${layerComponentsMatch[1].trim()}\n\n`;
 	}

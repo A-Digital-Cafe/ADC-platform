@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Project } from "@common/types/project-manager/Project.ts";
-import type { Block as StencilBlock } from "@ui-library/utils/react-jsx";
+export { type Block as StencilBlock } from "@ui-library/utils/react-jsx";
 import type { TransitionCommentSubmitDetail } from "../components/TransitionCommentModal.tsx";
 import { pmApi } from "../utils/pm-api.ts";
 
@@ -87,4 +87,4 @@ export function useIssueMover({ project, onSuccess, onFailure }: UseIssueMoverOp
 	return { pendingMove, requestMove, cancelMove, confirmMoveWithComment, moving };
 }
 
-export type { PendingMove, StencilBlock };
+export type { PendingMove };

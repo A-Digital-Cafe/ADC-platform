@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, Element } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, Element } from "@stencil/core";
 
 @Component({
 	tag: "adc-button-expand",
@@ -21,8 +21,6 @@ export class AdcButtonExpand {
 		"relative left-[-15px] text-primary cursor-pointer hover:brightness-105 inline-flex items-center min-h-[60px] touch-manipulation transition-transform duration-300";
 
 	render() {
-	
-
 		return (
 			<button
 				type="button"
@@ -38,7 +36,6 @@ export class AdcButtonExpand {
 						transition: "transform 0.1s ease",
 					}}
 					aria-hidden="true"
-					
 				></adc-icon-line-arrow-right>
 			</button>
 		);

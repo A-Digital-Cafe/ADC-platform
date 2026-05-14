@@ -1,0 +1,14 @@
+{
+	"extends": "../../../../tsconfig.base.json",
+	"compilerOptions": {
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"paths": {
+			"@ui-library": ["./../00-web-ui-library/index.ts"],
+			"@ui-library/utils/*": ["./../00-web-ui-library/utils/*"],
+			"@ui-library/*": ["./../00-web-ui-library/src/*"],
+			"@common/*": ["./../../../common/*"]
+		}
+	},
+	"include": ["src/**/*", "*.ts", "vue-shim.d.ts"]
+}

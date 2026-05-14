@@ -14,19 +14,54 @@ export function HomePage() {
 					<span slot="icon">
 						<adc-icon-members size="2rem"></adc-icon-members>
 					</span>
-					<span>GDPR básico, política de cookies y términos de uso.</span>
+					<span>
+						<a className="hover:underline" href="/privacy">
+							GDPR básico
+						</a>
+						,{" "}
+						<a className="hover:underline" href="/cookies">
+							política de cookies
+						</a>{" "}
+						y{" "}
+						<a className="hover:underline" href="/terms">
+							términos de uso
+						</a>
+						.
+					</span>
 				</adc-feature-card>
 				<adc-feature-card title="Valores y comunidad">
 					<span slot="icon">
 						<adc-icon-community size="2rem"></adc-icon-community>
 					</span>
-					<span>Espacio seguro, marco GNI y derechos humanos.</span>
+					<span>
+						<a className="hover:underline" href="/values#espacio-seguro">
+							Espacio seguro
+						</a>
+						,{" "}
+						<a className="hover:underline" href="/values#marco-gni">
+							marco GNI
+						</a>{" "}
+						y{" "}
+						<a className="hover:underline" href="/hria">
+							derechos humanos
+						</a>
+						.
+					</span>
 				</adc-feature-card>
 				<adc-feature-card title="Ética y roadmap">
 					<span slot="icon">
 						<adc-icon-learning size="2rem"></adc-icon-learning>
 					</span>
-					<span>Código de ética y plan público de cumplimiento.</span>
+					<span>
+						<a className="hover:underline" href="/ethics">
+							Código de ética
+						</a>{" "}
+						y{" "}
+						<a className="hover:underline" href="/roadmap">
+							plan público de cumplimiento
+						</a>
+						.
+					</span>
 				</adc-feature-card>
 			</section>
 
@@ -51,6 +86,21 @@ export function HomePage() {
 					<li>
 						<a className="hover:underline" href="/values">
 							Valores y marco GNI
+						</a>
+					</li>
+					<li>
+						<a className="hover:underline" href="/hria">
+							HRIA de derechos humanos
+						</a>
+					</li>
+					<li>
+						<a className="hover:underline" href="/authority-requests">
+							Respuesta a autoridades
+						</a>
+					</li>
+					<li>
+						<a className="hover:underline" href="/transparency">
+							Reporte de transparencia
 						</a>
 					</li>
 					<li>

@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, JSX } from "@stencil/core";
 import type { CommentEntry } from "../../atoms/adc-comment-item/adc-comment-item";
 import type { Block } from "../adc-blocks-renderer/adc-blocks-renderer";
 
@@ -219,16 +219,19 @@ export class AdcCommentsSection {
 	}
 
 	render() {
+		let content: JSX.Element | null;
+
+		if (this.loading) {
+			content = <p class="text-muted text-center">Cargando comentarios...</p>;
+		} else if (this.comments.length === 0) {
+			content = <p class="text-muted text-center">{this.emptyMessage}</p>;
+		} else {
+			content = <ul class="flex flex-col gap-3 list-none p-0">{this.comments.map((c) => this.renderNode(c))}</ul>;
+		}
 		return (
 			<section class="flex flex-col gap-4" aria-label="Comentarios">
 				{this.renderForm()}
-				{this.loading ? (
-					<p class="text-muted text-center">Cargando comentarios...</p>
-				) : this.comments.length === 0 ? (
-					<p class="text-muted text-center">{this.emptyMessage}</p>
-				) : (
-					<ul class="flex flex-col gap-3 list-none p-0">{this.comments.map((c) => this.renderNode(c))}</ul>
-				)}
+				{content}
 				{this.hasMore && (
 					<div class="flex justify-center">
 						<adc-button

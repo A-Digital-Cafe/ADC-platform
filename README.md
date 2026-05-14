@@ -1,4 +1,5 @@
-# ADC Platform
+
+# ADC Platform [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=abbytec_ADC-platform&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=abbytec_ADC-platform)
 
 ADC Platform es un kernel de software modular y dinámico construido sobre Node.js y TypeScript. Su arquitectura está diseñada para permitir la creación de aplicaciones complejas y escalables a través de la composición de módulos independientes: **Providers**, **Utilities**, **Services** y **Apps**.
 

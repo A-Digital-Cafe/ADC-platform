@@ -2,8 +2,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { BaseCLIStrategy } from "../base-strategy.js";
 import type { IBuildContext, IBuildResult } from "../types.js";
-import { getBinPath } from "../../utils/path-resolver.js";
-import { copyDirectory, runCommand } from "../../utils/file-operations.js";
+import { getBinPath } from "../../utils/fs/path-resolver.js";
+import { copyDirectory, runCommand } from "../../utils/fs/file-operations.js";
 
 /**
  * Estrategia para Astro (SSG)
@@ -50,7 +50,7 @@ export class AstroStrategy extends BaseCLIStrategy {
 
 		const finalConfig = {
 			...astroDefaults,
-			...(module.uiConfig.astroConfig || {}),
+			...module.uiConfig.astroConfig,
 			outDir: `./${outputDir}`,
 		};
 
@@ -64,7 +64,7 @@ export class AstroStrategy extends BaseCLIStrategy {
 		];
 
 		const buildConfig = {
-			...(finalConfig.build || {}),
+			...finalConfig.build,
 			format: "directory",
 		};
 

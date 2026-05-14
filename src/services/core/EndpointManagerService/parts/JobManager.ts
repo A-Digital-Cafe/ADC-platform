@@ -251,7 +251,7 @@ export class JobManager {
 			}
 		);
 
-		this.#consumers.set(consumerKey, consumer as unknown as Consumer);
+		this.#consumers.set(consumerKey, consumer);
 		logger.logOk(`[EndpointManager] consumer set up: ${consumerKey}`);
 	}
 

@@ -45,6 +45,20 @@ export function CalendarView({ project, perms }: Readonly<Props>) {
 
 	const entityOptions = JSON.stringify(entities.map((e) => ({ label: e.name, value: e.id })));
 
+	let entityComponet: React.ReactNode;
+	if (loading) entityComponet = <adc-skeleton variant="rectangular" height="400px" />;
+	else if (!entity) entityComponet = <p className="text-muted text-sm">{t("calendar.noSelection")}</p>;
+	else if (!entity.startDate || !entity.endDate) entityComponet = <p className="text-muted text-sm">{t("calendar.noDates")}</p>;
+	else
+		entityComponet = (
+			<CalendarGrid
+				project={project}
+				issues={relevantIssues}
+				startDate={new Date(entity.startDate)}
+				endDate={new Date(entity.endDate)}
+				onOpen={setEditingIssue}
+			/>
+		);
 	return (
 		<div className="space-y-4">
 			<div className="flex flex-wrap items-end gap-3">
@@ -76,23 +90,7 @@ export function CalendarView({ project, perms }: Readonly<Props>) {
 				</div>
 			</div>
 
-			{loading ? (
-				<adc-skeleton variant="rectangular" height="400px" />
-			) : entity ? (
-				!entity.startDate || !entity.endDate ? (
-					<p className="text-muted text-sm">{t("calendar.noDates")}</p>
-				) : (
-					<CalendarGrid
-						project={project}
-						issues={relevantIssues}
-						startDate={new Date(entity.startDate)}
-						endDate={new Date(entity.endDate)}
-						onOpen={setEditingIssue}
-					/>
-				)
-			) : (
-				<p className="text-muted text-sm">{t("calendar.noSelection")}</p>
-			)}
+			{entityComponet}
 
 			{editingIssue && (
 				<IssueDialog

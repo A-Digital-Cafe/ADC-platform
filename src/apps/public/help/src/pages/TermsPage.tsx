@@ -63,24 +63,26 @@ export function TermsPage() {
 			declaration="policy"
 			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Términos" }]}
 		>
-			<h2>1. Uso aceptable</h2>
+			<h2 id="uso-aceptable">1. Uso aceptable</h2>
 			<p>
 				Al usar el sitio te comprometes a no realizar actividades ilegales, abusivas, fraudulentas o que dañen a otras personas usuarias
 				o a la plataforma.
 			</p>
 
-			<h2>2. Conductas prohibidas</h2>
+			<h2 id="conductas-prohibidas">2. Conductas prohibidas</h2>
 			<p>No está permitido usar ADC para:</p>
 			<ul>
 				<li>acosar, amenazar, doxxear, discriminar o promover discurso de odio;</li>
 				<li>publicar malware, spam, phishing, estafas o contenido ilegal;</li>
 				<li>suplantar identidades o falsear afiliaciones;</li>
-				<li>evadir límites de tasa, geofiltros, medidas antiabuso o controles de seguridad;</li>
+				<li>
+					evadir límites de tasa, <a href="/values#geofiltro-activo">geofiltros</a>, medidas antiabuso o controles de seguridad;
+				</li>
 				<li>extraer datos de forma masiva sin autorización o afectar la disponibilidad del servicio;</li>
 				<li>publicar contenido que vulnere derechos de terceros.</li>
 			</ul>
 
-			<h2>3. Edad mínima</h2>
+			<h2 id="edad-minima">3. Edad mínima</h2>
 			<p>
 				La edad mínima general para usar la plataforma es <strong>13 años</strong>. En algunos países aplicamos una edad mayor, tomando
 				como referencia el criterio público usado por plataformas como Discord. Si tu país no aparece en la lista, aplica la regla
@@ -105,45 +107,46 @@ export function TermsPage() {
 				</div>
 			</details>
 
-			<h2>4. Cuentas</h2>
+			<h2 id="cuentas">4. Cuentas</h2>
 			<p>
 				Eres responsable de la actividad de tu cuenta y de mantener tus credenciales seguras. Podemos suspender cuentas que violen estos
-				términos o el código de ética.
+				términos o el <a href="/ethics">código de ética</a>.
 			</p>
 
-			<h2>5. Contenido</h2>
+			<h2 id="contenido">5. Contenido</h2>
 			<p>
 				Conservas los derechos sobre el contenido que publicas. Nos otorgas una licencia limitada para mostrarlo dentro de la plataforma
 				con la finalidad para la que lo publicaste, incluyendo copias técnicas necesarias para operar el servicio.
 			</p>
 
-			<h2>6. Enlaces y servicios externos</h2>
+			<h2 id="enlaces-y-servicios-externos">6. Enlaces y servicios externos</h2>
 			<p>
 				ADC puede enlazar o integrarse con servicios externos como Discord, Cloudflare, MongoDB Atlas u otros proveedores operativos.
 				Esos servicios pueden tener sus propias condiciones y políticas. Cuando un tercero trate datos en nombre de ADC, se documentará
-				en la política de privacidad o en el roadmap correspondiente.
+				en la <a href="/privacy#infraestructura-y-subprocesadores">política de privacidad</a> o en el{" "}
+				<a href="/roadmap#capa-etica-legal-cimientos">roadmap</a> correspondiente.
 			</p>
 
-			<h2>7. Subdominios con reglas propias</h2>
+			<h2 id="subdominios-con-reglas-propias">7. Subdominios con reglas propias</h2>
 			<p>
 				Algunos subdominios pueden tener condiciones, avisos o políticas adicionales por su función. El subdominio <code>games</code>{" "}
-				incorporará publicidad, por lo que tendrá documentación propia sobre proveedores, cookies, identificadores o consentimiento
-				cuando la modalidad técnica esté definida.
+				incorporará publicidad, por lo que tendrá documentación propia sobre proveedores,{" "}
+				<a href="/cookies#cookies-opcionales">cookies</a>, identificadores o consentimiento cuando la modalidad técnica esté definida.
 			</p>
 
-			<h2>8. Disponibilidad</h2>
+			<h2 id="disponibilidad">8. Disponibilidad</h2>
 			<p>
 				La plataforma se ofrece "tal cual". Trabajamos en un programa de SLA/SLO público que se incorporará en futuras fases (ver{" "}
-				<a href="/roadmap">Roadmap</a>).
+				<a href="/roadmap#capa-de-transparencia-operaciones">Roadmap</a>).
 			</p>
 
-			<h2>9. Jurisdicción y ley aplicable</h2>
+			<h2 id="jurisdiccion-y-ley-aplicable">9. Jurisdicción y ley aplicable</h2>
 			<p>
 				Estos términos se interpretan bajo la ley aplicable de la República Argentina, sin perjuicio de los derechos de protección al
 				consumidor o datos personales que puedan corresponder en tu país de residencia.
 			</p>
 
-			<h2>10. Modificaciones</h2>
+			<h2 id="modificaciones">10. Modificaciones</h2>
 			<p>
 				Podemos actualizar estos términos. Cambios sustanciales se anunciarán con antelación razonable y la fecha de última actualización
 				quedará reflejada al pie.

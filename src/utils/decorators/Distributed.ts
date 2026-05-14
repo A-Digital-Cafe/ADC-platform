@@ -62,7 +62,7 @@ export function Distributed<T extends new (...args: any[]) => any>(constructor: 
 			(this as any)[WORKER_INSTANCE] = null;
 
 			// Crear el proxy para interceptar las llamadas
-			return this.#createProxy();
+			this.#createProxy();
 		}
 
 		/**
@@ -111,7 +111,7 @@ export function Distributed<T extends new (...args: any[]) => any>(constructor: 
 
 					// Listener para la respuesta del worker
 					const messageHandler = (message: any) => {
-						if (message && message.id === messageId) {
+						if (message?.id === messageId) {
 							worker.off("message", messageHandler);
 
 							if (message.type === "response") {

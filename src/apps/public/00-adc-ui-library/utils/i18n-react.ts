@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 interface ADCGlobal {
 	__ADC_I18N__?: {
 		translations: Record<string, Record<string, unknown>>;
+		translationLocales?: Record<string, string>;
 		locale: string | null;
 		loading: boolean;
 		loaded: boolean;
@@ -19,6 +20,25 @@ interface ADCGlobal {
 	setLocale?: (locale: string) => void;
 }
 const customThis = globalThis as typeof globalThis & ADCGlobal;
+
+function areNamespacesLoaded(namespaces: string[]): boolean {
+	if (namespaces.length === 0) return true;
+
+	const state = customThis.__ADC_I18N__;
+	if (!state) return false;
+
+	const targetLocale = state.locale || localStorage.getItem("language") || navigator.language?.split("-")[0] || "en";
+	return namespaces.every((namespace) => {
+		if (!(namespace in state.translations)) return false;
+		return !state.translationLocales?.[namespace] || state.translationLocales[namespace] === targetLocale;
+	});
+}
+
+function eventMatchesNamespaces(detail: unknown, namespaces: string[]): boolean {
+	if (namespaces.length === 0) return true;
+	const loadedNamespaces = (detail as { namespaces?: unknown })?.namespaces;
+	return Array.isArray(loadedNamespaces) && loadedNamespaces.some((namespace) => namespaces.includes(String(namespace)));
+}
 
 export interface UseTranslationOptions {
 	/** Namespace(s) to load translations from */
@@ -63,7 +83,8 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 	// Estabilizar namespaces para evitar re-renders infinitos
 	const namespacesKey = Array.isArray(namespace) ? namespace.join(",") : namespace || "";
 	const namespaces = useMemo(() => {
-		return Array.isArray(namespace) ? namespace : namespace ? [namespace] : [];
+		if (Array.isArray(namespace)) return namespace;
+		return namespace ? [namespace] : [];
 	}, [namespacesKey]);
 
 	// Counter para forzar re-cálculo de t() cuando las traducciones cambian
@@ -72,10 +93,11 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 	const [ready, setReady] = useState(() => {
 		// Check if translations are already loaded
 		// Nota: usamos namespace directamente aquí porque namespaces aún no está calculado
-		const ns = Array.isArray(namespace) ? namespace : namespace ? [namespace] : [];
-		const state = customThis.__ADC_I18N__;
-		if (!state || ns.length === 0) return false;
-		return ns.every((n) => n in state.translations);
+		let ns: string[];
+		if (Array.isArray(namespace)) ns = namespace;
+		else if (namespace) ns = [namespace];
+		else ns = [];
+		return areNamespacesLoaded(ns);
 	});
 
 	const [locale, setLocale] = useState(() => {
@@ -134,7 +156,7 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 	// Load translations on mount
 	useEffect(() => {
 		if (!autoLoad || namespaces.length === 0) {
-			setReady(true);
+			setReady(areNamespacesLoaded(namespaces));
 			return;
 		}
 
@@ -152,9 +174,9 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 			if (cancelled) return;
 
 			const state = customThis.__ADC_I18N__;
-			const allLoaded = state && namespaces.every((ns) => ns in state.translations);
+			const allLoaded = areNamespacesLoaded(namespaces);
 
-			if (!allLoaded && customThis.loadTranslations) {
+			if (!allLoaded && state && customThis.loadTranslations) {
 				try {
 					await customThis.loadTranslations(namespaces);
 				} catch (err) {
@@ -163,7 +185,7 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 			}
 
 			if (!cancelled) {
-				setReady(true);
+				setReady(areNamespacesLoaded(namespaces) || !customThis.loadTranslations);
 				// Incrementar version para forzar re-cálculo de t()
 				setTranslationsVersion((v) => v + 1);
 			}
@@ -183,14 +205,18 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 			if (detail?.locale) {
 				setLocale(detail.locale);
 			}
-			setReady(true);
-			// Forzar re-cálculo de t() cuando cambian traducciones
-			setTranslationsVersion((v) => v + 1);
+
+			const loaded = areNamespacesLoaded(namespaces);
+			if (loaded || eventMatchesNamespaces(detail, namespaces)) {
+				setReady(loaded);
+				// Forzar re-cálculo de t() cuando cambian traducciones
+				setTranslationsVersion((v) => v + 1);
+			}
 		};
 
 		customThis.addEventListener("adc:i18n:loaded", handleI18nLoaded);
 		return () => customThis.removeEventListener("adc:i18n:loaded", handleI18nLoaded);
-	}, []);
+	}, [namespaces]);
 
 	return { t, locale, ready, setLocale: setLocaleFn };
 }

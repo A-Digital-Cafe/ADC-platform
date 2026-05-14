@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State, Element } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, Element } from "@stencil/core";
 
 export interface SidebarItem {
 	label: string;

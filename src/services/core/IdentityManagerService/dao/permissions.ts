@@ -216,8 +216,7 @@ export class PermissionManager {
 			for (const roleId of orgMembership.roleIds || []) {
 				const role = userRolesMap.get(roleId);
 				if (!role) continue;
-				if (isMembershipRoleInContext(role)) userRolePerms.push(...role.permissions);
-				else if (!role.orgId && (role.name === SystemRole.SYSTEM || role.name === SystemRole.ADMIN))
+				if (isMembershipRoleInContext(role) || (!role.orgId && (role.name === SystemRole.SYSTEM || role.name === SystemRole.ADMIN)))
 					userRolePerms.push(...role.permissions);
 			}
 		}
@@ -279,24 +278,24 @@ export class PermissionManager {
 
 	/**
 	 * Invalida cache para usuarios de un grupo
-	 * Por eficiencia, limpia todo el cache
+	 * Por eficiencia, limpia la cache
 	 */
 	invalidateGroup(_groupId: string): void {
-		// Limpiar todo el cache ya que requeriría query para saber qué usuarios afectar
+		// Limpiar la cache ya que requeriría query para saber qué usuarios afectar
 		this.#cache.clear();
 	}
 
 	/**
 	 * Invalida cache para usuarios con un rol específico
-	 * Por eficiencia, limpia todo el cache
+	 * Por eficiencia, limpia la cache
 	 */
 	invalidateRole(_roleId: string): void {
-		// Limpiar todo el cache ya que requeriría query para saber qué usuarios afectar
+		// Limpiar la cache ya que requeriría query para saber qué usuarios afectar
 		this.#cache.clear();
 	}
 
 	/**
-	 * Invalida todo el cache
+	 * Invalida la cache
 	 */
 	invalidateAll(): void {
 		this.#cache.clear();

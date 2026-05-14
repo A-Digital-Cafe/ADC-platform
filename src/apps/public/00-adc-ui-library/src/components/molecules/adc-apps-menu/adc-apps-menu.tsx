@@ -1,4 +1,4 @@
-import { Component, Prop, State, Element, h, Host, Listen } from "@stencil/core";
+import { Component, Prop, State, Element, Host, Listen } from "@stencil/core";
 
 import { getSession, type SessionUser } from "../../../../utils/session.js";
 import { DEFAULT_APPS } from "./apps-config.js";

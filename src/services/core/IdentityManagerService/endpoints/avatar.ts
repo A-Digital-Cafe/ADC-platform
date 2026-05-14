@@ -34,21 +34,21 @@ const AVATAR_RATE_LIMIT = { max: 5, timeWindow: 60_000 };
  * `user.metadata.customAvatar` + `user.metadata.avatarSource`.
  */
 export class AvatarEndpoints {
-	static #identity: IdentityManagerService;
-	static #userModel: Model<User> | null = null;
-	static #attachmentsManager: AttachmentsManager | null = null;
+	private static identity: IdentityManagerService;
+	private static userModel: Model<User> | null = null;
+	private static attachmentsManager: AttachmentsManager | null = null;
 
-	static init(identity: IdentityManagerService, userModel: Model<User>, attachmentsManager: AttachmentsManager | null): void {
-		AvatarEndpoints.#identity ??= identity;
-		AvatarEndpoints.#userModel ??= userModel;
-		AvatarEndpoints.#attachmentsManager ??= attachmentsManager;
+	public static init(identity: IdentityManagerService, userModel: Model<User>, attachmentsManager: AttachmentsManager | null): void {
+		AvatarEndpoints.identity ??= identity;
+		AvatarEndpoints.userModel ??= userModel;
+		AvatarEndpoints.attachmentsManager ??= attachmentsManager;
 	}
 
 	static #manager(): AttachmentsManager {
-		if (!AvatarEndpoints.#attachmentsManager) {
+		if (!AvatarEndpoints.attachmentsManager) {
 			throw new HttpError(503, "AVATAR_UPLOAD_UNAVAILABLE", "Subida de avatares no disponible (S3 no configurado)");
 		}
-		return AvatarEndpoints.#attachmentsManager;
+		return AvatarEndpoints.attachmentsManager;
 	}
 
 	static #requireAuth(ctx: EndpointCtx): { userId: string } {
@@ -63,7 +63,7 @@ export class AvatarEndpoints {
 	}
 
 	static async #getUser(userId: string, token?: string | null) {
-		const user = await AvatarEndpoints.#identity.users.getUser(userId, token ?? undefined);
+		const user = await AvatarEndpoints.identity.users.getUser(userId, token ?? undefined);
 		if (!user) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		return user;
 	}
@@ -112,14 +112,12 @@ export class AvatarEndpoints {
 		options.push({ id: "none", label: "Sin avatar" });
 
 		const fallbackLinked = user.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar);
-		const selected =
-			typeof metadata.avatarSource === "string"
-				? metadata.avatarSource
-				: metadata.customAvatar?.attachmentId
-					? "custom"
-					: fallbackLinked
-						? `linked:${fallbackLinked.provider}`
-						: "default";
+
+		let selected;
+		if (typeof metadata.avatarSource === "string") selected = metadata.avatarSource;
+		else if (metadata.customAvatar?.attachmentId) selected = "custom";
+		else if (fallbackLinked) selected = `linked:${fallbackLinked.provider}`;
+		else selected = "default";
 		return { options, selected };
 	}
 
@@ -168,7 +166,7 @@ export class AvatarEndpoints {
 		const currentMeta = (user.metadata ?? {}) as { customAvatar?: { attachmentId?: string } };
 		const previousId = currentMeta.customAvatar?.attachmentId;
 
-		await AvatarEndpoints.#identity.users.updateOwnMetadata(
+		await AvatarEndpoints.identity.users.updateOwnMetadata(
 			userId,
 			{ customAvatar: { attachmentId: confirmed.id }, avatarSource: "custom" },
 			ctx.token!
@@ -177,14 +175,13 @@ export class AvatarEndpoints {
 		if (previousId && previousId !== confirmed.id) {
 			try {
 				await manager.delete(userCtx, previousId);
-			} catch (err) {
+			} catch {
 				// no bloquear: el nuevo ya quedó persistido, simplemente queda un huérfano
 				// que el GC eventual de attachments limpiará.
-				void err;
 			}
 		}
 
-		AvatarEndpoints.#identity.permissions.invalidateUser(userId);
+		AvatarEndpoints.identity.permissions.invalidateUser(userId);
 		return { attachment: confirmed, avatarSource: "custom" };
 	}
 
@@ -205,17 +202,17 @@ export class AvatarEndpoints {
 		if (attachmentId) {
 			try {
 				await AvatarEndpoints.#manager().delete(AvatarEndpoints.#ctxFor(userId, userId), attachmentId);
-			} catch (err) {
-				void err;
+			} catch {
+				// no-op
 			}
 		}
 
 		// Si la fuente seleccionada era custom, fallback a auto (sin selección)
 		const patch: Record<string, unknown> = { customAvatar: null };
 		if (meta.avatarSource === "custom") patch.avatarSource = null;
-		await AvatarEndpoints.#identity.users.updateOwnMetadata(userId, patch, ctx.token!);
+		await AvatarEndpoints.identity.users.updateOwnMetadata(userId, patch, ctx.token!);
 
-		AvatarEndpoints.#identity.permissions.invalidateUser(userId);
+		AvatarEndpoints.identity.permissions.invalidateUser(userId);
 		return { success: true };
 	}
 
@@ -254,8 +251,8 @@ export class AvatarEndpoints {
 			throw new HttpError(400, "INVALID_SOURCE", "Fuente inválida");
 		}
 
-		await AvatarEndpoints.#identity.users.updateOwnMetadata(userId, { avatarSource: raw }, ctx.token!);
-		AvatarEndpoints.#identity.permissions.invalidateUser(userId);
+		await AvatarEndpoints.identity.users.updateOwnMetadata(userId, { avatarSource: raw }, ctx.token!);
+		AvatarEndpoints.identity.permissions.invalidateUser(userId);
 		return { avatarSource: raw };
 	}
 
@@ -273,7 +270,7 @@ export class AvatarEndpoints {
 		if (!targetUserId) throw new HttpError(400, "MISSING_FIELDS", "userId requerido");
 
 		// Lectura mínima sin permisos: el avatar es público para cualquier usuario que aparezca como autor.
-		const userModel = AvatarEndpoints.#userModel;
+		const userModel = AvatarEndpoints.userModel;
 		if (!userModel) throw new HttpError(503, "AVATAR_UPLOAD_UNAVAILABLE", "Modelo de usuarios no disponible");
 		const userDoc = await userModel.findOne({ id: targetUserId }).select({ id: 1, metadata: 1 }).lean();
 		if (!userDoc) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");

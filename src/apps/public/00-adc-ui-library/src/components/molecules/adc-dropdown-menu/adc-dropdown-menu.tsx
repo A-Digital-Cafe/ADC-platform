@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, State, Listen, Element } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, State, Listen, Element } from "@stencil/core";
 
 export interface DropdownMenuItem {
 	label: string;
@@ -74,11 +74,10 @@ export class AdcDropdownMenu {
 		if (this.hoverTimeout) clearTimeout(this.hoverTimeout);
 	}
 
-	render() {
-		void h;
-		const alignClass = this.alignState === "right" ? "right-0" : "left-0";
+	private static readonly keyPrefix = "adc-dropdown-item-";
 
-		const uuid = crypto.randomUUID();
+	render() {
+		const alignClass = this.alignState === "right" ? "right-0" : "left-0";
 
 		return (
 			<div class="relative inline-block" role="group">
@@ -102,7 +101,7 @@ export class AdcDropdownMenu {
 							if (item.to) {
 								return (
 									<a
-										key={uuid + "-item-" + index}
+										key={AdcDropdownMenu.keyPrefix + index}
 										href={item.to}
 										class="flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-accent whitespace-normal wrap-break-word"
 										role="menuitem"
@@ -115,7 +114,7 @@ export class AdcDropdownMenu {
 							}
 							return (
 								<button
-									key={uuid + "-item-" + index}
+									key={AdcDropdownMenu.keyPrefix + index}
 									type="button"
 									class="flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-accent whitespace-normal wrap-break-word"
 									role="menuitem"

@@ -33,7 +33,7 @@ export class VersionResolver {
 		}
 
 		// Exacta
-		if (!range.match(/^[\^~><=]/)) {
+		if (!/^[\^~><=]/.test(range)) {
 			return this.compareVersions(version, range) === 0;
 		}
 
