@@ -5,6 +5,7 @@ import { toast } from "../utils/toast.js";
 import { OrgFormBase } from "./OrgFormBase.js";
 import { SocialNetworksManager, type EditableOrganizationRequestSocialNetwork } from "./SocialNetworksManager.js";
 import { OrgRequestSuccess } from "./OrgRequestSuccess.js";
+import { createClientId } from "@common/utils/client-crypto.ts";
 
 interface FormData {
 	orgName: string;
@@ -26,12 +27,6 @@ type Translate = (key: string) => string;
 interface ValidationResult {
 	readonly error?: string;
 	readonly data?: CreateOrganizationRequestInput;
-}
-
-function createClientId(): string {
-	return typeof crypto !== "undefined" && "randomUUID" in crypto
-		? crypto.randomUUID()
-		: `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function isValidHttpUrl(value: string): boolean {
@@ -58,7 +53,7 @@ function validateRequestData(formData: FormData, socialNetworks: readonly Organi
 	if (!name) return { error: t("request.errors.nameRequired") };
 	if (name.length < 3) return { error: t("request.errors.nameMinLength") };
 	if (!email) return { error: t("request.errors.emailRequired") };
-	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: t("request.errors.emailInvalid") };
+	if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(email)) return { error: t("request.errors.emailInvalid") };
 	if (description.length > 2000) return { error: t("request.errors.descriptionTooLong") };
 	if (url && !isValidHttpUrl(url)) return { error: t("request.errors.urlInvalid") };
 
