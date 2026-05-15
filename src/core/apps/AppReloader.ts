@@ -14,7 +14,11 @@ export interface AppReloaderDeps {
 }
 
 export class AppReloader {
-	constructor(private readonly deps: AppReloaderDeps) {}
+	private readonly deps: Readonly<AppReloaderDeps>;
+
+	constructor(deps: AppReloaderDeps) {
+		this.deps = Object.freeze({ ...deps });
+	}
 
 	reloadAppByInstanceName = async (instanceName: string): Promise<void> => {
 		const configPath = this.deps.tracker.findConfigPathByInstance(instanceName);

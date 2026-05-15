@@ -18,26 +18,26 @@ export class ModuleRegistry {
 
 	readonly #appsRegistry = new Map<string, IApp>();
 
-	readonly #moduleStore = {
-		provider: {
+	readonly #moduleStore = Object.freeze({
+		provider: Object.freeze({
 			registry: new Map<string, IModule>(),
 			nameMap: new Map<string, string[]>(),
 			fileToUniqueKeyMap: new Map<string, string>(),
 			refCount: new Map<string, number>(),
-		},
-		utility: {
+		}),
+		utility: Object.freeze({
 			registry: new Map<string, IModule>(),
 			nameMap: new Map<string, string[]>(),
 			fileToUniqueKeyMap: new Map<string, string>(),
 			refCount: new Map<string, number>(),
-		},
-		service: {
+		}),
+		service: Object.freeze({
 			registry: new Map<string, IModule>(),
 			nameMap: new Map<string, string[]>(),
 			fileToUniqueKeyMap: new Map<string, string>(),
 			refCount: new Map<string, number>(),
-		},
-	};
+		}),
+	});
 
 	readonly #appModuleDependencies = new Map<string, Set<{ type: ModuleType; uniqueKey: string }>>();
 
@@ -449,7 +449,7 @@ export class ModuleRegistry {
 				try {
 					this.#logger.logDebug(`Deteniendo ${capitalizedModuleType} ${key}`);
 					if (instance.stop) {
-						await withTimeout(instance.stop(kernelKey), 2000, `${capitalizedModuleType} ${key}`);
+						await withTimeout(instance.stop(kernelKey), 2500, `${capitalizedModuleType} ${key}`);
 					}
 				} catch (e) {
 					this.#logger.logError(`Error deteniendo ${capitalizedModuleType} ${key}: ${e}`);

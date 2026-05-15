@@ -6,13 +6,18 @@ export type WithTimeoutFn = <T>(promise: Promise<T>, timeoutMs: number, name: st
 
 export function createWithTimeout(logger: ILogger): WithTimeoutFn {
 	return async <T>(promise: Promise<T>, timeoutMs: number, name: string): Promise<T | undefined> => {
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
 		const timeoutPromise = new Promise<undefined>((resolve) => {
-			setTimeout(() => {
+			timeoutId = setTimeout(() => {
 				logger.logWarn(`Timeout deteniendo ${name} (${timeoutMs}ms)`);
 				resolve(undefined);
 			}, timeoutMs);
 		});
-		return Promise.race([promise, timeoutPromise]);
+		try {
+			return await Promise.race([promise, timeoutPromise]);
+		} finally {
+			if (timeoutId) clearTimeout(timeoutId);
+		}
 	};
 }
 

@@ -15,7 +15,11 @@ export interface AppLifecycleDeps {
 }
 
 export class AppLifecycle {
-	constructor(private readonly deps: AppLifecycleDeps) {}
+	private readonly deps: Readonly<AppLifecycleDeps>;
+
+	constructor(deps: AppLifecycleDeps) {
+		this.deps = Object.freeze({ ...deps });
+	}
 
 	initializeAndRunApp = async (app: IApp, filePath: string, instanceName: string, configPath?: string): Promise<void> => {
 		const { logger, registry, tracker, kernelKey, isShuttingDown } = this.deps;

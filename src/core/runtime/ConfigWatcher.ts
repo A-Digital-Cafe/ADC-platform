@@ -19,7 +19,11 @@ export interface ConfigWatcherDeps {
 }
 
 export class ConfigWatcher {
-	constructor(private readonly deps: ConfigWatcherDeps) {}
+	private readonly deps: Readonly<ConfigWatcherDeps>;
+
+	constructor(deps: ConfigWatcherDeps) {
+		this.deps = Object.freeze({ ...deps });
+	}
 
 	start(): void {
 		const srcAppsPath = path.resolve(process.cwd(), "src", "apps");
