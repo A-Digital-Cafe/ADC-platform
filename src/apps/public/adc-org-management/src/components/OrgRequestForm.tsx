@@ -53,7 +53,7 @@ function validateRequestData(formData: FormData, socialNetworks: readonly Organi
 	if (!name) return { error: t("request.errors.nameRequired") };
 	if (name.length < 3) return { error: t("request.errors.nameMinLength") };
 	if (!email) return { error: t("request.errors.emailRequired") };
-	if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(email)) return { error: t("request.errors.emailInvalid") };
+	if (!/^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/u.test(email)) return { error: t("request.errors.emailInvalid") };
 	if (description.length > 2000) return { error: t("request.errors.descriptionTooLong") };
 	if (url && !isValidHttpUrl(url)) return { error: t("request.errors.urlInvalid") };
 

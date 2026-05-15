@@ -29,7 +29,7 @@ function optionalBoundedString(value: unknown, field: string, maxLength: number)
 
 function normalizeEmail(value: unknown): string {
 	const email = requireTrimmedString(value, "email").toLowerCase();
-	if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/u.test(email)) {
+	if (email.length > 254 || !/^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/u.test(email)) {
 		throw new ProjectManagerError(400, "INVALID_FIELD", "`email` no es válido");
 	}
 	return email;
