@@ -15,7 +15,7 @@ export function highlightJSFamily(
 	let placeholderIndex = 0;
 
 	// Template literals with ${} interpolation
-	const tplRegex = /`(?:\\.|[\s\S])*?`/g;
+	const tplRegex = /`(?:\\[\s\S]|[^\\`])*`/g;
 	escaped = escaped.replaceAll(tplRegex, (match) => {
 		const inner = match.slice(1, -1);
 		const exprRe = /\$\{([\s\S]*?)\}/g;
