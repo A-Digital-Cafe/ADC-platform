@@ -3,7 +3,7 @@ import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Project } from "@common/types/project-manager/Project.ts";
 import type { IssueLinkType } from "@common/types/project-manager/IssueLink.ts";
 import { LABEL_COLORS, type LabelColor } from "@common/types/project-manager/LabelColors.ts";
-import { shortId } from "../../utils/ids.ts";
+import { shortId } from "@common/utils/client-crypto.ts";
 import { pmApi } from "../../utils/pm-api.ts";
 
 interface Props {

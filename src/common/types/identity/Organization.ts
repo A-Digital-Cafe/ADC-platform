@@ -12,6 +12,7 @@ export interface Organization {
 	region: string;
 	tier: OrganizationTier;
 	status: OrganizationStatus;
+	approved: boolean;
 	permissions?: Permission[];
 	metadata?: Record<string, any>;
 	createdAt: Date;

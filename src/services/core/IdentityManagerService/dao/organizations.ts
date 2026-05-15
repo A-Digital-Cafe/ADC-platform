@@ -13,13 +13,17 @@ import type OperationsService from "../../../core/OperationsService/index.ts";
 import type { Step } from "../../../core/OperationsService/types.ts";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
 
+function isDuplicateKeyError(error: unknown): error is { code: number } {
+	return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+}
+
 export class OrgManager {
 	readonly #permissionChecker: PermissionChecker;
 	readonly #operations: OperationsService;
 	readonly #getAuthVerifier: AuthVerifierGetter;
 
 	constructor(
-		private readonly orgModel: Model<any>,
+		private readonly orgModel: Model<Organization>,
 		private readonly roleManager: RoleManager,
 		private readonly groupManager: GroupManager,
 		private readonly userManager: UserManager,
@@ -61,14 +65,15 @@ export class OrgManager {
 				region: regionPath,
 				tier: "default",
 				status: "active",
+				approved: true,
 				metadata,
 			});
 
 			this.logger.logOk(`[OrgManager] Organización creada: ${normalizedSlug} en ${regionPath}`);
 			return this.#toOrganization(org);
-		} catch (error: any) {
-			if (error.code === 11000) {
-				throw new Error(`Organización ${slug} ya existe`);
+		} catch (error) {
+			if (isDuplicateKeyError(error)) {
+				throw new Error(`Organización ${slug} ya existe`, { cause: error });
 			}
 			throw error;
 		}
@@ -93,15 +98,21 @@ export class OrgManager {
 		if (isExternalCall && !token) {
 			throw new AuthorizationError("Token de autenticación requerido", "NO_TOKEN");
 		}
-		const org = await this.orgModel.findOne({
-			$or: [{ orgId: orgIdOrSlug }, { slug: orgIdOrSlug.toLowerCase() }],
-		});
-		const resolvedOrgId = org?.orgId as string | undefined;
+
+		const org = await this.orgModel
+			.findOne({
+				$or: [{ orgId: orgIdOrSlug }, { slug: orgIdOrSlug.toLowerCase() }],
+			})
+			.lean();
+
+		if (!org) return null;
+
+		const resolvedOrgId = org.orgId;
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS, {
-			allowIf: (_uid, { orgId: tokenOrgId }) => !!resolvedOrgId && !!tokenOrgId && tokenOrgId === resolvedOrgId,
+			allowIf: (_uid, { orgId: tokenOrgId }) => !!tokenOrgId && tokenOrgId === resolvedOrgId,
 		});
 
-		return org ? this.#toOrganization(org) : null;
+		return this.#toOrganization(org);
 	}
 
 	// Resolución ligera `orgId|slug → { orgId, slug }` para construir URLs públicas.
@@ -124,7 +135,7 @@ export class OrgManager {
 			if (!regionInfo) throw new Error(`Región no existe: ${updates.region}`);
 		}
 
-		const org = await this.orgModel.findOneAndUpdate({ orgId }, { ...updates, updatedAt: new Date() }, { new: true });
+		const org = await this.orgModel.findOneAndUpdate({ orgId }, { ...updates, updatedAt: new Date() }, { new: true, lean: true });
 
 		if (!org) throw new Error(`Organización no encontrada: ${orgId}`);
 
@@ -167,7 +178,7 @@ export class OrgManager {
 	async getAllOrganizations(token?: string): Promise<Organization[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
 
-		const orgs = await this.orgModel.find({});
+		const orgs = await this.orgModel.find({}).lean();
 		return orgs.map((org: any) => this.#toOrganization(org));
 	}
 
@@ -188,16 +199,19 @@ export class OrgManager {
 	}
 
 	#toOrganization(doc: any): Organization {
+		const plainDoc = typeof doc?.toObject === "function" ? doc.toObject() : doc;
+
 		return {
-			orgId: doc.orgId,
-			slug: doc.slug,
-			region: doc.region,
-			tier: doc.tier,
-			status: doc.status,
-			permissions: doc.permissions,
-			metadata: doc.metadata,
-			createdAt: doc.createdAt,
-			updatedAt: doc.updatedAt,
+			orgId: plainDoc.orgId,
+			slug: plainDoc.slug,
+			region: plainDoc.region,
+			tier: plainDoc.tier,
+			status: plainDoc.status,
+			approved: plainDoc.approved ?? false,
+			permissions: plainDoc.permissions,
+			metadata: plainDoc.metadata,
+			createdAt: plainDoc.createdAt,
+			updatedAt: plainDoc.updatedAt,
 		};
 	}
 }

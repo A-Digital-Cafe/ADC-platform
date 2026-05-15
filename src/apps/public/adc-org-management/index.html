@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es" crystal-theme>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project Manager - ADC</title>
+    <style>
+        :root {
+            --custom-tone-1: 245;
+            --custom-tone-2: 270;
+        }
+    </style>
+    <script>
+        (function () {
+            function getCookie(name) {
+                var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+                return m ? m[2] : null;
+            }
+            var saved = getCookie('theme') || localStorage.getItem('theme');
+            var isDark = saved
+                ? saved.includes('dark')
+                : globalThis.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (isDark) {
+                document.documentElement.setAttribute('dark-mode', '');
+            } else {
+                document.documentElement.removeAttribute('dark-mode');
+            }
+        })();
+    </script>
+</head>
+
+<body>
+    <div id="root"></div>
+</body>
+
+</html>

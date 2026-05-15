@@ -226,7 +226,7 @@ export default class IdentityManagerService extends BaseService {
 			this.logger.logOk("IdentityManagerService iniciado con soporte multi-tenant y autenticación");
 		} catch (error: any) {
 			this.logger.logError("MongoDB no está disponible. IdentityManagerService requiere MongoDB.");
-			throw new Error(`IdentityManagerService requiere MongoDB: ${error.message}`);
+			throw new Error(`IdentityManagerService requiere MongoDB: ${error.message}`, { cause: error });
 		}
 	}
 

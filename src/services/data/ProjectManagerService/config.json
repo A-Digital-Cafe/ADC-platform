@@ -53,5 +53,8 @@
 			"name": "OperationsService",
 			"version": "latest"
 		}
-	]
+	],
+	"private": {
+		"organizationRequestsProjectId": "${ORG_MANAGEMENT_PROJECT_ID}"
+	}
 }

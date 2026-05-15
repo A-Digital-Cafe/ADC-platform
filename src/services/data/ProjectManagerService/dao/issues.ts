@@ -58,13 +58,16 @@ function isAssignee(issue: Issue | null | undefined, userId: string, groupIds: s
 
 export class IssueManager {
 	readonly #permissionChecker: PermissionChecker;
+	readonly #kernelKey: symbol;
 
 	constructor(
 		private readonly issueModel: Model<Issue>,
 		private readonly projectInternals: ProjectInternals,
+		kernelKey: symbol,
 		private readonly logger: ILogger,
 		getAuthVerifier: AuthVerifierGetter = () => null
 	) {
+		this.#kernelKey = kernelKey;
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "IssueManager", PM_RESOURCE_NAME);
 	}
 
@@ -73,7 +76,15 @@ export class IssueManager {
 			ownerId: project.ownerId,
 			allowIf: projectOwnerAllowIf(project, caller),
 		});
+		return this.#createWithReporter(project, input, reporterId);
+	}
 
+	async createInternal(kernelKey: symbol, project: Project, input: Partial<Issue> & Pick<Issue, "title">, reporterId: string): Promise<Issue> {
+		if (kernelKey !== this.#kernelKey) throw new Error("Acceso denegado: kernel key inválida");
+		return this.#createWithReporter(project, input, reporterId);
+	}
+
+	async #createWithReporter(project: Project, input: Partial<Issue> & Pick<Issue, "title">, reporterId: string): Promise<Issue> {
 		const { maxIssuesPerProject } = getPMTierLimits();
 		const count = await this.issueModel.countDocuments({ projectId: project.id });
 		if (count >= maxIssuesPerProject) {

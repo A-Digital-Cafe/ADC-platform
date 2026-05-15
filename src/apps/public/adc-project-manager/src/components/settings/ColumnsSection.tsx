@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Project, KanbanColumn, ProjectSettings } from "@common/types/project-manager/Project.ts";
-import { shortId } from "../../utils/ids.ts";
+import { shortId } from "@common/utils/client-crypto.ts";
 import { pmApi } from "../../utils/pm-api.ts";
 
 interface Props {
