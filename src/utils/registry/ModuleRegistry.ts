@@ -45,8 +45,12 @@ export class ModuleRegistry {
 		this.#kernelKey = kernelKey;
 	}
 
-	get kernelKey(): symbol {
-		return this.#kernelKey;
+	/**
+	 * Verifica que la kernelKey provista coincida con la registrada en construcción.
+	 * No expone el símbolo: úsalo para gating de operaciones privilegiadas.
+	 */
+	verifyKernelKey(candidate: symbol): boolean {
+		return candidate === this.#kernelKey;
 	}
 
 	setLoadingContext(context: string | null): void {
@@ -117,7 +121,7 @@ export class ModuleRegistry {
 		if (!nameMap.has(name)) {
 			nameMap.set(name, []);
 		}
-		const keys = nameMap.get(name)!;
+		const keys = nameMap.get(name) ?? [];
 		if (!keys.includes(uniqueKey)) {
 			keys.push(uniqueKey);
 		}
@@ -128,10 +132,12 @@ export class ModuleRegistry {
 		}
 
 		if (effectiveAppName) {
-			if (!this.#appModuleDependencies.has(effectiveAppName)) {
-				this.#appModuleDependencies.set(effectiveAppName, new Set());
+			let deps = this.#appModuleDependencies.get(effectiveAppName);
+			if (!deps) {
+				deps = new Set();
+				this.#appModuleDependencies.set(effectiveAppName, deps);
 			}
-			this.#appModuleDependencies.get(effectiveAppName)!.add({ type: moduleType, uniqueKey });
+			deps.add({ type: moduleType, uniqueKey });
 		}
 	}
 
@@ -257,7 +263,7 @@ export class ModuleRegistry {
 		return this.#appsRegistry.delete(name);
 	}
 
-	getAppsRegistry(): Map<string, IApp> {
+	getAppsRegistry(): ReadonlyMap<string, IApp> {
 		return this.#appsRegistry;
 	}
 
@@ -274,11 +280,11 @@ export class ModuleRegistry {
 		const effectiveAppName = appName || this.#currentLoadingContext;
 
 		if (effectiveAppName) {
-			if (!this.#appModuleDependencies.has(effectiveAppName)) {
-				this.#appModuleDependencies.set(effectiveAppName, new Set());
+			let deps = this.#appModuleDependencies.get(effectiveAppName);
+			if (!deps) {
+				deps = new Set();
+				this.#appModuleDependencies.set(effectiveAppName, deps);
 			}
-
-			const deps = this.#appModuleDependencies.get(effectiveAppName)!;
 			const depExists = Array.from(deps).some((d) => d.type === moduleType && d.uniqueKey === uniqueKey);
 
 			if (!depExists) {
@@ -291,66 +297,144 @@ export class ModuleRegistry {
 	}
 
 	async cleanupAppModules(appName: string, kernelKey: symbol): Promise<void> {
+		if (!this.verifyKernelKey(kernelKey)) {
+			throw new Error("cleanupAppModules: kernelKey inválida.");
+		}
 		const dependencies = this.#appModuleDependencies.get(appName);
 		if (!dependencies) return;
 
 		for (const { type, uniqueKey } of dependencies) {
-			const refCountMap = this.#getRefCountMap(type);
-			const currentCount = refCountMap.get(uniqueKey) || 0;
-
-			if (currentCount > 1) {
-				refCountMap.set(uniqueKey, currentCount - 1);
-				this.#logger.logDebug(`Referencias decrementadas para ${type} ${uniqueKey}: ${currentCount - 1}`);
-			} else {
-				const registry = this.#getRegistry(type);
-				const module = registry.get(uniqueKey);
-
-				if (module) {
-					this.#logger.logDebug(`Limpiando ${type}: ${uniqueKey}`);
-					await module.stop?.(kernelKey);
-					registry.delete(uniqueKey);
-					refCountMap.delete(uniqueKey);
-
-					const nameMap = this.#getNameMap(type);
-					for (const [name, keys] of nameMap.entries()) {
-						const index = keys.indexOf(uniqueKey);
-						if (index > -1) {
-							keys.splice(index, 1);
-							if (keys.length === 0) {
-								nameMap.delete(name);
-							}
-						}
-					}
-				}
-			}
+			await this.#releaseAppDependency(type, uniqueKey, kernelKey);
 		}
 
 		this.#appModuleDependencies.delete(appName);
 	}
 
-	async unloadModule(moduleType: ModuleType, kernelKey: symbol, filePath: string): Promise<void> {
-		const fileMap = this.getFileToUniqueKeyMap(moduleType);
-		const uniqueKey = fileMap.get(filePath);
-		if (uniqueKey) {
-			const registry = this.#getRegistry(moduleType);
-			const module = registry.get(uniqueKey) as Module;
-			if (module) {
-				const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
-				this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name}`);
-				await module.stop?.(kernelKey);
-				registry.delete(uniqueKey);
+	async #releaseAppDependency(type: ModuleType, uniqueKey: string, kernelKey: symbol): Promise<void> {
+		const refCountMap = this.#getRefCountMap(type);
+		const currentCount = refCountMap.get(uniqueKey) || 0;
 
-				const nameMap = this.#getNameMap(moduleType);
-				const keys = nameMap.get(module.name);
-				if (keys) {
-					const index = keys.indexOf(uniqueKey);
-					if (index > -1) {
-						keys.splice(index, 1);
-					}
+		if (currentCount > 1) {
+			refCountMap.set(uniqueKey, currentCount - 1);
+			this.#logger.logDebug(`Referencias decrementadas para ${type} ${uniqueKey}: ${currentCount - 1}`);
+			return;
+		}
+
+		await this.#destroyModuleByKey(type, uniqueKey, kernelKey);
+	}
+
+	async #destroyModuleByKey(type: ModuleType, uniqueKey: string, kernelKey: symbol): Promise<void> {
+		const registry = this.#getRegistry(type);
+		const module = registry.get(uniqueKey);
+		if (!module) return;
+
+		this.#logger.logDebug(`Limpiando ${type}: ${uniqueKey}`);
+		await module.stop?.(kernelKey);
+		registry.delete(uniqueKey);
+		this.#getRefCountMap(type).delete(uniqueKey);
+		this.#removeFromNameMap(type, uniqueKey);
+	}
+
+	#removeFromNameMap(type: ModuleType, uniqueKey: string): void {
+		const nameMap = this.#getNameMap(type);
+		for (const [name, keys] of nameMap.entries()) {
+			const index = keys.indexOf(uniqueKey);
+			if (index === -1) continue;
+			keys.splice(index, 1);
+			if (keys.length === 0) nameMap.delete(name);
+		}
+	}
+
+	getUniqueKeysByName(moduleType: ModuleType, name: string): string[] {
+		return [...(this.#getNameMap(moduleType).get(name) ?? [])];
+	}
+
+	getDependentAppNames(moduleType: ModuleType, uniqueKey: string): string[] {
+		const result: string[] = [];
+		for (const [appName, deps] of this.#appModuleDependencies.entries()) {
+			for (const dep of deps) {
+				if (dep.type === moduleType && dep.uniqueKey === uniqueKey) {
+					result.push(appName);
+					break;
 				}
 			}
-			fileMap.delete(filePath);
 		}
+		return result;
+	}
+
+	getDependentAppNamesByModuleName(moduleType: ModuleType, name: string): string[] {
+		const keys = new Set(this.getUniqueKeysByName(moduleType, name));
+		if (keys.size === 0) return [];
+		const result = new Set<string>();
+		for (const [appName, deps] of this.#appModuleDependencies.entries()) {
+			for (const dep of deps) {
+				if (dep.type === moduleType && keys.has(dep.uniqueKey)) {
+					result.add(appName);
+					break;
+				}
+			}
+		}
+		return [...result];
+	}
+
+	async unloadModuleByUniqueKey(moduleType: ModuleType, kernelKey: symbol, uniqueKey: string): Promise<void> {
+		if (!this.verifyKernelKey(kernelKey)) {
+			throw new Error("unloadModuleByUniqueKey: kernelKey inválida.");
+		}
+		const registry = this.#getRegistry(moduleType);
+		const module = registry.get(uniqueKey);
+		if (!module) return;
+		const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
+		this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name} (${uniqueKey})`);
+		await module.stop?.(kernelKey);
+		registry.delete(uniqueKey);
+		this.#getRefCountMap(moduleType).delete(uniqueKey);
+
+		const nameMap = this.#getNameMap(moduleType);
+		const keys = nameMap.get(module.name);
+		if (keys) {
+			const index = keys.indexOf(uniqueKey);
+			if (index > -1) keys.splice(index, 1);
+			if (keys.length === 0) nameMap.delete(module.name);
+		}
+
+		const fileMap = this.getFileToUniqueKeyMap(moduleType);
+		for (const [filePath, key] of fileMap.entries()) {
+			if (key === uniqueKey) fileMap.delete(filePath);
+		}
+	}
+
+	async unloadModulesByName(moduleType: ModuleType, kernelKey: symbol, name: string): Promise<void> {
+		const keys = this.getUniqueKeysByName(moduleType, name);
+		for (const uniqueKey of keys) {
+			await this.unloadModuleByUniqueKey(moduleType, kernelKey, uniqueKey);
+		}
+	}
+
+	async unloadModule(moduleType: ModuleType, kernelKey: symbol, filePath: string): Promise<void> {
+		if (!this.verifyKernelKey(kernelKey)) {
+			throw new Error("unloadModule: kernelKey inválida.");
+		}
+		const fileMap = this.getFileToUniqueKeyMap(moduleType);
+		const uniqueKey = fileMap.get(filePath);
+		if (!uniqueKey) return;
+
+		const registry = this.#getRegistry(moduleType);
+		const module = registry.get(uniqueKey);
+		if (module) {
+			const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
+			this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name}`);
+			await module.stop?.(kernelKey);
+			registry.delete(uniqueKey);
+
+			const nameMap = this.#getNameMap(moduleType);
+			const keys = nameMap.get(module.name);
+			if (keys) {
+				const index = keys.indexOf(uniqueKey);
+				if (index > -1) keys.splice(index, 1);
+			}
+		}
+		fileMap.delete(filePath);
 	}
 
 	async stopAllModules(
