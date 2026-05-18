@@ -1,7 +1,7 @@
 import { Component, Prop, State } from "@stencil/core";
 import { IS_DEV } from "../../../utils/url.js";
 
-type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "help";
+type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help";
 
 interface ADCGlobal {
 	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
@@ -18,6 +18,7 @@ const HELP_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string }> = [
 	{ key: "terms", path: "/terms" },
 	{ key: "cookies", path: "/cookies" },
 	{ key: "contact", path: "/contact" },
+	{ key: "team", path: "/team" },
 	{ key: "help", path: "/" },
 ];
 
@@ -28,6 +29,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		terms: "Términos",
 		cookies: "Cookies",
 		contact: "Contacto",
+		team: "Equipo",
 		help: "Ayuda",
 	},
 	en: {
@@ -36,6 +38,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		terms: "Terms",
 		cookies: "Cookies",
 		contact: "Contact",
+		team: "Team",
 		help: "Help",
 	},
 };

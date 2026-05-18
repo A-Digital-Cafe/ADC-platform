@@ -56,6 +56,7 @@ export default {
 		terms: "Términos",
 		cookies: "Cookies",
 		contact: "Contacto",
+		team: "Equipo",
 		help: "Ayuda"
 	}
 };

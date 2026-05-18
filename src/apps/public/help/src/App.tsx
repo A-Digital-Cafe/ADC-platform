@@ -12,6 +12,7 @@ import { AuthorityRequestsPage } from "./pages/AuthorityRequestsPage";
 import { TransparencyPage } from "./pages/TransparencyPage";
 import { ContactPage } from "./pages/ContactPage";
 import { RoadmapPage } from "./pages/RoadmapPage";
+import { TeamPage } from "./pages/TeamPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
 const HELP_ROUTES = new Set([
@@ -25,6 +26,7 @@ const HELP_ROUTES = new Set([
 	"/authority-requests",
 	"/transparency",
 	"/contact",
+	"/team",
 	"/roadmap",
 ]);
 
@@ -76,6 +78,8 @@ function renderPage(path: string) {
 			return <TransparencyPage />;
 		case "/contact":
 			return <ContactPage />;
+		case "/team":
+			return <TeamPage />;
 		case "/roadmap":
 			return <RoadmapPage />;
 		default:
