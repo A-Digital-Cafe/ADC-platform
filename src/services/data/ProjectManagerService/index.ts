@@ -1,7 +1,7 @@
 import type MongoProvider from "../../../providers/object/mongo/index.js";
 import { BaseService } from "../../BaseService.js";
 import { projectSchema, sprintSchema, milestoneSchema, issueSchema } from "./domain/index.js";
-import { ProjectManager, SprintManager, MilestoneManager, IssueManager, OrganizationRequestManager } from "./dao/index.js";
+import { ProjectManager, SprintManager, MilestoneManager, IssueManager, OrganizationRequestManager, SupportTicketManager } from "./dao/index.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
 import type { EndpointCtx } from "../../core/EndpointManagerService/index.js";
@@ -14,6 +14,7 @@ import { IssueDescriptionEndpoints } from "./endpoints/issueDescription.js";
 import { IssueCommentsEndpoints } from "./endpoints/comments.js";
 import { IssueAttachmentsEndpoints } from "./endpoints/attachments.js";
 import { OrganizationRequestEndpoints } from "./endpoints/orgRequests.js";
+import { SupportTicketEndpoints } from "./endpoints/supportTickets.js";
 import { PMScopes } from "@common/types/project-manager/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
@@ -42,6 +43,7 @@ export default class ProjectManagerService extends BaseService {
 	#milestoneManager: MilestoneManager | null = null;
 	#issueManager: IssueManager | null = null;
 	#organizationRequestManager: OrganizationRequestManager | null = null;
+	#supportTicketManager: SupportTicketManager | null = null;
 	#issueAttachmentsManager: AttachmentsManager | null = null;
 	#issueCommentsManager: CommentsManager | null = null;
 	#issueDescriptionDrafts: DraftsRepository | null = null;
@@ -70,6 +72,7 @@ export default class ProjectManagerService extends BaseService {
 			IssueCommentsEndpoints,
 			IssueAttachmentsEndpoints,
 			OrganizationRequestEndpoints,
+			SupportTicketEndpoints,
 		],
 	})
 	async start(kernelKey: symbol): Promise<void> {
@@ -95,6 +98,11 @@ export default class ProjectManagerService extends BaseService {
 			this.#projectManager,
 			this.#issueManager,
 			(this.config?.private ?? {}) as { organizationRequestsProjectId?: string }
+		);
+		this.#supportTicketManager = new SupportTicketManager(
+			this.#projectManager,
+			this.#issueManager,
+			(this.config?.private ?? {}) as { supportTicketsProjectId?: string }
 		);
 
 		this.#authVerifier = this.#identity.createAuthVerifier();
@@ -148,6 +156,7 @@ export default class ProjectManagerService extends BaseService {
 		IssueCommentsEndpoints.init(this, kernelKey);
 		IssueAttachmentsEndpoints.init(this, kernelKey);
 		OrganizationRequestEndpoints.init(this, kernelKey);
+		SupportTicketEndpoints.init(this, kernelKey);
 
 		this.logger.logOk("ProjectManagerService iniciado");
 	}
@@ -252,6 +261,10 @@ export default class ProjectManagerService extends BaseService {
 	get organizationRequests(): OrganizationRequestManager {
 		if (!this.#organizationRequestManager) throw new Error("OrganizationRequestManager not initialized");
 		return this.#organizationRequestManager;
+	}
+	get supportTickets(): SupportTicketManager {
+		if (!this.#supportTicketManager) throw new Error("SupportTicketManager not initialized");
+		return this.#supportTicketManager;
 	}
 	get identity(): IdentityManagerService {
 		if (!this.#identity) throw new Error("IdentityManagerService not initialized");

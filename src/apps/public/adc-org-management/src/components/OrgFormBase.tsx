@@ -23,12 +23,15 @@ export function OrgFormBase({ formData, error, onFormChange, onClearError }: Org
 	useEffect(() => {
 		const setupInputListener = (ref: RefObject<any>, field: keyof FormData) => {
 			if (ref.current) {
-				const handler = (e: CustomEvent<string>) => {
-					onFormChange(field, e.detail);
+				// Acceder al <input> nativo dentro de adc-input
+				const input = ref.current.querySelector("input") || ref.current;
+				const handler = (e: Event) => {
+					const value = (e.target as HTMLInputElement).value;
+					onFormChange(field, value);
 					onClearError();
 				};
-				ref.current.addEventListener("adcChange", handler);
-				return () => ref.current?.removeEventListener("adcChange", handler);
+				input.addEventListener("input", handler);
+				return () => input?.removeEventListener("input", handler);
 			}
 		};
 
