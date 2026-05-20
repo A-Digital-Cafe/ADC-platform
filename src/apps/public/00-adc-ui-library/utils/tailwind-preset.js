@@ -39,6 +39,13 @@ export default {
 				twarn: "var(--c-twarn)",
 				danger: "var(--c-danger)",
 				tdanger: "var(--c-tdanger)",
+
+				// App accent colors 
+				accentorange: "var(--c-app-orange)",
+				accentpurple: "var(--c-app-purple)",
+				accentcyan: "var(--c-app-cyan)",
+				accentred: "var(--c-app-red)",
+				accentgreen: "var(--c-app-green)",
 			},
 			fontFamily: {
 				heading: ["Fredoka", "sans-serif"],
