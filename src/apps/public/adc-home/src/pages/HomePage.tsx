@@ -1,4 +1,3 @@
-import "@ui-library/utils/react-jsx";
 import { MicroappCard } from "../components/MicroappCard";
 
 type AccentColor = "text-accentorange" | "text-accentcyan" | "text-accentpurple" | "text-accentgreen" | "text-accentred";
