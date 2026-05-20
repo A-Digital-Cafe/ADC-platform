@@ -1,57 +1,11 @@
 import "@ui-library/utils/react-jsx";
 import PageShell from "../components/PageShell";
-
-type RoleColor = "text-accentorange" | "text-accentcyan" | "text-accentpurple";
-
-interface TeamMember {
-	name: string;
-	username?: string;
-	role: string;
-	description?: string;
-	image?: string;
-	roleColor?: RoleColor;
-}
+import { TeamMember, FOUNDER, DEV_MEMBER, COMMUNITY_MEMBERS } from "../data/team";
 
 interface TeamCardProps {
 	member: TeamMember;
 	initials: string;
 }
-
-const FOUNDER: TeamMember = {
-	name: "Abigail Palmero",
-	username: "@abbytec",
-	role: "Founder / CEO",
-	roleColor: "text-accentorange",
-	description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-	image: "",
-};
-
-const DEV_MEMBER: TeamMember = {
-	name: "Ailen Franco",
-	role: "Dev Contributor",
-	roleColor: "text-accentpurple",
-	description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-	image: "",
-};
-
-const COMMUNITY_MEMBERS: TeamMember[] = [
-	{
-		name: "Salwa",
-		username: "@SoySalwa",
-		role: "Discord Moderator",
-		roleColor: "text-accentcyan",
-		description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-		image: "",
-	},
-	{
-		name: "Hormiga Dev",
-		username: "@HormigaDev",
-		role: "Discord Moderator",
-		roleColor: "text-accentcyan",
-		description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-		image: "",
-	},
-];
 
 function getInitials(name: string) {
 	return name
