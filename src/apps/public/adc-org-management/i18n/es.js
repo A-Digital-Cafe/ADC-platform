@@ -116,5 +116,26 @@ export default {
 			errorMessage: "Error al crear solicitud"
 		},
 		info: "Todas las acciones crean tickets para revisión"
+	},
+	landing: {
+		heroTitle: "Panel para solicitar creación de organizaciones",
+		heroDescription: "Solicita nuevas organizaciones, invita miembros, configura ajustes y colabora con tu equipo. Todo en una plataforma centralizada.",
+		processTitle: "Cómo Funciona",
+		steps: {
+			request: {
+				title: "Solicita tu Organización",
+				description: "Completa un formulario simple con los detalles de tu organización y envíalo para revisión."
+			},
+			review: {
+				title: "Revisión del Equipo Administrativo",
+				description: "Nuestro equipo administrativo revisa tu solicitud y aprueba tu nueva organización."
+			},
+			manage: {
+				title: "Comienza a Gestionar",
+				description: "Accede a tu organización, invita miembros del equipo y comienza a colaborar."
+			}
+		},
+		readyDescription: "Inicia sesión para enviar tu solicitud de organización y únete a la plataforma.",
+		footerInfo: "¿Ya tienes una organización? Inicia sesión para gestionarla desde tu panel."
 	}
 };

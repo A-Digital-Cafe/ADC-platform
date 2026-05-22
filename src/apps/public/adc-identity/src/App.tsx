@@ -6,6 +6,7 @@ import { identityApi } from "./utils/identity-api.ts";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Organization } from "@common/types/identity/Organization.ts";
 import { getVisibleTabs, type IdentityTab } from "./utils/permissions.ts";
+import { LandingView } from "./pages/LandingView.tsx";
 import { UsersView } from "./pages/UsersView.tsx";
 import { RolesView } from "./pages/RolesView.tsx";
 import { GroupsView } from "./pages/GroupsView.tsx";
@@ -143,14 +144,11 @@ export default function App() {
 		);
 	}
 
-	// Unauthorized
+	// Unauthorized or no visible tabs - show landing view
 	if (unauthorized || visibleTabs.length === 0) {
 		return (
 			<adc-layout>
-				<div className="max-w-6xl mx-auto px-4 py-16 text-center">
-					<h1 className="font-heading text-2xl font-bold text-text mb-4">{t("common.unauthorized")}</h1>
-					<p className="text-muted">{t("common.noPermissions")}</p>
-				</div>
+				<LandingView />
 			</adc-layout>
 		);
 	}

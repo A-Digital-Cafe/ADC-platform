@@ -19,14 +19,14 @@ export default {
 		loading: "Loading...",
 		organization: "Organization",
 		orgFilter: "Filter by organization",
-		globalView: "Global (no organization)"
+		globalView: "Global (no organization)",
 	},
 	tabs: {
 		users: "Users",
 		roles: "Roles",
 		groups: "Groups",
 		organizations: "Organizations",
-		regions: "Regions"
+		regions: "Regions",
 	},
 	users: {
 		username: "Username",
@@ -39,7 +39,7 @@ export default {
 		searchPlaceholder: "Search users...",
 		addUser: "Add User",
 		editUser: "Edit User",
-		deleteConfirm: "Are you sure you want to delete user \"{{name}}\"? This action cannot be undone.",
+		deleteConfirm: 'Are you sure you want to delete user "{{name}}"? This action cannot be undone.',
 		noUsers: "No users found",
 		usernamePlaceholder: "username",
 		emailPlaceholder: "user@example.com",
@@ -47,7 +47,7 @@ export default {
 		passwordPlaceholder: "Minimum 8 characters",
 		selectRoles: "Select roles",
 		searchRoles: "Search roles...",
-		never: "Never"
+		never: "Never",
 	},
 	roles: {
 		name: "Name",
@@ -60,13 +60,13 @@ export default {
 		searchPlaceholder: "Search roles...",
 		addRole: "Add Role",
 		editRole: "Edit Role",
-		deleteConfirm: "Are you sure you want to delete role \"{{name}}\"? Users with this role will lose associated permissions.",
+		deleteConfirm: 'Are you sure you want to delete role "{{name}}"? Users with this role will lose associated permissions.',
 		noRoles: "No roles found",
 		namePlaceholder: "Role name",
 		descriptionPlaceholder: "Role description",
 		scope: "Scope",
 		globalScope: "Global",
-		orgScope: "Organization"
+		orgScope: "Organization",
 	},
 	groups: {
 		name: "Name",
@@ -77,7 +77,7 @@ export default {
 		searchPlaceholder: "Search groups...",
 		addGroup: "Add Group",
 		editGroup: "Edit Group",
-		deleteConfirm: "Are you sure you want to delete group \"{{name}}\"? Members will lose group-inherited roles.",
+		deleteConfirm: 'Are you sure you want to delete group "{{name}}"? Members will lose group-inherited roles.',
 		noGroups: "No groups found",
 		namePlaceholder: "Group name",
 		descriptionPlaceholder: "Group description",
@@ -86,7 +86,7 @@ export default {
 		noMembers: "No members in this group",
 		scope: "Scope",
 		globalScope: "Global",
-		orgScope: "Organization"
+		orgScope: "Organization",
 	},
 	organizations: {
 		slug: "Slug",
@@ -97,19 +97,19 @@ export default {
 		searchPlaceholder: "Search organizations...",
 		addOrganization: "Add Organization",
 		editOrganization: "Edit Organization",
-		deleteConfirm: "Are you sure you want to delete organization \"{{slug}}\"? This action cannot be undone.",
+		deleteConfirm: 'Are you sure you want to delete organization "{{slug}}"? This action cannot be undone.',
 		noOrganizations: "No organizations found",
 		slugPlaceholder: "my-organization",
 		tierPlaceholder: "e.g. free, pro, enterprise",
 		statuses: {
 			active: "Active",
 			inactive: "Inactive",
-			blocked: "Blocked"
+			blocked: "Blocked",
 		},
 		members: "Members",
 		manageMembers: "Members of {{slug}}",
 		searchUserPlaceholder: "Search users by name or email...",
-		noMembers: "No members in this organization"
+		noMembers: "No members in this organization",
 	},
 	regions: {
 		path: "Path",
@@ -122,12 +122,12 @@ export default {
 		searchPlaceholder: "Search regions...",
 		addRegion: "Add Region",
 		editRegion: "Edit Region",
-		deleteConfirm: "Are you sure you want to delete region \"{{path}}\"? Organizations in this region may be affected.",
+		deleteConfirm: 'Are you sure you want to delete region "{{path}}"? Organizations in this region may be affected.',
 		noRegions: "No regions found",
 		pathPlaceholder: "region/subregion",
 		pathHint: "Format: region/subregion (e.g. us/east, eu/west)",
 		objectConnectionUri: "Database URI",
-		cacheConnectionUri: "Cache URI"
+		cacheConnectionUri: "Cache URI",
 	},
 	permissions: {
 		title: "Permissions",
@@ -146,7 +146,7 @@ export default {
 		community: {
 			content: "Content",
 			publish_status: "Publish status",
-			social: "Social networks"
+			social: "Social networks",
 		},
 		"project-manager": {
 			projects: "Projects",
@@ -156,7 +156,7 @@ export default {
 			custom_fields: "Custom fields",
 			attachments: "Attachments",
 			settings: "Settings",
-			stats: "Stats"
+			stats: "Stats",
 		},
 		toggleAll: "Toggle entire column",
 		toggleRow: "Toggle entire row",
@@ -167,13 +167,33 @@ export default {
 		predefinedReadonly: "Predefined role permissions cannot be modified.",
 		directTitle: "Direct Permissions",
 		directHint: "Permissions assigned directly to this user (added on top of role/group-inherited ones).",
-		directHintGroup: "Permissions assigned directly to this group (added on top of role-inherited ones)."
+		directHintGroup: "Permissions assigned directly to this group (added on top of role-inherited ones).",
+	},
+	landing: {
+		heroAria: "Hero section",
+		heroTitle: "Identity Management",
+		heroSubtitle: "Manage users, roles, groups and their permissions within the platform.",
+		featuresAria: "Features section",
+		features: {
+			users: {
+				title: "Users",
+			},
+			roles: {
+				title: "Roles",
+			},
+			groups: {
+				title: "Groups",
+			},
+		},
+		howAria: "Getting started section",
+		howTitle: "Getting Started",
+		signInHint: "Sign in to access your identity management panel.",
 	},
 	resources: {
 		identity: "Identity",
 		content: "Content",
 		community: "Community",
-		"project-manager": "Project Manager"
+		"project-manager": "Project Manager",
 	},
 	errors: {
 		// Access / org isolation
@@ -192,6 +212,6 @@ export default {
 		REGION_NOT_FOUND: "Region not found",
 		// Validation
 		MISSING_FIELDS: "Required fields are missing",
-		INVALID_ROLE: "Invalid role"
-	}
+		INVALID_ROLE: "Invalid role",
+	},
 };
