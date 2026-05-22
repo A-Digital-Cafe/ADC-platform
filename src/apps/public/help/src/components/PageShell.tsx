@@ -69,7 +69,7 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 	const declarationLabel = declaration ? tx(`declaration.${declaration}`, DECLARATION_LABEL[declaration]) : undefined;
 
 	return (
-		<article className="max-w-4xl mx-auto pb-16">
+		<article className="max-w-5xl mx-auto pb-16">
 			{breadcrumb && breadcrumb.length > 0 && (
 				<adc-top-breadcrumb ref={breadcrumbRef} items={breadcrumbItems} back-label={tx("common.back", "Volver")} />
 			)}

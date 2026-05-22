@@ -15,8 +15,7 @@ function getInitials(name: string) {
 }
 
 function TeamCard({ member, initials }: TeamCardProps) {
-	const cardClassName = `group rounded-lg border border-accent/10 bg-surface/50 backdrop-blur-sm transition-all duration-300 text-center shadow-sm max-w-[170px]`;
-
+	const cardClassName = `group rounded-lg border border-accent/10 bg-surface/50 backdrop-blur-sm transition-all duration-300 text-center shadow-sm max-w-[180px]`;
 	const avatarClassName = `mx-auto rounded-full overflow-hidden bg-primary text-tprimary flex items-center justify-center font-bold w-24 h-24 text-lg`;
 
 	return (
@@ -26,11 +25,9 @@ function TeamCard({ member, initials }: TeamCardProps) {
 				<div className={avatarClassName}>
 					{member.image ? <img src={member.image} alt={member.name} className="w-full h-full object-cover" /> : initials}
 				</div>
-
 				{/* Info */}
 				<div className="mt-1.5">
 					<h2 className={`font-heading !text-xl font-medium !m-0`}>{member.name}</h2>
-
 					{member.username && <p className="text-text/50 font-mono text-[8px] !text-sm !m-0">{member.username}</p>}
 
 					<p className={`!m-0 ${member.roleColor}`}>{member.role}</p>
@@ -59,7 +56,7 @@ export function TeamPage() {
 						<adc-divider text="Personal"></adc-divider>
 					</div>
 
-					<div className="flex gap-4 flex-wrap justify-center">
+					<div className="flex gap-4 flex-wrap justify-evenly">
 						<TeamCard member={FOUNDER} initials={getInitials(FOUNDER.name)} />
 						<TeamCard member={DEV_MEMBER} initials={getInitials(DEV_MEMBER.name)} />
 						{COMMUNITY_MEMBERS.map((member, idx) => (
