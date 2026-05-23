@@ -25,9 +25,8 @@
 	},
 	"services": [
 		{
-			"name": "data/content-service",
-			"version": "latest",
-			"language": "typescript"
+			"name": "data/ProjectManagerService",
+			"version": "latest"
 		}
 	]
 }

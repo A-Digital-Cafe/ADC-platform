@@ -1,23 +1,16 @@
-import React, { useState, useRef, useEffect, type ReactElement, type RefObject } from "react";
+import React, { useState, useRef, useEffect, type ReactElement } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
+import { createInputListener, createCustomEventListener } from "../utils/formListeners.js";
 import { ticketApi, type CreateSupportTicketInput, type SupportTicketType } from "../utils/ticket-api";
-import { TICKET_TYPE_LABELS, SUPPORT_TICKET_CONSTRAINTS, EMAIL_REGEX } from "@common/types/project-manager/SupportTicket.ts";
+import {
+	TICKET_TYPE_LABELS,
+	SUPPORT_TICKET_CONSTRAINTS,
+	SUPPORT_TICKET_VALIDATORS,
+	validateStringField,
+	type SelectOption,
+} from "@common/types/project-manager/SupportTicket.ts";
 import { TicketSuccess } from "./TicketSuccess.js";
 import { toast } from "../utils/toast";
-// Tipos específicos para Web Components
-interface AdcSelectElement extends HTMLElement {
-	value: SupportTicketType;
-}
-
-interface AdcInputElement extends HTMLElement {
-	value: string;
-	querySelector(selector: "input"): HTMLInputElement | null;
-}
-
-interface AdcTextareaElement extends HTMLElement {
-	value: string;
-	querySelector(selector: "textarea"): HTMLTextAreaElement | null;
-}
 
 interface FormData {
 	type: SupportTicketType;
@@ -37,14 +30,6 @@ interface CreateTicketFormProps {
 	readonly onSuccess?: () => void;
 	readonly onCancel?: () => void;
 }
-
-interface SelectOption {
-	value: SupportTicketType;
-	label: string;
-}
-
-// Usar constantes de backend para mantener sincronización
-const TICKET_CONSTRAINTS = SUPPORT_TICKET_CONSTRAINTS;
 
 // Función para obtener datos de formulario por defecto
 function getDefaultFormData(): FormData {
@@ -66,9 +51,27 @@ function normalizeFormData(formData: FormData): FormData {
 	};
 }
 
-// Función tipada para obtener mensaje de error
+// Función tipada para obtener mensaje de error (traduce códigos del backend)
 function getErrorMessage(err: unknown, t: Translate): string {
-	if (err instanceof Error) return err.message;
+	if (err instanceof Error) {
+		const message = err.message;
+
+		// Detecta formato de código de error: "field:reason" (ej: "title:minLength")
+		if (message.includes(":") && !message.includes(" ") && !message.includes("http")) {
+			const [field, code] = message.split(":");
+			// Convierte "minLength" a "MinLength" para la clave i18n
+			const codePascal = code.charAt(0).toUpperCase() + code.slice(1);
+			const translationKey = `tickets.errors.${field}${codePascal}`;
+			const translated = t(translationKey);
+
+			// Si la traducción existe (no devuelve la misma clave), usa la traducción
+			if (translated !== translationKey) {
+				return translated;
+			}
+		}
+
+		return message;
+	}
 	if (typeof err === "string") return err;
 	return t("tickets.errors.submitError") || "Error creating ticket";
 }
@@ -77,25 +80,41 @@ function validateTicketData(formData: Readonly<FormData>, t: Translate): Validat
 	const normalized = normalizeFormData(formData);
 	const { title, email, description } = normalized;
 
-	if (!title) return { error: t("tickets.errors.titleRequired") || "Title is required" };
-	if (title.length < TICKET_CONSTRAINTS.title.min)
-		return { error: t("tickets.errors.titleMinLength") || `Title must be at least ${TICKET_CONSTRAINTS.title.min} characters` };
-	if (title.length > TICKET_CONSTRAINTS.title.max)
-		return { error: t("tickets.errors.titleMaxLength") || `Title must not exceed ${TICKET_CONSTRAINTS.title.max} characters` };
-
-	if (!email) return { error: t("tickets.errors.emailRequired") || "Email is required" };
-	if (email.length > TICKET_CONSTRAINTS.email.max) return { error: t("tickets.errors.emailTooLong") || "Email is too long" };
-	if (!EMAIL_REGEX.test(email)) return { error: t("tickets.errors.emailInvalid") || "Invalid email address" };
-
-	if (!description) return { error: t("tickets.errors.descriptionRequired") || "Description is required" };
-	if (description.length < TICKET_CONSTRAINTS.description.min)
-		return {
-			error: t("tickets.errors.descriptionMinLength") || `Description must be at least ${TICKET_CONSTRAINTS.description.min} characters`,
+	// Validar título
+	const titleValidation = validateStringField(title, SUPPORT_TICKET_VALIDATORS.title);
+	if (!titleValidation.valid) {
+		const errorMap: Record<string, string> = {
+			required: t("tickets.errors.titleRequired") || "Title is required",
+			minLength: t("tickets.errors.titleMinLength") || `Title must be at least ${SUPPORT_TICKET_CONSTRAINTS.title.min} characters`,
+			maxLength: t("tickets.errors.titleMaxLength") || `Title must not exceed ${SUPPORT_TICKET_CONSTRAINTS.title.max} characters`,
+			pattern: "",
 		};
-	if (description.length > TICKET_CONSTRAINTS.description.max)
-		return {
-			error: t("tickets.errors.descriptionMaxLength") || `Description must not exceed ${TICKET_CONSTRAINTS.description.max} characters`,
+		return { error: errorMap[titleValidation.reason] };
+	}
+
+	// Validar email
+	const emailValidation = validateStringField(email, SUPPORT_TICKET_VALIDATORS.email);
+	if (!emailValidation.valid) {
+		const errorMap: Record<string, string> = {
+			required: t("tickets.errors.emailRequired") || "Email is required",
+			maxLength: t("tickets.errors.emailMaxLength") || "Email is too long",
+			pattern: t("tickets.errors.emailPattern") || "Invalid email address",
+			minLength: "",
 		};
+		return { error: errorMap[emailValidation.reason] };
+	}
+
+	// Validar descripción
+	const descriptionValidation = validateStringField(description, SUPPORT_TICKET_VALIDATORS.description);
+	if (!descriptionValidation.valid) {
+		const errorMap: Record<string, string> = {
+			required: t("tickets.errors.descriptionRequired") || "Description is required",
+			minLength: t("tickets.errors.descriptionMinLength") || `Description must be at least ${SUPPORT_TICKET_CONSTRAINTS.description.min} characters`,
+			maxLength: t("tickets.errors.descriptionMaxLength") || `Description must not exceed ${SUPPORT_TICKET_CONSTRAINTS.description.max} characters`,
+			pattern: "",
+		};
+		return { error: errorMap[descriptionValidation.reason] };
+	}
 
 	return {
 		data: {
@@ -116,61 +135,41 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 	const [success, setSuccess] = useState(false);
 
 	// Refs para los Web Components
-	const typeSelectRef = useRef<AdcSelectElement>(null);
-	const titleInputRef = useRef<AdcInputElement>(null);
-	const emailInputRef = useRef<AdcInputElement>(null);
-	const descriptionRef = useRef<AdcTextareaElement>(null);
+	const typeSelectRef = useRef<HTMLElement>(null);
+	const titleInputRef = useRef<HTMLElement>(null);
+	const emailInputRef = useRef<HTMLElement>(null);
+	const descriptionRef = useRef<HTMLElement>(null);
+
+	// Helper para actualizar campos y limpiar errores
+	const updateField = <K extends keyof FormData>(field: K, value: FormData[K]): void => {
+		setFormData((prev) => ({ ...prev, [field]: value }));
+		setError(null);
+	};
 
 	// Setup listeners para Web Components
 	useEffect(() => {
-		const setupSelectListener = (): (() => void) | undefined => {
-			if (!typeSelectRef.current) return;
-			const handler = (e: CustomEvent<SupportTicketType>) => {
-				if (e.detail !== undefined && e.detail !== null) {
-					setFormData((prev) => ({ ...prev, type: e.detail }));
-					setError(null);
-				}
-			};
-			typeSelectRef.current.addEventListener("adcChange", handler as EventListener);
-			return () => typeSelectRef.current?.removeEventListener("adcChange", handler as EventListener);
-		};
+		// Mount listeners once - no external dependencies
+		const unsubscribeSelect = createCustomEventListener<SupportTicketType>(typeSelectRef.current, "adcChange", (type) =>
+			updateField("type", type)
+		);
 
-		const setupInputListener = (ref: RefObject<AdcInputElement | null>, field: "title" | "email"): (() => void) | undefined => {
-			if (!ref.current) return;
-			const input = ref.current.querySelector("input") || (ref.current as unknown as HTMLInputElement);
-			if (!input) return;
-			const handler = (e: Event) => {
-				const value = (e.target as HTMLInputElement).value;
-				setFormData((prev) => ({ ...prev, [field]: value }));
-				setError(null);
-			};
-			input.addEventListener("input", handler);
-			return () => input?.removeEventListener("input", handler);
-		};
+		const unsubscribeTitle = createInputListener(titleInputRef.current, "input", (value) => {
+			updateField("title", value);
+		});
 
-		const setupTextareaListener = (): (() => void) | undefined => {
-			if (!descriptionRef.current) return;
-			const textarea = descriptionRef.current.querySelector("textarea") || (descriptionRef.current as unknown as HTMLTextAreaElement);
-			if (!textarea) return;
-			const handler = (e: Event) => {
-				const value = (e.target as HTMLTextAreaElement).value;
-				setFormData((prev) => ({ ...prev, description: value }));
-				setError(null);
-			};
-			textarea.addEventListener("input", handler);
-			return () => textarea?.removeEventListener("input", handler);
-		};
+		const unsubscribeEmail = createInputListener(emailInputRef.current, "input", (value) => {
+			updateField("email", value);
+		});
 
-		const unsubscribeSelect = setupSelectListener();
-		const unsubscribeTitle = setupInputListener(titleInputRef, "title");
-		const unsubscribeEmail = setupInputListener(emailInputRef, "email");
-		const unsubscribeTextarea = setupTextareaListener();
+		const unsubscribeDescription = createInputListener(descriptionRef.current, "textarea", (value) => {
+			updateField("description", value);
+		});
 
 		return () => {
-			unsubscribeSelect?.();
-			unsubscribeTitle?.();
-			unsubscribeEmail?.();
-			unsubscribeTextarea?.();
+			unsubscribeSelect();
+			unsubscribeTitle();
+			unsubscribeEmail();
+			unsubscribeDescription();
 		};
 	}, []);
 
@@ -276,7 +275,7 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 						value={formData.title}
 					/>
 					<p className="text-xs text-muted">
-					{TICKET_CONSTRAINTS.title.min}-{TICKET_CONSTRAINTS.title.max} characters
+						{SUPPORT_TICKET_CONSTRAINTS.title.min}-{SUPPORT_TICKET_CONSTRAINTS.title.max} characters
 					</p>
 				</div>
 
@@ -311,7 +310,7 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 						rows={5}
 					/>
 					<p className="text-xs text-muted">
-					{TICKET_CONSTRAINTS.description.min}-{TICKET_CONSTRAINTS.description.max} characters
+						{SUPPORT_TICKET_CONSTRAINTS.description.min}-{SUPPORT_TICKET_CONSTRAINTS.description.max} characters
 					</p>
 				</div>
 

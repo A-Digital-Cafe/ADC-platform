@@ -3,17 +3,11 @@ import { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES } from "./CommonTicketColumn
 
 export type { SupportTicketType };
 
-export interface SupportTicketSocialNetwork {
-	platform: string;
-	url: string;
-}
-
 export interface CreateSupportTicketInput {
 	type: SupportTicketType;
 	title: string;
 	email: string;
 	description: string;
-	attachmentUrls?: string[];
 }
 
 export interface SupportTicketIssueResponse {
@@ -32,21 +26,68 @@ export interface SupportTicketConfig {
 	supportTicketsProjectId?: string;
 }
 
-/**
- * Límites de validación para support tickets.
- * Una fuente de verdad para frontend y backend.
- */
+/** Límites de validación para support tickets  */
 export const SUPPORT_TICKET_CONSTRAINTS = {
 	title: { min: 5, max: 200 },
 	description: { min: 10, max: 5000 },
 	email: { max: 254 },
-	attachmentUrls: { max: 10, urlMax: 2048 },
 } as const;
 
-/**
- * Regex para validar email addresses (RFC-like).
- * Mantener sincronizado con backend.
- */
+/** Email regex (RFC-like) */
 export const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/u;
 
 export { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES };
+
+export interface SelectOption {
+	value: SupportTicketType;
+	label: string;
+}
+
+export interface StringValidator {
+	required?: boolean;
+	minLength?: number;
+	maxLength?: number;
+	pattern?: RegExp;
+}
+
+/** Validators para support tickets (F/B) */
+export const SUPPORT_TICKET_VALIDATORS: Record<string, StringValidator> = {
+	title: {
+		required: true,
+		minLength: SUPPORT_TICKET_CONSTRAINTS.title.min,
+		maxLength: SUPPORT_TICKET_CONSTRAINTS.title.max,
+	},
+	email: {
+		required: true,
+		maxLength: SUPPORT_TICKET_CONSTRAINTS.email.max,
+		pattern: EMAIL_REGEX,
+	},
+	description: {
+		required: true,
+		minLength: SUPPORT_TICKET_CONSTRAINTS.description.min,
+		maxLength: SUPPORT_TICKET_CONSTRAINTS.description.max,
+	},
+};
+
+export function validateStringField(
+	value: string,
+	validator: StringValidator
+): { valid: true } | { valid: false; reason: "required" | "minLength" | "maxLength" | "pattern" } {
+	if (validator.required && !value) {
+		return { valid: false, reason: "required" };
+	}
+
+	if (validator.minLength && value.length < validator.minLength) {
+		return { valid: false, reason: "minLength" };
+	}
+
+	if (validator.maxLength && value.length > validator.maxLength) {
+		return { valid: false, reason: "maxLength" };
+	}
+
+	if (validator.pattern && !validator.pattern.test(value)) {
+		return { valid: false, reason: "pattern" };
+	}
+
+	return { valid: true };
+}

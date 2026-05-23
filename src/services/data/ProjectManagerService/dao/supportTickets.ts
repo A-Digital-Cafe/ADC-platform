@@ -1,6 +1,11 @@
 import type { Block } from "@common/ADC/types/learning.ts";
 import { ProjectManagerError } from "@common/types/custom-errors/ProjectManagerError.ts";
-import type { CreateSupportTicketInput, SupportTicketIssueResponse, SupportTicketCaller, SupportTicketConfig } from "@common/types/project-manager/SupportTicket.ts";
+import type {
+	CreateSupportTicketInput,
+	SupportTicketIssueResponse,
+	SupportTicketCaller,
+	SupportTicketConfig,
+} from "@common/types/project-manager/SupportTicket.ts";
 import { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES } from "@common/types/project-manager/SupportTicket.ts";
 import { TICKET_COLUMN_MAP, type CommonTicketColumnKey } from "@common/types/project-manager/CommonTicketColumns.ts";
 import type { IssueManager } from "./issues.js";
@@ -13,11 +18,7 @@ export class SupportTicketManager {
 		private readonly config: SupportTicketConfig = {}
 	) {}
 
-	async create(
-		kernelKey: symbol,
-		input: CreateSupportTicketInput,
-		caller: SupportTicketCaller
-	): Promise<SupportTicketIssueResponse> {
+	async create(kernelKey: symbol, input: CreateSupportTicketInput, caller: SupportTicketCaller): Promise<SupportTicketIssueResponse> {
 		const projectId = this.#projectId();
 		const project = await this.projects.getInternals(kernelKey).fetchProject(projectId);
 		if (!project) {
@@ -78,7 +79,6 @@ function supportTicketCustomFields(input: CreateSupportTicketInput, caller: Supp
 		reportedByUserId: caller.userId,
 		reportedByEmail: caller.email ?? null,
 		reportIp: caller.ip,
-		attachmentUrls: input.attachmentUrls ?? [],
 	};
 }
 
@@ -90,17 +90,6 @@ function supportTicketBlocks(input: CreateSupportTicketInput, caller: SupportTic
 		{ type: "heading", level: 3, text: "Descripción" },
 		{ type: "paragraph", text: input.description },
 	];
-
-	if (input.attachmentUrls?.length) {
-		blocks.push(
-			{ type: "heading", level: 3, text: "Adjuntos" },
-			{
-				type: "list",
-				ordered: false,
-				items: input.attachmentUrls.map((url) => `[Adjunto](${url})`),
-			}
-		);
-	}
 
 	blocks.push(
 		{ type: "heading", level: 3, text: "Información del reporte" },
