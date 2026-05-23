@@ -109,8 +109,12 @@ function validateTicketData(formData: Readonly<FormData>, t: Translate): Validat
 	if (!descriptionValidation.valid) {
 		const errorMap: Record<string, string> = {
 			required: t("tickets.errors.descriptionRequired") || "Description is required",
-			minLength: t("tickets.errors.descriptionMinLength") || `Description must be at least ${SUPPORT_TICKET_CONSTRAINTS.description.min} characters`,
-			maxLength: t("tickets.errors.descriptionMaxLength") || `Description must not exceed ${SUPPORT_TICKET_CONSTRAINTS.description.max} characters`,
+			minLength:
+				t("tickets.errors.descriptionMinLength") ||
+				`Description must be at least ${SUPPORT_TICKET_CONSTRAINTS.description.min} characters`,
+			maxLength:
+				t("tickets.errors.descriptionMaxLength") ||
+				`Description must not exceed ${SUPPORT_TICKET_CONSTRAINTS.description.max} characters`,
 			pattern: "",
 		};
 		return { error: errorMap[descriptionValidation.reason] };
@@ -161,7 +165,7 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 			updateField("email", value);
 		});
 
-		const unsubscribeDescription = createInputListener(descriptionRef.current, "textarea", (value) => {
+		const unsubscribeDescription = createInputListener(descriptionRef.current, "input", (value) => {
 			updateField("description", value);
 		});
 
