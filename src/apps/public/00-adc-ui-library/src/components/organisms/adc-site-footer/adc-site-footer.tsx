@@ -63,8 +63,6 @@ function fallbackLocale(): "es" | "en" {
 export class AdcSiteFooter {
 	@Prop() brandName: string = "";
 	@Prop() brandSlogan: string = "";
-	@Prop() creatorName: string = "";
-	@Prop() creatorHref: string = "";
 	@Prop() lowerSign: boolean = false;
 	@Prop() registered: boolean = false;
 	@State() private i18nVersion = 0;
@@ -120,16 +118,7 @@ export class AdcSiteFooter {
 		return (
 			<adc-text>
 				&copy; 2025-{this.getYear()} {this.brandName}
-				{this.registered ? "®" : "℠"} - {this.brandSlogan} · creada por{" "}
-				<a
-					href={this.creatorHref}
-					target="_blank"
-					rel="noopener noreferrer"
-					aria-label={`Sitio de ${this.creatorName} (se abre en una pestaña nueva)`}
-				>
-					{this.creatorName}
-					<span class="sr-only"> (se abre en una pestaña nueva)</span>
-				</a>
+				{this.registered ? "®" : "℠"} - {this.brandSlogan}
 			</adc-text>
 		);
 	}

@@ -36,8 +36,6 @@ export class AdcLayout {
 
 	@Prop() brandName: string = "Abby's Digital Cafe";
 	@Prop() brandSlogan: string = "Una taza de código con tintes de amistad";
-	@Prop() creatorName: string = "Abbytec";
-	@Prop() creatorHref: string = "https://abbytec.dev.ar/";
 
 	render() {
 		const authUrl = this.authUrl || resolveAuthUrl();
@@ -63,13 +61,7 @@ export class AdcLayout {
 					<slot />
 				</main>
 
-				<adc-site-footer
-					class="mt-12"
-					brand-name={this.brandName}
-					brand-slogan={this.brandSlogan}
-					creator-name={this.creatorName}
-					creator-href={this.creatorHref}
-				>
+				<adc-site-footer class="mt-12" brand-name={this.brandName} brand-slogan={this.brandSlogan}>
 					<slot name="footer" />
 				</adc-site-footer>
 			</div>
