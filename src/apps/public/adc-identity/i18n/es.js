@@ -19,14 +19,14 @@ export default {
 		loading: "Cargando...",
 		organization: "Organización",
 		orgFilter: "Filtrar por organización",
-		globalView: "Global (sin organización)"
+		globalView: "Global (sin organización)",
 	},
 	tabs: {
 		users: "Usuarios",
 		roles: "Roles",
 		groups: "Grupos",
 		organizations: "Organizaciones",
-		regions: "Regiones"
+		regions: "Regiones",
 	},
 	users: {
 		username: "Usuario",
@@ -39,7 +39,7 @@ export default {
 		searchPlaceholder: "Buscar usuarios...",
 		addUser: "Agregar Usuario",
 		editUser: "Editar Usuario",
-		deleteConfirm: "¿Estás seguro de eliminar al usuario \"{{name}}\"? Esta acción no se puede deshacer.",
+		deleteConfirm: '¿Estás seguro de eliminar al usuario "{{name}}"? Esta acción no se puede deshacer.',
 		noUsers: "No se encontraron usuarios",
 		usernamePlaceholder: "nombre_usuario",
 		emailPlaceholder: "usuario@ejemplo.com",
@@ -47,7 +47,7 @@ export default {
 		passwordPlaceholder: "Mínimo 8 caracteres",
 		selectRoles: "Seleccionar roles",
 		searchRoles: "Buscar roles...",
-		never: "Nunca"
+		never: "Nunca",
 	},
 	roles: {
 		name: "Nombre",
@@ -60,13 +60,13 @@ export default {
 		searchPlaceholder: "Buscar roles...",
 		addRole: "Agregar Rol",
 		editRole: "Editar Rol",
-		deleteConfirm: "¿Estás seguro de eliminar el rol \"{{name}}\"? Los usuarios con este rol perderán los permisos asociados.",
+		deleteConfirm: '¿Estás seguro de eliminar el rol "{{name}}"? Los usuarios con este rol perderán los permisos asociados.',
 		noRoles: "No se encontraron roles",
 		namePlaceholder: "Nombre del rol",
 		descriptionPlaceholder: "Descripción del rol",
 		scope: "Alcance",
 		globalScope: "Global",
-		orgScope: "Organización"
+		orgScope: "Organización",
 	},
 	groups: {
 		name: "Nombre",
@@ -77,7 +77,7 @@ export default {
 		searchPlaceholder: "Buscar grupos...",
 		addGroup: "Agregar Grupo",
 		editGroup: "Editar Grupo",
-		deleteConfirm: "¿Estás seguro de eliminar el grupo \"{{name}}\"? Los miembros perderán los roles heredados del grupo.",
+		deleteConfirm: '¿Estás seguro de eliminar el grupo "{{name}}"? Los miembros perderán los roles heredados del grupo.',
 		noGroups: "No se encontraron grupos",
 		namePlaceholder: "Nombre del grupo",
 		descriptionPlaceholder: "Descripción del grupo",
@@ -86,7 +86,7 @@ export default {
 		noMembers: "No hay miembros en este grupo",
 		scope: "Alcance",
 		globalScope: "Global",
-		orgScope: "Organización"
+		orgScope: "Organización",
 	},
 	organizations: {
 		slug: "Slug",
@@ -97,19 +97,19 @@ export default {
 		searchPlaceholder: "Buscar organizaciones...",
 		addOrganization: "Agregar Organización",
 		editOrganization: "Editar Organización",
-		deleteConfirm: "¿Estás seguro de eliminar la organización \"{{slug}}\"? Esta acción no se puede deshacer.",
+		deleteConfirm: '¿Estás seguro de eliminar la organización "{{slug}}"? Esta acción no se puede deshacer.',
 		noOrganizations: "No se encontraron organizaciones",
 		slugPlaceholder: "mi-organizacion",
 		tierPlaceholder: "ej. free, pro, enterprise",
 		statuses: {
 			active: "Activa",
 			inactive: "Inactiva",
-			blocked: "Bloqueada"
+			blocked: "Bloqueada",
 		},
 		members: "Miembros",
 		manageMembers: "Miembros de {{slug}}",
 		searchUserPlaceholder: "Buscar usuarios por nombre o email...",
-		noMembers: "No hay miembros en esta organización"
+		noMembers: "No hay miembros en esta organización",
 	},
 	regions: {
 		path: "Ruta",
@@ -122,12 +122,12 @@ export default {
 		searchPlaceholder: "Buscar regiones...",
 		addRegion: "Agregar Región",
 		editRegion: "Editar Región",
-		deleteConfirm: "¿Estás seguro de eliminar la región \"{{path}}\"? Las organizaciones en esta región podrían verse afectadas.",
+		deleteConfirm: '¿Estás seguro de eliminar la región "{{path}}"? Las organizaciones en esta región podrían verse afectadas.',
 		noRegions: "No se encontraron regiones",
 		pathPlaceholder: "region/subregion",
 		pathHint: "Formato: region/subregion (ej. us/east, eu/west)",
 		objectConnectionUri: "URI de Base de Datos",
-		cacheConnectionUri: "URI de Caché"
+		cacheConnectionUri: "URI de Caché",
 	},
 	permissions: {
 		title: "Permisos",
@@ -146,7 +146,7 @@ export default {
 		community: {
 			content: "Contenido",
 			publish_status: "Estado de publicación",
-			social: "Redes sociales"
+			social: "Redes sociales",
 		},
 		"project-manager": {
 			projects: "Proyectos",
@@ -156,7 +156,7 @@ export default {
 			custom_fields: "Campos personalizados",
 			attachments: "Adjuntos",
 			settings: "Configuración",
-			stats: "Estadísticas"
+			stats: "Estadísticas",
 		},
 		toggleAll: "Alternar toda la columna",
 		toggleRow: "Alternar toda la fila",
@@ -167,13 +167,33 @@ export default {
 		predefinedReadonly: "Los permisos de roles predefinidos no se pueden modificar.",
 		directTitle: "Permisos directos",
 		directHint: "Permisos asignados directamente a este usuario (se suman a los heredados de roles y grupos).",
-		directHintGroup: "Permisos asignados directamente a este grupo (se suman a los heredados de roles)."
+		directHintGroup: "Permisos asignados directamente a este grupo (se suman a los heredados de roles).",
+	},
+	landing: {
+		heroAria: "Sección principal",
+		heroTitle: "Gestión de Identidad",
+		heroSubtitle: "Administra usuarios, roles, grupos y sus permisos dentro de la plataforma.",
+		featuresAria: "Sección de características",
+		features: {
+			users: {
+				title: "Usuarios",
+			},
+			roles: {
+				title: "Roles",
+			},
+			groups: {
+				title: "Grupos",
+			},
+		},
+		howAria: "Sección de inicio",
+		howTitle: "Cómo Empezar",
+		signInHint: "Inicia sesión para acceder a tu panel de gestión de identidad.",
 	},
 	resources: {
 		identity: "Identidad",
 		content: "Contenido",
 		community: "Comunidad",
-		"project-manager": "Project Manager"
+		"project-manager": "Project Manager",
 	},
 	errors: {
 		// Acceso / aislamiento de org
@@ -192,6 +212,6 @@ export default {
 		REGION_NOT_FOUND: "Región no encontrada",
 		// Validación
 		MISSING_FIELDS: "Faltan campos requeridos",
-		INVALID_ROLE: "Rol inválido"
-	}
+		INVALID_ROLE: "Rol inválido",
+	},
 };

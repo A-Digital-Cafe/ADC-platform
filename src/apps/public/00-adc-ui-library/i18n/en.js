@@ -56,6 +56,7 @@ export default {
 		terms: "Terms",
 		cookies: "Cookies",
 		contact: "Contact",
+		team: "Team",
 		help: "Help"
 	}
 };

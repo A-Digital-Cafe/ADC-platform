@@ -116,5 +116,26 @@ export default {
 			errorMessage: "Error creating request"
 		},
 		info: "All actions create tickets for review"
+	},
+	landing: {
+		heroTitle: "Organization Request Panel",
+		heroDescription: "Request new organizations, invite members, configure settings, and collaborate with your team. All in one centralized platform.",
+		processTitle: "How It Works",
+		steps: {
+			request: {
+				title: "Request Your Organization",
+				description: "Fill out a simple form with your organization details and submit for review."
+			},
+			review: {
+				title: "Administrative Team Review",
+				description: "Our administrative team reviews your request and approves your new organization."
+			},
+			manage: {
+				title: "Start Managing",
+				description: "Access your organization, invite team members, and start collaborating."
+			}
+		},
+		readyDescription: "Sign in to submit your organization request and join the platform.",
+		footerInfo: "Already have an organization? Sign in to manage it from your dashboard."
 	}
 };

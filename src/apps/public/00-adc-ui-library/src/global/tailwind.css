@@ -41,6 +41,13 @@
         --c-tsuccess: oklch(0.47 0.12 145);
         --c-tinfo: oklch(0.47 0.12 240);
         --c-tdanger: oklch(0.47 0.12 10);
+
+        /* App accent colors - reutilizables en toda la plataforma */
+        --c-app-orange: oklch(70.485% 0.18669 47.592);
+        --c-app-purple: #a855f7;
+        --c-app-cyan: #06b6d4;
+        --c-app-red: #ef4444;
+        --c-app-green: #22c55e;
     }
 
     :root[coffee-theme][dark-mode] {
@@ -68,6 +75,13 @@
         --c-tsuccess: oklch(0.88 0.06 145);
         --c-tinfo: oklch(0.88 0.06 240);
         --c-tdanger: oklch(0.88 0.06 10);
+
+        /* App accent colors (brighter for dark mode) */
+        --c-app-orange: #fb923c;
+        --c-app-purple: #d8b4fe;
+        --c-app-cyan: #22d3ee;
+        --c-app-red: #f87171;
+        --c-app-green: #4ade80;
     }
 
     :root[crystal-theme] {
@@ -100,6 +114,13 @@
         --c-tsuccess: oklch(0.42 0.1 155);
         --c-tinfo: oklch(0.42 0.1 245);
         --c-tdanger: oklch(0.42 0.1 15);
+
+        /* App accent colors - reutilizables en toda la plataforma */
+        --c-app-orange: #ea580c;
+        --c-app-purple: #9333ea;
+        --c-app-cyan: #0891b2;
+        --c-app-red: #dc2626;
+        --c-app-green: #16a34a;
     }
 
     :root[crystal-theme][dark-mode] {
@@ -129,6 +150,13 @@
         --c-tsuccess: oklch(0.85 0.06 155);
         --c-tinfo: oklch(0.85 0.06 250);
         --c-tdanger: oklch(0.85 0.06 15);
+
+        /* App accent colors (brighter for dark mode) */
+        --c-app-orange: #fb923c;
+        --c-app-purple: #d8b4fe;
+        --c-app-cyan: #22d3ee;
+        --c-app-red: #f87171;
+        --c-app-green: #4ade80;
     }
 
     :root[rainbow-mode] {

@@ -1,7 +1,7 @@
 import { Component, Prop, State } from "@stencil/core";
 import { IS_DEV } from "../../../utils/url.js";
 
-type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "help";
+type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help";
 
 interface ADCGlobal {
 	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
@@ -18,6 +18,7 @@ const HELP_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string }> = [
 	{ key: "terms", path: "/terms" },
 	{ key: "cookies", path: "/cookies" },
 	{ key: "contact", path: "/contact" },
+	{ key: "team", path: "/team" },
 	{ key: "help", path: "/" },
 ];
 
@@ -28,6 +29,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		terms: "Términos",
 		cookies: "Cookies",
 		contact: "Contacto",
+		team: "Equipo",
 		help: "Ayuda",
 	},
 	en: {
@@ -36,6 +38,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		terms: "Terms",
 		cookies: "Cookies",
 		contact: "Contact",
+		team: "Team",
 		help: "Help",
 	},
 };
@@ -60,8 +63,6 @@ function fallbackLocale(): "es" | "en" {
 export class AdcSiteFooter {
 	@Prop() brandName: string = "";
 	@Prop() brandSlogan: string = "";
-	@Prop() creatorName: string = "";
-	@Prop() creatorHref: string = "";
 	@Prop() lowerSign: boolean = false;
 	@Prop() registered: boolean = false;
 	@State() private i18nVersion = 0;
@@ -117,16 +118,7 @@ export class AdcSiteFooter {
 		return (
 			<adc-text>
 				&copy; 2025-{this.getYear()} {this.brandName}
-				{this.registered ? "®" : "℠"} - {this.brandSlogan} · creada por{" "}
-				<a
-					href={this.creatorHref}
-					target="_blank"
-					rel="noopener noreferrer"
-					aria-label={`Sitio de ${this.creatorName} (se abre en una pestaña nueva)`}
-				>
-					{this.creatorName}
-					<span class="sr-only"> (se abre en una pestaña nueva)</span>
-				</a>
+				{this.registered ? "®" : "℠"} - {this.brandSlogan}
 			</adc-text>
 		);
 	}

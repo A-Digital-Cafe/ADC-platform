@@ -7,6 +7,7 @@ import { getSession } from "@ui-library/utils/session";
 
 import OrgRequestView from "./pages/OrgRequestView";
 import HomeView from "./pages/HomeView";
+import LandingView from "./pages/LandingView";
 import { AuthGate } from "./components/AuthGate.js";
 
 type ViewType = "home" | "request";
@@ -25,6 +26,7 @@ export default function App() {
 	const { t, ready } = useTranslation({ namespace: "adc-org-management", autoLoad: true });
 	const [currentPath, setCurrentPath] = useState(router.getCurrentPath() || "/org-management");
 	const [sessionReady, setSessionReady] = useState(false);
+	const [isAuthenticated, setIsAuthenticated] = useState(false);
 
 	const route = parseRoute(currentPath);
 
@@ -38,9 +40,10 @@ export default function App() {
 		const loadSession = async () => {
 			clearErrors();
 			try {
-				await getSession(true);
+				const session = await getSession(true);
+				setIsAuthenticated(!!session?.user?.id);
 			} catch {
-				// AuthGate resolverá el estado visible de autenticación.
+				setIsAuthenticated(false);
 			} finally {
 				setSessionReady(true);
 			}
@@ -64,15 +67,21 @@ export default function App() {
 		<adc-layout>
 			<adc-toast-manager></adc-toast-manager>
 			<div className="w-full">
-				{route.view === "home" && (
-					<AuthGate>
-						<HomeView />
-					</AuthGate>
-				)}
-				{route.view === "request" && (
-					<AuthGate>
-						<OrgRequestView />
-					</AuthGate>
+				{!isAuthenticated && sessionReady ? (
+					<LandingView />
+				) : (
+					<div className="w-full">
+						{route.view === "home" && (
+							<AuthGate>
+								<HomeView />
+							</AuthGate>
+						)}
+						{route.view === "request" && (
+							<AuthGate>
+								<OrgRequestView />
+							</AuthGate>
+						)}
+					</div>
 				)}
 			</div>
 		</adc-layout>
