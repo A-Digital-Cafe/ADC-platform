@@ -13,7 +13,8 @@ import {
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
-import type { AuthenticatedUser, OAuthProviderConfig } from "../types.js";
+import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig } from "../types.js";
+import { buildErrorUrl } from "../utils/errorRedirect.js";
 
 /** Nombre de las cookies */
 const STATE_COOKIE_NAME = "oauth_state";
@@ -65,6 +66,7 @@ interface OAuthEndpointsDeps {
 	defaultRedirectUrl: string;
 	getProviderConfig: (provider: string) => OAuthProviderConfig | null;
 	logger: { logError: (msg: string) => void; logWarn: (msg: string) => void };
+	moderation: ModerationLookupService | null;
 }
 
 interface ProviderParams {
@@ -180,14 +182,14 @@ export class OAuthEndpoints {
 		];
 
 		if (error) {
-			throw UncommonResponse.redirect(`/auth/error?error=${encodeURIComponent(error)}`, {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: error }), {
 				status: 302,
 				clearCookies,
 			});
 		}
 
 		if (!code || !state) {
-			throw UncommonResponse.redirect("/auth/error?error=Código o estado faltante", {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Código o estado faltante" }), {
 				status: 302,
 				clearCookies,
 			});
@@ -196,7 +198,7 @@ export class OAuthEndpoints {
 		// Validar state contra la cookie
 		const stateCookie = ctx.cookies?.[STATE_COOKIE_NAME];
 		if (!stateCookie) {
-			throw UncommonResponse.redirect("/auth/error?error=Estado faltante en cookies", {
+			throw UncommonResponse.redirect(buildErrorUrl("/csrf"), {
 				status: 302,
 				clearCookies,
 			});
@@ -205,7 +207,7 @@ export class OAuthEndpoints {
 		// Usar el método validateState con ambos argumentos
 		const stateValid = OAuthEndpoints.deps.sessionManager.validateState(state, stateCookie);
 		if (!stateValid) {
-			throw UncommonResponse.redirect("/auth/error?error=Estado inválido (posible ataque CSRF)", {
+			throw UncommonResponse.redirect(buildErrorUrl("/csrf"), {
 				status: 302,
 				clearCookies,
 			});
@@ -216,7 +218,7 @@ export class OAuthEndpoints {
 
 		const oauthProvider = OAuthEndpoints.deps.oauthRegistry.get(provider);
 		if (!oauthProvider) {
-			throw UncommonResponse.redirect("/auth/error?error=Proveedor no encontrado", {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Proveedor no encontrado" }), {
 				status: 302,
 				clearCookies,
 			});
@@ -230,6 +232,27 @@ export class OAuthEndpoints {
 		try {
 			const tokens = await oauthProvider.exchangeCode(code, config);
 			const profile = await oauthProvider.getUserProfile(tokens.accessToken);
+
+			// Anti-evasión: bloquear si el email OAuth está en la ban-list
+			if (OAuthEndpoints.deps.moderation && profile.email) {
+				const emailBan = await OAuthEndpoints.deps.moderation.isEmailBanned(profile.email);
+				if (emailBan.banned) {
+					throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: emailBan.reason || "Cuenta baneada" }), {
+						status: 302,
+						clearCookies,
+					});
+				}
+			}
+			if (OAuthEndpoints.deps.moderation && ctx.ip) {
+				const ipBan = await OAuthEndpoints.deps.moderation.isIpBanned(ctx.ip);
+				if (ipBan.banned) {
+					throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: ipBan.reason || "Acceso bloqueado" }), {
+						status: 302,
+						clearCookies,
+					});
+				}
+			}
+
 			const result = await OAuthEndpoints.getOrCreateUser(provider, profile, tokens.accessToken);
 
 			// Email coincide con usuario existente → redirigir a vinculación con autenticación
@@ -283,6 +306,19 @@ export class OAuthEndpoints {
 
 			const user = result.user;
 
+			// Bloquear cuentas baneadas/deshabilitadas (evita evasión por OAuth tras ban administrativo)
+			if (user.isActive === false) {
+				const banReason = (user.metadata as any)?.banReason || "Cuenta deshabilitada";
+				throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: banReason }), { status: 302, clearCookies });
+			}
+
+			// Registrar IP del login OAuth (3h) para alimentar ban-list anti-evasión
+			if (OAuthEndpoints.deps.moderation && ctx.ip) {
+				await OAuthEndpoints.deps.moderation
+					.recordLoginAttemptIp(user.id, ctx.ip)
+					.catch((e: any) => OAuthEndpoints.deps.logger.logWarn(`recordLoginAttemptIp: ${e?.message || e}`));
+			}
+
 			// Discord autoroles: sincronizar roles de guild si es provider Discord
 			if (provider === "discord" && OAuthEndpoints.deps.internalIdentity) {
 				await OAuthEndpoints.syncDiscordRoles(tokens.accessToken, user.id, oauthProvider as DiscordOAuthProvider);
@@ -307,7 +343,7 @@ export class OAuthEndpoints {
 			if (err instanceof UncommonResponse || err instanceof AuthError) throw err;
 
 			OAuthEndpoints.deps.logger.logError(`Error en callback de ${provider}: ${err.message}`);
-			throw UncommonResponse.redirect(`/auth/error?error=${encodeURIComponent("Error durante la autenticación")}`, {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Error durante la autenticación" }), {
 				status: 302,
 				clearCookies,
 			});
@@ -592,6 +628,7 @@ export class OAuthEndpoints {
 					avatar: profile.avatar || linkedUser.linkedAccounts?.find((la) => la.provider === provider)?.providerAvatar,
 					permissions,
 					metadata: linkedUser.metadata,
+					isActive: linkedUser.isActive,
 				},
 			};
 		}

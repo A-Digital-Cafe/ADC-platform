@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { identityApi } from "../utils/identity-api.ts";
+import { moderationApi } from "../utils/moderation-api.ts";
 import type { Organization, Permission, Role } from "@common/types/identity/index.d.ts";
 import { Scope, canWrite, canUpdate, canDelete } from "../utils/permissions.ts";
 import { DataTable, type Column } from "../components/DataTable.tsx";
-import { PermissionEditor } from "../components/PermissionEditor/index.ts";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal.tsx";
-import { FormModalFooter } from "../components/FormModalFooter.tsx";
-import { RolePicker } from "../components/RolePicker.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { RowActions } from "../components/RowActions.tsx";
+import { BanUserModal, UserFormModal } from "../components/UserModals/index.ts";
 import { ClientUser } from "@common/types/identity/User.ts";
 
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
@@ -34,6 +33,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editingUser, setEditingUser] = useState<ClientUser | null>(null);
 	const [deleteConfirm, setDeleteConfirm] = useState<ClientUser | null>(null);
+	const [banTarget, setBanTarget] = useState<ClientUser | null>(null);
 
 	// Form state
 	const [formUsername, setFormUsername] = useState("");
@@ -50,14 +50,6 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	const writable = canWrite(perms, Scope.USERS);
 	const updatable = canUpdate(perms, Scope.USERS);
 	const deletable = canDelete(perms, Scope.USERS);
-
-	// Ref callbacks for Stencil web component events (React 19 lowercases event names)
-	const editModalRef = useCallback((el: HTMLElement | null) => {
-		if (el) el.addEventListener("adcClose", () => setModalOpen(false));
-	}, []);
-	const toggleRef = useCallback((el: HTMLElement | null) => {
-		if (el) el.addEventListener("adcChange", (e: Event) => setFormIsActive((e as CustomEvent<boolean>).detail));
-	}, []);
 
 	const checkUsername = async (username: string) => {
 		controllerRef.current?.abort();
@@ -247,6 +239,14 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		}
 	};
 
+	const handleUnban = async (user: ClientUser) => {
+		clearErrors();
+		const result = await moderationApi.unbanUser(user.id);
+		if (result.success) loadData();
+	};
+
+	const isUserBanned = (user: ClientUser): boolean => !user.isActive && !!user.metadata && !!(user.metadata as any).bannedAt;
+
 	const toggleRoleId = (roleId: string) => {
 		setFormRoleIds((prev) => (prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId]));
 	};
@@ -274,11 +274,16 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		{
 			key: "isActive",
 			label: t("users.status"),
-			render: (u) => (
-				<adc-badge color={u.isActive ? "green" : "red"} dot>
-					{u.isActive ? t("users.active") : t("users.inactive")}
-				</adc-badge>
-			),
+			render: (u) =>
+				isUserBanned(u) ? (
+					<adc-badge color="red" dot>
+						{t("users.banned")}
+					</adc-badge>
+				) : (
+					<adc-badge color={u.isActive ? "green" : "red"} dot>
+						{u.isActive ? t("users.active") : t("users.inactive")}
+					</adc-badge>
+				),
 		},
 		...(isAdmin && !orgId
 			? [
@@ -322,94 +327,43 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 						item={user}
 						canEdit={updatable}
 						canDelete={deletable}
+						canBan={isAdmin && !orgId && updatable}
+						isBanned={isUserBanned(user)}
 						onEdit={openEditModal}
 						onDelete={setDeleteConfirm}
+						onBan={setBanTarget}
+						onUnban={handleUnban}
 						editLabel={t("common.edit")}
 						deleteLabel={t("common.delete")}
+						banLabel={t("users.ban")}
+						unbanLabel={t("users.unban")}
 					/>
 				)}
 			/>
 
 			{/* Create/Edit Modal */}
 			{modalOpen && (
-				<adc-modal ref={editModalRef} open modalTitle={editingUser ? t("users.editUser") : t("users.addUser")} size="lg">
-					<form onSubmit={handleSubmit} className="space-y-4">
-						{(!isScopedOrgView || !editingUser) && (
-							<div>
-								<label className="block text-sm font-medium mb-1 text-text">{t("users.username")}</label>
-								<adc-input
-									inputId="username"
-									value={formUsername}
-									placeholder={t("users.usernamePlaceholder")}
-									onInput={(e: any) => setFormUsername(e.target.value)}
-								/>
-								{!isScopedOrgView && (
-									<>
-										{usernameStatus === "checking" && <p className="text-xs text-muted mt-1">Verificando...</p>}
-										{usernameStatus === "available" && (
-											<p className="text-xs text-green-500 mt-1">Nombre de usuario disponible</p>
-										)}
-										{usernameStatus === "unavailable" && (
-											<p className="text-xs text-red-500 mt-1">Este nombre de usuario ya está en uso</p>
-										)}
-									</>
-								)}
-							</div>
-						)}
-
-						{!editingUser && (
-							<div>
-								<label className="block text-sm font-medium mb-1 text-text">{t("users.password")}</label>
-								<adc-input
-									inputId="password"
-									type="password"
-									value={formPassword}
-									placeholder="••••••••"
-									onInput={(e: any) => setFormPassword(e.target.value)}
-								/>
-							</div>
-						)}
-
-						{!isScopedOrgView && (
-							<div>
-								<label className="block text-sm font-medium mb-1 text-text">{t("users.email")}</label>
-								<adc-input
-									inputId="email"
-									type="email"
-									value={formEmail}
-									placeholder="user@example.com"
-									onInput={(e: any) => setFormEmail(e.target.value)}
-								/>
-							</div>
-						)}
-
-						{editingUser && !isScopedOrgView && (
-							<div>
-								<label className="block text-sm font-medium mb-1 text-text">{t("users.status")}</label>
-								<adc-toggle
-									ref={toggleRef}
-									checked={formIsActive}
-									label={formIsActive ? t("users.active") : t("users.inactive")}
-								/>
-							</div>
-						)}
-
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("users.roles")}</label>
-							<RolePicker roles={assignablePickerRoles} selectedIds={formRoleIds} onToggle={toggleRoleId} />
-						</div>
-
-						{editingUser && !isScopedOrgView && (
-							<div>
-								<label className="block text-sm font-medium mb-1 text-text">{t("permissions.directTitle")}</label>
-								<p className="text-xs text-muted mb-2">{t("permissions.directHint")}</p>
-								<PermissionEditor permissions={formPermissions} onChange={setFormPermissions} />
-							</div>
-						)}
-
-						<FormModalFooter onCancel={() => setModalOpen(false)} submitting={submitting} />
-					</form>
-				</adc-modal>
+				<UserFormModal
+					editingUser={editingUser}
+					isScopedOrgView={isScopedOrgView}
+					submitting={submitting}
+					usernameStatus={usernameStatus}
+					assignablePickerRoles={assignablePickerRoles}
+					formUsername={formUsername}
+					formPassword={formPassword}
+					formEmail={formEmail}
+					formRoleIds={formRoleIds}
+					formIsActive={formIsActive}
+					formPermissions={formPermissions}
+					onUsernameChange={setFormUsername}
+					onPasswordChange={setFormPassword}
+					onEmailChange={setFormEmail}
+					onActiveChange={setFormIsActive}
+					onPermissionsChange={setFormPermissions}
+					onToggleRoleId={toggleRoleId}
+					onSubmit={handleSubmit}
+					onClose={() => setModalOpen(false)}
+				/>
 			)}
 
 			{deleteConfirm && (
@@ -417,6 +371,17 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 					message={t("users.deleteConfirm", { name: deleteConfirm.username })}
 					onClose={() => setDeleteConfirm(null)}
 					onConfirm={handleDelete}
+				/>
+			)}
+
+			{banTarget && (
+				<BanUserModal
+					user={banTarget}
+					onClose={() => setBanTarget(null)}
+					onBanned={() => {
+						setBanTarget(null);
+						loadData();
+					}}
 				/>
 			)}
 		</>

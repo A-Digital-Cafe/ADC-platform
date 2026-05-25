@@ -1,4 +1,4 @@
-import type { Connection } from "mongoose";
+import type { Connection, Model } from "mongoose";
 import { BaseService } from "../../BaseService.js";
 import type { IdentityStats, OrgScopedManagers } from "./types.js";
 import type MongoProvider from "../../../providers/object/mongo/index.js";
@@ -8,6 +8,7 @@ import type { User, Role, Group, Organization, RegionInfo } from "@common/types/
 import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManager, RegionManager, OrgManager } from "./dao/index.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type SessionManagerService from "../../security/SessionManagerService/index.js";
+import type ModerationService from "../../security/ModerationService/index.js";
 import type OperationsService from "../OperationsService/index.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
 import { UserEndpoints } from "./endpoints/users.js";
@@ -60,7 +61,7 @@ export default class IdentityManagerService extends BaseService {
 	#internalRoleManager: RoleManager | null = null;
 
 	// Discord Guild Config model (para mapeo de roles por guild)
-	#discordGuildConfigModel: import("mongoose").Model<DiscordGuildConfig> | null = null;
+	#discordGuildConfigModel: Model<DiscordGuildConfig> | null = null;
 
 	// AuthVerifier para verificar tokens y permisos
 	#authVerifier: IAuthVerifier | null = null;
@@ -70,6 +71,13 @@ export default class IdentityManagerService extends BaseService {
 
 	// SessionManagerService (lazy-loaded singleton)
 	#sessionManager: SessionManagerService | null = null;
+
+	// ModerationService (lazy, opcional) — usado por endpoints ban/unban.
+	#moderationService: ModerationService | null = null;
+	#moderationLookupAttempted = false;
+
+	// Timer para limpieza periódica de cuentas con retención vencida.
+	#retentionTimer: ReturnType<typeof setInterval> | null = null;
 
 	// MongoDB provider
 	readonly #mongoProvider: MongoProvider;
@@ -222,6 +230,13 @@ export default class IdentityManagerService extends BaseService {
 			RegionEndpoints.init(this);
 			StatsEndpoints.init(this);
 			AvatarEndpoints.init(this, UserModel, this.#avatarAttachmentsManager);
+
+			// Cron de retención: purga usuarios con `metadata.scheduledDeletionAt < now`.
+			this.#runRetentionPurge().catch((err) => this.logger.logWarn(`Retention purge inicial falló: ${err?.message || err}`));
+			this.#retentionTimer = setInterval(
+				() => this.#runRetentionPurge().catch((err) => this.logger.logWarn(`Retention purge falló: ${err?.message || err}`)),
+				6 * 60 * 60 * 1000
+			);
 
 			this.logger.logOk("IdentityManagerService iniciado con soporte multi-tenant y autenticación");
 		} catch (error: any) {
@@ -470,10 +485,58 @@ export default class IdentityManagerService extends BaseService {
 		// Limpiar cache de conexiones por organización
 		this.#orgConnectionCache.clear();
 
+		if (this.#retentionTimer) {
+			clearInterval(this.#retentionTimer);
+			this.#retentionTimer = null;
+		}
+
 		await super.stop(kernelKey);
 		this.#systemManager?.clearSystemUser(kernelKey);
 		this.#authVerifier = null;
 
 		this.logger.logOk("IdentityManagerService detenido");
+	}
+
+	/**
+	 * Lookup perezoso (y cacheado) de ModerationService.
+	 * Usado por endpoints ban/unban para alimentar la ban-list sin
+	 * acoplar la inicialización (ModerationService arranca DESPUÉS).
+	 */
+	tryGetModerationService(): ModerationService | null {
+		if (this.#moderationService) return this.#moderationService;
+		if (this.#moderationLookupAttempted) return null;
+		this.#moderationLookupAttempted = true;
+		try {
+			this.#moderationService = this.getMyService("ModerationService");
+		} catch {
+			this.#moderationService = null;
+		}
+		return this.#moderationService;
+	}
+
+	/**
+	 * Purga usuarios con `metadata.scheduledDeletionAt <= now`.
+	 * Usa el manager interno (sin token) para borrar.
+	 */
+	async #runRetentionPurge(): Promise<void> {
+		if (!this.#internalUserManager) return;
+		const due = await this.#internalUserManager.findUsersDueForDeletion();
+		if (due.length === 0) return;
+		this.logger.logInfo(`Retention purge: ${due.length} usuarios pendientes de borrado`);
+		for (const { id } of due) {
+			try {
+				await this.#internalUserManager.deleteUser(id);
+				// Mejor esfuerzo: limpiar registros de moderación del usuario.
+				try {
+					const moderation = this.tryGetModerationService();
+					if (moderation && this.#kernelKey)
+						await moderation._internal(this.#kernelKey).unbanByUserIdInternal(id, "auto-retention-purge");
+				} catch {
+					/* swallow */
+				}
+			} catch (err: any) {
+				this.logger.logWarn(`Retention purge falló para ${id}: ${err?.message || err}`);
+			}
+		}
 	}
 }

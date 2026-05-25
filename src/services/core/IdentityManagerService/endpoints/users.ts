@@ -460,4 +460,19 @@ export class UserEndpoints {
 		UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
 	}
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Self-delete
+	// ────────────────────────────────────────────────────────────────────────
+
+	@RegisterEndpoint({
+		method: "DELETE",
+		url: "/api/identity/users/me",
+	})
+	static async deleteSelf(ctx: EndpointCtx<Record<string, string>, { reason?: string }>) {
+		if (!ctx.user) throw new AuthError(401, "UNAUTHORIZED", "No hay sesión");
+		const { reason } = ctx.data || {};
+		await UserEndpoints.identity.users.requestSelfDeletion(ctx.user.id, reason, 30, ctx.token!);
+		return { success: true, scheduledDeletionInDays: 30 };
+	}
 }

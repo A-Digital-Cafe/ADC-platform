@@ -13,7 +13,7 @@ import {
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
-import type { AuthenticatedUser } from "../types.js";
+import type { AuthenticatedUser, ModerationLookupService } from "../types.js";
 import { UserAuthenticationResult } from "../../../core/IdentityManagerService/dao/users.ts";
 import { User } from "@common/types/identity/User.js";
 import type { Permission } from "@common/types/identity/Permission.js";
@@ -22,6 +22,10 @@ import { SystemRole } from "../../../core/IdentityManagerService/defaults/system
 /** Nombre de las cookies */
 const ACCESS_COOKIE_NAME = "access_token";
 const REFRESH_COOKIE_NAME = "refresh_token";
+
+function toBlockedUntil(expiresAt: Date | null | undefined): number | undefined {
+	return expiresAt ? expiresAt.getTime() : undefined;
+}
 
 interface AuthEndpointsDeps {
 	keyStore: KeyStore;
@@ -34,6 +38,7 @@ interface AuthEndpointsDeps {
 	cookieDomain: string;
 	defaultRedirectUrl: string;
 	logger: { logError: (msg: string) => void; logWarn: (msg: string) => void };
+	moderation: ModerationLookupService | null;
 }
 
 interface LoginBody {
@@ -77,6 +82,16 @@ export class AuthEndpoints {
 			throw new AuthError(400, "MISSING_CREDENTIALS", "Username y password son requeridos");
 		}
 
+		// Pre-check: IP baneada → rechazar antes de revelar si las credenciales son válidas
+		if (AuthEndpoints.deps.moderation && ctx.ip) {
+			const ipBan = await AuthEndpoints.deps.moderation.isIpBanned(ctx.ip);
+			if (ipBan.banned) {
+				throw new AuthError(403, "ACCOUNT_BANNED", ipBan.reason || "Acceso bloqueado", {
+					blockedUntil: toBlockedUntil(ipBan.expiresAt),
+				});
+			}
+		}
+
 		try {
 			const profile = await AuthEndpoints.validateCredentials(username, password);
 			if (!profile) throw new AuthError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
@@ -100,6 +115,23 @@ export class AuthEndpoints {
 			}
 
 			const fullUser = profile as User;
+
+			// Post-credenciales: chequear ban por email
+			if (AuthEndpoints.deps.moderation && fullUser.email) {
+				const emailBan = await AuthEndpoints.deps.moderation.isEmailBanned(fullUser.email);
+				if (emailBan.banned) {
+					throw new AuthError(403, "ACCOUNT_BANNED", emailBan.reason || "Cuenta baneada", {
+						blockedUntil: toBlockedUntil(emailBan.expiresAt),
+					});
+				}
+			}
+
+			// Registrar IP de login exitoso (3h) para alimentar la ban-list anti-evasión
+			if (AuthEndpoints.deps.moderation && ctx.ip) {
+				await AuthEndpoints.deps.moderation
+					.recordLoginAttemptIp(fullUser.id, ctx.ip)
+					.catch((e: any) => AuthEndpoints.deps.logger.logWarn(`recordLoginAttemptIp: ${e?.message || e}`));
+			}
 
 			// Si el usuario tiene organizaciones y no se especificó orgId (undefined = no ha elegido),
 			// retornar la lista de orgs para que el frontend muestre el selector.
@@ -168,6 +200,24 @@ export class AuthEndpoints {
 		const emailRegex = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 		if (!emailRegex.test(email)) {
 			throw new AuthError(400, "INVALID_EMAIL", "El email no es válido");
+		}
+
+		// Bloquear registros desde emails/IPs baneados (anti-evasión)
+		if (AuthEndpoints.deps.moderation) {
+			const emailBan = await AuthEndpoints.deps.moderation.isEmailBanned(email);
+			if (emailBan.banned) {
+				throw new AuthError(403, "ACCOUNT_BANNED", emailBan.reason || "Email no permitido", {
+					blockedUntil: toBlockedUntil(emailBan.expiresAt),
+				});
+			}
+			if (ctx.ip) {
+				const ipBan = await AuthEndpoints.deps.moderation.isIpBanned(ctx.ip);
+				if (ipBan.banned) {
+					throw new AuthError(403, "ACCOUNT_BANNED", ipBan.reason || "Acceso bloqueado", {
+						blockedUntil: toBlockedUntil(ipBan.expiresAt),
+					});
+				}
+			}
 		}
 
 		if (!AuthEndpoints.deps.internalIdentity) {

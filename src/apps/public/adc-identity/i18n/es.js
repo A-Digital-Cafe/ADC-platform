@@ -48,6 +48,13 @@ export default {
 		selectRoles: "Seleccionar roles",
 		searchRoles: "Buscar roles...",
 		never: "Nunca",
+		ban: "Banear",
+		unban: "Desbanear",
+		banned: "Baneado",
+		banUser: 'Banear a "{{name}}"',
+		banReason: "Motivo del ban",
+		banExpiresAt: "Fecha de expiración (opcional)",
+		banExpiresAtHelp: "Si se deja vacío el ban es permanente",
 	},
 	roles: {
 		name: "Nombre",
@@ -213,5 +220,8 @@ export default {
 		// Validación
 		MISSING_FIELDS: "Faltan campos requeridos",
 		INVALID_ROLE: "Rol inválido",
+		FORBIDDEN: "No tienes permisos para realizar esta acción",
+		MISSING_REASON: "Se requiere una razón para banear a un usuario",
+		MISSING_TARGET: "Debe especificar un usuario",
 	},
 };

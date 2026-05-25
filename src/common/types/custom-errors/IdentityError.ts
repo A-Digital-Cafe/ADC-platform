@@ -17,8 +17,11 @@ type IdentityErrorTypes =
 	| "ORG_NOT_FOUND"
 	| "REGION_NOT_FOUND"
 	// Validation
+	| "FORBIDDEN"
 	| "INVALID_BODY"
 	| "MISSING_FIELDS"
+	| "MISSING_TARGET"
+	| "INVALID_REASON"
 	| "INVALID_ROLE"
 	| "INVALID_ROLE_ID"
 	| "INVALID_GROUP"

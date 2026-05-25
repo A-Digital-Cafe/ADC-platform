@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import type { TokenVerificationResult as JWTTokenVerificationResult } from "../../../providers/security/jwt/types.d.ts";
+import type { BanLookupResult } from "@common/types/identity/Moderation.js";
 
 /**
  * Información del usuario autenticado
@@ -23,6 +24,15 @@ export interface AuthenticatedUser {
 	orgId?: string;
 	/** Metadatos adicionales */
 	metadata?: Record<string, unknown>;
+	/** Si el usuario está activo (false → baneado/deshabilitado) */
+	isActive?: boolean;
+}
+
+/** Subset de ModerationService usado por SessionManagerService. */
+export interface ModerationLookupService {
+	isEmailBanned(rawEmail: string): Promise<BanLookupResult>;
+	isIpBanned(rawIp: string): Promise<BanLookupResult>;
+	recordLoginAttemptIp(userId: string, rawIp: string): Promise<void>;
 }
 
 /**
