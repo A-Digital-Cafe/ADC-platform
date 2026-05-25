@@ -9,3 +9,22 @@ export function isPrivateHost(hostname: string): boolean {
 
 /** Dev mode: localhost, 127.0.0.1 or private/LAN IP */
 export const IS_DEV = isPrivateHost(globalThis.location?.hostname ?? "");
+
+const hostname = () => globalThis.location?.hostname ?? "localhost";
+const protocol = () => globalThis.location?.protocol ?? "http:";
+const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");
+
+/** Dev URL: http://{hostname}:{devPort}{path} */
+function getDevUrl(devPort: number, path = ""): string {
+	return `http://${hostname()}:${devPort}${path}`;
+}
+
+/** Prod URL: {protocol}//{prodHostname}{port}{path} — preserves current port (e.g. :3000 in prodtests) */
+function getProdUrl(prodHostname: string, path = ""): string {
+	return `${protocol()}//${prodHostname}${port()}${path}`;
+}
+
+/** URL based on environment */
+export function getUrl(devPort: number, prodHostname: string, path = ""): string {
+	return IS_DEV ? getDevUrl(devPort, path) : getProdUrl(prodHostname, path);
+}

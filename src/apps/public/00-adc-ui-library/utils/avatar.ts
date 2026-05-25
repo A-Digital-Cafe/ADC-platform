@@ -9,8 +9,6 @@ import { createAdcApi } from "./adc-fetch.js";
 import { buildDicebearAvatar } from "@common/utils/avatar.js";
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 
-export { buildDicebearAvatar };
-
 interface PublicProfile {
 	username?: string;
 	avatar?: string | null;
@@ -44,7 +42,7 @@ export function buildAvatarUrl(opts: { avatar?: string | null; seed?: string | n
  * Pide al backend (con caché + dedupe) los perfiles públicos (username + avatar)
  * de los `userIds` indicados. Hasta 50 ids por llamada (batch automático).
  */
-export async function fetchPublicProfiles(userIds: readonly string[]): Promise<Map<string, PublicProfile>> {
+async function fetchPublicProfiles(userIds: readonly string[]): Promise<Map<string, PublicProfile>> {
 	const out = new Map<string, PublicProfile>();
 	const toFetch: string[] = [];
 	const pending: Array<Promise<void>> = [];
@@ -103,10 +101,4 @@ export async function fetchPublicProfiles(userIds: readonly string[]): Promise<M
 export async function fetchPublicProfile(userId: string): Promise<PublicProfile> {
 	const map = await fetchPublicProfiles([userId]);
 	return map.get(userId) ?? {};
-}
-
-/** Limpia la caché (e.g. tras logout o cambios de avatar propios). */
-export function clearAvatarCache(): void {
-	cache.clear();
-	inflight.clear();
 }

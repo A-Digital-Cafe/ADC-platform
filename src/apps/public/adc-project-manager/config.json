@@ -34,6 +34,10 @@
 		{
 			"name": "IdentityManagerService",
 			"version": "latest"
+		},
+		{
+			"name": "SEOService",
+			"version": "latest"
 		}
 	]
 }

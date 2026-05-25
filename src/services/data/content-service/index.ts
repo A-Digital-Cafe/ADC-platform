@@ -19,10 +19,13 @@ import type InternalS3Provider from "../../../providers/object/internal-s3-provi
 import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
 import { articleAttachmentsChecker } from "./permissions/articleAttachments.ts";
 import { articleCommentsChecker } from "./permissions/articleComments.ts";
+import { SitemapDao, type PublishedSitemapSlug, type ArticleSEO, type PathSEO } from "./dao/sitemap.ts";
+import { ContentSEOAccessors } from "./seo-accessors.js";
 
 export default class ContentService extends BaseService {
 	public readonly name = "content-service";
 	private mongoProvider!: MongoProvider;
+	#seo: ContentSEOAccessors | null = null;
 
 	@EnableEndpoints({
 		managers: () => [PathEndpoints, ArticleEndpoints, CommentEndpoints, ArticleAttachmentEndpoints, RatingEndpoints],
@@ -86,7 +89,29 @@ export default class ContentService extends BaseService {
 		CommentEndpoints.init(ArticleModel, commentsManager as CommentsManager, identityService);
 		ArticleAttachmentEndpoints.init(ArticleModel, attachmentsManager as AttachmentsManager);
 
+		this.#seo = new ContentSEOAccessors(new SitemapDao(ArticleModel, PathModel));
+
 		this.logger.logOk("[ContentService] Servicio de contenido iniciado correctamente");
+	}
+
+	/** Devuelve solo slug + updatedAt de artículos publicados (batched + cache). */
+	async listPublishedArticleSlugs(): Promise<PublishedSitemapSlug[]> {
+		return this.#seo ? this.#seo.listPublishedArticleSlugs() : [];
+	}
+
+	/** Devuelve solo slug + updatedAt de learning paths publicados (batched + cache). */
+	async listPublishedPathSlugs(): Promise<PublishedSitemapSlug[]> {
+		return this.#seo ? this.#seo.listPublishedPathSlugs() : [];
+	}
+
+	/** Datos mínimos para inyectar meta SEO de un artículo (hit a cache batched). */
+	async getArticleSEOBySlug(slug: string): Promise<ArticleSEO | null> {
+		return this.#seo ? this.#seo.getArticleSEOBySlug(slug) : null;
+	}
+
+	/** Datos mínimos para inyectar meta SEO de un learning path (hit a cache batched). */
+	async getPathSEOBySlug(slug: string): Promise<PathSEO | null> {
+		return this.#seo ? this.#seo.getPathSEOBySlug(slug) : null;
 	}
 
 	private async waitForMongo(): Promise<void> {

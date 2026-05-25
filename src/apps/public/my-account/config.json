@@ -19,7 +19,7 @@
 		"hosting": [
 			{
 				"domains": ["adigitalcafe.com"],
-				"subdomains": ["*"]
+				"subdomains": ["my-account"]
 			}
 		]
 	},

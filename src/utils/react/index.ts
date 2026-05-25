@@ -1,7 +1,1 @@
-export {
-	loadRemoteComponent,
-	type Framework,
-	type RemoteComponentResult,
-	type LoadRemoteComponentOptions,
-} from './loadRemoteComponent.js';
-
+export { loadRemoteComponent, type Framework, type RemoteComponentResult } from "./loadRemoteComponent.js";

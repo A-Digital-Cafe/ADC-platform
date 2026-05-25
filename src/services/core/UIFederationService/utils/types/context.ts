@@ -3,6 +3,7 @@ import type { ILangManagerService } from "../../../LangManagerService/types.js";
 import type FastifyServerProvider from "../../../../../providers/http/fastify-server/index.js";
 import type { ImportMap } from "../../../../../interfaces/modules/IUIModule.js";
 import type { ModuleRegistry } from "../registry/module-registry.js";
+import type SEOService from "../../../../data/SEOService/index.js";
 
 export interface HostRegistryEntry {
 	namespace: string;
@@ -25,6 +26,8 @@ export interface UIFederationContext {
 	port: number;
 	uiOutputBaseDir: string;
 	isDevelopment: boolean;
+	/** Lookup soft de SEOService. Devuelve `null` si aún no está registrado. */
+	getSEOService: () => SEOService | null;
 }
 
 export const DEFAULT_NAMESPACE = "default";

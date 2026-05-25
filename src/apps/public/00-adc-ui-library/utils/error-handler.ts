@@ -5,7 +5,7 @@
  * Errors are routed based on errorKey and component configuration.
  */
 
-export type ErrorSeverity = "info" | "warning" | "error" | "success";
+type ErrorSeverity = "info" | "warning" | "error" | "success";
 
 export interface ShowErrorOptions {
 	/** The error key (e.g., "INVALID_CREDENTIALS", "PATH_NOT_FOUND") */

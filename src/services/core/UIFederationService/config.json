@@ -22,6 +22,11 @@
 			"name": "LangManagerService",
 			"version": "latest",
 			"language": "typescript"
+		},
+		{
+			"name": "SEOService",
+			"version": "latest",
+			"language": "typescript"
 		}
 	]
 }

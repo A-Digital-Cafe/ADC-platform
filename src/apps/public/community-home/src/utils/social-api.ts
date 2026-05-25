@@ -8,7 +8,6 @@ import type { AttachmentDTO } from "@common/types/attachments/Attachment.js";
 
 export type { Comment, CommentDraft, CommentsPage, RatingStats };
 export { buildCommentsTree, type CommentTreeNode } from "@ui-library/utils/comments-tree";
-export type { PresignUploadResult } from "@ui-library/utils/api-attachments";
 
 const api = createAdcApi({ basePath: "/api/learning", devPort: 3000, credentials: "include" });
 

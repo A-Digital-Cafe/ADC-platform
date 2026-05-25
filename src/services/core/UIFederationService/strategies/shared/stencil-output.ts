@@ -6,7 +6,7 @@ import { runCommand } from "../../utils/fs/file-operations.js";
  * Extrae CSS puro removiendo directivas de Tailwind (@import "tailwindcss", @layer, @utility, etc.)
  * Convierte @layer blocks a CSS puro y preserva variables CSS.
  */
-export function extractPureCss(cssContent: string, moduleName: string): string {
+function extractPureCss(cssContent: string, moduleName: string): string {
 	let result = `/**\n * CSS base para ${moduleName}\n * Generado automáticamente - CSS puro sin directivas de Tailwind\n */\n\n`;
 
 	// Remover @import "tailwindcss" y similares

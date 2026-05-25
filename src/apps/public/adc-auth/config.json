@@ -1,5 +1,6 @@
 {
 	"uiModule": {
+		"enableSEO": true,
 		"name": "adc-auth",
 		"uiNamespace": "adc-platform",
 		"framework": "react",
@@ -16,5 +17,11 @@
 				"subdomains": ["auth"]
 			}
 		]
-	}
+	},
+	"services": [
+		{
+			"name": "SEOService",
+			"version": "latest"
+		}
+	]
 }

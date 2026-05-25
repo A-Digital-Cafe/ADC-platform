@@ -62,6 +62,16 @@ async function registerHostsForModule(module: RegisteredUIModule, namespace: str
 	if (registeredPatterns.length > 0) {
 		ctx.logger.logOk(`Módulo UI ${module.name} [${namespace}] servido en hosts: ${registeredPatterns.join(", ")}`);
 	}
+
+	if (module.uiConfig.enableSEO) {
+		const seo = ctx.getSEOService();
+		if (seo) {
+			seo.enableForHosts(registeredPatterns);
+			ctx.logger.logDebug(`SEO habilitado para ${module.name} en ${registeredPatterns.length} host(s)`);
+		} else {
+			ctx.logger.logWarn(`enableSEO=true en ${module.name} pero SEOService no está disponible`);
+		}
+	}
 }
 
 async function serveModuleInProd(module: RegisteredUIModule, namespace: string, ctx: UIFederationContext): Promise<void> {

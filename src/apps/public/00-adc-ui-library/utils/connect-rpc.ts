@@ -3,16 +3,4 @@
  * Los tipos se definen en @common/ADC/types/learning.ts
  */
 
-export type {
-	Block,
-	TextAlign,
-	TextMark,
-	CalloutTone,
-	CalloutRole,
-	LinkRel,
-	LearningPath,
-	PathItem,
-	PathItemLevel,
-	Article,
-	Image,
-} from "@common/ADC/types/learning.js";
+export type { Block, TextAlign, TextMark, CalloutTone, CalloutRole, LearningPath, PathItemLevel, Article } from "@common/ADC/types/learning.js";

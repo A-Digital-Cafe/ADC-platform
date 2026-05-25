@@ -1,5 +1,6 @@
 {
 	"uiModule": {
+		"enableSEO": true,
 		"name": "community-home",
 		"uiNamespace": "adc-platform",
 		"framework": "react",
@@ -19,7 +20,7 @@
 		"hosting": [
 			{
 				"domains": ["adigitalcafe.com"],
-				"subdomains": ["*"]
+				"subdomains": ["community"]
 			}
 		]
 	},
@@ -28,6 +29,10 @@
 			"name": "data/content-service",
 			"version": "latest",
 			"language": "typescript"
+		},
+		{
+			"name": "SEOService",
+			"version": "latest"
 		}
 	]
 }

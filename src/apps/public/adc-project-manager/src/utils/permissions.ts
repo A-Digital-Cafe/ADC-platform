@@ -1,5 +1,4 @@
 export { PMScopes as Scope } from "@common/types/project-manager/permissions.ts";
-export { CRUDXAction as Action } from "@common/types/Actions";
 
 import { PMScopes } from "@common/types/project-manager/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions";
@@ -16,7 +15,7 @@ export interface PMTab {
 }
 
 /** Tabs dentro de un proyecto */
-export const PROJECT_TABS: PMTab[] = [
+const PROJECT_TABS: PMTab[] = [
 	{ id: "board", label: "board", requiredScope: PMScopes.ISSUES, requiredAction: CRUDXAction.READ },
 	{ id: "backlog", label: "backlog", requiredScope: PMScopes.ISSUES, requiredAction: CRUDXAction.READ },
 	{ id: "calendar", label: "calendar", requiredScope: PMScopes.ISSUES, requiredAction: CRUDXAction.READ },
@@ -33,7 +32,7 @@ export interface CallerCtx {
 }
 
 /** Devuelve `true` si el caller es owner, miembro o pertenece a un group miembro del proyecto. */
-export function isProjectMember(project: Project | null | undefined, caller: CallerCtx | null | undefined): boolean {
+function isProjectMember(project: Project | null | undefined, caller: CallerCtx | null | undefined): boolean {
 	if (!project || !caller?.userId) return false;
 	if (project.ownerId === caller.userId) return true;
 	if (project.memberUserIds?.includes(caller.userId)) return true;
@@ -42,7 +41,7 @@ export function isProjectMember(project: Project | null | undefined, caller: Cal
 }
 
 /** Devuelve `true` si el caller es asignado al issue (directo o vía group). */
-export function isIssueAssignee(issue: Issue | null | undefined, caller: CallerCtx | null | undefined): boolean {
+function isIssueAssignee(issue: Issue | null | undefined, caller: CallerCtx | null | undefined): boolean {
 	if (!issue || !caller?.userId) return false;
 	if (issue.assigneeIds?.includes(caller.userId)) return true;
 	const gids = caller.groupIds ?? [];
@@ -52,12 +51,6 @@ export function isIssueAssignee(issue: Issue | null | undefined, caller: CallerC
 /** Verifica acceso básico a proyectos (permiso formal). */
 export function canAccessProjects(perms: Permission[]): boolean {
 	return hasPermission(perms, RESOURCE, CRUDXAction.READ, PMScopes.PROJECTS);
-}
-
-/** Visibilidad del tablero: permiso formal O miembro del proyecto. */
-export function canViewProject(perms: Permission[], project: Project | null, caller?: CallerCtx): boolean {
-	if (hasPermission(perms, RESOURCE, CRUDXAction.READ, PMScopes.PROJECTS, { selfId: caller?.userId, ownerId: project?.ownerId })) return true;
-	return isProjectMember(project, caller);
 }
 
 export function getVisibleProjectTabs(perms: Permission[], project?: Project | null, caller?: CallerCtx): PMTab[] {

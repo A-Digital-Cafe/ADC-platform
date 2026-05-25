@@ -15,7 +15,7 @@ export interface RemoteComponentResult {
 	timestamp: number;
 }
 
-export interface LoadRemoteComponentOptions {
+interface LoadRemoteComponentOptions {
 	/** Función para importar dinámicamente el módulo */
 	importFn: () => Promise<any>;
 	/** Nombre del módulo para logs y data attributes */

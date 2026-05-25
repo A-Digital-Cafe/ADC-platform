@@ -69,6 +69,12 @@ export interface UIModuleConfig {
 	hosting?: UIHostingConfig[];
 	/** Seguridad HTTP específica para el módulo UI */
 	security?: UIModuleSecurityConfig;
+	/**
+	 * Habilita inyección de metadatos SEO en las respuestas HTML
+	 * de este módulo. Requiere que `SEOService` esté cargado y que
+	 * la app llame a `seoService.registerPageMeta(...)`.
+	 */
+	enableSEO?: boolean;
 }
 
 /**

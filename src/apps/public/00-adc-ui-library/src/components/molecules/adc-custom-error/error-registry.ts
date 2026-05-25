@@ -39,10 +39,3 @@ export function recalculateClaimedKeys(): void {
 		}
 	});
 }
-
-/**
- * Checks if an error key is claimed by a specific (non-global) handler.
- */
-export function isErrorKeyClaimed(errorKey: string): boolean {
-	return claimedErrorKeys.has(errorKey);
-}

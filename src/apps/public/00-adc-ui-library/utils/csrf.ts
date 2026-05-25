@@ -48,7 +48,3 @@ export async function appendCsrfHeader(
 	if (token) nextHeaders.set(CSRF_HEADER_NAME, token);
 	return nextHeaders;
 }
-
-export function clearCsrfTokenCache(): void {
-	tokenCache.clear();
-}

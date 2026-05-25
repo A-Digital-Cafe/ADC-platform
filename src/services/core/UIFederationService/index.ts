@@ -5,6 +5,7 @@ import type { RegisteredUIModule } from "./types.js";
 import type { ImportMap, UIModuleConfig } from "../../../interfaces/modules/IUIModule.js";
 import type { ILangManagerService } from "../LangManagerService/types.js";
 import FastifyServerProvider from "../../../providers/http/fastify-server/index.js";
+import type SEOService from "../../data/SEOService/index.js";
 
 import { getStrategy, isFrameworkSupported, getSupportedFrameworks } from "./strategies/index.js";
 import { ModuleRegistry } from "./utils/registry/module-registry.js";
@@ -28,6 +29,8 @@ export default class UIFederationService extends BaseService {
 	readonly #isDevelopment: boolean;
 	#langManager: ILangManagerService | null = null;
 	#httpProvider: FastifyServerProvider | null = null;
+	#seoService: SEOService | null = null;
+
 
 	constructor(kernel: any, options?: any) {
 		super(kernel, options);
@@ -50,6 +53,7 @@ export default class UIFederationService extends BaseService {
 			port: this.#port,
 			uiOutputBaseDir: this.#uiOutputBaseDir,
 			isDevelopment: this.#isDevelopment,
+			getSEOService: () => this.#seoService,
 		};
 	}
 
@@ -67,6 +71,13 @@ export default class UIFederationService extends BaseService {
 			this.logger.logDebug("LangManagerService conectado");
 		} catch {
 			this.logger.logDebug("LangManagerService no disponible, i18n deshabilitado");
+		}
+		try {
+			this.#seoService = this.getMyService<SEOService>("SEOService");
+			this.#seoService.attachFastify(this.#httpProvider);
+			this.logger.logDebug("SEOService conectado");
+		} catch {
+			this.logger.logDebug("SEOService no disponible, SEO deshabilitado");
 		}
 		await setupImportMapEndpoints(this.#ctx());
 		await this.#httpProvider.listen(this.#port);

@@ -2,9 +2,9 @@ import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
 import type { DockerManager } from "../../utils/system/DockerManager.js";
 
-export type WithTimeoutFn = <T>(promise: Promise<T>, timeoutMs: number, name: string) => Promise<T | undefined>;
+type WithTimeoutFn = <T>(promise: Promise<T>, timeoutMs: number, name: string) => Promise<T | undefined>;
 
-export function createWithTimeout(logger: ILogger): WithTimeoutFn {
+function createWithTimeout(logger: ILogger): WithTimeoutFn {
 	return async <T>(promise: Promise<T>, timeoutMs: number, name: string): Promise<T | undefined> => {
 		let timeoutId: ReturnType<typeof setTimeout> | undefined;
 		const timeoutPromise = new Promise<undefined>((resolve) => {

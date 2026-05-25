@@ -1,4 +1,4 @@
-export interface FederatedRoute {
+interface FederatedRoute {
 	/** App identifier */
 	id: string;
 	/** Paths that belong to this app (matched by prefix) */

@@ -1,5 +1,6 @@
 {
 	"uiModule": {
+		"enableSEO": true,
 		"name": "adc-org-management",
 		"uiNamespace": "adc-platform",
 		"framework": "react",
@@ -28,6 +29,10 @@
 		},
 		{
 			"name": "IdentityManagerService",
+			"version": "latest"
+		},
+		{
+			"name": "SEOService",
 			"version": "latest"
 		}
 	]

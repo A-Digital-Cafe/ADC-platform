@@ -145,8 +145,8 @@ export class ModuleLoader {
 							kernel.registry.registerProvider(providerConfig.name, provider, providerConfig, null);
 						}
 					} catch (error) {
-						const message = `Error cargando provider ${providerConfig.name}: ${error}`;
-						if (modulesConfig.failOnError) throw new Error(message);
+						const message = `Error cargando provider ${providerConfig.name}`;
+						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
 						Logger.warn(message);
 					}
 				}
@@ -166,8 +166,8 @@ export class ModuleLoader {
 							kernel.registry.registerUtility(baseName, utility, utilityConfig, null);
 						}
 					} catch (error) {
-						const message = `Error cargando utility ${utilityConfig.name}: ${error}`;
-						if (modulesConfig.failOnError) throw new Error(message);
+						const message = `Error cargando utility ${utilityConfig.name}`;
+						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
 						Logger.warn(message);
 					}
 				}
@@ -246,6 +246,14 @@ export class ModuleLoader {
 							continue; // Saltar al siguiente servicio
 						}
 
+						// Reutilizar instancia kernel-mode (registrada con su propio uniqueKey) si existe
+						const existingKeys = kernel.registry.getUniqueKeysByName("service", serviceConfig.name);
+						if (existingKeys.length > 0) {
+							Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya cargado (kernel-mode u otro), reutilizando`);
+							kernel.registry.addModuleDependency("service", serviceConfig.name);
+							continue;
+						}
+
 						// SEGUNDO: Cargar los providers específicos del servicio (si los tiene)
 						// Esto evita duplicación porque los providers se cargan una sola vez en el kernel
 						if (mutableServiceConfig.providers && Array.isArray(mutableServiceConfig.providers)) {
@@ -287,8 +295,8 @@ export class ModuleLoader {
 											);
 										}
 									} catch (error) {
-										const message = `Error cargando provider ${interpolatedProviderConfig.name} del servicio ${serviceConfig.name}: ${error}`;
-										if (modulesConfig.failOnError) throw new Error(message);
+										const message = `Error cargando provider ${interpolatedProviderConfig.name} del servicio ${serviceConfig.name}`;
+										if (modulesConfig.failOnError) throw new Error(message, { cause: error });
 										Logger.warn(message);
 									}
 								}
@@ -316,8 +324,8 @@ export class ModuleLoader {
 											kernel.registry.registerUtility(baseName, utility, utilityConfig);
 										}
 									} catch (error) {
-										const message = `Error cargando utility ${utilityConfig.name} del servicio ${serviceConfig.name}: ${error}`;
-										if (modulesConfig.failOnError) throw new Error(message);
+										const message = `Error cargando utility ${utilityConfig.name} del servicio ${serviceConfig.name}`;
+										if (modulesConfig.failOnError) throw new Error(message, { cause: error });
 										Logger.warn(message);
 									}
 								}
@@ -347,16 +355,16 @@ export class ModuleLoader {
 						};
 						kernel.registry.registerService(service.name, service, registrationConfig);
 					} catch (error) {
-						const message = `Error cargando service ${serviceConfig.name}: ${error}`;
-						if (modulesConfig.failOnError) throw new Error(message);
+						const message = `Error cargando service ${serviceConfig.name}`;
+						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
 						Logger.warn(message);
 					}
 				}
 			}
 		} catch (error) {
-			const message = `Error procesando la definición de módulos: ${error}`;
+			const message = `Error procesando la definición de módulos`;
 			Logger.error(message);
-			throw new Error(message);
+			throw new Error(message, { cause: error });
 		}
 	}
 

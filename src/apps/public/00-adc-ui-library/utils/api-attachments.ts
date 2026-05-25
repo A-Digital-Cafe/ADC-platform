@@ -60,5 +60,3 @@ export function createAttachmentsApi(api: AdcApi, prefix: string, idScope: strin
 			}),
 	};
 }
-
-export type AttachmentsApi = ReturnType<typeof createAttachmentsApi>;

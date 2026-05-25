@@ -3,11 +3,10 @@
  * el usuario autenticado y sus permisos sin depender del app adc-auth.
  *
  * Cachea la respuesta de /api/auth/session por 30s para evitar llamadas
- * repetidas. Llamar a `clearSessionCache()` después de login/logout.
+ * repetidas.
  */
 
 import { createAdcApi } from "./adc-fetch.js";
-import { hasBitfieldPermission } from "@common/utils/perms.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 
 export type { SessionUser, SessionResponse };
@@ -39,14 +38,4 @@ export async function getSession(force = false, silent = false): Promise<Session
 	} finally {
 		inflight = null;
 	}
-}
-
-export function clearSessionCache(): void {
-	cache = null;
-}
-
-/** Verifica si la sesión actual tiene un permiso (e.g. P.COMMUNITY.SOCIAL.WRITE). */
-export async function sessionHasPermission(required: string): Promise<boolean> {
-	const session = await getSession();
-	return hasBitfieldPermission(session.user?.perms ?? [], required);
 }

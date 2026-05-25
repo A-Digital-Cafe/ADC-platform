@@ -1,15 +1,12 @@
 import { FederatedRouter } from "./federated-router.js";
 
-export type { FederatedRoute } from "./federated-router.js";
-export { FederatedRouter } from "./federated-router.js";
-
 export interface RouteDefinition {
 	module: string;
 	path?: string;
 	subdomain?: string;
 }
 
-export class Router {
+class Router {
 	private onRouteChange: ((path: string) => void) | null = null;
 	private popstateListener: (() => void) | null = null;
 	private baseDomain: string | null = null;

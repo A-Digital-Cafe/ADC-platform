@@ -65,19 +65,50 @@ async function main() {
 	process.on("SIGHUP", () => shutdownHandler("SIGHUP")); // Terminal cerrada
 	process.on("SIGQUIT", () => shutdownHandler("SIGQUIT")); // Ctrl+\
 
+	// Errores HTTP típicos no fatales: una request individual no debe tirar todo el kernel.
+	// En un servidor con millones de usuarios, perder el proceso por una conexión rota es inaceptable.
+	const NON_FATAL_ERROR_CODES = new Set([
+		"ERR_HTTP_HEADERS_SENT",
+		"ERR_STREAM_DESTROYED",
+		"ERR_STREAM_WRITE_AFTER_END",
+		"ERR_STREAM_PREMATURE_CLOSE",
+		"ERR_SOCKET_CLOSED",
+		"ECONNRESET",
+		"EPIPE",
+		"ECANCELED",
+	]);
+	const NON_FATAL_MESSAGE_HINTS = ["writeHead", "headers after they are sent", "Request aborted", "premature close"];
+	const isNonFatal = (reason: any): boolean => {
+		if (!reason) return false;
+		const code = String(reason.code ?? "");
+		if (NON_FATAL_ERROR_CODES.has(code)) return true;
+		const msg = String(reason.message ?? reason);
+		return NON_FATAL_MESSAGE_HINTS.some((hint) => msg.includes(hint));
+	};
+
 	// Manejar excepciones no capturadas
 	process.on("uncaughtException", async (error) => {
+		if (isNonFatal(error)) {
+			Logger.warn(`[non-fatal] Excepción no capturada ignorada: ${error.message}`);
+			return;
+		}
 		Logger.error(`Excepción no capturada: ${error.message}`);
 		if (!isShuttingDown) {
 			await shutdownHandler("UNCAUGHT_EXCEPTION");
 		}
 	});
 
-	process.on("unhandledRejection", async (reason: any) => {
-		Logger.error(`Promesa rechazada no manejada: ${reason?.message || reason}`);
-		if (!isShuttingDown) {
-			await shutdownHandler("UNHANDLED_REJECTION");
+	process.on("unhandledRejection", (reason: any) => {
+		// Política de producción: NUNCA tirar el kernel por una promesa rechazada
+		// (en su mayoría son errores transitorios de I/O / conexiones rotas).
+		if (isNonFatal(reason)) {
+			Logger.warn(`[non-fatal] Promesa rechazada ignorada: ${reason?.message || reason}`);
+			if (reason?.stack && process.env.DEBUG_NON_FATAL === "1") Logger.warn(reason.stack);
+			return;
 		}
+		Logger.error(`Promesa rechazada no manejada: ${reason?.message || reason}`);
+		if (reason?.stack) Logger.error(reason.stack);
+		// No iniciamos shutdown: log + continue. El operador investigará el log.
 	});
 
 	// Ahora sí iniciar el kernel (las señales ya están registradas)

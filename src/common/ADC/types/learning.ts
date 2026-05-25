@@ -13,7 +13,7 @@ export type CalloutTone = "info" | "warning" | "success" | "error";
 export type CalloutRole = "note" | "status" | "alert";
 export type LinkRel = "nofollow" | "noopener" | "noreferrer" | "ugc" | "sponsored";
 
-export type AttachmentKind = "image" | "file";
+type AttachmentKind = "image" | "file";
 
 export type Block =
 	| { type: "heading"; level: 2 | 3 | 4 | 5 | 6; text: string; align?: TextAlign; id?: string }
@@ -40,7 +40,7 @@ export type Block =
 // Learning Path
 // ============================================================================
 
-export type PathItemType = "article" | "path";
+type PathItemType = "article" | "path";
 export type PathItemLevel = "critico" | "importante" | "opcional";
 
 export interface PathItem {
@@ -49,7 +49,7 @@ export interface PathItem {
 	level?: PathItemLevel;
 }
 
-export interface Image {
+interface Image {
 	url: string;
 	width?: number;
 	height?: number;

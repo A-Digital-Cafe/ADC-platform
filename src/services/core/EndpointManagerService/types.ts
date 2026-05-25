@@ -18,7 +18,7 @@ export interface EndpointConfig {
 }
 
 /** Optional endpoint configuration */
-export interface EndpointOptions {
+interface EndpointOptions {
 	/** Rate limit per IP. timeWindow is in milliseconds. */
 	rateLimit?: { max: number; timeWindow: number };
 	schema?: {

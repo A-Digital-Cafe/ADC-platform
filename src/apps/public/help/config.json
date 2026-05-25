@@ -1,5 +1,6 @@
 {
 	"uiModule": {
+		"enableSEO": true,
 		"name": "help",
 		"uiNamespace": "adc-platform",
 		"framework": "react",
@@ -22,5 +23,11 @@
 				"subdomains": ["help"]
 			}
 		]
-	}
+	},
+	"services": [
+		{
+			"name": "SEOService",
+			"version": "latest"
+		}
+	]
 }

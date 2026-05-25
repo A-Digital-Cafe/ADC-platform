@@ -95,5 +95,3 @@ export function createCommentsApi(api: AdcApi, prefix: string, _draftScope?: str
 		},
 	};
 }
-
-export type CommentsApi = ReturnType<typeof createCommentsApi>;

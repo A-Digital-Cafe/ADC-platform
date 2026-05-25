@@ -1,5 +1,5 @@
 /** Returns true for localhost, 127.0.0.1 and private/LAN IPv4 addresses */
-export function isPrivateHost(hostname: string): boolean {
+function isPrivateHost(hostname: string): boolean {
 	if (hostname === "localhost" || hostname === "127.0.0.1") return true;
 	if (hostname.startsWith("192.168.")) return true;
 	if (hostname.startsWith("10.")) return true;
@@ -20,7 +20,7 @@ export function getDevUrl(devPort: number, path = ""): string {
 }
 
 /** Prod URL: {protocol}//{prodHostname}{port}{path} */
-export function getProdUrl(prodHostname: string, path = ""): string {
+function getProdUrl(prodHostname: string, path = ""): string {
 	return `${protocol()}//${prodHostname}${port()}${path}`;
 }
 

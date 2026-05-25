@@ -2,7 +2,7 @@
  * Types and interfaces for adc-toast-manager component
  */
 
-export type ToastVariant = "success" | "error" | "warning" | "info";
+type ToastVariant = "success" | "error" | "warning" | "info";
 
 export interface ADCToastEvent {
 	message: string;

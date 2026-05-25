@@ -15,5 +15,4 @@ export const pmApi = {
 
 export type { IssueListParams } from "./pm-api/client.ts";
 export { buildCommentsTree, type CommentTreeNode } from "@ui-library/utils/comments-tree";
-export type { Comment, CommentDraft, CommentsPage } from "@common/types/comments/Comment.ts";
-export type { AttachmentDTO } from "@common/types/attachments/Attachment.ts";
+export type { Comment } from "@common/types/comments/Comment.ts";

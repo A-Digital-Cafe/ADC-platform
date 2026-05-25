@@ -1,5 +1,4 @@
 export { IdentityScopes as Scope } from "@common/types/identity/permissions.ts";
-export { CRUDXAction as Action } from "@common/types/Actions";
 
 import { IdentityScopes } from "@common/types/identity/permissions.ts";
 import type { Permission } from "@common/types/identity/Permission.js";
@@ -19,7 +18,7 @@ export interface IdentityTab {
 /**
  * Available tabs with their required permissions
  */
-export const IDENTITY_TABS: IdentityTab[] = [
+const IDENTITY_TABS: IdentityTab[] = [
 	{ id: "users", label: "users", requiredScope: IdentityScopes.USERS, requiredAction: CRUDXAction.READ },
 	{ id: "roles", label: "roles", requiredScope: IdentityScopes.ROLES, requiredAction: CRUDXAction.READ },
 	{ id: "groups", label: "groups", requiredScope: IdentityScopes.GROUPS, requiredAction: CRUDXAction.READ },

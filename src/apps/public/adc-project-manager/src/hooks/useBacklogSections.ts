@@ -5,7 +5,7 @@ import type { Milestone } from "@common/types/project-manager/Milestone.ts";
 import type { GroupSection } from "../components/backlog/BacklogSection.tsx";
 import type { GroupBy } from "../components/backlog/BacklogFilters.tsx";
 
-export const UNASSIGNED_KEY = "__unassigned__";
+const UNASSIGNED_KEY = "__unassigned__";
 
 type GroupEntity = Pick<Sprint | Milestone, "id" | "name" | "status">;
 

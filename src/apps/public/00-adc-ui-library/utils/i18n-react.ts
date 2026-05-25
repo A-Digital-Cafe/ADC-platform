@@ -220,20 +220,3 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 
 	return { t, locale, ready, setLocale: setLocaleFn };
 }
-
-/**
- * Get a translation key with a fallback
- * Useful for error messages where you want to show the errorKey as fallback
- */
-export function getErrorMessage(
-	t: (key: string, params?: Record<string, string>) => string,
-	errorKey: string,
-	fallbackMessage?: string
-): string {
-	const translated = t(`errors.${errorKey}`);
-	// If translation returns the key itself, use fallback
-	if (translated === `errors.${errorKey}`) {
-		return fallbackMessage || errorKey;
-	}
-	return translated;
-}

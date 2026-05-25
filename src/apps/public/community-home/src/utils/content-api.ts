@@ -2,7 +2,7 @@ import type { LearningPath, Article } from "@ui-library/utils/connect-rpc";
 import { createAdcApi } from "@ui-library/utils/adc-fetch";
 
 // Re-exportar tipos para uso en componentes
-export type { LearningPath, Article, Block, PathItemLevel } from "@ui-library/utils/connect-rpc";
+export type { LearningPath, Article, PathItemLevel } from "@ui-library/utils/connect-rpc";
 
 interface ListPathsOptions {
 	public?: boolean;

@@ -1,11 +1,7 @@
-export { AuthError } from "@common/types/custom-errors/AuthError.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 import { createAdcApi, type RequestOptions } from "@ui-library/utils/adc-fetch";
 
-/** @deprecated Usa SessionUser directamente. */
-export type AuthUser = SessionUser;
-
-export type { SessionUser, SessionResponse };
+export type { SessionResponse };
 
 export interface OrgOption {
 	orgId: string;
