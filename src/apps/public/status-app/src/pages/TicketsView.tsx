@@ -5,13 +5,8 @@ export default function TicketsView() {
 	const { t } = useTranslation({ namespace: "status-app", autoLoad: true });
 
 	return (
-		<div className="w-full flex flex-col pl-25 lg:pl-70">
-			<div className="mb-6">
-				<h2 className="font-heading text-2xl font-bold text-text mb-2">{t("tickets.title")}</h2>
-				<p className="text-muted">{t("tickets.subtitle")}</p>
-			</div>
-
+		<adc-page-shell heading={t("tickets.title")} description={t("tickets.subtitle")}>
 			<CreateTicketForm />
-		</div>
+		</adc-page-shell>
 	);
 }

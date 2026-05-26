@@ -78,7 +78,6 @@ function supportTicketCustomFields(input: CreateSupportTicketInput, caller: Supp
 		reporterEmail: input.email,
 		reportedByUserId: caller.userId,
 		reportedByEmail: caller.email ?? null,
-		reportIp: caller.ip,
 	};
 }
 
@@ -94,8 +93,7 @@ function supportTicketBlocks(input: CreateSupportTicketInput, caller: SupportTic
 	blocks.push(
 		{ type: "heading", level: 3, text: "Información del reporte" },
 		{ type: "paragraph", text: `Usuario reportante: ${caller.userId}` },
-		{ type: "paragraph", text: `Email de sesión: ${caller.email || "Anónimo"}` },
-		{ type: "paragraph", text: `IP: ${caller.ip}` }
+		{ type: "paragraph", text: `Email de sesión: ${caller.email || "Anónimo"}` }
 	);
 
 	return blocks;

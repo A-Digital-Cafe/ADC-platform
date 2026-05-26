@@ -8,7 +8,7 @@
 		"isRemote": false,
 		"serviceWorker": true,
 		"uiDependencies": ["adc-ui-library"],
-		"devPort": 3017,
+		"devPort": 3020,
 		"sharedLibs": ["react", "tailwind"],
 		"i18n": true,
 		"security": {
@@ -19,7 +19,7 @@
 		"hosting": [
 			{
 				"domains": ["adigitalcafe.com"],
-				"subdomains": ["*"]
+				"subdomains": ["status"]
 			}
 		]
 	},

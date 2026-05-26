@@ -4,20 +4,8 @@ export default function NotificationView() {
 	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
 
 	return (
-		<div className="w-full flex flex-col pl-25 lg:pl-70">
-			{/* Title */}
-			<div className="mb-4">
-				<h2 className="font-bold text-text">{t("notifications.title")}</h2>
-				<p className="text-muted">{t("notifications.subtitle")}</p>
-			</div>
-
-			<div className="bg-surface p-8 pb-6 rounded-xxl">
-				{/* Header */}
-				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">{t("notifications.panelTitle")}</h3>
-					<p className="text-sm text-muted">{t("notifications.panelDescription")}</p>
-				</div>
-
+		<adc-page-shell heading={t("notifications.title")} description={t("notifications.subtitle")} headerSpacing="sm">
+			<adc-section-panel heading={t("notifications.panelTitle")} description={t("notifications.panelDescription")}>
 				{/* Empty state */}
 				<div className="flex flex-col items-center justify-center text-center py-16">
 					{/* Icono */}
@@ -38,7 +26,7 @@ export default function NotificationView() {
 
 					<p className="text-muted max-w-md">{t("notifications.emptyDescription")}</p>
 				</div>
-			</div>
-		</div>
+			</adc-section-panel>
+		</adc-page-shell>
 	);
 }

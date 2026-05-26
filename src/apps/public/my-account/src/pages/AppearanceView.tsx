@@ -34,20 +34,8 @@ export default function AppearanceView() {
 	] as const;
 
 	return (
-		<div className="w-full flex flex-col pl-25 lg:pl-70">
-			{/* Title */}
-			<div className="mb-4">
-				<h2 className="text-2xl font-bold text-text">{t("appearance.title")}</h2>
-				<p className="text-muted">{t("appearance.subtitle")}</p>
-			</div>
-
-			{/* Panel */}
-			<div className="bg-surface p-8 pb-6 rounded-xxl">
-				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">{t("appearance.panelTitle")}</h3>
-					<p className="text-sm text-muted">{t("appearance.panelDescription")}</p>
-				</div>
-
+		<adc-page-shell heading={t("appearance.title")} description={t("appearance.subtitle")} headerSpacing="sm">
+			<adc-section-panel heading={t("appearance.panelTitle")} description={t("appearance.panelDescription")}>
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
 					{themes.map((theme) => {
 						const isActive = mode === theme.key;
@@ -78,7 +66,7 @@ export default function AppearanceView() {
 						);
 					})}
 				</div>
-			</div>
-		</div>
+			</adc-section-panel>
+		</adc-page-shell>
 	);
 }

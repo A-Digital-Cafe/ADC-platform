@@ -173,7 +173,7 @@ export function OrgRequestForm({ onSuccess }: OrgRequestFormProps) {
 				onSocialNetworkChange={handleSocialNetworkChange}
 			/>
 
-			<div className="bg-info border border-info rounded-lg p-4 flex gap-3">
+			<div className="bg-info border border-info rounded-lg p-4 flex gap-3 items-center" role="alert">
 				<svg className="w-5 h-5 text-tinfo shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
 					<path
 						fillRule="evenodd"

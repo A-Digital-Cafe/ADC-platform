@@ -215,114 +215,100 @@ export default function ProfileView() {
 	}
 
 	return (
-		<div className="w-full flex flex-col pl-25 lg:pl-70">
-			{/* Title */}
-			<div className="mb-4">
-				<h2 className="font-bold text-text">{t("profile.title")}</h2>
-				<p className="text-muted">{t("profile.subtitle")}</p>
-			</div>
-
-			{/* Panel */}
-			<div className="bg-surface p-8 pb-6 rounded-xxl">
-				<div className="mb-6">
-					<h3 className="mt-0! text-lg font-semibold text-text">{t("profile.panelTitle")}</h3>
-					<p className="text-sm text-muted">{t("profile.panelDescription")}</p>
-				</div>
-
-				<div className="max-w-3xl mx-auto">
-					{/* Avatar */}
-					<div className="flex flex-col items-center mb-8">
-						<div className="relative">
-							{avatarSource === "none" || !previewUrl ? (
-								<div className="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-muted bg-surface border-2 border-text/15">
-									<adc-icon-no-avatar size="2.5rem" />
-								</div>
-							) : (
-								<img
-									src={previewUrl}
-									alt={t("profile.avatarAlt")}
-									className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-accent"
-								/>
-							)}
-							{customOption && avatarSource === "custom" && (
-								<button
-									type="button"
-									aria-label={t("profile.removeCustomAvatar")}
-									title={t("profile.removeCustomAvatar")}
-									disabled={avatarBusy}
-									onClick={handleRemoveCustom}
-									className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-red-500 text-white text-sm font-bold flex items-center justify-center shadow-md hover:bg-red-600 disabled:opacity-50"
-								>
-									×
-								</button>
-							)}
-						</div>
-
-						{avatarOptions.length > 1 && (
-							<div className="w-full max-w-xs mt-4">
-								<label className="block text-xs text-muted mb-1">{t("profile.avatarSourceLabel")}</label>
-								<adc-select
-									value={avatarSource || ""}
-									options={selectorOptionsJson}
-									onChange={(e: any) => handleSelectAvatar((e.target as HTMLSelectElement).value as AvatarSource)}
-								/>
+		<adc-page-shell heading={t("profile.title")} description={t("profile.subtitle")} headerSpacing="sm">
+			<adc-section-panel heading={t("profile.panelTitle")} description={t("profile.panelDescription")} contentWidth="lg">
+				{/* Avatar */}
+				<div className="flex flex-col items-center mb-8">
+					<div className="relative">
+						{avatarSource === "none" || !previewUrl ? (
+							<div className="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-muted bg-surface border-2 border-text/15">
+								<adc-icon-no-avatar size="2.5rem" />
 							</div>
+						) : (
+							<img
+								src={previewUrl}
+								alt={t("profile.avatarAlt")}
+								className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-accent"
+							/>
 						)}
-
-						<input ref={fileInputRef} type="file" accept={ACCEPTED_MIMES.join(",")} className="hidden" onChange={handleFilePicked} />
-						<adc-button className="mt-4" variant="primary" disabled={avatarBusy} onClick={() => fileInputRef.current?.click()}>
-							{customOption ? t("profile.replaceCustomAvatar") : t("profile.uploadCustomAvatar")}
-						</adc-button>
-
-						<p className="text-xs text-muted mt-2 text-center">{t("profile.avatarHint")}</p>
+						{customOption && avatarSource === "custom" && (
+							<button
+								type="button"
+								aria-label={t("profile.removeCustomAvatar")}
+								title={t("profile.removeCustomAvatar")}
+								disabled={avatarBusy}
+								onClick={handleRemoveCustom}
+								className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-red-500 text-white text-sm font-bold flex items-center justify-center shadow-md hover:bg-red-600 disabled:opacity-50"
+							>
+								×
+							</button>
+						)}
 					</div>
 
-					{/* Form */}
-					<form onSubmit={handleSubmit} className="space-y-5">
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<div>
-								<label htmlFor="profile-name" className="block text-sm mb-1 text-text">
-									{t("profile.name")}
-								</label>
-								<adc-input
-									inputId="profile-name"
-									value={form.name}
-									onInput={(e) => handleChange("name", (e.target as HTMLInputElement).value)}
-								/>
-							</div>
-
-							<div>
-								<label htmlFor="profile-lastName" className="block text-sm mb-1 text-text">
-									{t("profile.lastName")}
-								</label>
-								<adc-input
-									inputId="profile-lastName"
-									value={form.lastName}
-									onInput={(e) => handleChange("lastName", (e.target as HTMLInputElement).value)}
-								/>
-							</div>
+					{avatarOptions.length > 1 && (
+						<div className="w-full max-w-xs mt-4">
+							<label className="block text-xs text-muted mb-1">{t("profile.avatarSourceLabel")}</label>
+							<adc-select
+								value={avatarSource || ""}
+								options={selectorOptionsJson}
+								onChange={(e: any) => handleSelectAvatar((e.target as HTMLSelectElement).value as AvatarSource)}
+							/>
 						</div>
+					)}
 
+					<input ref={fileInputRef} type="file" accept={ACCEPTED_MIMES.join(",")} className="hidden" onChange={handleFilePicked} />
+					<adc-button className="mt-4" variant="primary" disabled={avatarBusy} onClick={() => fileInputRef.current?.click()}>
+						{customOption ? t("profile.replaceCustomAvatar") : t("profile.uploadCustomAvatar")}
+					</adc-button>
+
+					<p className="text-xs text-muted mt-2 text-center">{t("profile.avatarHint")}</p>
+				</div>
+
+				{/* Form */}
+				<form onSubmit={handleSubmit} className="space-y-5">
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<div>
-							<label htmlFor="profile-birthDate" className="block text-sm mb-1 text-text">
-								{t("profile.birthDate")}
+							<label htmlFor="profile-name" className="block text-sm mb-1 text-text">
+								{t("profile.name")}
 							</label>
 							<adc-input
-								inputId="profile-birthDate"
-								type="date"
-								value={form.birthDate}
-								onInput={(e) => handleChange("birthDate", (e.target as HTMLInputElement).value)}
+								inputId="profile-name"
+								value={form.name}
+								onInput={(e) => handleChange("name", (e.target as HTMLInputElement).value)}
 							/>
 						</div>
 
-						<div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4">
-							<adc-button type="submit" variant="primary" disabled={!hasChanges}>
-								{hasChanges ? t("profile.saveChanges") : t("profile.noChangesButton")}
-							</adc-button>
+						<div>
+							<label htmlFor="profile-lastName" className="block text-sm mb-1 text-text">
+								{t("profile.lastName")}
+							</label>
+							<adc-input
+								inputId="profile-lastName"
+								value={form.lastName}
+								onInput={(e) => handleChange("lastName", (e.target as HTMLInputElement).value)}
+							/>
 						</div>
-					</form>
-				</div>
-			</div>
-		</div>
+					</div>
+
+					<div>
+						<label htmlFor="profile-birthDate" className="block text-sm mb-1 text-text">
+							{t("profile.birthDate")}
+						</label>
+						<adc-input
+							inputId="profile-birthDate"
+							type="date"
+							value={form.birthDate}
+							onInput={(e) => handleChange("birthDate", (e.target as HTMLInputElement).value)}
+						/>
+					</div>
+
+					<div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4">
+						<adc-button type="submit" variant="primary" disabled={!hasChanges}>
+							{hasChanges ? t("profile.saveChanges") : t("profile.noChangesButton")}
+						</adc-button>
+					</div>
+				</form>
+			</adc-section-panel>
+		</adc-page-shell>
 	);
 }

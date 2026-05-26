@@ -1,5 +1,5 @@
 import type { SupportTicketType } from "./CommonTicketColumns.ts";
-import { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES } from "./CommonTicketColumns.ts";
+export { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES } from "./CommonTicketColumns.ts";
 
 export type { SupportTicketType };
 
@@ -19,7 +19,6 @@ export interface SupportTicketIssueResponse {
 export interface SupportTicketCaller {
 	userId: string;
 	email?: string;
-	ip: string;
 }
 
 export interface SupportTicketConfig {
@@ -34,9 +33,7 @@ export const SUPPORT_TICKET_CONSTRAINTS = {
 } as const;
 
 /** Email regex (RFC-like) */
-export const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/u;
-
-export { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES };
+const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/u;
 
 export interface SelectOption {
 	value: SupportTicketType;

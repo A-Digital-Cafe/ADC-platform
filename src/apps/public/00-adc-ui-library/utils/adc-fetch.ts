@@ -17,8 +17,6 @@ import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 export { clearErrors } from "./error-handler.js";
 
 export interface AdcFetchResult<T = undefined> {
-    ticketKey: AdcFetchResult<import("../../status-app/src/utils/ticket-api.js").SupportTicketIssueResponse>;
-	error: string;
 	success: boolean;
 	data?: T;
 	errorKey?: string;

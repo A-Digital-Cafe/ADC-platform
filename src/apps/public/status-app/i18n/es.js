@@ -5,8 +5,7 @@ export default {
 		goBack: "Volver",
 	},
 	nav: {
-		title: "Estado del Sistema",
-		subtitle: "Monitorea servicios y compatibilidad",
+		title: "Estado y soporte",
 		status: "Estado",
 		tickets: "Tickets de Soporte",
 		metrics: "Rendimiento",
@@ -14,7 +13,7 @@ export default {
 	},
 	auth: {
 		accessRequired: "Acceso requerido",
-		signInRequired: "Debes iniciar sesión para ver el estado del sistema.",
+		signInRequired: "Debes iniciar sesión para ver el estado del sistema o realizar tickets.",
 	},
 	status: {
 		title: "Estado de Servicios",

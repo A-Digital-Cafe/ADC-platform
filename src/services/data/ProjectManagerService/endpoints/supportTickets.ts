@@ -1,16 +1,12 @@
 import { RegisterEndpoint, type EndpointCtx } from "../../../core/EndpointManagerService/index.js";
 import { ProjectManagerError } from "@common/types/custom-errors/ProjectManagerError.ts";
 import type { CreateSupportTicketInput, SupportTicketType } from "@common/types/project-manager/SupportTicket.ts";
-import { 
-	SUPPORT_TICKET_VALIDATORS,
-	validateStringField,
-	TICKET_TYPE_LABELS,
-} from "@common/types/project-manager/SupportTicket.ts";
+import { SUPPORT_TICKET_VALIDATORS, validateStringField, TICKET_TYPE_LABELS } from "@common/types/project-manager/SupportTicket.ts";
 import type ProjectManagerService from "../index.js";
 
 // Rate limiting: 10 tickets máximo cada 3 días por IP
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-const SUPPORT_TICKET_RATE_LIMIT = { max: 10, timeWindow: THREE_DAYS_MS };
+const SUPPORT_TICKET_RATE_LIMIT = { max: 5, timeWindow: THREE_DAYS_MS };
 
 // Extract valid types from TICKET_TYPE_LABELS to avoid duplication
 const VALID_TICKET_TYPES = Object.keys(TICKET_TYPE_LABELS) as SupportTicketType[];
@@ -113,12 +109,12 @@ export class SupportTicketEndpoints {
 		options: { rateLimit: SUPPORT_TICKET_RATE_LIMIT },
 	})
 	static async create(ctx: EndpointCtx<never, CreateSupportTicketInput>) {
+		if (!ctx.user?.id) throw new ProjectManagerError(401, "NO_TOKEN", "Debes iniciar sesión para crear un ticket de soporte");
 		const input = normalizeInput(ctx.data);
 
 		return SupportTicketEndpoints.service.supportTickets.create(SupportTicketEndpoints.kernelKey, input, {
-			userId: ctx.user!.id,
-			email: ctx.user?.email,
-			ip: ctx.ip,
+			userId: ctx.user.id,
+			email: ctx.user.email,
 		});
 	}
 }

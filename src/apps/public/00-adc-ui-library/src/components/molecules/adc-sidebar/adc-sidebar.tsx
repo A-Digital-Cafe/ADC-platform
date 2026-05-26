@@ -31,7 +31,7 @@ export class AdcSidebar {
 	};
 
 	render() {
-		const sidebarClass = this.collapsed ? "w-25 lg:w-74" : "w-74";
+		const sidebarClass = this.collapsed ? "w-35 lg:w-74" : "w-74";
 
 		return (
 			<aside

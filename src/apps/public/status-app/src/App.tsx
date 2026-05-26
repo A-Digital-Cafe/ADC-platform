@@ -118,7 +118,6 @@ export default function App() {
 						collapsed={!sidebarExpanded}
 						activeItem={activeSection}
 						title={t("nav.title")}
-						subtitle={t("nav.subtitle")}
 					/>
 
 					<main

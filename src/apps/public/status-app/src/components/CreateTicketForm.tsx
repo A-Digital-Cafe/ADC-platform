@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect, type ReactElement } from "react";
+import React, { useState, type ReactElement } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
-import { createInputListener, createCustomEventListener } from "../utils/formListeners.js";
 import { ticketApi, type CreateSupportTicketInput, type SupportTicketType } from "../utils/ticket-api";
 import {
 	TICKET_TYPE_LABELS,
@@ -17,6 +16,10 @@ interface FormData {
 	title: string;
 	email: string;
 	description: string;
+}
+
+interface InputEventLike {
+	readonly target: EventTarget | null;
 }
 
 type Translate = (key: string) => string;
@@ -130,6 +133,10 @@ function validateTicketData(formData: Readonly<FormData>, t: Translate): Validat
 	};
 }
 
+function getInputValue(event: InputEventLike): string {
+	return (event.target as HTMLInputElement | HTMLTextAreaElement).value;
+}
+
 export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFormProps): ReactElement {
 	const { t } = useTranslation({ namespace: "status-app", autoLoad: true });
 
@@ -138,51 +145,18 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState(false);
 
-	// Refs para los Web Components
-	const typeSelectRef = useRef<HTMLElement>(null);
-	const titleInputRef = useRef<HTMLElement>(null);
-	const emailInputRef = useRef<HTMLElement>(null);
-	const descriptionRef = useRef<HTMLElement>(null);
-
 	// Helper para actualizar campos y limpiar errores
 	const updateField = <K extends keyof FormData>(field: K, value: FormData[K]): void => {
 		setFormData((prev) => ({ ...prev, [field]: value }));
 		setError(null);
 	};
 
-	// Setup listeners para Web Components
-	useEffect(() => {
-		// Mount listeners once - no external dependencies
-		const unsubscribeSelect = createCustomEventListener<SupportTicketType>(typeSelectRef.current, "adcChange", (type) =>
-			updateField("type", type)
-		);
-
-		const unsubscribeTitle = createInputListener(titleInputRef.current, "input", (value) => {
-			updateField("title", value);
-		});
-
-		const unsubscribeEmail = createInputListener(emailInputRef.current, "input", (value) => {
-			updateField("email", value);
-		});
-
-		const unsubscribeDescription = createInputListener(descriptionRef.current, "input", (value) => {
-			updateField("description", value);
-		});
-
-		return () => {
-			unsubscribeSelect();
-			unsubscribeTitle();
-			unsubscribeEmail();
-			unsubscribeDescription();
-		};
-	}, []);
-
 	const handleReset = (): void => {
 		setFormData(getDefaultFormData());
 		setError(null);
 	};
 
-	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+	const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>): Promise<void> => {
 		e.preventDefault();
 		setError(null);
 		setLoading(true);
@@ -201,7 +175,7 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 		try {
 			const response = await ticketApi.create(validation.data);
 
-			if (response && response.data?.ticketKey) {
+			if (response?.data?.ticketKey) {
 				handleReset();
 
 				toast.success(t("tickets.successTitle") || `Ticket created: ${response.data.ticketKey}`);
@@ -245,7 +219,7 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 			<h3 className="font-semibold text-lg text-text mb-4">{t("tickets.form.title") || "Create New Ticket"}</h3>
 			<form onSubmit={handleSubmit} className="space-y-4">
 				{error && (
-					<div id="error-message" className="bg-danger/10 border border-danger/20 rounded-lg p-4 text-sm text-danger">
+					<div id="error-message" className="bg-danger border border-danger rounded-lg p-4 text-sm text-tdanger">
 						{error}
 					</div>
 				)}
@@ -257,10 +231,10 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 						<span className="text-danger ml-1">*</span>
 					</label>
 					<adc-select
-						ref={typeSelectRef}
 						value={formData.type}
 						options={JSON.stringify(ticketTypeOptions)}
 						placeholder={t("tickets.form.type") || "Select a type"}
+						onadcChange={(event) => updateField("type", event.detail as SupportTicketType)}
 					/>
 				</div>
 
@@ -271,12 +245,12 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 						<span className="text-danger ml-1">*</span>
 					</label>
 					<adc-input
-						ref={titleInputRef}
 						inputId="title"
 						name="title"
 						type="text"
 						placeholder={t("tickets.form.titlePlaceholder") || "Describe your issue..."}
 						value={formData.title}
+						onInput={(event) => updateField("title", getInputValue(event))}
 					/>
 					<p className="text-xs text-muted">
 						{SUPPORT_TICKET_CONSTRAINTS.title.min}-{SUPPORT_TICKET_CONSTRAINTS.title.max} characters
@@ -290,12 +264,12 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 						<span className="text-danger ml-1">*</span>
 					</label>
 					<adc-input
-						ref={emailInputRef}
 						inputId="email"
 						name="email"
 						type="email"
 						placeholder="your@email.com"
 						value={formData.email}
+						onInput={(event) => updateField("email", getInputValue(event))}
 					/>
 				</div>
 
@@ -306,19 +280,19 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 						<span className="text-danger ml-1">*</span>
 					</label>
 					<adc-textarea
-						ref={descriptionRef}
 						textareaId="description"
 						name="description"
 						placeholder={t("tickets.form.descriptionPlaceholder") || "Provide detailed information..."}
 						value={formData.description}
 						rows={5}
+						onInput={(event) => updateField("description", getInputValue(event))}
 					/>
 					<p className="text-xs text-muted">
 						{SUPPORT_TICKET_CONSTRAINTS.description.min}-{SUPPORT_TICKET_CONSTRAINTS.description.max} characters
 					</p>
 				</div>
 
-				<div className="bg-info border border-info rounded-lg p-4 flex gap-3" role="note">
+				<div className="bg-info border border-info rounded-lg p-4 flex gap-3 items-center" role="alert">
 					<svg className="w-5 h-5 text-tinfo shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
 						<path
 							fillRule="evenodd"
