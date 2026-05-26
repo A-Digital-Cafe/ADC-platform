@@ -6,6 +6,7 @@ interface TeamCardProps {
 	member: TeamMember;
 	initials: string;
 }
+
 function getInitials(name: string) {
 	return name
 		.split(" ")
