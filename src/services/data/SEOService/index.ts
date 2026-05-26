@@ -106,7 +106,7 @@ export default class SEOService extends BaseService {
 			if (candidate.startsWith("*.")) continue;
 			if (candidate === baseDomain || candidate.endsWith(`.${baseDomain}`)) out.push(candidate);
 		}
-		return out.sort();
+		return out.sort((a, b) => a.localeCompare(b));
 	}
 
 	// ============ Page Meta ============
