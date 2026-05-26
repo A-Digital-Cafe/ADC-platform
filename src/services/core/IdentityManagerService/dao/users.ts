@@ -71,7 +71,7 @@ export class UserManager {
 			return user;
 		} catch (error: any) {
 			if (error.code === 11000) {
-				throw new Error(`Usuario ${username} ya existe`);
+				throw new Error(`Usuario ${username} ya existe`, { cause: error });
 			}
 			throw error;
 		}
@@ -425,6 +425,112 @@ export class UserManager {
 			this.logger.logError(`Error eliminando usuario: ${error}`);
 			throw error;
 		}
+	}
+
+	/**
+	 * Marca a un usuario como baneado:
+	 *  - `isActive = false`
+	 *  - `metadata.bannedAt`, `metadata.banReason`, `metadata.banExpiresAt`
+	 *  - `metadata.scheduledDeletionAt = now + 30d`
+	 *
+	 * No toca la ban-list (lo hace el orquestador en ModerationService).
+	 * Requiere `IdentityScopes.USERS` UPDATE.
+	 */
+	async banUser(userId: string, args: { reason: string; expiresAt?: Date | null; retentionDays?: number }, token?: string): Promise<User> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
+		const userObj = (current.toObject?.() || current) as User;
+		const currentMeta = userObj.metadata || {};
+		const now = new Date();
+		const retentionMs = (args.retentionDays ?? 30) * 24 * 60 * 60 * 1000;
+
+		const nextMeta = {
+			...currentMeta,
+			bannedAt: now,
+			banReason: args.reason,
+			banExpiresAt: args.expiresAt ?? null,
+			scheduledDeletionAt: new Date(now.getTime() + retentionMs),
+		};
+
+		const updated = await this.userModel.findOneAndUpdate(
+			{ id: userId },
+			{ isActive: false, metadata: nextMeta, updatedAt: now },
+			{ new: true }
+		);
+		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+		this.logger.logInfo(`Usuario baneado: ${userId} (reason="${args.reason}")`);
+		return updated.toObject?.() || updated;
+	}
+
+	/**
+	 * Revierte el ban de un usuario: reactiva la cuenta y limpia metadatos de ban.
+	 */
+	async unbanUser(userId: string, token?: string): Promise<User> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
+		const userObj = (current.toObject?.() || current) as User;
+		const currentMeta = { ...userObj.metadata };
+		delete (currentMeta as any).bannedAt;
+		delete (currentMeta as any).banReason;
+		delete (currentMeta as any).banExpiresAt;
+		delete (currentMeta as any).scheduledDeletionAt;
+
+		const updated = await this.userModel.findOneAndUpdate(
+			{ id: userId },
+			{ isActive: true, metadata: currentMeta, updatedAt: new Date() },
+			{ new: true }
+		);
+		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+		this.logger.logInfo(`Usuario desbaneado: ${userId}`);
+		return updated.toObject?.() || updated;
+	}
+
+	/**
+	 * Auto-eliminación: marca cuenta inactiva y programa borrado en `retentionDays` días.
+	 * El borrado físico lo realiza el cron de retención en IdentityManagerService.
+	 */
+	async requestSelfDeletion(userId: string, reason?: string, retentionDays = 30, token?: string): Promise<User> {
+		const callerId = await this.#permissionChecker.resolveUserId(token);
+		if (callerId && callerId !== userId) {
+			throw new Error(`No se puede solicitar borrado de otro usuario (caller=${callerId}, target=${userId})`);
+		}
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
+		const userObj = (current.toObject?.() || current) as User;
+		const currentMeta = userObj.metadata || {};
+		const now = new Date();
+		const nextMeta = {
+			...currentMeta,
+			deletionRequestedAt: now,
+			deletionReason: reason || null,
+			scheduledDeletionAt: new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000),
+		};
+		const updated = await this.userModel.findOneAndUpdate(
+			{ id: userId },
+			{ isActive: false, metadata: nextMeta, updatedAt: now },
+			{ new: true }
+		);
+		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+		this.logger.logInfo(`Usuario solicita borrado: ${userId}`);
+		return updated.toObject?.() || updated;
+	}
+
+	/**
+	 * Devuelve usuarios cuya retención expiró (`metadata.scheduledDeletionAt < now`).
+	 * Pensado para el cron de retención: se invoca a través del manager interno
+	 * (construido con `getAuthVerifier = () => null`), donde `requirePermission`
+	 * hace short-circuit y permite la operación sin token.
+	 */
+	async findUsersDueForDeletion(now: Date = new Date(), token?: string): Promise<Array<{ id: string }>> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+
+		const docs = await this.userModel.find({ "metadata.scheduledDeletionAt": { $lte: now } }, { id: 1, _id: 0 }).lean();
+		return docs.map((d: any) => ({ id: d.id }));
 	}
 
 	/**

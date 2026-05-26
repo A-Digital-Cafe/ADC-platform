@@ -15,17 +15,6 @@ export interface RemoteComponentResult {
 	timestamp: number;
 }
 
-interface LoadRemoteComponentOptions {
-	/** Función para importar dinámicamente el módulo */
-	importFn: () => Promise<any>;
-	/** Nombre del módulo para logs y data attributes */
-	moduleName: string;
-	/** Framework del módulo (react, vue, vanilla) */
-	framework: Framework;
-	/** Componente de error personalizado (opcional) */
-	errorComponent?: (error: Error, moduleName: string) => React.ReactElement;
-}
-
 export interface LazyLoadRemoteComponentOptions {
 	/** URL del remoteEntry.js (ej: 'http://localhost:3001/remoteEntry.js') */
 	remoteEntryUrl: string;
@@ -255,56 +244,6 @@ export async function lazyLoadRemoteComponent(options: LazyLoadRemoteComponentOp
 		return { Component: WrapperComponent, moduleName, timestamp };
 	} catch (error) {
 		console.error(`[Layout] ❌ Error lazy loading ${moduleName}:`, error);
-
-		const ErrorComponent = () =>
-			errorComponent ? errorComponent(error as Error, moduleName) : DefaultErrorComponent(error as Error, moduleName);
-
-		return { Component: ErrorComponent, moduleName, timestamp: Date.now() };
-	}
-}
-
-/**
- * Carga un componente remoto y lo envuelve según su framework.
- *
- * @example
- * ```typescript
- * import { loadRemoteComponent } from '@adc/utils/react/loadRemoteComponent';
- *
- * const result = await loadRemoteComponent({
- *   importFn: () => import('home/App'),
- *   moduleName: 'home',
- *   framework: 'vanilla',
- * });
- * ```
- */
-export async function loadRemoteComponent(options: LoadRemoteComponentOptions): Promise<RemoteComponentResult> {
-	const { importFn, moduleName, framework, errorComponent } = options;
-	const timestamp = Date.now();
-
-	try {
-		const module = await importFn();
-		const RemoteComponent = module.default ?? module;
-
-		console.log(`[Layout] Framework detectado para ${moduleName}: ${framework}`);
-
-		let WrapperComponent: React.ComponentType<any>;
-
-		switch (framework) {
-			case "vue":
-				WrapperComponent = createVueWrapper(RemoteComponent, moduleName, timestamp);
-				break;
-			case "vanilla":
-				WrapperComponent = createVanillaWrapper(RemoteComponent, moduleName, timestamp);
-				break;
-			case "react":
-			default:
-				WrapperComponent = createReactWrapper(RemoteComponent, moduleName, timestamp);
-				break;
-		}
-
-		return { Component: WrapperComponent, moduleName, timestamp };
-	} catch (error) {
-		console.error(`[Layout] ❌ Error cargando ${moduleName}:`, error);
 
 		const ErrorComponent = () =>
 			errorComponent ? errorComponent(error as Error, moduleName) : DefaultErrorComponent(error as Error, moduleName);

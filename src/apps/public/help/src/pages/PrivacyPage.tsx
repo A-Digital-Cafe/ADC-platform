@@ -69,6 +69,15 @@ export function PrivacyPage() {
 				(logs de acceso, eventos de seguridad, datos de sesión) están en proceso de formalización; ver{" "}
 				<a href="/roadmap#capa-etica-legal-cimientos">roadmap</a>.
 			</p>
+			<p>
+				<strong>Cuentas baneadas o eliminadas:</strong> se conservan durante <strong>30 días</strong> desde el evento (ban o solicitud de
+				borrado) y luego se eliminan automáticamente. Para evitar la reentrada de cuentas baneadas mantenemos una{" "}
+				<em>lista anti-evasión</em> basada en <strong>hashes HMAC-SHA256</strong> del email normalizado y, durante un máximo de{" "}
+				<strong>3 horas</strong> tras el último intento de inicio de sesión, del hash de IP. Estos hashes son <em>unidireccionales</em> y
+				no almacenamos los emails, las IPs ni ninguna otra PII en estos registros. Para usuarios baneados desde otros sistemas conectados
+				(p. ej. Discord modlogs) sólo guardamos un identificador opaco del evento externo para poder revertir el ban si la fuente
+				original lo revoca.
+			</p>
 
 			<h2 id="seguridad">6. Seguridad</h2>
 			<p>

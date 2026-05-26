@@ -76,7 +76,7 @@ export default class JsonFileCrudService extends BaseService implements IJsonFil
 			this.logger.logDebug(`Archivo leído: ${key}`);
 			return data;
 		} catch (err: any) {
-			throw new Error(`[JsonFileCrud] Error al leer ${key}: ${err.message}`);
+			throw new Error(`[JsonFileCrud] Error al leer ${key}: ${err.message}`, { cause: err });
 		}
 	}
 

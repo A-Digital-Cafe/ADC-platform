@@ -3,7 +3,7 @@ import { BaseService } from "../../BaseService.js";
 import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
 import type { IJWTProviderMultiKey } from "../../../providers/security/jwt/types.d.ts";
 import type RedisProvider from "../../../providers/queue/redis/index.js";
-import type { AuthenticatedUser, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
+import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
 export type { AuthenticatedUser, TokenVerificationResult } from "./types.js";
 
 // Domain components
@@ -57,6 +57,7 @@ export default class SessionManagerService extends BaseService {
 	#internalIdentity: ReturnType<IdentityManagerService["_internal"]> | null = null;
 	#jwtProvider: IJWTProviderMultiKey | null = null;
 	#redis: RedisProvider | null = null;
+	#moderation: ModerationLookupService | null = null;
 
 	// Componentes de dominio
 	#keyStore: KeyStore | null = null;
@@ -176,6 +177,15 @@ export default class SessionManagerService extends BaseService {
 		);
 
 		// Inicializar singletons de endpoints
+		try {
+			if (!this.#moderation) {
+				const mod = this.getMyService<import("../ModerationService/index.js").default>("ModerationService");
+				this.#moderation = mod._internal(this.#kernelKey!);
+			}
+		} catch {
+			this.#moderation = null;
+		}
+
 		AuthEndpoints.init(
 			{
 				keyStore: this.#keyStore,
@@ -188,6 +198,7 @@ export default class SessionManagerService extends BaseService {
 				cookieDomain: this.#cookieDomain,
 				defaultRedirectUrl: this.#defaultRedirectUrl,
 				logger: this.logger,
+				moderation: this.#moderation,
 			},
 			(username: string, password: string) => this.#validatePlatformCredentials(username, password)
 		);
@@ -204,6 +215,7 @@ export default class SessionManagerService extends BaseService {
 			defaultRedirectUrl: this.#defaultRedirectUrl,
 			getProviderConfig: (provider: string) => this.#getProviderConfig(provider),
 			logger: this.logger,
+			moderation: this.#moderation,
 		});
 	}
 

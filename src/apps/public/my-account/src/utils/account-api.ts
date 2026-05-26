@@ -60,8 +60,6 @@ export const accountApi = {
 	updateUser: (userId: string, data: Partial<ClientUser>) =>
 		api.put<ClientUser>(`/users/${userId}`, { body: data, idempotencyKey: createIdempotencyKey(data) }),
 
-	deleteUser: (userId: string) => api.delete(`/users/${userId}`, { idempotencyKey: userId }),
-
 	updateCurrentUser: async (metadata: UserProfileMetadata) => {
 		const { data: user } = await api.get<ClientUser>("/users/me");
 
@@ -72,15 +70,15 @@ export const accountApi = {
 		return accountApi.updateUser(user.id, { metadata });
 	},
 
-	deleteCurrentUser: async () => {
-		const { data: user } = await api.get<ClientUser>("/users/me");
-
-		if (!user) {
-			throw new Error("AUTHENTICATED_USER_NOT_FOUND");
-		}
-
-		return accountApi.deleteUser(user.id);
-	},
+	/**
+	 * Solicita la eliminación de la cuenta del usuario actual.
+	 * Usa el endpoint self-delete (`DELETE /users/me`) que programa el borrado en 30 días.
+	 */
+	deleteCurrentUser: (reason?: string) =>
+		api.delete<{ success: true; scheduledDeletionInDays: number }>("/users/me", {
+			body: reason ? { reason } : undefined,
+			idempotencyKey: crypto.randomUUID(),
+		}),
 
 	// AVATARS
 

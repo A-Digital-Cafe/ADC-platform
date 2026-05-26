@@ -13,11 +13,13 @@ import {
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
-import type { AuthenticatedUser } from "../types.js";
+import type { AuthenticatedUser, ModerationLookupService } from "../types.js";
 import { UserAuthenticationResult } from "../../../core/IdentityManagerService/dao/users.ts";
 import { User } from "@common/types/identity/User.js";
 import type { Permission } from "@common/types/identity/Permission.js";
 import { SystemRole } from "../../../core/IdentityManagerService/defaults/systemRoles.js";
+import { assertEmailNotBanned, assertIpNotBanned, recordLoginAttemptIp, redirectIfRequestBanned } from "../utils/moderationGuards.js";
+import { requiresOrgSelection, resolveNativeLoginUser, validateNativeLoginBody, type NativeLoginBody } from "../utils/nativeLogin.js";
 
 /** Nombre de las cookies */
 const ACCESS_COOKIE_NAME = "access_token";
@@ -34,18 +36,19 @@ interface AuthEndpointsDeps {
 	cookieDomain: string;
 	defaultRedirectUrl: string;
 	logger: { logError: (msg: string) => void; logWarn: (msg: string) => void };
-}
-
-interface LoginBody {
-	username?: string;
-	password?: string;
-	orgId?: string;
+	moderation: ModerationLookupService | null;
 }
 
 interface RegisterBody {
 	username?: string;
 	email?: string;
 	password?: string;
+}
+
+interface ValidRegisterBody {
+	username: string;
+	email: string;
+	password: string;
 }
 
 /**
@@ -70,49 +73,28 @@ export class AuthEndpoints {
 		permissions: [],
 		options: { skipIdempotency: true, rateLimit: { max: 4, timeWindow: 300_000 } },
 	})
-	static async handleNativeLogin(ctx: EndpointCtx<Record<string, string>, LoginBody>): Promise<unknown> {
-		const { username, password, orgId } = ctx.data || {};
+	static async handleNativeLogin(ctx: EndpointCtx<Record<string, string>, NativeLoginBody>): Promise<unknown> {
+		const { username, password, orgId } = validateNativeLoginBody(ctx.data);
+		const ipAddress = AuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);
 
-		if (!username || !password) {
-			throw new AuthError(400, "MISSING_CREDENTIALS", "Username y password son requeridos");
-		}
+		// Pre-check: IP baneada -> rechazar antes de revelar si las credenciales son válidas
+		await assertIpNotBanned(AuthEndpoints.deps.moderation, ipAddress);
 
 		try {
 			const profile = await AuthEndpoints.validateCredentials(username, password);
-			if (!profile) throw new AuthError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
-			if ("isActive" in profile && profile.isActive === false) {
-				throw new AuthError(403, "ACCOUNT_DISABLED", "Cuenta desactivada");
-			}
-			if ("wrongPassword" in profile && profile.wrongPassword) {
-				const blockStatus = await AuthEndpoints.deps.loginTracker.recordLoginAttempt(profile.id, false, ctx.ip);
+			const fullUser = await resolveNativeLoginUser(profile, AuthEndpoints.deps.loginTracker, ipAddress);
 
-				if (blockStatus.blocked) {
-					if (blockStatus.permanent) {
-						throw new AuthError(403, "ACCOUNT_BLOCKED_PERMANENT", "Cuenta bloqueada");
-					}
+			// Post-credenciales: chequear ban por email
+			await assertEmailNotBanned(AuthEndpoints.deps.moderation, fullUser.email);
 
-					throw new AuthError(403, "ACCOUNT_BLOCKED_TEMP", "Cuenta bloqueada temporalmente", {
-						blockedUntil: blockStatus.blockedUntil ?? undefined,
-					});
-				}
-
-				throw new AuthError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
-			}
-
-			const fullUser = profile as User;
+			// Registrar IP de login exitoso (3h) para alimentar la ban-list anti-evasión
+			await recordLoginAttemptIp(AuthEndpoints.deps.moderation, fullUser.id, ipAddress, AuthEndpoints.deps.logger);
 
 			// Si el usuario tiene organizaciones y no se especificó orgId (undefined = no ha elegido),
 			// retornar la lista de orgs para que el frontend muestre el selector.
 			// orgId === null significa "acceso personal" (elección explícita sin organización).
-			if (fullUser.orgMemberships?.length && orgId === undefined) {
-				const orgOptions = await AuthEndpoints.getUserOrgOptions(fullUser);
-				throw UncommonResponse.json({
-					success: true,
-					requiresOrgSelection: true,
-					userId: fullUser.id,
-					username: fullUser.username,
-					orgOptions,
-				});
+			if (requiresOrgSelection(fullUser, orgId)) {
+				await AuthEndpoints.respondWithOrgSelection(fullUser);
 			}
 
 			// Construir usuario directamente desde profile (ya validado por authenticate)
@@ -150,25 +132,13 @@ export class AuthEndpoints {
 		options: { rateLimit: { max: 2, timeWindow: 3_600_000 } },
 	})
 	static async handleRegister(ctx: EndpointCtx<Record<string, string>, RegisterBody>): Promise<unknown> {
-		const { username, email, password } = ctx.data || {};
-
-		if (!username || !email || !password) {
-			throw new AuthError(400, "MISSING_FIELDS", "Username, email y password son requeridos");
-		}
-
-		// Validaciones básicas
-		if (username.length < 3 || username.length > 30) {
-			throw new AuthError(400, "INVALID_USERNAME", "El nombre de usuario debe tener entre 3 y 30 caracteres");
-		}
-
-		if (password.length < 8) {
-			throw new AuthError(400, "WEAK_PASSWORD", "La contraseña debe tener al menos 8 caracteres");
-		}
-
-		const emailRegex = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
-		if (!emailRegex.test(email)) {
-			throw new AuthError(400, "INVALID_EMAIL", "El email no es válido");
-		}
+		const { username, email, password } = AuthEndpoints.validateRegisterBody(ctx.data);
+		await redirectIfRequestBanned({
+			moderation: AuthEndpoints.deps.moderation,
+			email,
+			ip: ctx.ip,
+			emailReason: "Email no permitido",
+		});
 
 		if (!AuthEndpoints.deps.internalIdentity) {
 			throw new AuthError(500, "SERVICE_UNAVAILABLE", "Servicio de identidad no disponible");
@@ -483,6 +453,40 @@ export class AuthEndpoints {
 	}
 
 	// ============ Métodos auxiliares (privados estáticos) ============
+
+	private static async respondWithOrgSelection(fullUser: User): Promise<never> {
+		const orgOptions = await AuthEndpoints.getUserOrgOptions(fullUser);
+		throw UncommonResponse.json({
+			success: true,
+			requiresOrgSelection: true,
+			userId: fullUser.id,
+			username: fullUser.username,
+			orgOptions,
+		});
+	}
+
+	private static validateRegisterBody(body: RegisterBody | undefined): ValidRegisterBody {
+		const { username, email, password } = body || {};
+
+		if (!username || !email || !password) {
+			throw new AuthError(400, "MISSING_FIELDS", "Username, email y password son requeridos");
+		}
+
+		if (username.length < 3 || username.length > 30) {
+			throw new AuthError(400, "INVALID_USERNAME", "El nombre de usuario debe tener entre 3 y 30 caracteres");
+		}
+
+		if (password.length < 8) {
+			throw new AuthError(400, "WEAK_PASSWORD", "La contraseña debe tener al menos 8 caracteres");
+		}
+
+		const emailRegex = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
+		if (!emailRegex.test(email)) {
+			throw new AuthError(400, "INVALID_EMAIL", "El email no es válido");
+		}
+
+		return { username, email, password };
+	}
 
 	private static async getTokenCookies(ctx: EndpointCtx, user: AuthenticatedUser): Promise<SetCookie[]> {
 		const ipAddress = AuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);

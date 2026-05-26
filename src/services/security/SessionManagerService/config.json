@@ -35,6 +35,12 @@
 			"language": "typescript"
 		},
 		{
+			"name": "ModerationService",
+			"version": "latest",
+			"language": "typescript",
+			"optional": true
+		},
+		{
 			"name": "EndpointManagerService",
 			"version": "latest"
 		}

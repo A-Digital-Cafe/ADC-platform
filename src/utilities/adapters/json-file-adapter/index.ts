@@ -27,7 +27,7 @@ export default class JsonAdapterUtility extends BaseUtility implements IFileAdap
 			return JSON.parse(jsonString) as T;
 		} catch (err: any) {
 			Logger.error("[JsonAdapter] Error al parsear desde Buffer: " + err.message);
-			throw new Error(`[JsonAdapter] Error al parsear JSON: ${err.message}`);
+			throw new Error(`[JsonAdapter] Error al parsear JSON: ${err.message}`, { cause: err });
 		}
 	}
 }

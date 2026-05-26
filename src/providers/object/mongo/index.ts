@@ -82,8 +82,9 @@ export default class MongoProvider extends BaseProvider {
 
 	constructor(options?: any) {
 		super();
+		const hasExplicitUri = options && Object.hasOwn(options, "uri");
 		this.config = {
-			uri: options?.uri || process.env.MONGODB_URI || "mongodb://localhost:27017/adc-platform",
+			uri: hasExplicitUri ? options.uri : process.env.MONGODB_URI || "mongodb://localhost:27017/adc-platform",
 			maxRetries: options?.maxRetries ?? 5,
 			retryDelay: options?.retryDelay ?? 5000,
 			connectionTimeout: options?.connectionTimeout ?? 10000,

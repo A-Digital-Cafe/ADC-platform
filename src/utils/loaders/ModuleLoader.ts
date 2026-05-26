@@ -23,6 +23,22 @@ export class ModuleLoader {
 
 	readonly #loaderManager: LoaderManager;
 
+	/**
+	 * Extrae el nombre real del provider/módulo eliminando un prefijo de alias.
+	 * Acepta formato `alias@providerName` (p.ej. `"discord@object/mongo"` → `"object/mongo"`).
+	 * Si no contiene `@`, devuelve el nombre tal cual.
+	 */
+	static #stripAlias(name: string): string {
+		const at = name.indexOf("@");
+		return at >= 0 ? name.slice(at + 1) : name;
+	}
+
+	static #shouldSkipOptionalProvider(config: IModuleConfig): boolean {
+		if (!config.optional) return false;
+		const uri = config.custom?.uri;
+		return typeof uri === "string" && uri.trim() === "";
+	}
+
 	constructor(kernelKey: symbol) {
 		this.#kernelKey = kernelKey;
 		this.#loaderManager = new LoaderManager(this.#kernelKey);
@@ -96,9 +112,10 @@ export class ModuleLoader {
 	 */
 	public interpolateEnvVars(obj: any, envVars?: Record<string, string>): any {
 		if (typeof obj === "string") {
-			return obj.replaceAll(/\$\{([^}]+)\}/g, (_, varName) => {
+			return obj.replaceAll(/\$\{([^}]+)\}/g, (_, varSpec) => {
+				const [varName, defaultValue] = String(varSpec).split(":-");
 				// Priorizar variables del módulo, luego process.env
-				return envVars?.[varName] || process.env[varName] || "";
+				return envVars?.[varName] || process.env[varName] || defaultValue || "";
 			});
 		}
 
@@ -129,20 +146,26 @@ export class ModuleLoader {
 			// Solo se registran como dependencias cuando un servicio los usa
 			if (modulesConfig.providers && Array.isArray(modulesConfig.providers)) {
 				for (const providerConfig of modulesConfig.providers) {
+					const interpolatedProviderConfig = this.interpolateEnvVars(providerConfig);
+					if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) {
+						Logger.debug(`[ModuleLoader] Provider opcional ${interpolatedProviderConfig.name} omitido (uri vacía)`);
+						continue;
+					}
+
 					// Verificar si el provider ya existe antes de cargarlo
-					if (kernel.registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
-						Logger.debug(`[ModuleLoader] Provider global ${providerConfig.name} ya existe, saltando`);
+					if (kernel.registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)) {
+						Logger.debug(`[ModuleLoader] Provider global ${interpolatedProviderConfig.name} ya existe, saltando`);
 						continue;
 					}
 					try {
-						const provider = await this.loadProvider(providerConfig);
+						const provider = await this.loadProvider(interpolatedProviderConfig);
 						// Pasar null como appName para que NO se registre como dependencia de la app actual
 						// Registrar por el nombre de la clase del provider
-						kernel.registry.registerProvider(provider.name, provider, providerConfig, null);
+						kernel.registry.registerProvider(provider.name, provider, interpolatedProviderConfig, null);
 
 						// También registrar por el nombre del módulo/configuración para que sea encontrable
-						if (providerConfig.name !== provider.name) {
-							kernel.registry.registerProvider(providerConfig.name, provider, providerConfig, null);
+						if (interpolatedProviderConfig.name !== provider.name) {
+							kernel.registry.registerProvider(interpolatedProviderConfig.name, provider, interpolatedProviderConfig, null);
 						}
 					} catch (error) {
 						const message = `Error cargando provider ${providerConfig.name}`;
@@ -269,6 +292,11 @@ export class ModuleLoader {
 										`[ModuleLoader] Provider config DESPUÉS de interpolar: ${JSON.stringify(interpolatedProviderConfig)}`
 									);
 
+									if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) {
+										Logger.debug(`[ModuleLoader] Provider opcional ${interpolatedProviderConfig.name} omitido (uri vacía)`);
+										continue;
+									}
+
 									// Verificar si el provider ya existe
 									if (
 										kernel.registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)
@@ -339,10 +367,17 @@ export class ModuleLoader {
 						// Esto es necesario para el reference counting correcto
 						if (mutableServiceConfig.providers && Array.isArray(mutableServiceConfig.providers)) {
 							for (const providerConfig of mutableServiceConfig.providers) {
+								const interpolatedProviderConfig = this.interpolateEnvVars(providerConfig, serviceEnvVars);
+								if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) continue;
+
 								// Agregar el provider como dependencia de la app actual
 								// Esto incrementa el reference count y lo añade a appModuleDependencies
 								// addModuleDependency también maneja automáticamente los aliases (type)
-								kernel.registry.addModuleDependency("provider", providerConfig.name, providerConfig.config);
+								kernel.registry.addModuleDependency(
+									"provider",
+									interpolatedProviderConfig.name,
+									interpolatedProviderConfig.config
+								);
 							}
 						}
 
@@ -377,10 +412,16 @@ export class ModuleLoader {
 		const language = config.language || "typescript";
 		const version = config.version || "latest";
 
+		// Soporte de alias `alias@providerName` (p.ej. "discord@object/mongo").
+		// La parte tras `@` identifica el provider real a cargar; el alias completo
+		// se conserva en `config.name` para que la registry pueda diferenciar instancias
+		// del mismo provider type con distintos `custom`.
+		const resolvedProviderName = ModuleLoader.#stripAlias(config.name);
+
 		Logger.debug(`[ModuleLoader] Cargando Provider: ${config.name} (v${version}, ${language})`);
 
 		// Resolver la versión correcta
-		const resolved = await VersionResolver.resolveModuleVersion(this.#providersPath, config.name, version, language);
+		const resolved = await VersionResolver.resolveModuleVersion(this.#providersPath, resolvedProviderName, version, language);
 
 		if (!resolved) {
 			throw new Error(`No se pudo resolver Provider: ${config.name}@${version} (${language})`);
@@ -532,6 +573,11 @@ export class ModuleLoader {
 
 		if (serviceConfig.providers && Array.isArray(serviceConfig.providers)) {
 			for (const providerConfig of serviceConfig.providers) {
+				if (ModuleLoader.#shouldSkipOptionalProvider(providerConfig)) {
+					Logger.debug(`[ModuleLoader] Provider opcional ${providerConfig.name} omitido (uri vacía)`);
+					continue;
+				}
+
 				if (kernel.registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
 					Logger.debug(`[ModuleLoader] Provider ${providerConfig.name} ya existe`);
 					continue;

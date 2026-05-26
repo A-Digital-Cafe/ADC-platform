@@ -1,0 +1,52 @@
+{
+	"kernelMode": 65,
+	"name": "ModerationService",
+	"version": "1.0.0",
+	"providers": [
+		{
+			"name": "object/mongo",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"uri": "mongodb://admin:password@localhost:27017/adc-core?authSource=admin"
+			}
+		},
+		{
+			"name": "queue/redis",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"host": "${REDIS_HOST:-localhost}",
+				"port": "${REDIS_PORT:-6380}",
+				"password": "${REDIS_PASSWORD}",
+				"db": 0,
+				"keyPrefix": "adc:moderation:"
+			}
+		},
+		{
+			"name": "pengubot@object/mongo",
+			"version": "latest",
+			"language": "typescript",
+			"optional": true,
+			"custom": {
+				"uri": "${PENGUBOT_MONGO_URI:-}"
+			}
+		}
+	],
+	"services": [
+		{
+			"name": "EndpointManagerService",
+			"version": "latest",
+			"optional": true
+		}
+	],
+	"private": {
+		"discord": {
+			"syncEnabled": "${DISCORD_BAN_SYNC_ENABLED:-true}",
+			"syncIntervalMs": 86400000
+		},
+		"retention": {
+			"loginIpTtlSeconds": 10800
+		}
+	}
+}

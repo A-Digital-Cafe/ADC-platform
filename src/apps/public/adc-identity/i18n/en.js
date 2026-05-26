@@ -48,6 +48,13 @@ export default {
 		selectRoles: "Select roles",
 		searchRoles: "Search roles...",
 		never: "Never",
+		ban: "Ban",
+		unban: "Unban",
+		banned: "Banned",
+		banUser: 'Ban "{{name}}"',
+		banReason: "Ban reason",
+		banExpiresAt: "Expiration date (optional)",
+		banExpiresAtHelp: "Leave empty for a permanent ban",
 	},
 	roles: {
 		name: "Name",
@@ -213,5 +220,8 @@ export default {
 		// Validation
 		MISSING_FIELDS: "Required fields are missing",
 		INVALID_ROLE: "Invalid role",
+		FORBIDDEN: "You don't have permissions to perform this action",
+		MISSING_REASON: "A reason is required to ban a user",
+		MISSING_TARGET: "You must specify a user",
 	},
 };

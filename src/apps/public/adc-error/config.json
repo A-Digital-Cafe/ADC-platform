@@ -1,0 +1,27 @@
+{
+	"uiModule": {
+		"enableSEO": true,
+		"name": "adc-error",
+		"uiNamespace": "adc-platform",
+		"framework": "react",
+		"outputDir": "dist-ui",
+		"isHost": true,
+		"isRemote": false,
+		"uiDependencies": ["adc-ui-library"],
+		"devPort": 3026,
+		"sharedLibs": ["react", "tailwind"],
+		"i18n": true,
+		"hosting": [
+			{
+				"domains": ["adigitalcafe.com"],
+				"subdomains": ["error"]
+			}
+		]
+	},
+	"services": [
+		{
+			"name": "SEOService",
+			"version": "latest"
+		}
+	]
+}
