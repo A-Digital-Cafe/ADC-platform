@@ -473,7 +473,7 @@ export class UserManager {
 		const current = await this.userModel.findOne({ id: userId });
 		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
 		const userObj = (current.toObject?.() || current) as User;
-		const currentMeta = { ...(userObj.metadata || {}) };
+		const currentMeta = { ...userObj.metadata };
 		delete (currentMeta as any).bannedAt;
 		delete (currentMeta as any).banReason;
 		delete (currentMeta as any).banExpiresAt;
@@ -530,7 +530,7 @@ export class UserManager {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
 
 		const docs = await this.userModel.find({ "metadata.scheduledDeletionAt": { $lte: now } }, { id: 1, _id: 0 }).lean();
-		return docs as unknown as Array<{ id: string }>;
+		return docs.map((d: any) => ({ id: d.id }));
 	}
 
 	/**

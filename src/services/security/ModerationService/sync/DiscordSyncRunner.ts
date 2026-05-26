@@ -2,7 +2,7 @@ import type MongoProvider from "../../../../providers/object/mongo/index.js";
 import type IdentityManagerService from "../../../core/IdentityManagerService/index.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import type { BanRepository } from "../dao/BanRepository.js";
-import type { User, LinkedAccount } from "@common/types/identity/User.js";
+import type { User } from "@common/types/identity/User.js";
 import type { BanRecord, BanInput } from "@common/types/identity/Moderation.js";
 import { PengubotModlogsAdapter } from "../adapters/PengubotModlogsAdapter.js";
 
@@ -85,7 +85,7 @@ export class DiscordSyncRunner {
 					});
 					continue;
 				}
-				await this.banPlatformUser(user as User & { linkedAccounts?: LinkedAccount[] }, {
+				await this.banPlatformUser(user, {
 					reason: log.reason || "Discord ban",
 					expiresAt: null,
 					source: "discord-modlogs",

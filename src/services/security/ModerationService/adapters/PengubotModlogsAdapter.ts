@@ -70,9 +70,8 @@ export class PengubotModlogsAdapter implements IModlogSource {
 	async listActiveBans(): Promise<PengubotModLogRow[]> {
 		if (!this.enabled) return [];
 		await this.#ensureConnected();
-		const docs = await this.#model!.find({ type: "Ban", $or: [{ hiddenCase: false }, { hiddenCase: { $exists: false } }] })
-			.lean();
-		return docs as unknown as PengubotModLogRow[];
+		const docs = await this.#model!.find({ type: "Ban", $or: [{ hiddenCase: false }, { hiddenCase: { $exists: false } }] }).lean();
+		return docs;
 	}
 
 	async listRevokedBans(since?: Date): Promise<PengubotModLogRow[]> {
@@ -81,7 +80,7 @@ export class PengubotModlogsAdapter implements IModlogSource {
 		const filter: Record<string, unknown> = { type: "Ban", hiddenCase: true };
 		if (since) filter.date = { $gte: since };
 		const docs = await this.#model!.find(filter).lean();
-		return docs as unknown as PengubotModLogRow[];
+		return docs;
 	}
 
 	async close(): Promise<void> {

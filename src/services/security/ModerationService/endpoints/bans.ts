@@ -31,12 +31,12 @@ export class BanEndpoints {
 	static #kernelKey: symbol;
 
 	static init(service: ModerationService, kernelKey: symbol): void {
-		BanEndpoints.#service ??= service;
-		BanEndpoints.#kernelKey ??= kernelKey;
+		this.#service ??= service;
+		this.#kernelKey ??= kernelKey;
 	}
 
 	private static api(): ModerationInternalApi {
-		return BanEndpoints.#service._internal(BanEndpoints.#kernelKey);
+		return this.#service._internal(this.#kernelKey);
 	}
 
 	private static assertGlobalAdmin(ctx: EndpointCtx): void {
@@ -52,7 +52,7 @@ export class BanEndpoints {
 	static async listBans(ctx: EndpointCtx) {
 		BanEndpoints.assertGlobalAdmin(ctx);
 		const activeOnly = ctx.query?.activeOnly !== "false";
-		const limit = Math.min(parseInt(ctx.query?.limit as string, 10) || 200, 500);
+		const limit = Math.min(Number.parseInt(ctx.query?.limit as string, 10) || 200, 500);
 		const bans = await BanEndpoints.api().listBans({ activeOnly, limit }, ctx.token!);
 		// Sanitización: NO devolvemos los hashes (PII proxy) por defecto
 		return {

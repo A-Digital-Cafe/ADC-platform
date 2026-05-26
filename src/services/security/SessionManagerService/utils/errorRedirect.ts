@@ -24,5 +24,6 @@ export function buildErrorUrl(page: ErrorPage, params: Record<string, string | u
 		if (v != null && v !== "") qs.set(k, v);
 	}
 	const search = qs.toString();
-	return `${ERROR_APP_BASE}${page}${search ? `?${search}` : ""}`;
+	const searchParam = search ? `?${search}` : "";
+	return `${ERROR_APP_BASE}${page}${searchParam}`;
 }

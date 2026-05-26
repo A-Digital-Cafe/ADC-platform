@@ -279,14 +279,14 @@ export class BanRepository {
 			.sort({ bannedAt: -1 })
 			.limit(opts.limit ?? 200)
 			.lean();
-		return docs as unknown as BanRecord[];
+		return docs;
 	}
 
 	async findActiveByExternalId(source: string, externalId: string, token?: string): Promise<BanRecord | null> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
 
 		const doc = await this.model.findOne({ source, externalId, active: true }).lean();
-		return (doc as unknown as BanRecord) || null;
+		return doc ?? null;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────

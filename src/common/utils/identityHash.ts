@@ -55,7 +55,7 @@ function normalizeEmail(rawEmail: string): string {
 
 	// Gmail / googlemail: quitar puntos del local-part
 	if (domain === "gmail.com" || domain === "googlemail.com") {
-		local = local.replace(/\./g, "");
+		local = local.replaceAll(".", "");
 	}
 
 	if (!local) return trimmed;
@@ -68,7 +68,7 @@ function normalizeEmail(rawEmail: string): string {
  */
 function hashEmail(rawEmail: string): string | null {
 	const normalized = normalizeEmail(rawEmail);
-	if (!normalized || !normalized.includes("@")) return null;
+	if (!normalized?.includes("@")) return null;
 	return hmacHex("email", normalized);
 }
 
