@@ -1,6 +1,7 @@
 import type { Block } from "@common/ADC/types/learning.ts";
 import { ProjectManagerError } from "@common/types/custom-errors/ProjectManagerError.ts";
 import type { CreateOrganizationRequestInput, OrganizationRequestIssueResponse } from "@common/types/project-manager/OrganizationRequest.ts";
+import { TICKET_COLUMN_MAP, type CommonTicketColumnKey } from "@common/types/project-manager/CommonTicketColumns.ts";
 import type { IssueManager } from "./issues.js";
 import type { ProjectManager } from "./projects.js";
 
@@ -36,6 +37,9 @@ export class OrganizationRequestManager {
 			);
 		}
 
+		
+		const columnKey: CommonTicketColumnKey = TICKET_COLUMN_MAP["org-request"];
+
 		const issue = await this.issues.createInternal(
 			kernelKey,
 			project,
@@ -43,6 +47,7 @@ export class OrganizationRequestManager {
 				title: `Solicitud de organización: ${input.name}`,
 				description: organizationRequestBlocks(input, caller),
 				category: "task",
+				columnKey,
 				customFields: organizationRequestCustomFields(input, caller),
 			},
 			caller.userId

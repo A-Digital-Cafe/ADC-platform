@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { accountApi } from "../utils/account-api";
-import { toast } from "../utils/toast";
+import { toast } from "@ui-library/utils/toast";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 
 const AUTH_URL = "http://localhost:3012";
@@ -75,15 +75,8 @@ export default function AdminView() {
 					</div>
 				</adc-modal>
 			)}
-			<div className="w-full flex flex-col pl-25 lg:pl-70">
-				{/* Title */}
-				<div className="mb-4">
-					<h2 className="text-2xl font-bold text-text">{t("admin.title")}</h2>
-					<p className="text-muted">{t("admin.subtitle")}</p>
-				</div>
-
-				{/* Container */}
-				<div className="bg-surface p-8 pb-6 rounded-xxl">
+			<adc-page-shell heading={t("admin.title")} description={t("admin.subtitle")} headerSpacing="sm">
+				<adc-section-panel>
 					{/* Header */}
 					<div className="flex items-center gap-3">
 						<div className="w-10 h-10 rounded-full bg-danger/90 flex items-center justify-center shadow-sm">
@@ -128,8 +121,8 @@ export default function AdminView() {
 							</adc-button>
 						</div>
 					</div>
-				</div>
-			</div>
+				</adc-section-panel>
+			</adc-page-shell>
 		</>
 	);
 }

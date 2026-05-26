@@ -1,7 +1,10 @@
-import { useRef, useEffect } from "react";
 import type { OrganizationRequestSocialNetwork } from "../utils/pm-api.js";
 
 type SocialNetworkField = "platform" | "url";
+
+interface InputEventLike {
+	readonly target: EventTarget | null;
+}
 
 export interface EditableOrganizationRequestSocialNetwork extends OrganizationRequestSocialNetwork {
 	readonly clientId: string;
@@ -14,20 +17,8 @@ interface SocialNetworksManagerProps {
 	readonly onSocialNetworkChange: (idx: number, field: SocialNetworkField, value: string) => void;
 }
 
-function bindAdcChange(element: EventTarget | undefined, onChange: (value: string) => void): (() => void) | undefined {
-	if (!element) return undefined;
-	const handler: EventListener = (event) => onChange((event as CustomEvent<string>).detail);
-	element.addEventListener("adcChange", handler);
-	return () => element.removeEventListener("adcChange", handler);
-}
-
-function bindSocialNetworkField(
-	element: EventTarget | undefined,
-	idx: number,
-	field: SocialNetworkField,
-	onSocialNetworkChange: SocialNetworksManagerProps["onSocialNetworkChange"]
-): (() => void) | undefined {
-	return bindAdcChange(element, (value) => onSocialNetworkChange(idx, field, value));
+function getInputValue(event: InputEventLike): string {
+	return (event.target as HTMLInputElement).value;
 }
 
 export function SocialNetworksManager({
@@ -36,24 +27,6 @@ export function SocialNetworksManager({
 	onRemoveSocialNetwork,
 	onSocialNetworkChange,
 }: SocialNetworksManagerProps) {
-	const inputRefs = useRef<Map<string, any>>(new Map());
-
-	useEffect(() => {
-		const unsubscribers: Array<() => void> = [];
-
-		for (let idx = 0; idx < socialNetworks.length; idx += 1) {
-			for (const field of ["platform", "url"] as const) {
-				const ref = inputRefs.current.get(`${field}-${idx}`);
-				const unbind = bindSocialNetworkField(ref, idx, field, onSocialNetworkChange);
-				if (unbind) unsubscribers.push(unbind);
-			}
-		}
-
-		return () => {
-			unsubscribers.forEach((unsub) => unsub());
-		};
-	}, [socialNetworks, onSocialNetworkChange]);
-
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center justify-between">
@@ -72,27 +45,23 @@ export function SocialNetworksManager({
 						<div key={social.clientId} className="flex gap-3 items-end p-4 rounded-lg border border-border bg-background">
 							<div className="flex-1 min-w-0">
 								<adc-input
-									ref={(el: any) => {
-										if (el) inputRefs.current.set(`platform-${idx}`, el);
-									}}
 									inputId={`social-platform-${idx}`}
 									name={`social-platform-${idx}`}
 									type="text"
 									placeholder="ej: Facebook, Twitter, LinkedIn, Instagram..."
 									value={social.platform}
+									onInput={(event) => onSocialNetworkChange(idx, "platform", getInputValue(event))}
 								/>
 							</div>
 
 							<div className="flex-1 min-w-0">
 								<adc-input
-									ref={(el: any) => {
-										if (el) inputRefs.current.set(`url-${idx}`, el);
-									}}
 									inputId={`social-url-${idx}`}
 									name={`social-url-${idx}`}
 									type="url"
 									placeholder="https://..."
 									value={social.url}
+									onInput={(event) => onSocialNetworkChange(idx, "url", getInputValue(event))}
 								/>
 							</div>
 

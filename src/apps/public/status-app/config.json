@@ -1,0 +1,32 @@
+{
+	"uiModule": {
+		"name": "status-app",
+		"uiNamespace": "adc-platform",
+		"framework": "react",
+		"outputDir": "dist-ui",
+		"isHost": true,
+		"isRemote": false,
+		"serviceWorker": true,
+		"uiDependencies": ["adc-ui-library"],
+		"devPort": 3020,
+		"sharedLibs": ["react", "tailwind"],
+		"i18n": true,
+		"security": {
+			"headers": {
+				"Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh; connect-src 'self' http://localhost:* ws://localhost:* https://esm.sh; worker-src 'self' blob:; manifest-src 'self'"
+			}
+		},
+		"hosting": [
+			{
+				"domains": ["adigitalcafe.com"],
+				"subdomains": ["status"]
+			}
+		]
+	},
+	"services": [
+		{
+			"name": "data/ProjectManagerService",
+			"version": "latest"
+		}
+	]
+}

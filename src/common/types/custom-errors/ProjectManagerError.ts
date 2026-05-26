@@ -1,6 +1,6 @@
 import ADCCustomError from "../ADCCustomError.ts";
 
-type ProjectManagerErrorTypes =
+type ExpectedProjectManagerErrorTypes =
 	// Access
 	| "ORG_ACCESS_DENIED"
 	| "PROJECT_ACCESS_DENIED"
@@ -24,14 +24,10 @@ type ProjectManagerErrorTypes =
 	| "INVALID_VISIBILITY"
 	// Tier / quota
 	| "TIER_LIMIT_REACHED"
-	// Feature flags
-	| "ATTACHMENTS_NOT_IMPLEMENTED"
-	| "ORG_REQUEST_PROJECT_NOT_CONFIGURED"
-	| "ORG_REQUEST_PROJECT_UNAVAILABLE"
+
 	// Comments
 	| "COMMENT_REQUIRED_ON_FINAL"
-	| "COMMENTS_UNAVAILABLE"
-	| "ATTACHMENTS_UNAVAILABLE"
+
 	// Issue description
 	| "DESCRIPTION_DRAFTS_UNAVAILABLE"
 	| "ISSUE_DESCRIPTION_TOO_MANY_ATTACHMENTS"
@@ -41,6 +37,16 @@ type ProjectManagerErrorTypes =
 	| "NO_TOKEN"
 	| "FORBIDDEN";
 
+type UnexpectedProjectManagerErrorTypes =
+	| "ATTACHMENTS_NOT_IMPLEMENTED"
+	| "ORG_REQUEST_PROJECT_NOT_CONFIGURED"
+	| "ORG_REQUEST_PROJECT_UNAVAILABLE"
+	| "SUPPORT_TICKET_PROJECT_NOT_CONFIGURED"
+	| "SUPPORT_TICKET_PROJECT_UNAVAILABLE"
+	| "COMMENTS_UNAVAILABLE"
+	| "ATTACHMENTS_UNAVAILABLE";
+
+type ProjectManagerErrorTypes = ExpectedProjectManagerErrorTypes | UnexpectedProjectManagerErrorTypes;
 export class ProjectManagerError extends ADCCustomError<Record<string, unknown>, ProjectManagerErrorTypes> {
 	public readonly name = "ProjectManagerError";
 }

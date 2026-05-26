@@ -1,3 +1,4 @@
+// Toast utility centralizado para apps públicas
 type ToastVariant = "success" | "error" | "info" | "warning";
 
 function showToast(message: string, variant: ToastVariant = "info", duration = 3000) {
