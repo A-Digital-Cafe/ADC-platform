@@ -319,7 +319,7 @@ export default function CreateTicketForm({ onSuccess, onCancel }: CreateTicketFo
 					<button
 						type="submit"
 						disabled={loading}
-						className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+						className="px-4 py-2 bg-primary text-tprimary rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
 					>
 						{loading ? t("common.sending") || "Sending..." : t("tickets.form.submit") || "Submit"}
 					</button>
