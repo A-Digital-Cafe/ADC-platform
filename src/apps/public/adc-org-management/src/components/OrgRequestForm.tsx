@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { orgRequestApi, type CreateOrganizationRequestInput, type OrganizationRequestSocialNetwork } from "../utils/pm-api.js";
-import { toast } from "../utils/toast.js";
+import { toast } from "@ui-library/utils/toast";
 import { OrgFormBase } from "./OrgFormBase.js";
 import { SocialNetworksManager, type EditableOrganizationRequestSocialNetwork } from "./SocialNetworksManager.js";
 import { OrgRequestSuccess } from "./OrgRequestSuccess.js";

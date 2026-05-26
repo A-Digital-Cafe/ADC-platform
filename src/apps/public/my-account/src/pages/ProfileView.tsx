@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { accountApi, type AvatarOption, type AvatarSource } from "../utils/account-api";
-import { toast } from "../utils/toast";
+import { toast } from "@ui-library/utils/toast";
 import { buildAvatarUrl } from "@ui-library/utils/avatar";
 import { broadcastAvatarUpdate, setupAvatarSync, type AvatarUpdatePayload } from "@ui-library/utils/auth-sync";
 import { useTranslation } from "@ui-library/utils/i18n-react";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { accountApi } from "../utils/account-api";
-import { toast } from "../utils/toast";
+import { toast } from "@ui-library/utils/toast";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 
 const AUTH_URL = "http://localhost:3012";

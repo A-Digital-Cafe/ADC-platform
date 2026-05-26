@@ -9,7 +9,7 @@ import {
 	type SelectOption,
 } from "@common/types/project-manager/SupportTicket.ts";
 import { TicketSuccess } from "./TicketSuccess.js";
-import { toast } from "../utils/toast";
+import { toast } from "@ui-library/utils/toast";
 
 interface FormData {
 	type: SupportTicketType;

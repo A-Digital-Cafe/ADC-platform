@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { accountApi } from "../utils/account-api";
-import { toast } from "../utils/toast";
+import { toast } from "@ui-library/utils/toast";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 export default function PrivacySecurityView() {
 	const { t } = useTranslation({ namespace: "my-account", autoLoad: true });
