@@ -10,7 +10,7 @@
 const IS_DEV = process.env.NODE_ENV !== "production";
 
 /** Base configurable vía env, con default por ambiente. */
-export const ERROR_APP_BASE = (process.env.ADC_ERROR_APP_URL ?? (IS_DEV ? "http://localhost:3026" : "https://error.adigitalcafe.com")).replace(
+const ERROR_APP_BASE = (process.env.ADC_ERROR_APP_URL ?? (IS_DEV ? "http://localhost:3026" : "https://error.adigitalcafe.com")).replace(
 	/\/$/,
 	""
 );

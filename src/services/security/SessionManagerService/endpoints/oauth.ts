@@ -13,8 +13,17 @@ import {
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
-import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig } from "../types.js";
+import type { AuthenticatedUser, IOAuthProvider, ModerationLookupService, OAuthProviderConfig } from "../types.js";
 import { buildErrorUrl } from "../utils/errorRedirect.js";
+import { recordLoginAttemptIp, redirectIfRequestBanned } from "../utils/moderationGuards.js";
+import { syncDiscordRolesForUser } from "../utils/discordRoleSync.js";
+import {
+	assertPendingLinkPassword,
+	requirePendingLinkPassword,
+	requirePendingLinkToken,
+	requireValidPendingLinkEntry,
+	type PendingLinkEntry,
+} from "../utils/pendingLinks.js";
 
 /** Nombre de las cookies */
 const STATE_COOKIE_NAME = "oauth_state";
@@ -31,14 +40,6 @@ interface PendingLinkData {
 	providerAvatar?: string;
 	email: string;
 	accessToken: string;
-}
-
-/** Entrada en el store server-side de pending links */
-interface PendingLinkEntry {
-	data: PendingLinkData;
-	createdAt: number;
-	expiresAt: number;
-	attempts: number;
 }
 
 /** Max intentos de contraseña por pending link antes de consumirlo */
@@ -73,6 +74,17 @@ interface ProviderParams {
 	provider: string;
 }
 
+type InternalIdentity = NonNullable<OAuthEndpointsDeps["internalIdentity"]>;
+type InternalUserManager = InternalIdentity["users"];
+type InternalUser = NonNullable<Awaited<ReturnType<InternalUserManager["getUserByEmail"]>>>;
+
+interface CallbackRequest {
+	code: string;
+	returnUrl: string;
+	oauthProvider: IOAuthProvider;
+	config: OAuthProviderConfig;
+}
+
 /**
  * Endpoints de autenticación OAuth (Discord, Google, etc.)
  * Singleton con métodos estáticos y @RegisterEndpoint
@@ -81,7 +93,7 @@ export class OAuthEndpoints {
 	private static deps: OAuthEndpointsDeps;
 
 	/** Fallback en memoria si Redis no está disponible */
-	private static readonly pendingLinks = new Map<string, PendingLinkEntry>();
+	private static readonly pendingLinks = new Map<string, PendingLinkEntry<PendingLinkData>>();
 
 	/** Intervalo de limpieza (solo sin Redis — Redis usa TTL nativo) */
 	private static cleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -173,161 +185,32 @@ export class OAuthEndpoints {
 	})
 	static async handleCallback(ctx: EndpointCtx<ProviderParams>): Promise<never> {
 		const provider = ctx.params.provider || "platform";
-		const { code, state, error } = ctx.query || {};
-
-		// Cookies a limpiar (siempre limpiar state cookies)
-		const clearCookies: ClearCookie[] = [
-			{ name: STATE_COOKIE_NAME, options: { path: "/" } },
-			{ name: RETURN_URL_COOKIE_NAME, options: { path: "/" } },
-		];
-
-		if (error) {
-			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: error }), {
-				status: 302,
-				clearCookies,
-			});
-		}
-
-		if (!code || !state) {
-			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Código o estado faltante" }), {
-				status: 302,
-				clearCookies,
-			});
-		}
-
-		// Validar state contra la cookie
-		const stateCookie = ctx.cookies?.[STATE_COOKIE_NAME];
-		if (!stateCookie) {
-			throw UncommonResponse.redirect(buildErrorUrl("/csrf"), {
-				status: 302,
-				clearCookies,
-			});
-		}
-
-		// Usar el método validateState con ambos argumentos
-		const stateValid = OAuthEndpoints.deps.sessionManager.validateState(state, stateCookie);
-		if (!stateValid) {
-			throw UncommonResponse.redirect(buildErrorUrl("/csrf"), {
-				status: 302,
-				clearCookies,
-			});
-		}
-
-		// Obtener returnUrl de la cookie
-		const returnUrl = ctx.cookies?.[RETURN_URL_COOKIE_NAME] || "";
-
-		const oauthProvider = OAuthEndpoints.deps.oauthRegistry.get(provider);
-		if (!oauthProvider) {
-			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Proveedor no encontrado" }), {
-				status: 302,
-				clearCookies,
-			});
-		}
-
-		const config = OAuthEndpoints.deps.getProviderConfig(provider);
-		if (!config) {
-			throw new AuthError(500, "PROVIDER_CONFIG_NOT_FOUND", "Configuración del proveedor no encontrada");
-		}
+		const clearCookies = OAuthEndpoints.getOAuthClearCookies();
+		const { code, returnUrl, oauthProvider, config } = OAuthEndpoints.resolveCallbackRequest(ctx, provider, clearCookies);
 
 		try {
 			const tokens = await oauthProvider.exchangeCode(code, config);
 			const profile = await oauthProvider.getUserProfile(tokens.accessToken);
 
 			// Anti-evasión: bloquear si el email OAuth está en la ban-list
-			if (OAuthEndpoints.deps.moderation && profile.email) {
-				const emailBan = await OAuthEndpoints.deps.moderation.isEmailBanned(profile.email);
-				if (emailBan.banned) {
-					throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: emailBan.reason || "Cuenta baneada" }), {
-						status: 302,
-						clearCookies,
-					});
-				}
-			}
-			if (OAuthEndpoints.deps.moderation && ctx.ip) {
-				const ipBan = await OAuthEndpoints.deps.moderation.isIpBanned(ctx.ip);
-				if (ipBan.banned) {
-					throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: ipBan.reason || "Acceso bloqueado" }), {
-						status: 302,
-						clearCookies,
-					});
-				}
-			}
+			await redirectIfRequestBanned({ moderation: OAuthEndpoints.deps.moderation, email: profile.email, ip: ctx.ip, clearCookies });
 
 			const result = await OAuthEndpoints.getOrCreateUser(provider, profile, tokens.accessToken);
 
 			// Email coincide con usuario existente → redirigir a vinculación con autenticación
 			if (result.type === "requires_link") {
-				// Generar token opaco y almacenar datos server-side (Redis o fallback Map)
-				const { randomBytes } = await import("node:crypto");
-				const pendingToken = randomBytes(32).toString("hex");
-
-				await OAuthEndpoints.storePendingLink(pendingToken, {
-					data: result.pendingData,
-					createdAt: Date.now(),
-					expiresAt: Date.now() + PENDING_LINK_TTL_SECONDS * 1000,
-					attempts: 0,
-				});
-
-				const pendingCookies: SetCookie[] = [
-					{
-						name: PENDING_LINK_COOKIE_NAME,
-						value: pendingToken, // Solo token opaco, no datos
-						options: {
-							httpOnly: true,
-							secure: isProd,
-							sameSite: "lax",
-							path: "/",
-							maxAge: 5 * 60, // 5 minutos
-						},
-					},
-				];
-
-				if (returnUrl) {
-					pendingCookies.push({
-						name: RETURN_URL_COOKIE_NAME,
-						value: returnUrl,
-						options: {
-							httpOnly: true,
-							secure: isProd,
-							sameSite: "lax",
-							path: "/",
-							maxAge: 5 * 60,
-						},
-					});
-				}
-
-				const linkRedirect = `/auth/link-account?provider=${provider}&email=${encodeURIComponent(result.pendingData.email)}`;
-				throw UncommonResponse.redirect(linkRedirect, {
-					status: 302,
-					cookies: pendingCookies,
-					clearCookies,
-				});
+				return await OAuthEndpoints.redirectToLinkAccount(provider, result.pendingData, returnUrl, clearCookies);
 			}
 
 			const user = result.user;
 
 			// Bloquear cuentas baneadas/deshabilitadas (evita evasión por OAuth tras ban administrativo)
-			if (user.isActive === false) {
-				const banReason = (user.metadata as any)?.banReason || "Cuenta deshabilitada";
-				throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: banReason }), { status: 302, clearCookies });
-			}
+			OAuthEndpoints.redirectIfInactiveUser(user, clearCookies);
 
 			// Registrar IP del login OAuth (3h) para alimentar ban-list anti-evasión
-			if (OAuthEndpoints.deps.moderation && ctx.ip) {
-				await OAuthEndpoints.deps.moderation
-					.recordLoginAttemptIp(user.id, ctx.ip)
-					.catch((e: any) => OAuthEndpoints.deps.logger.logWarn(`recordLoginAttemptIp: ${e?.message || e}`));
-			}
+			await recordLoginAttemptIp(OAuthEndpoints.deps.moderation, user.id, ctx.ip, OAuthEndpoints.deps.logger);
 
-			// Discord autoroles: sincronizar roles de guild si es provider Discord
-			if (provider === "discord" && OAuthEndpoints.deps.internalIdentity) {
-				await OAuthEndpoints.syncDiscordRoles(tokens.accessToken, user.id, oauthProvider as DiscordOAuthProvider);
-			}
-
-			// Re-obtener permisos después de sync de roles (podrían haber cambiado)
-			if (provider === "discord" && OAuthEndpoints.deps.identityService) {
-				user.permissions = await OAuthEndpoints.getUserPermissions(user.id);
-			}
+			await OAuthEndpoints.syncDiscordLogin(provider, tokens.accessToken, user, oauthProvider);
 
 			const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx, user);
 
@@ -360,58 +243,23 @@ export class OAuthEndpoints {
 		options: { skipIdempotency: true, rateLimit: { max: 3, timeWindow: 300_000 } },
 	})
 	static async handleLinkAccount(ctx: EndpointCtx<Record<string, string>>): Promise<never> {
-		const pendingToken = ctx.cookies?.[PENDING_LINK_COOKIE_NAME];
-		if (!pendingToken) {
-			throw new AuthError(400, "NO_PENDING_LINK", "No hay vinculación pendiente");
-		}
-
-		// Buscar datos en store server-side (Redis o fallback Map)
-		const entry = await OAuthEndpoints.getPendingLink(pendingToken);
-		if (!entry) {
-			throw new AuthError(400, "INVALID_PENDING_LINK", "Vinculación expirada o inválida");
-		}
-
-		// Verificar expiración (en caso de fallback sin TTL nativo)
-		if (Date.now() > entry.expiresAt) {
-			await OAuthEndpoints.deletePendingLink(pendingToken);
-			throw new AuthError(400, "INVALID_PENDING_LINK", "Vinculación expirada");
-		}
-
+		const pendingToken = requirePendingLinkToken(ctx.cookies?.[PENDING_LINK_COOKIE_NAME]);
+		const entry = await OAuthEndpoints.getValidPendingLink(pendingToken);
 		const pendingData = entry.data;
+		const password = requirePendingLinkPassword(ctx.data as { password?: string } | undefined);
+		const users = OAuthEndpoints.requireInternalIdentity().users;
+		const existingUser = await OAuthEndpoints.getPendingLinkUser(users, pendingData.email, pendingToken);
 
-		const { password } = (ctx.data as { password?: string }) || {};
-		if (!password) {
-			throw new AuthError(400, "PASSWORD_REQUIRED", "Se requiere contraseña para vincular la cuenta");
-		}
-
-		if (!OAuthEndpoints.deps.internalIdentity) {
-			throw new AuthError(500, "IDENTITY_NOT_AVAILABLE", "Servicio de identidad no disponible");
-		}
-
-		const users = OAuthEndpoints.deps.internalIdentity.users;
-		const existingUser = await users.getUserByEmail(pendingData.email);
-		if (!existingUser) {
-			await OAuthEndpoints.deletePendingLink(pendingToken);
-			throw new AuthError(404, "USER_NOT_FOUND", "Usuario no encontrado");
-		}
-
-		// Verificar contraseña de la plataforma
-		const authResult = await users.authenticate(existingUser.username, password);
-		if (!authResult || ("wrongPassword" in authResult && authResult.wrongPassword)) {
-			// Incrementar intentos — consumir token si se excede el máximo
-			entry.attempts++;
-			if (entry.attempts >= MAX_LINK_ATTEMPTS) {
-				await OAuthEndpoints.deletePendingLink(pendingToken);
-				throw new AuthError(401, "WRONG_PASSWORD", "Demasiados intentos fallidos, inicie el proceso nuevamente");
-			}
-			// Guardar intentos actualizados
-			await OAuthEndpoints.storePendingLink(pendingToken, entry);
-			throw new AuthError(401, "WRONG_PASSWORD", `Contraseña incorrecta (${MAX_LINK_ATTEMPTS - entry.attempts} intentos restantes)`);
-		}
-		if ("isActive" in authResult && !authResult.isActive) {
-			await OAuthEndpoints.deletePendingLink(pendingToken);
-			throw new AuthError(403, "ACCOUNT_DISABLED", "Cuenta deshabilitada");
-		}
+		await assertPendingLinkPassword({
+			pendingToken,
+			entry,
+			username: existingUser.username,
+			password,
+			maxAttempts: MAX_LINK_ATTEMPTS,
+			authenticate: (username, candidatePassword) => users.authenticate(username, candidatePassword),
+			storePendingLink: OAuthEndpoints.storePendingLink,
+			deletePendingLink: OAuthEndpoints.deletePendingLink,
+		});
 
 		// Éxito → consumir token (one-time use)
 		await OAuthEndpoints.deletePendingLink(pendingToken);
@@ -426,25 +274,9 @@ export class OAuthEndpoints {
 			linkedAt: new Date(),
 		});
 
-		// Sync Discord roles si aplica
-		if (pendingData.provider === "discord" && pendingData.accessToken) {
-			const discordProvider = OAuthEndpoints.deps.oauthRegistry.get("discord") as DiscordOAuthProvider | undefined;
-			if (discordProvider) {
-				await OAuthEndpoints.syncDiscordRoles(pendingData.accessToken, existingUser.id, discordProvider);
-			}
-		}
+		await OAuthEndpoints.syncPendingLinkProvider(pendingData, existingUser.id);
 
-		const permissions = await OAuthEndpoints.getUserPermissions(existingUser.id);
-		const user: AuthenticatedUser = {
-			id: existingUser.id,
-			providerId: pendingData.providerId,
-			provider: pendingData.provider,
-			username: existingUser.username,
-			email: existingUser.email,
-			avatar: pendingData.providerAvatar,
-			permissions,
-			metadata: existingUser.metadata,
-		};
+		const user = await OAuthEndpoints.buildLinkedAccountUser(existingUser, pendingData);
 
 		const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx as unknown as EndpointCtx<ProviderParams>, user);
 		const clearLinkCookies: ClearCookie[] = [
@@ -467,6 +299,170 @@ export class OAuthEndpoints {
 	}
 
 	// ============ Métodos auxiliares (privados estáticos) ============
+
+	private static getOAuthClearCookies(): ClearCookie[] {
+		return [
+			{ name: STATE_COOKIE_NAME, options: { path: "/" } },
+			{ name: RETURN_URL_COOKIE_NAME, options: { path: "/" } },
+		];
+	}
+
+	private static resolveCallbackRequest(ctx: EndpointCtx<ProviderParams>, provider: string, clearCookies: ClearCookie[]): CallbackRequest {
+		const { code, state, error } = ctx.query || {};
+
+		if (error) {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: error }), { status: 302, clearCookies });
+		}
+
+		if (!code || !state) {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Código o estado faltante" }), {
+				status: 302,
+				clearCookies,
+			});
+		}
+
+		const stateCookie = ctx.cookies?.[STATE_COOKIE_NAME];
+		if (!stateCookie || !OAuthEndpoints.deps.sessionManager.validateState(state, stateCookie)) {
+			throw UncommonResponse.redirect(buildErrorUrl("/csrf"), { status: 302, clearCookies });
+		}
+
+		const oauthProvider = OAuthEndpoints.deps.oauthRegistry.get(provider);
+		if (!oauthProvider) {
+			throw UncommonResponse.redirect(buildErrorUrl("/oauth", { provider, message: "Proveedor no encontrado" }), {
+				status: 302,
+				clearCookies,
+			});
+		}
+
+		const config = OAuthEndpoints.deps.getProviderConfig(provider);
+		if (!config) {
+			throw new AuthError(500, "PROVIDER_CONFIG_NOT_FOUND", "Configuración del proveedor no encontrada");
+		}
+
+		return { code, returnUrl: ctx.cookies?.[RETURN_URL_COOKIE_NAME] || "", oauthProvider, config };
+	}
+
+	private static async redirectToLinkAccount(
+		provider: string,
+		pendingData: PendingLinkData,
+		returnUrl: string,
+		clearCookies: ClearCookie[]
+	): Promise<never> {
+		const { randomBytes } = await import("node:crypto");
+		const pendingToken = randomBytes(32).toString("hex");
+		const now = Date.now();
+
+		await OAuthEndpoints.storePendingLink(pendingToken, {
+			data: pendingData,
+			createdAt: now,
+			expiresAt: now + PENDING_LINK_TTL_SECONDS * 1000,
+			attempts: 0,
+		});
+
+		const linkRedirect = `/auth/link-account?provider=${provider}&email=${encodeURIComponent(pendingData.email)}`;
+		throw UncommonResponse.redirect(linkRedirect, {
+			status: 302,
+			cookies: OAuthEndpoints.buildPendingLinkCookies(pendingToken, returnUrl),
+			clearCookies,
+		});
+	}
+
+	private static buildPendingLinkCookies(pendingToken: string, returnUrl: string): SetCookie[] {
+		const pendingCookies: SetCookie[] = [
+			{
+				name: PENDING_LINK_COOKIE_NAME,
+				value: pendingToken,
+				options: {
+					httpOnly: true,
+					secure: isProd,
+					sameSite: "lax",
+					path: "/",
+					maxAge: PENDING_LINK_TTL_SECONDS,
+				},
+			},
+		];
+
+		if (returnUrl) {
+			pendingCookies.push({
+				name: RETURN_URL_COOKIE_NAME,
+				value: returnUrl,
+				options: {
+					httpOnly: true,
+					secure: isProd,
+					sameSite: "lax",
+					path: "/",
+					maxAge: PENDING_LINK_TTL_SECONDS,
+				},
+			});
+		}
+
+		return pendingCookies;
+	}
+
+	private static redirectIfInactiveUser(user: AuthenticatedUser, clearCookies: ClearCookie[]): void {
+		if (user.isActive === false) {
+			const banReason = (user.metadata as any)?.banReason || "Cuenta deshabilitada";
+			throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: banReason }), { status: 302, clearCookies });
+		}
+	}
+
+	private static async syncDiscordLogin(
+		provider: string,
+		accessToken: string,
+		user: AuthenticatedUser,
+		oauthProvider: IOAuthProvider
+	): Promise<void> {
+		if (provider !== "discord") return;
+
+		await OAuthEndpoints.syncDiscordRoles(accessToken, user.id, oauthProvider as DiscordOAuthProvider);
+		if (OAuthEndpoints.deps.identityService) {
+			user.permissions = await OAuthEndpoints.getUserPermissions(user.id);
+		}
+	}
+
+	private static async getValidPendingLink(pendingToken: string): Promise<PendingLinkEntry<PendingLinkData>> {
+		const entry = await OAuthEndpoints.getPendingLink(pendingToken);
+		return requireValidPendingLinkEntry(pendingToken, entry, OAuthEndpoints.deletePendingLink);
+	}
+
+	private static requireInternalIdentity(): InternalIdentity {
+		if (!OAuthEndpoints.deps.internalIdentity) {
+			throw new AuthError(500, "IDENTITY_NOT_AVAILABLE", "Servicio de identidad no disponible");
+		}
+		return OAuthEndpoints.deps.internalIdentity;
+	}
+
+	private static async getPendingLinkUser(users: InternalUserManager, email: string, pendingToken: string): Promise<InternalUser> {
+		const existingUser = await users.getUserByEmail(email);
+		if (!existingUser) {
+			await OAuthEndpoints.deletePendingLink(pendingToken);
+			throw new AuthError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+		}
+		return existingUser;
+	}
+
+	private static async syncPendingLinkProvider(pendingData: PendingLinkData, userId: string): Promise<void> {
+		if (pendingData.provider !== "discord") return;
+
+		const discordProvider = OAuthEndpoints.deps.oauthRegistry.get("discord") as DiscordOAuthProvider | undefined;
+		if (discordProvider) {
+			await OAuthEndpoints.syncDiscordRoles(pendingData.accessToken, userId, discordProvider);
+		}
+	}
+
+	private static async buildLinkedAccountUser(existingUser: InternalUser, pendingData: PendingLinkData): Promise<AuthenticatedUser> {
+		const permissions = await OAuthEndpoints.getUserPermissions(existingUser.id);
+		return {
+			id: existingUser.id,
+			providerId: pendingData.providerId,
+			provider: pendingData.provider,
+			username: existingUser.username,
+			email: existingUser.email,
+			avatar: pendingData.providerAvatar,
+			permissions,
+			metadata: existingUser.metadata,
+		};
+	}
 
 	private static async getTokenCookies(ctx: EndpointCtx<ProviderParams>, user: AuthenticatedUser): Promise<SetCookie[]> {
 		const ipAddress = OAuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);
@@ -557,7 +553,7 @@ export class OAuthEndpoints {
 	/**
 	 * Almacena un pending link en Redis (con TTL nativo) o en memoria.
 	 */
-	private static async storePendingLink(token: string, entry: PendingLinkEntry): Promise<void> {
+	private static async storePendingLink(token: string, entry: PendingLinkEntry<PendingLinkData>): Promise<void> {
 		if (OAuthEndpoints.deps.redis) {
 			await OAuthEndpoints.deps.redis.setex(`${REDIS_PENDING_PREFIX}${token}`, PENDING_LINK_TTL_SECONDS, JSON.stringify(entry));
 			return;
@@ -568,11 +564,11 @@ export class OAuthEndpoints {
 	/**
 	 * Recupera un pending link de Redis o de memoria.
 	 */
-	private static async getPendingLink(token: string): Promise<PendingLinkEntry | null> {
+	private static async getPendingLink(token: string): Promise<PendingLinkEntry<PendingLinkData> | null> {
 		if (OAuthEndpoints.deps.redis) {
 			const data = await OAuthEndpoints.deps.redis.get(`${REDIS_PENDING_PREFIX}${token}`);
 			if (!data) return null;
-			return JSON.parse(data) as PendingLinkEntry;
+			return JSON.parse(data) as PendingLinkEntry<PendingLinkData>;
 		}
 
 		return OAuthEndpoints.pendingLinks.get(token) || null;
@@ -720,68 +716,7 @@ export class OAuthEndpoints {
 	 * - Solo toca roles que están en el mapa, no roles asignados manualmente
 	 */
 	private static async syncDiscordRoles(accessToken: string, userId: string, discordProvider: DiscordOAuthProvider): Promise<void> {
-		if (!OAuthEndpoints.deps.internalIdentity) return;
-
-		const { roles: roleManager, users, discordGuildId, getDiscordRoleMap } = OAuthEndpoints.deps.internalIdentity;
-		if (!discordGuildId) return;
-
-		// Fetch guild member roles desde Discord API
-		const discordRoleIds = await discordProvider.fetchGuildMemberRoles(accessToken, discordGuildId);
-		if (!discordRoleIds) return; // Failed or rate-limited
-
-		// Obtener mapeo Discord Role ID → nombre de rol de plataforma
-		const roleMap = await getDiscordRoleMap(discordGuildId);
-		if (!roleMap || Object.keys(roleMap).length === 0) return;
-
-		// Traducir Discord role IDs → nombres de roles de plataforma
-		const mappedRoleNames = new Set<string>();
-		for (const discordRoleId of discordRoleIds) {
-			const platformRoleName = roleMap[discordRoleId];
-			if (platformRoleName) mappedRoleNames.add(platformRoleName);
-		}
-
-		// Obtener todos los nombres de roles que están en el mapa (para saber cuáles remover)
-		const allMappedRoleNames = new Set(Object.values(roleMap));
-
-		// Resolver IDs de roles de plataforma por nombre
-		const roleNameToId = new Map<string, string>();
-		for (const roleName of allMappedRoleNames) {
-			const role = await roleManager.getRoleByName(roleName);
-			if (role) roleNameToId.set(roleName, role.id);
-		}
-
-		// Obtener usuario actual para sus roleIds
-		const currentUser = await users.getUser(userId);
-		if (!currentUser) return;
-
-		const currentRoleIds = new Set(currentUser.roleIds || []);
-		const allMappedRoleIds = new Set(roleNameToId.values());
-
-		// Calcular nuevos roleIds:
-		// - Mantener todos los roles que NO están en el mapa (asignados manualmente)
-		// - Agregar los roles mapeados que el usuario tiene en Discord
-		// - Remover los roles mapeados que el usuario ya no tiene en Discord
-		const newRoleIds = new Set<string>();
-
-		// Mantener roles no-mapeados
-		for (const roleId of currentRoleIds) {
-			if (!allMappedRoleIds.has(roleId)) {
-				newRoleIds.add(roleId);
-			}
-		}
-
-		// Agregar roles mapeados que tiene en Discord
-		for (const roleName of mappedRoleNames) {
-			const roleId = roleNameToId.get(roleName);
-			if (roleId) newRoleIds.add(roleId);
-		}
-
-		// Solo actualizar si cambió
-		const sortedCurrent = [...currentRoleIds].sort((a, b) => a.localeCompare(b));
-		const sortedNew = [...newRoleIds].sort((a, b) => a.localeCompare(b));
-		if (sortedCurrent.join(",") !== sortedNew.join(",")) {
-			await users.updateUser(userId, { roleIds: [...newRoleIds] });
-		}
+		await syncDiscordRolesForUser({ accessToken, userId, discordProvider, internalIdentity: OAuthEndpoints.deps.internalIdentity });
 	}
 
 	private static async getUserPermissions(userId: string): Promise<string[]> {

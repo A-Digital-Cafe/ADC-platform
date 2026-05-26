@@ -4,9 +4,10 @@
  * - Elimina caracteres de control
  * - No interpreta HTML (React ya escapa)
  */
-export function sanitizeMessage(raw: string | null | undefined, max = 300): string {
+function sanitizeMessage(raw: string | null | undefined, max = 300): string {
 	if (!raw) return "";
 	// Quita caracteres de control y normaliza espacios
+	// eslint-disable-next-line no-control-regex
 	const cleaned = raw.replace(/[\u0000-\u001F\u007F]+/g, " ").trim();
 	if (cleaned.length <= max) return cleaned;
 	return `${cleaned.slice(0, max)}…`;
