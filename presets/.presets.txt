@@ -12,4 +12,4 @@
 # Ejemplos:
 # SEO       git@github.com:abbytec/adc-preset-seo.git       main
 # Billing   git@github.com:abbytec/adc-preset-billing.git   v1.0.0
-
+SEO https://github.com/A-Digital-Cafe/adc-seo.git main
