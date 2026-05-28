@@ -3,7 +3,7 @@
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"outDir": "./dist",
-		"rootDir": "./src",
+		"rootDir": "./",
 		"esModuleInterop": true,
 		"allowImportingTsExtensions": true,
 		"allowSyntheticDefaultImports": true,
@@ -22,5 +22,5 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true
 	},
-	"include": ["src", "globals.d.ts"]
+	"include": ["src", "presets", "globals.d.ts"]
 }

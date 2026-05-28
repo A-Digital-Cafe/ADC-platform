@@ -1,5 +1,4 @@
-import { BaseApp } from "../../BaseApp.js";
-import type SEOService from "../../../services/data/SEOService/index.js";
+import { AppWithSeo } from "../../AppWithSeo.js";
 
 const HELP_PATHS = [
 	"/",
@@ -34,30 +33,21 @@ const HELP_PAGE_META: Record<string, { title: string; description: string }> = {
 /**
  * Help - Centro de ayuda, políticas y compromisos públicos de ADC.
  */
-export default class HelpApp extends BaseApp {
+export default class HelpApp extends AppWithSeo {
 	async run() {
-		try {
-			const seo = this.getMyService<SEOService>("SEOService");
-			const hosting = this.config?.uiModule?.hosting;
-			seo.registerOnSitemap({
-				appName: this.name,
-				hosting,
-				appDir: this.appDir,
+		this.registerSeo({
+			sitemap: {
 				paths: HELP_PATHS.map((p) => ({ path: p, changefreq: "monthly" as const, priority: p === "/" ? 0.8 : 0.5 })),
-			});
-			seo.registerPageMeta({
-				appName: this.name,
-				hosting,
+			},
+			pageMeta: {
 				defaults: {
 					titleTemplate: "%s · ADC Ayuda",
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
 					twitter: { card: "summary" },
 				},
 				pages: HELP_PATHS.map((p) => ({ path: p, meta: HELP_PAGE_META[p] })),
-			});
-		} catch (e) {
-			this.logger.logDebug(`SEOService no disponible: ${(e as Error).message}`);
-		}
+			},
+		});
 		this.logger.logOk(`${this.name} ejecutándose`);
 	}
 }

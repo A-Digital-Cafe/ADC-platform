@@ -23,8 +23,10 @@ export class KernelServiceLoader {
 		private readonly isShuttingDown: () => boolean
 	) {}
 
-	async loadAll(servicesPath: string): Promise<void> {
-		const kernelServices = await findKernelServices(servicesPath);
+	async loadAll(servicesPath: string | string[]): Promise<void> {
+		const paths = Array.isArray(servicesPath) ? servicesPath : [servicesPath];
+		const found = await Promise.all(paths.map((p) => findKernelServices(p)));
+		const kernelServices = found.flat().sort((a, b) => a.priority - b.priority);
 		if (kernelServices.length === 0) return;
 
 		this.logger.logInfo(`Cargando ${kernelServices.length} servicio(s) en modo kernel...`);

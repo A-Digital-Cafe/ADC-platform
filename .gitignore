@@ -36,6 +36,15 @@ npm-debug.log*
 
 
 apps/private
+
+# Presets externos: cada subcarpeta de `presets/` es un repo opcional
+# (servicios/apps desacoplados). Se vinculan vía submódulos, worktrees
+# o clones manuales. El contenido nunca debe versionarse desde este repo.
+/presets/*
+!presets/.gitmodules
+!presets/.presets.txt
+!presets/README.md
+
 private/
 **.pyc
 __pycache__

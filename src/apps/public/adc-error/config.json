@@ -1,6 +1,5 @@
 {
 	"uiModule": {
-		"enableSEO": true,
 		"name": "adc-error",
 		"uiNamespace": "adc-platform",
 		"framework": "react",

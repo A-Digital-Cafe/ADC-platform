@@ -11,10 +11,23 @@ import { VersionResolver } from "../VersionResolver.js";
 
 export class ModuleLoader {
 	readonly #basePath = path.resolve(process.cwd(), "src");
+	readonly #presetsPath = path.resolve(process.cwd(), "presets");
 
-	readonly #providersPath = path.resolve(this.#basePath, "providers");
-	readonly #utilitiesPath = path.resolve(this.#basePath, "utilities");
-	readonly #servicesPath = path.resolve(this.#basePath, "services");
+	#providersPath: string[] = [path.resolve(this.#basePath, "providers")];
+	#utilitiesPath: string[] = [path.resolve(this.#basePath, "utilities")];
+	#servicesPath: string[] = [path.resolve(this.#basePath, "services")];
+
+	/**
+	 * Registra los presets descubiertos por el Kernel para que los lookups de
+	 * providers/utilities/services consideren también `presets/<topic>/<layer>`.
+	 * Llamar una sola vez al inicio; idempotente.
+	 */
+	public setPresetTopics(topics: string[]): void {
+		const layerPaths = (layer: "providers" | "utilities" | "services") => topics.map((t) => path.resolve(this.#presetsPath, t, layer));
+		this.#providersPath = [path.resolve(this.#basePath, "providers"), ...layerPaths("providers")];
+		this.#utilitiesPath = [path.resolve(this.#basePath, "utilities"), ...layerPaths("utilities")];
+		this.#servicesPath = [path.resolve(this.#basePath, "services"), ...layerPaths("services")];
+	}
 
 	readonly #configCache = new Map<string, IModuleConfig>();
 	readonly #envCache = new Map<string, Record<string, string>>();

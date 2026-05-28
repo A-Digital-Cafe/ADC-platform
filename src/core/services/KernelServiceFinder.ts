@@ -66,6 +66,10 @@ async function traverse(currentDir: string, acc: KernelServiceInfo[]): Promise<v
 
 export async function findKernelServices(dir: string): Promise<KernelServiceInfo[]> {
 	const acc: KernelServiceInfo[] = [];
-	await traverse(dir, acc);
+	try {
+		await traverse(dir, acc);
+	} catch {
+		// El directorio no existe (ej. preset opcional). No es error.
+	}
 	return acc.sort((a, b) => a.priority - b.priority);
 }

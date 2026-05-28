@@ -1,4 +1,5 @@
 import "./utils/env/load-env.js";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Logger } from "./utils/logger/Logger.js";
 import { ModuleLoader } from "./utils/loaders/ModuleLoader.js";
@@ -35,6 +36,16 @@ export class Kernel {
 	readonly #servicesPath = path.resolve(this.#basePath, "services");
 	readonly #appsPath = path.resolve(this.#basePath, "apps");
 
+	/**
+	 * Carpeta raíz de presets opcionales. Cada subcarpeta es un "preset" temático
+	 * (ej. `presets/SEO/`) que replica la estructura de `src` (apps, services,
+	 * providers, utilities). Permite desacoplar módulos en repos independientes:
+	 * si el preset está presente se monta como módulos nativos, si no, el
+	 * sistema arranca igual.
+	 */
+	readonly #presetsPath = path.resolve(process.cwd(), "presets");
+	#presetTopics: string[] = [];
+
 	readonly #appLoader: AppLoader;
 	readonly #registrar: ModuleRegistrar;
 	readonly #kernelServiceLoader: KernelServiceLoader;
@@ -61,11 +72,17 @@ export class Kernel {
 		this.#logger.logInfo(`Modo: ${this.#isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}`);
 		this.#logger.logDebug(`Base path: ${this.#basePath}`);
 
+		this.#presetTopics = await this.#discoverPresetTopics();
+		if (this.#presetTopics.length > 0) {
+			this.#logger.logInfo(`Presets detectados: ${this.#presetTopics.join(", ")}`);
+		}
+		Kernel.moduleLoader.setPresetTopics(this.#presetTopics);
+
 		await this.#dockerManager.loadCommonDockerCompose(path.resolve(this.#basePath, "common", "docker"));
-		await this.#kernelServiceLoader.loadAll(this.#servicesPath);
+		await this.#kernelServiceLoader.loadAll([this.#servicesPath, ...this.#presetLayerPaths("services")]);
 
 		const excludeTests = process.env.ENABLE_TESTS !== "true" && !this.#isDevelopment;
-		const excludeList = excludeTests ? ["BaseApp.ts", "test"] : ["BaseApp.ts"];
+		const excludeList = excludeTests ? ["BaseApp.ts", "AppWithSeo.ts", "test"] : ["BaseApp.ts", "AppWithSeo.ts"];
 		await loadLayerRecursive(
 			this.#appsPath,
 			this.#appLoader.loadApp,
@@ -74,6 +91,16 @@ export class Kernel {
 			this.#logger,
 			() => this.#isShuttingDown
 		);
+		for (const presetAppsPath of this.#presetLayerPaths("apps")) {
+			await loadLayerRecursive(
+				presetAppsPath,
+				this.#appLoader.loadApp,
+				excludeList,
+				this.#fileExtension,
+				this.#logger,
+				() => this.#isShuttingDown
+			);
+		}
 
 		this.#startWatchers();
 		await this.#refreshUiImportMaps();
@@ -81,39 +108,68 @@ export class Kernel {
 		this.#scheduleStatusInterval();
 	}
 
+	async #discoverPresetTopics(): Promise<string[]> {
+		try {
+			const entries = await fs.readdir(this.#presetsPath, { withFileTypes: true });
+			return entries.filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name);
+		} catch {
+			return [];
+		}
+	}
+
+	#presetLayerPaths(layer: "apps" | "services" | "providers" | "utilities"): string[] {
+		return this.#presetTopics.map((topic) => path.resolve(this.#presetsPath, topic, layer));
+	}
+
 	#startWatchers(): void {
 		const isStartingUp = () => this.#isStartingUp;
 		const unload = (type: ModuleType) => (p: string) => this.registry.unloadModule(type, Kernel.#kernelKey, p);
 		const onChange = (type: ModuleType) => (p: string) => this.#dependencyReloader.handleFileChange(type, p);
 
-		watchLayer(
-			this.#providersPath,
-			this.#fileExtension,
-			(p) => this.#registrar.registerByPath("provider", p),
-			unload("provider"),
-			isStartingUp,
-			[],
-			onChange("provider")
-		);
-		watchLayer(
-			this.#utilitiesPath,
-			this.#fileExtension,
-			(p) => this.#registrar.registerByPath("utility", p),
-			unload("utility"),
-			isStartingUp,
-			[],
-			onChange("utility")
-		);
-		watchLayer(
-			this.#servicesPath,
-			this.#fileExtension,
-			(p) => this.#registrar.registerByPath("service", p),
-			unload("service"),
-			isStartingUp,
-			[],
-			onChange("service")
-		);
-		watchLayer(this.#appsPath, this.#fileExtension, this.#appLoader.loadApp, this.#appLoader.unloadApp, isStartingUp, ["BaseApp.ts"]);
+		const providerPaths = [this.#providersPath, ...this.#presetLayerPaths("providers")];
+		const utilityPaths = [this.#utilitiesPath, ...this.#presetLayerPaths("utilities")];
+		const servicePaths = [this.#servicesPath, ...this.#presetLayerPaths("services")];
+		const appPaths = [this.#appsPath, ...this.#presetLayerPaths("apps")];
+
+		for (const p of providerPaths) {
+			watchLayer(
+				p,
+				this.#fileExtension,
+				(q) => this.#registrar.registerByPath("provider", q),
+				unload("provider"),
+				isStartingUp,
+				[],
+				onChange("provider")
+			);
+		}
+		for (const p of utilityPaths) {
+			watchLayer(
+				p,
+				this.#fileExtension,
+				(q) => this.#registrar.registerByPath("utility", q),
+				unload("utility"),
+				isStartingUp,
+				[],
+				onChange("utility")
+			);
+		}
+		for (const p of servicePaths) {
+			watchLayer(
+				p,
+				this.#fileExtension,
+				(q) => this.#registrar.registerByPath("service", q),
+				unload("service"),
+				isStartingUp,
+				[],
+				onChange("service")
+			);
+		}
+		for (const p of appPaths) {
+			watchLayer(p, this.#fileExtension, this.#appLoader.loadApp, this.#appLoader.unloadApp, isStartingUp, [
+				"BaseApp.ts",
+				"AppWithSeo.ts",
+			]);
+		}
 
 		new ConfigWatcher({
 			logger: this.#logger,

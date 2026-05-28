@@ -135,10 +135,26 @@ export class VersionResolver {
 	 * @param language Lenguaje del módulo (default: typescript)
 	 */
 	static async resolveModuleVersion(
-		modulesDir: string,
+		modulesDir: string | string[],
 		moduleName: string,
 		versionRange: string = "latest",
 		language: string = "typescript"
+	): Promise<{ path: string; version: string } | null> {
+		const dirs = Array.isArray(modulesDir) ? modulesDir : [modulesDir];
+		for (let i = 0; i < dirs.length; i++) {
+			const isLast = i === dirs.length - 1;
+			const result = await this.#resolveSingle(dirs[i], moduleName, versionRange, language, !isLast);
+			if (result) return result;
+		}
+		return null;
+	}
+
+	static async #resolveSingle(
+		modulesDir: string,
+		moduleName: string,
+		versionRange: string,
+		language: string,
+		silent: boolean
 	): Promise<{ path: string; version: string } | null> {
 		try {
 			let moduleBaseDir = path.join(modulesDir, moduleName);
@@ -153,7 +169,7 @@ export class VersionResolver {
 					moduleBaseDir = recursiveResult;
 					Logger.debug(`[VersionResolver] Módulo encontrado recursivamente: ${moduleBaseDir}`);
 				} else {
-					Logger.warn(`[VersionResolver] No se encontró módulo: ${moduleName}`);
+					if (!silent) Logger.warn(`[VersionResolver] No se encontró módulo: ${moduleName}`);
 					return null;
 				}
 			}
@@ -167,7 +183,7 @@ export class VersionResolver {
 				if (!entry.isDirectory()) continue;
 
 				// Extraer versión y lenguaje del nombre: "1.0.0-ts" o "default-py"
-				const match = entry.name.match(/^(.+)-([a-z]{2,})$/);
+				const match = new RegExp(/^(.+)-([a-z]{2,})$/).exec(entry.name);
 				if (match) {
 					const [, version, lang] = match;
 					if (lang === language || lang === this.#normalizeLanguage(language)) {
@@ -190,7 +206,7 @@ export class VersionResolver {
 						version: "1.0.0",
 					};
 				} catch {
-					Logger.warn(`[VersionResolver] No se encontró versión compatible de ${moduleName}`);
+					if (!silent) Logger.warn(`[VersionResolver] No se encontró versión compatible de ${moduleName}`);
 					return null;
 				}
 			}
@@ -199,7 +215,7 @@ export class VersionResolver {
 			const compatible = candidates.filter((c) => this.satisfiesRange(c.version, versionRange));
 
 			if (compatible.length === 0) {
-				Logger.warn(`[VersionResolver] No hay versión compatible de ${moduleName} para el rango ${versionRange}`);
+				if (!silent) Logger.warn(`[VersionResolver] No hay versión compatible de ${moduleName} para el rango ${versionRange}`);
 				return null;
 			}
 

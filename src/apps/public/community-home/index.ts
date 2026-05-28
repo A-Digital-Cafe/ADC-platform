@@ -1,22 +1,23 @@
-import { BaseApp } from "../../BaseApp.js";
-import type SEOService from "../../../services/data/SEOService/index.js";
-import type { PageMeta } from "../../../services/data/SEOService/index.js";
+import { AppWithSeo } from "../../AppWithSeo.js";
+import type { PageMeta } from "../../../common/types/SEO/Service.js";
 import type ContentService from "../../../services/data/content-service/index.js";
 
 /**
  * Community Home - Página principal de la comunidad ADC
  */
-export default class CommunityHomeApp extends BaseApp {
+export default class CommunityHomeApp extends AppWithSeo {
 	async run() {
+		let content: ContentService;
 		try {
-			const seo = this.getMyService<SEOService>("SEOService");
-			const content = this.getMyService<ContentService>("content-service");
-			const hosting = this.config?.uiModule?.hosting;
+			content = this.getMyService<ContentService>("content-service");
+		} catch (e) {
+			this.logger.logDebug(`content-service no disponible: ${(e as Error).message}`);
+			this.logger.logOk(`${this.name} ejecutándose`);
+			return;
+		}
 
-			seo.registerOnSitemap({
-				appName: this.name,
-				hosting,
-				appDir: this.appDir,
+		this.registerSeo({
+			sitemap: {
 				paths: async () => {
 					const [articles, paths] = await Promise.all([content.listPublishedArticleSlugs(), content.listPublishedPathSlugs()]);
 					return [
@@ -32,11 +33,8 @@ export default class CommunityHomeApp extends BaseApp {
 						})),
 					];
 				},
-			});
-
-			seo.registerPageMeta({
-				appName: this.name,
-				hosting,
+			},
+			pageMeta: {
 				defaults: {
 					titleTemplate: "%s · ADC",
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
@@ -117,10 +115,8 @@ export default class CommunityHomeApp extends BaseApp {
 						},
 					},
 				],
-			});
-		} catch (e) {
-			this.logger.logDebug(`SEOService no disponible: ${(e as Error).message}`);
-		}
+			},
+		});
 		this.logger.logOk(`${this.name} ejecutándose`);
 	}
 }

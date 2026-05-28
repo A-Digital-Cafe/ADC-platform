@@ -1,0 +1,15 @@
+# Formato: <nombre>  <repo-url>  <ref>
+# - <nombre>: carpeta destino dentro de presets/
+# - <repo-url>: URL git (ssh o https)
+# - <ref>: branch, tag o commit (opcional, default = rama por defecto del remoto)
+#
+# Las líneas que empiezan con # se ignoran.
+# El script scripts/sync-presets.sh:
+#   - clona los que falten
+#   - omite silenciosamente los que no tengas permiso para clonar
+#   - NO toca los que ya estén clonados (usa `git -C <dir> pull` manualmente si querés actualizar)
+#
+# Ejemplos:
+# SEO       git@github.com:abbytec/adc-preset-seo.git       main
+# Billing   git@github.com:abbytec/adc-preset-billing.git   v1.0.0
+

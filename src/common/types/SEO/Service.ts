@@ -1,4 +1,18 @@
-import type { UIModuleConfig } from "../../../../interfaces/modules/IUIModule.js";
+/**
+ * Contrato público del SEOService.
+ *
+ * Vive en `src/common/types` para que las apps y el resto de servicios del
+ * núcleo puedan referenciarlo sin depender físicamente del módulo `SEOService`
+ * (que ahora vive como preset opcional en `presets/SEO/`).
+ *
+ * Sólo los tipos consumidos desde fuera del módulo se exponen aquí.
+ * Los tipos internos (cache, estado por host, registración, etc.) viven
+ * junto a la implementación.
+ */
+
+import type { UIModuleConfig } from "../../../interfaces/modules/IUIModule.js";
+
+// ============ Sitemap ============
 
 export type SitemapChangeFreq = "always" | "hourly" | "daily" | "weekly" | "monthly" | "yearly" | "never";
 
@@ -29,6 +43,8 @@ export interface RegisterSitemapOptions {
 	 */
 	isIndex?: boolean;
 }
+
+// ============ Page Meta ============
 
 export interface OgImageMeta {
 	url: string;
@@ -101,30 +117,30 @@ export interface RegisterPageMetaOptions {
 	defaults?: PageMeta;
 }
 
-export interface CompiledEntry {
-	exact: boolean;
-	path: string;
-	regex: RegExp;
-	paramNames: string[];
-	meta: PageMeta | PageMetaResolver;
-	cacheTtlMs: number;
+// ============ Provider de Fastify (referencia laxa) ============
+
+/**
+ * Subconjunto mínimo del FastifyServerProvider que el SEOService necesita
+ * para enganchar el hook de inyección. Se tipa de forma laxa para evitar
+ * que el contrato público dependa del módulo concreto del provider.
+ */
+export interface ISeoFastifyProvider {
+	getApp(): { addHook(name: "onSend", handler: (...args: any[]) => any): void };
+	registerHostRoute(host: string, method: string, path: string, handler: (...args: any[]) => any): void;
 }
 
-export interface HostSEOState {
-	enabled: boolean;
-	defaults: PageMeta;
-	exact: Map<string, CompiledEntry>;
-	patterns: CompiledEntry[];
-}
+// ============ Contrato del servicio ============
 
-export interface SitemapRegistration {
-	appName: string;
-	source: SitemapPathSource;
-	/** Directorio del módulo, usado para resolver `lastmod` por defecto. */
-	appDir?: string;
-}
-
-export interface CachedRender {
-	tags: string;
-	expires: number;
+/**
+ * Interfaz pública del SEOService. Permite que apps y servicios la consuman
+ * sin acoplarse a la implementación (que vive en el preset opcional `SEO`).
+ *
+ * Si el servicio no está disponible (preset no instalado), `getMyService`
+ * lanzará y el llamante debe degradar silenciosamente.
+ */
+export interface ISEOService {
+	registerOnSitemap(options: RegisterSitemapOptions): void;
+	registerPageMeta(options: RegisterPageMetaOptions): void;
+	enableForHosts(hostPatterns: string[], options?: { defaults?: PageMeta }): void;
+	attachFastify(provider: ISeoFastifyProvider): void;
 }

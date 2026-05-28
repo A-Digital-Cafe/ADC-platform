@@ -1,27 +1,19 @@
-import { BaseApp } from "../../BaseApp.js";
-import type SEOService from "../../../services/data/SEOService/index.js";
+import { AppWithSeo } from "../../AppWithSeo.js";
 
 /**
  * ADC Auth App - Sistema de autenticación
  * Host app para login/register via SessionManagerService
  */
-export default class AdcAuthApp extends BaseApp {
+export default class AdcAuthApp extends AppWithSeo {
 	async run(): Promise<void> {
-		try {
-			const seo = this.getMyService<SEOService>("SEOService");
-			const hosting = this.config?.uiModule?.hosting;
-			seo.registerOnSitemap({
-				appName: this.name,
-				hosting,
-				appDir: this.appDir,
+		this.registerSeo({
+			sitemap: {
 				paths: [
 					{ path: "/login", changefreq: "monthly", priority: 0.7 },
 					{ path: "/register", changefreq: "monthly", priority: 0.7 },
 				],
-			});
-			seo.registerPageMeta({
-				appName: this.name,
-				hosting,
+			},
+			pageMeta: {
 				defaults: {
 					titleTemplate: "%s · ADC",
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
@@ -44,10 +36,8 @@ export default class AdcAuthApp extends BaseApp {
 						},
 					},
 				],
-			});
-		} catch (e) {
-			this.logger.logDebug(`SEOService no disponible: ${(e as Error).message}`);
-		}
+			},
+		});
 		this.logger.logOk("ADC Auth App iniciada");
 	}
 }
