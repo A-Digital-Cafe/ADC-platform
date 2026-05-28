@@ -58,6 +58,15 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
 			git -C "$dir" checkout --quiet "$ref" 2>/dev/null || \
 				echo "    ⚠ no se pudo hacer checkout de $ref en $name" >&2
 		fi
+		# Instalar dependencias de cada módulo dentro del preset (services/, apps/, etc.)
+		# Cada módulo tiene su propio package.json; se instala en su directorio para no
+		# afectar el lockfile raíz.
+		while IFS= read -r pkg; do
+			module_dir="$(dirname "$pkg")"
+			echo "    → bun install en $module_dir"
+			(cd "$module_dir" && bun install --ignore-scripts) 2>/dev/null || \
+				echo "    ⚠ bun install falló en $module_dir (no crítico)" >&2
+		done < <(find "$dir" -name "package.json" -not -path "*/node_modules/*")
 		ok=$((ok + 1))
 	else
 		echo "    ✗ clone falló para $name" >&2
