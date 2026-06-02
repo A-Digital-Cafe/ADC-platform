@@ -62,6 +62,8 @@ export interface LearningPath {
 	description: string;
 	color: string;
 	banner?: Image;
+	/** Id del attachment (AttachmentsUtility) cuando el banner se sube en vez de referenciar una URL externa. */
+	bannerAttachmentId?: string;
 	public: boolean;
 	listed: boolean;
 	items: PathItem[];

@@ -8,7 +8,11 @@
 		"src/apps/*/*",
 		"src/providers/*/*",
 		"src/utilities/*/*",
-		"src/services/*/*"
+		"src/services/*/*",
+		"presets/*/apps/**",
+		"presets/*/providers/**",
+		"presets/*/utilities/**",
+		"presets/*/services/**"
 	],
 	"scripts": {
 		"postinstall": "bash scripts/sync-presets.sh || true",

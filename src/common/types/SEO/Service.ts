@@ -80,6 +80,21 @@ export interface ArticleMeta {
 	tag?: string | string[];
 }
 
+/**
+ * Branding para la autogeneración de OG images cuando una página no declara
+ * `og.image`. Las apps lo pasan en `defaults.ogBrand` al registrar su SEO.
+ */
+export interface OgBrandConfig {
+	/** Color de fondo de la imagen (CSS color). Default `#ffffff`. */
+	background?: string;
+	/** Color del texto principal (CSS color). Default `#1a1a1a`. */
+	color?: string;
+	/** URL absoluta del logo a renderizar al pie. */
+	logoUrl?: string;
+	/** Nombre de marca mostrado junto al logo. */
+	brandName?: string;
+}
+
 export interface PageMeta {
 	title?: string;
 	/** Plantilla con `%s` reemplazado por `title`. */
@@ -93,6 +108,11 @@ export interface PageMeta {
 	article?: ArticleMeta;
 	jsonLd?: object | object[];
 	extra?: Array<{ tag: "meta" | "link"; attrs: Record<string, string> }>;
+	/**
+	 * Branding para autogenerar una OG image si `og` existe pero `og.image` no.
+	 * El SEOService genera un PNG 1200x630 servido en `/_og/:file`.
+	 */
+	ogBrand?: OgBrandConfig;
 }
 
 export interface PageMetaResolverContext {
@@ -115,6 +135,40 @@ export interface RegisterPageMetaOptions {
 	hosting?: UIModuleConfig["hosting"];
 	pages: PageMetaEntry[];
 	defaults?: PageMeta;
+}
+
+// ============ llms.txt ============
+
+export interface LlmsLink {
+	title: string;
+	description?: string;
+	href: string;
+}
+
+export interface LlmsSection {
+	title: string;
+	description?: string;
+	links: LlmsLink[];
+}
+
+export interface LlmsContext {
+	host: string;
+	origin: string;
+}
+
+export type LlmsSectionsSource = LlmsSection[] | ((ctx: LlmsContext) => LlmsSection[] | Promise<LlmsSection[]>);
+
+export interface RegisterLlmsOptions {
+	appName: string;
+	hosting?: UIModuleConfig["hosting"];
+	/** Título principal del documento (`# title`). */
+	title: string;
+	/** Descripción corta (`> description`). */
+	description?: string;
+	/** Secciones con enlaces curados para LLMs. */
+	sections: LlmsSectionsSource;
+	/** TTL de caché del documento generado (ms). Default 5min. */
+	cacheTtlMs?: number;
 }
 
 // ============ Provider de Fastify (referencia laxa) ============
@@ -141,6 +195,7 @@ export interface ISeoFastifyProvider {
 export interface ISEOService {
 	registerOnSitemap(options: RegisterSitemapOptions): void;
 	registerPageMeta(options: RegisterPageMetaOptions): void;
+	registerLlms(options: RegisterLlmsOptions): void;
 	enableForHosts(hostPatterns: string[], options?: { defaults?: PageMeta }): void;
 	attachFastify(provider: ISeoFastifyProvider): void;
 }

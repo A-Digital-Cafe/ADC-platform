@@ -60,4 +60,36 @@ export const adminApi = {
 	},
 };
 
+interface BannerPresignResult {
+	attachmentId: string;
+	uploadUrl: string;
+	headers: Record<string, string>;
+}
+
+/** URL pública (raw) del banner de un path, servida por content-service. */
+export function pathBannerRawUrl(slug: string): string {
+	return `/api/learning/paths/${encodeURIComponent(slug)}/banner/raw`;
+}
+
+export const pathBannerApi = {
+	/** Sube un banner para un path existente: presign → PUT a S3 → confirm. */
+	upload: async (slug: string, file: File): Promise<boolean> => {
+		const presign = await api.post<BannerPresignResult>(`/paths/${slug}/banner/presign-upload`, {
+			body: { fileName: file.name, mimeType: file.type || "application/octet-stream", size: file.size },
+			idempotencyKey: `path-banner-presign:${slug}:${file.size}:${Date.now()}`,
+		});
+		if (!presign.data) return false;
+		const putRes = await fetch(presign.data.uploadUrl, { method: "PUT", body: file, headers: presign.data.headers });
+		if (!putRes.ok) return false;
+		const confirmed = await api.post<{ attachment: { id: string } }>(`/paths/${slug}/banner/${presign.data.attachmentId}/confirm`, {
+			idempotencyKey: `path-banner-confirm:${slug}:${presign.data.attachmentId}`,
+		});
+		return !!confirmed.data?.attachment?.id;
+	},
+	remove: async (slug: string): Promise<boolean> => {
+		const r = await api.delete<{ success: boolean }>(`/paths/${slug}/banner`, { idempotencyKey: `path-banner-del:${slug}` });
+		return r.data?.success === true;
+	},
+};
+
 export type { Article, LearningPath, Block, PathItemLevel };

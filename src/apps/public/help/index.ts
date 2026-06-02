@@ -44,6 +44,7 @@ export default class HelpApp extends AppWithSeo {
 					titleTemplate: "%s · ADC Ayuda",
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
 					twitter: { card: "summary" },
+					ogBrand: { background: "#edf5e3", color: "#772300", brandName: "ADC Ayuda" },
 				},
 				pages: HELP_PATHS.map((p) => ({ path: p, meta: HELP_PAGE_META[p] })),
 			},

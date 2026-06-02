@@ -19,6 +19,7 @@ export default class AdcAuthApp extends AppWithSeo {
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
 					twitter: { card: "summary" },
 					robots: "noindex,nofollow",
+					ogBrand: { background: "#ffede3", color: "#712b00", brandName: "Abby's Digital Cafe" },
 				},
 				pages: [
 					{

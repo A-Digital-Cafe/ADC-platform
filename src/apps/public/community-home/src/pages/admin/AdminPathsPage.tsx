@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { getSession } from "@ui-library/utils/session";
 import { canPublish } from "../../utils/permissions";
 import { contentAPI, type LearningPath } from "../../utils/content-api";
-import { adminApi } from "../../utils/admin-api";
+import { adminApi, pathBannerApi, pathBannerRawUrl } from "../../utils/admin-api";
 import { AdminGate } from "../../components/admin/AdminGate";
 import { PathItemsEditor, type PathItem } from "../../components/admin/PathItemsEditor";
 
@@ -46,6 +46,9 @@ function PathsAdminBody() {
 	const [form, setForm] = useState<FormState>(initialForm());
 	const [canPub, setCanPub] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [hasBanner, setHasBanner] = useState(false);
+	const [bannerBusy, setBannerBusy] = useState(false);
+	const [bannerVersion, setBannerVersion] = useState(0);
 
 	useEffect(() => {
 		refresh();
@@ -64,11 +67,41 @@ function PathsAdminBody() {
 		if (!p) return;
 		setEditing(slug);
 		setForm(initialForm(p));
+		setHasBanner(!!(p as { bannerAttachmentId?: string }).bannerAttachmentId);
+		setBannerVersion((v) => v + 1);
 	}
 
 	function resetForm() {
 		setEditing(null);
 		setForm(initialForm());
+		setHasBanner(false);
+	}
+
+	async function handleBannerUpload(ev: React.ChangeEvent<HTMLInputElement>) {
+		const file = ev.target.files?.[0];
+		ev.target.value = "";
+		if (!file || !editing) return;
+		setBannerBusy(true);
+		try {
+			const ok = await pathBannerApi.upload(editing, file);
+			if (ok) {
+				setHasBanner(true);
+				setBannerVersion((v) => v + 1);
+			}
+		} finally {
+			setBannerBusy(false);
+		}
+	}
+
+	async function handleBannerRemove() {
+		if (!editing) return;
+		setBannerBusy(true);
+		try {
+			const ok = await pathBannerApi.remove(editing);
+			if (ok) setHasBanner(false);
+		} finally {
+			setBannerBusy(false);
+		}
 	}
 
 	async function handleSubmit(ev: React.SubmitEvent) {
@@ -160,6 +193,35 @@ function PathsAdminBody() {
 							Listado
 						</label>
 					</>
+				)}
+				{editing && (
+					<div className="flex flex-col gap-2 p-3 rounded-xxl border border-alt bg-surface">
+						<span className="text-sm opacity-80">Banner</span>
+						{hasBanner && (
+							<img
+								src={`${pathBannerRawUrl(editing)}?v=${bannerVersion}`}
+								alt={`Banner de ${form.title}`}
+								className="w-full max-h-40 object-cover rounded-xl"
+							/>
+						)}
+						<div className="flex items-center gap-2">
+							<label className="cursor-pointer text-sm underline">
+								{hasBanner ? "Reemplazar banner" : "Subir banner"}
+								<input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={bannerBusy} />
+							</label>
+							{hasBanner && (
+								<button
+									type="button"
+									className="text-sm text-red-500 bg-transparent border-0 cursor-pointer"
+									onClick={handleBannerRemove}
+									disabled={bannerBusy}
+								>
+									Quitar
+								</button>
+							)}
+							{bannerBusy && <span className="text-sm opacity-60">Procesando…</span>}
+						</div>
+					</div>
 				)}
 				<PathItemsEditor items={form.items} onChange={(items) => setForm({ ...form, items })} excludePathSlug={editing || undefined} />
 				<div className="flex gap-2">

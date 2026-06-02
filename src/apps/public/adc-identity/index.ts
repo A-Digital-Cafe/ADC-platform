@@ -9,7 +9,11 @@ export default class AdcIdentityApp extends AppWithSeo {
 		this.registerSeo({
 			sitemap: { paths: [{ path: "/", changefreq: "monthly", priority: 0.6 }] },
 			pageMeta: {
-				defaults: { robots: "noindex,nofollow", og: { siteName: "Abby's Digital Cafe" } },
+				defaults: {
+					robots: "noindex,nofollow",
+					og: { siteName: "Abby's Digital Cafe" },
+					ogBrand: { background: "#dff7f8", color: "#004f78", brandName: "ADC Identity" },
+				},
 				pages: [
 					{
 						path: "/",

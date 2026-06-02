@@ -1,5 +1,5 @@
 import { BaseApp } from "./BaseApp.js";
-import type { ISEOService, PageMeta, PageMetaEntry, SitemapPathSource } from "../common/types/SEO/Service.js";
+import type { ISEOService, LlmsSectionsSource, PageMeta, PageMetaEntry, SitemapPathSource } from "../common/types/SEO/Service.js";
 
 /**
  * Configuración SEO declarativa que las apps pasan a `registerSeo()`.
@@ -8,6 +8,7 @@ import type { ISEOService, PageMeta, PageMetaEntry, SitemapPathSource } from "..
  * - `sitemap.isIndex`: marca los hosts como índices de sitemaps.
  * - `pageMeta.pages`: metadatos por ruta (estáticos o resolvers async).
  * - `pageMeta.defaults`: metadatos por defecto del host (og, twitter, etc.).
+ * - `llms`: documento `/llms.txt` con secciones curadas para LLMs.
  */
 export interface AppSeoConfig {
 	sitemap?: {
@@ -17,6 +18,12 @@ export interface AppSeoConfig {
 	pageMeta?: {
 		pages: PageMetaEntry[];
 		defaults?: PageMeta;
+	};
+	llms?: {
+		title: string;
+		description?: string;
+		sections: LlmsSectionsSource;
+		cacheTtlMs?: number;
 	};
 }
 
@@ -40,7 +47,7 @@ export abstract class AppWithSeo extends BaseApp {
 	 * en debug y se continúa.
 	 */
 	protected registerSeo(seoConfig: AppSeoConfig): void {
-		if (!seoConfig.sitemap && !seoConfig.pageMeta) return;
+		if (!seoConfig.sitemap && !seoConfig.pageMeta && !seoConfig.llms) return;
 		try {
 			const seo = this.getMyService<ISEOService>("SEOService");
 			const hosting = this.config?.uiModule?.hosting;
@@ -59,6 +66,16 @@ export abstract class AppWithSeo extends BaseApp {
 					hosting,
 					pages: seoConfig.pageMeta.pages,
 					defaults: seoConfig.pageMeta.defaults,
+				});
+			}
+			if (seoConfig.llms) {
+				seo.registerLlms({
+					appName: this.name,
+					hosting,
+					title: seoConfig.llms.title,
+					description: seoConfig.llms.description,
+					sections: seoConfig.llms.sections,
+					cacheTtlMs: seoConfig.llms.cacheTtlMs,
 				});
 			}
 		} catch (e) {
