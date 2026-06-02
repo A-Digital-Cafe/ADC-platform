@@ -3,7 +3,7 @@
 	"compilerOptions": {
 		"jsx": "react-jsx",
 		"jsxImportSource": "react",
-    	"types": ["bun"]
+		"types": ["bun"]
 	},
-	"exclude": ["node_modules", "**/node_modules", "**/*.spec.ts", "src/apps/**"]
+	"exclude": ["node_modules", "**/node_modules", "**/*.spec.ts", "src/apps/**", "presets/*/apps/**"]
 }

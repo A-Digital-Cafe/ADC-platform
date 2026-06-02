@@ -1,15 +1,15 @@
 import { AppWithSeo } from "../../AppWithSeo.js";
 import type { PageMeta } from "../../../common/types/SEO/Service.js";
-import type ContentService from "../../../services/data/content-service/index.js";
+import type { IContentService } from "@common/types/community/ContentService.js";
 
 /**
  * Community Home - Página principal de la comunidad ADC
  */
 export default class CommunityHomeApp extends AppWithSeo {
 	async run() {
-		let content: ContentService;
+		let content: IContentService;
 		try {
-			content = this.getMyService<ContentService>("content-service");
+			content = this.getMyService<IContentService>("content-service");
 		} catch (e) {
 			this.logger.logDebug(`content-service no disponible: ${(e as Error).message}`);
 			this.logger.logOk(`${this.name} ejecutándose`);

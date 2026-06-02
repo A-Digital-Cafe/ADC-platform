@@ -15,7 +15,14 @@
 		"lib": ["es2022", "dom", "dom.iterable"],
 		"noEmit": true,
 		"paths": {
-			"@common/*": ["./src/common/*"]
+			"@common/*": ["./src/common/*"],
+			"@apps/*": ["./src/apps/*"],
+			"@services/*": ["./src/services/*"],
+			"@providers/*": ["./src/providers/*"],
+			"@utilities/*": ["./src/utilities/*"],
+			"@interfaces/*": ["./src/interfaces/*"],
+			"@adc/utils/*": ["./src/utils/*"],
+			"@kernel": ["./src/kernel.ts"]
 		},
 		"declaration": false,
 		"experimentalDecorators": true,

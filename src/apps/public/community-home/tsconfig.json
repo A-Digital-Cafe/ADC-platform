@@ -6,6 +6,10 @@
 		"jsx": "react-jsx",
 		"paths": {
 			"@adc/utils/*": ["./../../../utils/*"],
+			"@services/*": ["./../../../services/*"],
+			"@providers/*": ["./../../../providers/*"],
+			"@utilities/*": ["./../../../utilities/*"],
+			"@interfaces/*": ["./../../../interfaces/*"],
 			"@ui-library/utils/*": ["./../00-adc-ui-library/utils/*"],
 			"@ui-library/*": ["./../00-adc-ui-library/src/*"],
 			"@common/*": ["./../../../common/*"]

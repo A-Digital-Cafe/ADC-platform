@@ -1,8 +1,0 @@
-{
-	"name": "@adc-platform/project-manager",
-	"version": "1.0.0",
-	"type": "module",
-	"dependencies": {
-		"mongoose": "^7.7.1"
-	}
-}
