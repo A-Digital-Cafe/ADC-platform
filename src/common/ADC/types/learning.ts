@@ -18,6 +18,7 @@ type AttachmentKind = "image" | "file";
 export type Block =
 	| { type: "heading"; level: 2 | 3 | 4 | 5 | 6; text: string; align?: TextAlign; id?: string }
 	| { type: "paragraph"; text: string; align?: TextAlign; marks?: TextMark[] }
+	| { type: "checkbox"; checked: boolean; text: string; align?: TextAlign; marks?: TextMark[] }
 	| { type: "list"; ordered?: boolean; items: string[]; start?: number; ariaLabel?: string }
 	| { type: "code"; language: string; content: string; ariaLabel?: string }
 	| { type: "callout"; tone: CalloutTone; text: string; role?: CalloutRole }

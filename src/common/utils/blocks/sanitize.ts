@@ -59,6 +59,16 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				marks: marks?.length ? marks : undefined,
 			};
 		}
+		case "checkbox": {
+			const marks = Array.isArray(r.marks) ? (r.marks.filter((m) => TEXT_MARKS.has(m as TextMark)) as TextMark[]) : undefined;
+			return {
+				type: "checkbox",
+				checked: r.checked === true,
+				text: clampString(r.text, TEXT_MAX),
+				align: pickEnum(r.align, TEXT_ALIGNS),
+				marks: marks?.length ? marks : undefined,
+			};
+		}
 		case "list": {
 			const itemsRaw = Array.isArray(r.items) ? r.items.slice(0, MAX_LIST_ITEMS) : [];
 			const items = itemsRaw.map((it) => clampString(it, LIST_ITEM_MAX)).filter((s) => s.length > 0);

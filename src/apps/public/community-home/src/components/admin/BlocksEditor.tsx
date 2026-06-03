@@ -40,6 +40,7 @@ const BLOCK_TYPES: readonly BlockTypeOption[] = [
 		create: () => ({ type: "table", header: ["Col 1", "Col 2"], rows: [["a", "b"]] }),
 	},
 	{ type: "divider", label: "Divisor", icon: "—", create: () => ({ type: "divider" }) },
+	{ type: "checkbox", label: "Checkbox", icon: "☑", create: () => ({ type: "checkbox", checked: false, text: "Escribe aquí..." }) },
 ];
 
 function parseBlocks(text: string): { blocks: Block[]; error: string } {

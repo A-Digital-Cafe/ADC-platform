@@ -4,11 +4,12 @@ type Align = "left" | "center" | "right";
 type AttachmentKind = "image" | "file";
 
 export interface Block {
-	type: "heading" | "paragraph" | "list" | "code" | "callout" | "quote" | "table" | "divider" | "attachment";
+	type: "heading" | "paragraph" | "list" | "code" | "callout" | "quote" | "table" | "divider" | "attachment" | "checkbox";
 	level?: number;
 	id?: string;
 	align?: Align;
 	text?: string;
+	checked?: boolean;
 	marks?: Array<"bold" | "italic" | "code">;
 	ordered?: boolean;
 	items?: string[];
@@ -71,6 +72,8 @@ export class AdcBlocksRenderer {
 				return this.renderHeading(block, index);
 			case "paragraph":
 				return this.renderParagraph(block, index);
+			case "checkbox":
+				return this.renderCheckbox(block, index);
 			case "list":
 				return (
 					<adc-list-block
@@ -221,6 +224,23 @@ export class AdcBlocksRenderer {
 			<adc-text key={index} class={classes}>
 				<adc-inline-tokens tokens={[]} fallback={block.text || ""}></adc-inline-tokens>
 			</adc-text>
+		);
+	}
+
+	private renderCheckbox(block: Block, index: number) {
+		const classes = `${this.getAlignClass(block.align)} ${this.getMarksClass(block.marks)} pl-4 pr-16 flex items-start gap-2 mb-2`;
+
+		const textContent = block.marks?.includes("code") ? (
+			<code>{block.text}</code>
+		) : (
+			<adc-inline-tokens tokens={[]} fallback={block.text || ""}></adc-inline-tokens>
+		);
+
+		return (
+			<div key={index} class={classes}>
+				<adc-checkbox checked={block.checked} disabled={true} visualEnabled={true}></adc-checkbox>
+				<span class="flex-1 text-sm text-text">{textContent}</span>
+			</div>
 		);
 	}
 

@@ -70,7 +70,30 @@ export class AdcBlocksForm {
 	}
 
 	#hasContent(): boolean {
-		const hasText = this.blocks.some((b) => b.type === "paragraph" && (b.text || "").trim().length > 0);
+		const hasParagraph = this.blocks.some((b) => b.type === "paragraph" && (b.text || "").trim().length > 0);
+		const hasList = this.blocks.some((b) => b.type === "list" && (b.items || []).some((item) => item.trim().length > 0));
+		const hasCode = this.blocks.some((b) => b.type === "code" && (b.content || "").trim().length > 0);
+		const hasCallout = this.blocks.some((b) => b.type === "callout" && (b.text || "").trim().length > 0);
+		const hasQuote = this.blocks.some((b) => b.type === "quote" && (b.text || "").trim().length > 0);
+		const hasTable = this.blocks.some(
+			(b) =>
+				b.type === "table" &&
+				((b.header || []).some((h) => h.trim().length > 0) || (b.rows || []).some((row) => row.some((cell) => cell.trim().length > 0)))
+		);
+
+		const startsWithValid =
+			this.blocks.length >= 1 &&
+			(this.blocks[0].type === "heading" || this.blocks[0].type === "paragraph") &&
+			(this.blocks[0].text || "").trim().length > 0;
+		const startsWithTitleAndHasParagraph =
+			this.blocks.length >= 2 &&
+			this.blocks[0].type === "heading" &&
+			(this.blocks[0].text || "").trim().length > 0 &&
+			this.blocks.slice(1).some((b) => b.type === "paragraph" && (b.text || "").trim().length > 0);
+
+		const hasText =
+			hasParagraph || (startsWithValid && hasList) || hasCode || hasCallout || hasQuote || hasTable || startsWithTitleAndHasParagraph;
+
 		const hasAtt = this.attachmentIds.length > 0 || this.blocks.some((b) => b.type === "attachment");
 		return hasText || hasAtt;
 	}

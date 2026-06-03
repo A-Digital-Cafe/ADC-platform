@@ -2,6 +2,7 @@ import type { Block, CalloutRole, CalloutTone, TextAlign, TextMark } from "@ui-l
 
 export type HeadingBlock = Extract<Block, { type: "heading" }>;
 export type ParagraphBlock = Extract<Block, { type: "paragraph" }>;
+export type CheckboxBlock = Extract<Block, { type: "checkbox" }>;
 export type ListBlock = Extract<Block, { type: "list" }>;
 export type CodeBlock = Extract<Block, { type: "code" }>;
 export type CalloutBlock = Extract<Block, { type: "callout" }>;

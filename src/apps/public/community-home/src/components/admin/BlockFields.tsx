@@ -3,6 +3,7 @@ import { HeadingFields, ParagraphFields } from "./block-fields/TextBlockFields";
 import { ListFields } from "./block-fields/ListBlockFields";
 import { CalloutFields, CodeFields, QuoteFields } from "./block-fields/ContentBlockFields";
 import { TableFields } from "./block-fields/TableBlockFields";
+import { CheckboxFields } from "./block-fields/CheckBoxField";
 
 interface Props {
 	readonly block: Block;
@@ -15,6 +16,8 @@ export function BlockFields({ block, onChange }: Props) {
 			return <HeadingFields block={block} onChange={onChange} />;
 		case "paragraph":
 			return <ParagraphFields block={block} onChange={onChange} />;
+		case "checkbox":
+			return <CheckboxFields block={block as any} onChange={onChange as any} />;
 		case "list":
 			return <ListFields block={block} onChange={onChange} />;
 		case "code":

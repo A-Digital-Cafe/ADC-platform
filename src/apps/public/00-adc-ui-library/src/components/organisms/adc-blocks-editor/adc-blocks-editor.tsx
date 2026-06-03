@@ -279,6 +279,14 @@ export class AdcBlocksEditor {
 				blocks.push(updated);
 				continue;
 			}
+			if (el.classList.contains("adc-blocks-editor__checkbox-row")) {
+				const inputEl = el.querySelector(".adc-blocks-editor__checkbox-input") as HTMLInputElement | null;
+				const checked = inputEl ? inputEl.checked : false;
+				const spanEl = el.querySelector("span") || el;
+				const md = AdcBlocksEditor.inlineMarkdown(spanEl).trim();
+				blocks.push({ type: "checkbox", checked, text: md });
+				continue;
+			}
 			const tag = el.tagName.toLowerCase();
 			if (tag === "h2" || tag === "h3" || tag === "h4" || tag === "h5" || tag === "h6") {
 				const text = AdcBlocksEditor.inlineMarkdown(el).trim();
@@ -360,6 +368,16 @@ export class AdcBlocksEditor {
 				if (b.type === "paragraph") {
 					const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
 					return `<div>${inner}</div>`;
+				}
+				if (b.type === "checkbox") {
+					const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
+					const checkedAttr = b.checked ? "checked" : "";
+					return (
+						`<div class="adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2">` +
+						`<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" ${checkedAttr} />` +
+						`<span class="flex-1">${inner}</span>` +
+						`</div>`
+					);
 				}
 				if (AdcBlocksEditor.isStandaloneCardBlock(b)) {
 					// Buscar id ya asignado.
@@ -600,10 +618,10 @@ export class AdcBlocksEditor {
 
 	/**
 	 * Transforma el bloque que contiene el caret/selección actual a otro tipo
-	 * inline: párrafo (`p`), heading (`h2`/`h3`/`h4`) o lista (`ul`/`ol`).
+	 * inline: párrafo (`p`), heading (`h2`/`h3`/`h4`) o lista (`ul`/`ol`) o checkbox.
 	 * Si la selección abarca múltiples bloques, los transforma todos.
 	 */
-	private transformCurrentBlock(target: "p" | "h2" | "h3" | "h4" | "ul" | "ol") {
+	private transformCurrentBlock(target: "p" | "h2" | "h3" | "h4" | "ul" | "ol" | "checkbox") {
 		if (!this.editorEl) return;
 		this.editorEl.focus();
 		const sel = globalThis.getSelection();
@@ -640,16 +658,50 @@ export class AdcBlocksEditor {
 						list.appendChild(li2);
 					}
 				} else {
-					li.innerHTML = block.innerHTML || "<br>";
+					let innerHTML = block.innerHTML;
+					if (block.classList.contains("adc-blocks-editor__checkbox-row")) {
+						const spanEl = block.querySelector("span");
+						if (spanEl) innerHTML = spanEl.innerHTML;
+					}
+					li.innerHTML = innerHTML || "<br>";
 					list.appendChild(li);
 				}
 			}
 			targets[0].replaceWith(list);
 			for (const b of targets.slice(1)) b.remove();
+		} else if (target === "checkbox") {
+			for (const block of targets) {
+				const tag = block.tagName.toLowerCase();
+				if (tag === "ul" || tag === "ol") {
+					const lis = Array.from(block.querySelectorAll(":scope > li"));
+					const replacements: HTMLElement[] = lis.map((li) => {
+						const newEl = document.createElement("div");
+						newEl.className = "adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2";
+						newEl.innerHTML = `<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" /><span class="flex-1">${li.innerHTML || "<br>"}</span>`;
+						return newEl;
+					});
+					block.replaceWith(...replacements);
+				} else {
+					let innerHTML = block.innerHTML;
+					if (block.classList.contains("adc-blocks-editor__checkbox-row")) {
+						const spanEl = block.querySelector("span");
+						if (spanEl) innerHTML = spanEl.innerHTML;
+					}
+					const newEl = document.createElement("div");
+					newEl.className = "adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2";
+					newEl.innerHTML = `<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" /><span class="flex-1">${innerHTML || "<br>"}</span>`;
+					block.replaceWith(newEl);
+				}
+			}
 		} else {
 			// p / h2 / h3 / h4
 			for (const block of targets) {
 				const tag = block.tagName.toLowerCase();
+				let innerHTML = block.innerHTML;
+				if (block.classList.contains("adc-blocks-editor__checkbox-row")) {
+					const spanEl = block.querySelector("span");
+					if (spanEl) innerHTML = spanEl.innerHTML;
+				}
 				if (tag === "ul" || tag === "ol") {
 					// Convertir cada <li> en un bloque target separado.
 					const lis = Array.from(block.querySelectorAll(":scope > li"));
@@ -661,7 +713,7 @@ export class AdcBlocksEditor {
 					block.replaceWith(...replacements);
 				} else {
 					const newEl = document.createElement(target === "p" ? "div" : target);
-					newEl.innerHTML = block.innerHTML || "<br>";
+					newEl.innerHTML = innerHTML || "<br>";
 					block.replaceWith(newEl);
 				}
 			}
@@ -696,14 +748,15 @@ export class AdcBlocksEditor {
 		if (block?.nodeType !== Node.ELEMENT_NODE) return false;
 		const blockEl = block as HTMLElement;
 		const tag = blockEl.tagName.toLowerCase();
-		// No aplicar si ya es lista o heading.
-		if (tag === "ul" || tag === "ol" || tag.startsWith("h")) return false;
+		// No aplicar si ya es lista, heading o checkbox.
+		if (tag === "ul" || tag === "ol" || tag.startsWith("h") || blockEl.classList.contains("adc-blocks-editor__checkbox-row")) return false;
 		const text = blockEl.textContent ?? "";
-		let target: "ul" | "ol" | "h2" | "h3" | "h4" | null = null;
+		let target: "ul" | "ol" | "h2" | "h3" | "h4" | "checkbox" | null = null;
 		let stripLen = 0;
 		const ulMatch = /^[*-] $/.exec(text);
 		const olMatch = /^(\d+)\. $/.exec(text);
 		const hMatch = /^(#{1,3}) $/.exec(text);
+		const cbMatch = /^\[([ xX]?)\] $/.exec(text);
 		if (ulMatch) {
 			target = "ul";
 			stripLen = ulMatch[0].length;
@@ -714,6 +767,9 @@ export class AdcBlocksEditor {
 			const lvl = hMatch[1].length;
 			target = `h${lvl + 1}` as "h2" | "h3" | "h4";
 			stripLen = hMatch[0].length;
+		} else if (cbMatch) {
+			target = "checkbox";
+			stripLen = cbMatch[0].length;
 		}
 		if (!target) return false;
 		// Quitar el prefijo del bloque y transformar.
@@ -832,6 +888,10 @@ export class AdcBlocksEditor {
 	private readonly handleEditorChange = (ev: Event) => {
 		const t = ev.target as HTMLElement | null;
 		if (!t) return;
+		if (t.classList.contains("adc-blocks-editor__checkbox-input")) {
+			this.emit();
+			return;
+		}
 		const action = t.dataset.standaloneAction;
 		if (action === "language" || action === "tone") {
 			this.emit();
@@ -1002,6 +1062,15 @@ export class AdcBlocksEditor {
 								</div>
 							)}
 						</div>
+						{this.renderToolButton({
+							label: "Checkbox",
+							onClick: () => this.transformCurrentBlock("checkbox"),
+							children: (
+								<span class="font-bold text-xs" aria-hidden="true">
+									☑
+								</span>
+							),
+						})}
 					</fieldset>
 
 					<span class="w-px h-5 bg-alt mx-1" aria-hidden="true" />
