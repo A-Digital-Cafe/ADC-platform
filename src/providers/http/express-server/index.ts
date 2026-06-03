@@ -3,6 +3,7 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { Server } from "node:http";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { IHttpServerProvider } from "../../../interfaces/modules/providers/IHttpServer.js";
 import { expressConnectMiddleware } from "@connectrpc/connect-express";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
@@ -21,6 +22,7 @@ export default class ExpressServerProvider extends BaseProvider implements IHttp
 		this.#setupMiddleware();
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 	}
@@ -106,6 +108,7 @@ export default class ExpressServerProvider extends BaseProvider implements IHttp
 		});
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		super.stop(kernelKey);
 		if (this.server && this.isListening) {

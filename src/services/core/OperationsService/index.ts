@@ -30,7 +30,7 @@ export default class OperationsService extends BaseService {
 		await super.start(kernelKey);
 		this.#redis = this.getMyProvider<RedisProvider>("queue/redis");
 		const mongo = this.getMyProvider<MongoProvider>("object/mongo");
-		await mongo.connect();
+		await mongo.connect(kernelKey);
 		this.#stepperModel = mongo.createModel<StepperDocument>("OperationStep", stepperSchema);
 		this.logger.logOk("OperationsService iniciado");
 	}

@@ -1,5 +1,6 @@
 import mongoose, { Connection, Model, Schema } from "mongoose";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Logger } from "../../../utils/logger/Logger.js";
 
 interface IMongoConfig {
@@ -163,7 +164,16 @@ export default class MongoProvider extends BaseProvider {
 		return view;
 	}
 
-	async connect(): Promise<void> {
+	/**
+	 * Asegura que la conexión esté establecida. Reservado al Kernel y a los
+	 * servicios que reciben la kernelKey en su `start()` (p.ej. OperationsService).
+	 */
+	@OnlyKernel()
+	async connect(_kernelKey: symbol): Promise<void> {
+		return this.#connect();
+	}
+
+	async #connect(): Promise<void> {
 		if (this.connection?.readyState === 1) {
 			Logger.info(`[MongoProvider] Ya conectado a ${this.dbName}`);
 			return;
@@ -194,7 +204,7 @@ export default class MongoProvider extends BaseProvider {
 			const delay = this.config.retryDelay! * Math.pow(2, this.retryCount - 1);
 			Logger.warn(`[MongoProvider] Reintentando conexión (${this.retryCount}/${this.config.maxRetries}) en ${delay}ms...`);
 			await new Promise((resolve) => setTimeout(resolve, delay));
-			await this.connect();
+			await this.#connect();
 		} else {
 			Logger.error(`[MongoProvider] Se alcanzó el máximo de reintentos (${this.config.maxRetries}). No se pudo conectar a MongoDB.`);
 			throw new Error(`No se pudo conectar a MongoDB después de ${this.config.maxRetries} intentos`);
@@ -231,17 +241,18 @@ export default class MongoProvider extends BaseProvider {
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null;
 			if (!this.isDisconnecting)
-				this.connect().catch((err) => {
+				this.#connect().catch((err) => {
 					Logger.error(`[MongoProvider] Error en reconexión: ${err.message}`);
 				});
 		}, this.config.reconnectInterval);
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		super.start(kernelKey);
 		if (!this.initialized) {
 			this.initialized = true;
-			this.connect().catch((err: any) => {
+			this.#connect().catch((err: any) => {
 				Logger.error(`[MongoProvider] Error durante conexión inicial: ${err.message}`);
 			});
 		}
@@ -338,7 +349,7 @@ export default class MongoProvider extends BaseProvider {
 		return { connections };
 	}
 
-	async disconnect(): Promise<void> {
+	async #disconnect(): Promise<void> {
 		if (this.reconnectTimer) {
 			clearTimeout(this.reconnectTimer);
 			this.reconnectTimer = null;
@@ -353,6 +364,7 @@ export default class MongoProvider extends BaseProvider {
 		}
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		this.isDisconnecting = true;
@@ -363,6 +375,6 @@ export default class MongoProvider extends BaseProvider {
 		}
 		this.#dbViewsCache.clear();
 
-		await this.disconnect();
+		await this.#disconnect();
 	}
 }

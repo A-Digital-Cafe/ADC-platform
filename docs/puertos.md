@@ -10,5 +10,6 @@ public/my-account 3016
 public/adc-project-manager 3018
 public/status 3020
 public/help 3022
-public/adc-org-management 3024
+public/adc-home 3024
 public/adc-error 3026
+public/adc-org-management 3028

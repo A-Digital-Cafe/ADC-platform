@@ -1,6 +1,6 @@
 import { BaseService } from "../../BaseService.js";
 import type { IHostBasedHttpProvider } from "../../../interfaces/modules/providers/IHttpServer.js";
-import { type HttpMethod, type EndpointConfig, type EndpointHandler, type ServiceCallRequest } from "./types.js";
+import { type HttpMethod, type EndpointConfig, type EndpointHandler } from "./types.js";
 import { setPermissionValidator } from "./decorators.js";
 import SessionManagerService from "../../security/SessionManagerService/index.ts";
 import OperationsService from "../OperationsService/index.ts";
@@ -9,10 +9,10 @@ import type RedisProvider from "../../../providers/queue/redis/index.ts";
 import { EndpointRegistry } from "./parts/EndpointRegistry.js";
 import { createPermissionValidator } from "./parts/validator.js";
 import { createHttpWrapper } from "./parts/http.js";
-import { internalCallEndpoint } from "./parts/internalCallEndpoint.ts";
 import { JobManager } from "./parts/JobManager.ts";
 import { registerCsrfEndpoint } from "./parts/csrf.js";
 import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 
 // Re-exportar decoradores para uso externo
 export { RegisterEndpoint, EnableEndpoints, DisableEndpoints, readEndpointMetadata, readEnableEndpointsConfig } from "./decorators.js";
@@ -49,6 +49,7 @@ export default class EndpointManagerService extends BaseService {
 
 	static readonly JOB_TTL_SECONDS = JobManager.JOB_TTL_SECONDS;
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 		this.#httpProvider = this.getMyProvider<IHostBasedHttpProvider>("fastify-server");
@@ -150,13 +151,14 @@ export default class EndpointManagerService extends BaseService {
 
 	/**
 	 * Elimina todos los endpoints asociados a un owner.
+	 * Solo invocable por el Kernel (o decoradores de ciclo de vida con kernelKey).
 	 * @param ownerName El nombre del propietario.
 	 * @returns El número de endpoints eliminados.
 	 */
-	unregisterEndpointsByOwner = (ownerName: string) => this.#registry.unregisterByOwner(ownerName);
-
-	internalCallEndpoint = (request: ServiceCallRequest) =>
-		internalCallEndpoint(request, this.#getSessionManager.bind(this), this.getMyService.bind(this));
+	@OnlyKernel()
+	unregisterEndpointsByOwner(_kernelKey: symbol, ownerName: string) {
+		return this.#registry.unregisterByOwner(ownerName);
+	}
 
 	// Obtiene información sobre los endpoints registrados
 	getRegisteredEndpoints = () => this.#registry.getAll();
@@ -164,6 +166,7 @@ export default class EndpointManagerService extends BaseService {
 	// Obtiene estadísticas del servicio
 	getStats = () => this.#registry.getStats();
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		// Graceful shutdown: drain all queue consumers first
 		if (this.#jobManager) {

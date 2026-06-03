@@ -6,6 +6,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import type { IHostBasedHttpProvider, HostOptions, HttpHandler } from "../../../interfaces/modules/providers/IHttpServer.js";
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
@@ -197,7 +198,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 		this.app = Fastify(fastifyOptions);
 	}
+	@OnlyKernel()
 	public async start(_kernelKey: symbol): Promise<void> {
+		await super.start(_kernelKey);
 		await this.setupMiddleware();
 	}
 
@@ -429,8 +432,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		return types[ext] || "application/octet-stream";
 	}
 
-	/** Obtener la instancia raw de Fastify (para casos especiales) */
-	getApp(): FastifyInstance<any> {
+	/** Obtener la instancia raw de Fastify (solo Kernel/servicios con kernelKey). */
+	@OnlyKernel()
+	getApp(_kernelKey: symbol): FastifyInstance<any> {
 		return this.app;
 	}
 
@@ -570,6 +574,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		}
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		if (this.isListening) {
