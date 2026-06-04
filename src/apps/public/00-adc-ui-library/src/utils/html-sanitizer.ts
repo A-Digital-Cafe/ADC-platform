@@ -127,5 +127,7 @@ export function sanitizeRichHtml(html: string): string {
 /** Extrae texto plano de un fragmento HTML (para previews/bodyText). */
 export function htmlToPlainText(html: string): string {
 	const doc = new DOMParser().parseFromString(html, "text/html");
-	return (doc.body.textContent || "").replace(/\s+\n/g, "\n").trim();
+	// `[^\S\n]+` (espacios en blanco salvo el salto de línea) evita el backtracking
+	// super-lineal que tendría `\s+\n`, donde `\s` solaparía con `\n`.
+	return (doc.body.textContent || "").replace(/[^\S\n]+\n/g, "\n").trim();
 }
