@@ -349,7 +349,13 @@ function generate(libPath) {
 			// Stencil emits event names starting with lowercase (e.g. "adcRate").
 			let emittedName = propName;
 			if (propName.startsWith("onAdc")) {
-				resolvedType = resolvedType.replaceAll(/\w+CustomEvent<([^>]+)>/g, "CustomEvent<$1>");
+				// `\w+` va seguido de `<` (carácter NO de palabra), por lo que no hay
+				// solapamiento ni backtracking super-lineal. Filtramos en código los que
+				// terminan en `CustomEvent` para preservar el comportamiento original.
+				resolvedType = resolvedType.replaceAll(/\w+<([^>]+)>/g, (match, inner) => {
+					const name = match.slice(0, match.indexOf("<"));
+					return name.endsWith("CustomEvent") ? `CustomEvent<${inner}>` : match;
+				});
 				emittedName = "on" + propName.charAt(2).toLowerCase() + propName.slice(3);
 			}
 
