@@ -98,7 +98,7 @@ function registerRateLimit(method: HttpMethod, url: string, response: Response, 
 function hashIdempotency(data: unknown): string {
 	const str = JSON.stringify(data);
 	let h = 5381;
-	for (const ch of str) h = ((h << 5) + h + ch.codePointAt(0)!) >>> 0;
+	for (const ch of str) h = ((h << 5) + h + (ch.codePointAt(0) || 0)) >>> 0;
 	return h.toString(36);
 }
 
