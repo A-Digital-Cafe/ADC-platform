@@ -13,7 +13,7 @@ export class AdcBlurPanel {
 	/**
 	 * Intensidad del blur (sm, md, lg, xl)
 	 */
-	@Prop() blur: "sm" | "md" | "lg" | "xl" = "lg";
+	@Prop({ attribute: "blur" }) blurSize: "sm" | "md" | "lg" | "xl" = "lg";
 
 	/**
 	 * Padding interno (none, sm, md, lg, xl)
@@ -43,7 +43,7 @@ export class AdcBlurPanel {
 			<Host
 				class={{
 					"blur-panel": true,
-					[`blur-${this.blur}`]: true,
+					[`blur-${this.blurSize}`]: true,
 					[`padding-${this.padding}`]: true,
 					[`radius-${this.radius}`]: true,
 					[`variant-${this.variant}`]: true,

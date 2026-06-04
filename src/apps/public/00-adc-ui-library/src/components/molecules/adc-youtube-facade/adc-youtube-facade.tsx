@@ -14,7 +14,7 @@ export class AdcYoutubeFacade {
 	@Prop() src!: string;
 
 	/** Título del video para accesibilidad */
-	@Prop() title: string = "Video de YouTube";
+	@Prop({ attribute: "title" }) videoTitle: string = "Video de YouTube";
 
 	/** Ancho del contenedor (opcional, por defecto responsive) */
 	@Prop() width?: string;
@@ -74,7 +74,7 @@ export class AdcYoutubeFacade {
 					width="560"
 					height="315"
 					src={`https://www.youtube.com/embed/${id}?autoplay=1`}
-					title={this.title}
+					title={this.videoTitle}
 					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
 					allowFullScreen
 					class="rounded-xxl max-w-full"
@@ -94,10 +94,10 @@ export class AdcYoutubeFacade {
 				onKeyPress={this.handleKeyPress}
 				role="button"
 				tabIndex={0}
-				aria-label={`Reproducir video: ${this.title}`}
+				aria-label={`Reproducir video: ${this.videoTitle}`}
 			>
 				{/* Imagen de fondo (thumbnail) */}
-				<img src={thumbnailUrl} alt={this.title} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+				<img src={thumbnailUrl} alt={this.videoTitle} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
 
 				{/* Overlay oscuro */}
 				<span class="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors" />

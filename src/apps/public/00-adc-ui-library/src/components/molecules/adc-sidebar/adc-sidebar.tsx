@@ -17,7 +17,7 @@ export class AdcSidebar {
 	@Prop() items: SidebarItem[] = [];
 	@Prop() collapsed: boolean = false;
 	@Prop() activeItem: string | null = null;
-	@Prop() title: string = "";
+	@Prop({ attribute: "title" }) sectionTitle: string = "";
 	@Prop() subtitle: string = "";
 
 	@State() internalActiveItem: string | null = null;
@@ -31,7 +31,7 @@ export class AdcSidebar {
 	};
 
 	render() {
-		const sidebarClass = this.collapsed ? "w-35 lg:w-74" : "w-74";
+		const sidebarClass = this.collapsed ? "w-32 lg:w-max lg:min-w-74" : "w-max min-w-74";
 
 		return (
 			<aside
@@ -41,14 +41,19 @@ export class AdcSidebar {
 					height: "calc(100vh - var(--header-offset))",
 				}}
 			>
-				{(this.title || this.subtitle) && (
-					<div
-						class={`flex flex-col justify-center items-center px-3 mb-4 transition-opacity duration-300 ${
-							this.collapsed ? "opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto" : "opacity-100"
-						}`}
-					>
-						{this.title && <h2 class="mb-0! truncate">{this.title}</h2>}
-						{this.subtitle && <p class="text-sm text-primary opacity-70 truncate">{this.subtitle}</p>}
+				{(this.sectionTitle || this.subtitle) && (
+					<div class={`flex flex-col justify-center items-center gap-2 px-3 my-4 transition-opacity duration-300 `}>
+						<span
+							class={`flex flex-col items-center justify-center min-w-0 transition-all duration-300 lg:flex-col
+						${this.collapsed ? "hidden lg:flex lg:flex-1 lg:opacity-100 lg:pointer-events-auto" : "flex-1 opacity-100"}`}
+						>
+							{this.sectionTitle && <h2 class="my-0! truncate">{this.sectionTitle}</h2>}
+							{this.subtitle && <p class="text-sm text-primary opacity-70 truncate">{this.subtitle}</p>}
+						</span>
+
+						<span class="shrink-0">
+							<slot name="actions" />
+						</span>
 					</div>
 				)}
 
@@ -60,8 +65,8 @@ export class AdcSidebar {
 							<div key={item.label}>
 								<a
 									href={item.to}
-									class={`flex gap-2 transition-all duration-300 py-3 rounded w-full items-center cursor-pointer ${
-										this.collapsed ? "justify-center px-0" : "justify-start gap-2 px-3"
+									class={`flex gap-2 transition-all duration-300 py-3 rounded w-full lg:px-4 items-center cursor-pointer ${
+										this.collapsed ? "justify-center px-0" : "justify-start gap-2 px-4"
 									} ${this.activeItem === item.action ? "bg-primary text-tprimary" : "hover:bg-primary hover:text-tprimary"}`}
 									onClick={() => this.handleItemClick(item)}
 									title={this.collapsed ? item.label : ""}
@@ -74,11 +79,11 @@ export class AdcSidebar {
 									)}
 
 									<span
-										class={`flex-1 overflow-hidden transition-all duration-300 ${
-											this.collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100"
-										} lg:max-w-40 lg:opacity-100`}
+										class={`flex-1 transition-all duration-300 lg:flex ${
+											this.collapsed ? "hidden max-w-0 opacity-0 overflow-hidden" : "max-w-none opacity-100"
+										} lg:max-w-none lg:opacity-100 lg:overflow-visible`}
 									>
-										<span class="text-left whitespace-nowrap text-lg font-semibold ">{item.label}</span>
+										<span class="text-left whitespace-nowrap text-lg font-semibold">{item.label}</span>
 
 										{item.badge && <span class="ml-auto badge badge-sm">{item.badge}</span>}
 									</span>

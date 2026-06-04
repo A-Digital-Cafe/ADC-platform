@@ -5,12 +5,12 @@ import { Component, Prop } from "@stencil/core";
 	shadow: false,
 })
 export class AdcShareButtons {
-	@Prop() title: string = "";
+	@Prop({ attribute: "title" }) sharingTitle: string = "";
 	@Prop() description: string = "";
 	@Prop() url: string = "";
 
 	private getEncodedText(): string {
-		return encodeURIComponent(`${this.title}\n\n${this.description}\n\n${this.url}`);
+		return encodeURIComponent(`${this.sharingTitle}\n\n${this.description}\n\n${this.url}`);
 	}
 
 	private getLinkedInUrl(): string {

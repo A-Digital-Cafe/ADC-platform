@@ -5,7 +5,7 @@ import { Component, Prop } from "@stencil/core";
 	shadow: false,
 })
 export class AdcFeatureCard {
-	@Prop() title: string = "";
+	@Prop({ attribute: "title" }) cardTitle: string = "";
 	@Prop() staticRender: boolean = true;
 
 	render() {
@@ -14,7 +14,7 @@ export class AdcFeatureCard {
 				<div class="mt-2" aria-hidden="true">
 					<slot name="icon"></slot>
 				</div>
-				<h3 style={{ marginTop: "0.5rem" }}>{this.title}</h3>
+				<h3 style={{ marginTop: "0.5rem" }}>{this.cardTitle}</h3>
 				<adc-text>
 					<slot></slot>
 				</adc-text>

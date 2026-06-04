@@ -5,7 +5,7 @@ import { Component, Prop, Event, EventEmitter } from "@stencil/core";
 	shadow: false,
 })
 export class AdcContentCard {
-	@Prop() title: string = "";
+	@Prop({ attribute: "title" }) cardTitle: string = "";
 	@Prop() description?: string;
 	@Prop() bannerUrl?: string;
 	@Prop() bannerAlt?: string;
@@ -38,9 +38,9 @@ export class AdcContentCard {
 
 		const content = (
 			<div class={innerClass}>
-				{this.bannerUrl && <img src={this.bannerUrl} alt={this.bannerAlt || this.title} class={imageClass} loading="lazy" />}
-				{this.description && <h2 class="text-lg font-semibold">{this.title}</h2>}
-				{!this.description && <h3 class="text-lg font-semibold">{this.title}</h3>}
+				{this.bannerUrl && <img src={this.bannerUrl} alt={this.bannerAlt || this.cardTitle} class={imageClass} loading="lazy" />}
+				{this.description && <h2 class="text-lg font-semibold">{this.cardTitle}</h2>}
+				{!this.description && <h3 class="text-lg font-semibold">{this.cardTitle}</h3>}
 				{this.description && <p>{this.description}</p>}
 				<slot></slot>
 			</div>

@@ -5,7 +5,7 @@ import { Component, Prop, Event, EventEmitter } from "@stencil/core";
 	shadow: false,
 })
 export class AdcLpBadge {
-	@Prop() title: string = "";
+	@Prop({ attribute: "title" }) text: string = "";
 	@Prop() color: string = "";
 	@Prop() slug?: string;
 	@Prop() as?: "button" | "span";
@@ -36,7 +36,7 @@ export class AdcLpBadge {
 		if (this.slug) {
 			return (
 				<a href={`/paths/${this.slug}`} class={baseClass}>
-					{this.title}
+					{this.text}
 				</a>
 			);
 		}
@@ -44,11 +44,11 @@ export class AdcLpBadge {
 		if (this.as === "button") {
 			return (
 				<button type="button" class={baseClass} onClick={this.handleClick}>
-					{this.title}
+					{this.text}
 				</button>
 			);
 		}
 
-		return <span class={baseClass}>{this.title}</span>;
+		return <span class={baseClass}>{this.text}</span>;
 	}
 }
