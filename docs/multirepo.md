@@ -24,6 +24,8 @@ node_modules/
 dist/
 \*.log
 .env
+.env.\*
+!.env.example
 EOF
 
 # 3. Primer commit
