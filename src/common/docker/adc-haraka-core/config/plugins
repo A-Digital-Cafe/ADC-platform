@@ -1,0 +1,20 @@
+# Plugins cargados por Haraka (orden importa).
+# Conexión / saludo
+process_title
+log.syslog
+
+# Aceptación de destinatarios: solo dominios en host_list (dominio raíz y *.raíz)
+rcpt_to.in_host_list
+
+# Cabeceras y validaciones básicas
+data.headers
+attachment
+
+# Antispam: reglas básicas (ver plugins/adc_basic_spam.js)
+adc_basic_spam
+
+# Firmado DKIM saliente (selector global)
+dkim_sign
+
+# Entrega del correo entrante al email-service vía webhook HTTP
+adc_inbound_webhook

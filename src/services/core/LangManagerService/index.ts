@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { BaseService } from "../../BaseService.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import type { ILangManagerService, TranslationDict, RegisteredNamespace } from "./types.js";
 
 export default class LangManagerService extends BaseService implements ILangManagerService {
@@ -16,11 +17,13 @@ export default class LangManagerService extends BaseService implements ILangMana
 		this.fallbackLocale = options?.fallbackLocale || "en";
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 		this.logger.logOk("LangManagerService iniciado");
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		this.namespaces.clear();

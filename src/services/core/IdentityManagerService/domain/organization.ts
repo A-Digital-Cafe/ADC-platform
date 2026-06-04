@@ -5,7 +5,7 @@ export const organizationSchema = new Schema<Organization>({
 	orgId: { type: String, required: true, unique: true },
 	slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
 	region: { type: String, required: true, default: "default/default" },
-	tier: { type: String, enum: ["default"], default: "default" },
+	tier: { type: String, enum: ["default", "team", "enterprise"], default: "default" },
 	status: { type: String, enum: ["active", "inactive", "blocked"], default: "active" },
 	approved: { type: Boolean, default: false },
 	permissions: [

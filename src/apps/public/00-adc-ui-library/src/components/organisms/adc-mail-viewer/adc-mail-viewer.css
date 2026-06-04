@@ -1,0 +1,32 @@
+.adc-mail-viewer__content {
+	color: var(--color-text, #1f1f1f);
+	line-height: 1.6;
+	word-break: break-word;
+}
+
+.adc-mail-viewer__content a {
+	color: var(--color-primary, #2563eb);
+	text-decoration: underline;
+}
+
+.adc-mail-viewer__content ul {
+	list-style: disc outside;
+	padding-left: 1.5rem;
+}
+
+.adc-mail-viewer__content ol {
+	list-style: decimal outside;
+	padding-left: 1.5rem;
+}
+
+.adc-mail-viewer__content blockquote {
+	margin: 0.5rem 0;
+	padding-left: 0.9rem;
+	border-left: 3px solid var(--color-border, rgba(0, 0, 0, 0.15));
+	color: var(--color-muted, #5f6368);
+}
+
+.adc-mail-viewer__content pre,
+.adc-mail-viewer__content code {
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}

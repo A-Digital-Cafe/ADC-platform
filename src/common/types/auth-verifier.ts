@@ -59,7 +59,7 @@ export class PermissionChecker {
 		if (!hasPermission) {
 			throw new AuthorizationError(
 				`Usuario ${result.userId} no tiene permisos (resource=${this.resource}, action=${action}, scope=${scope})`,
-				"INSUFFICIENT_PERMISSIONS"
+				"FORBIDDEN"
 			);
 		}
 		return result.userId;

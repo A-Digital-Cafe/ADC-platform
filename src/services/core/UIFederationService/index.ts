@@ -56,6 +56,7 @@ export default class UIFederationService extends BaseService {
 		};
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 		await fs.mkdir(this.#uiOutputBaseDir, { recursive: true });
@@ -83,6 +84,7 @@ export default class UIFederationService extends BaseService {
 		this.logger.logOk(`UIFederationService iniciado en modo ${this.#isDevelopment ? "desarrollo" : "producción"} (puerto ${this.#port})`);
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		await stopAllWatchers(this.#watchBuilds, this.logger);

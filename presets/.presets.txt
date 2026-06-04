@@ -10,11 +10,13 @@
 #   - NO toca los que ya estén clonados (usa `git -C <dir> pull` manualmente si querés actualizar)
 #
 # Ejemplos:
-# SEO       git@github.com:abbytec/adc-preset-seo.git       main
-# Billing   git@github.com:abbytec/adc-preset-billing.git   v1.0.0
+# SEO       git@github.com:A-Digital-Cafe/adc-preset-seo.git       main
+# Billing   git@github.com:A-Digital-Cafe/adc-preset-billing.git   v1.0.0
 SEO https://github.com/A-Digital-Cafe/adc-seo.git main
 community-content https://github.com/A-Digital-Cafe/community-content.git main
 my-account https://github.com/A-Digital-Cafe/adc-my-account.git main
 org-management https://github.com/A-Digital-Cafe/adc-org-management.git main
 status https://github.com/A-Digital-Cafe/adc-status.git main
 project-management https://github.com/A-Digital-Cafe/project-management.git main
+adc-email-backend https://github.com/A-Digital-Cafe/adc-email-backend.git main
+adc-email-frontend https://github.com/A-Digital-Cafe/adc-email-frontend.git main

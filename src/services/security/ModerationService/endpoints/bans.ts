@@ -5,6 +5,7 @@ import { P } from "@common/types/Permissions.ts";
 import type ModerationService from "../index.js";
 import type { ModerationInternalApi } from "../index.js";
 import { parseBanRequest } from "./banValidation.js";
+import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
 
 interface BanBody {
 	userId?: string;
@@ -41,7 +42,7 @@ export class BanEndpoints {
 
 	private static assertGlobalAdmin(ctx: EndpointCtx): void {
 		if (!ctx.user) throw new AuthError(401, "UNAUTHORIZED", "No hay sesión");
-		if (ctx.user.orgId) throw new IdentityError(403, "FORBIDDEN", "Solo admin global puede moderar bans");
+		if (ctx.user.orgId) throw new AuthorizationError("Solo admin global puede moderar bans", "FORBIDDEN");
 	}
 
 	@RegisterEndpoint({

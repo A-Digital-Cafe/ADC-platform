@@ -10,7 +10,9 @@ import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-
 import type SessionManagerService from "../../security/SessionManagerService/index.js";
 import type ModerationService from "../../security/ModerationService/index.js";
 import type OperationsService from "../OperationsService/index.ts";
+import type { Step } from "../OperationsService/index.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { UserEndpoints } from "./endpoints/users.js";
 import { RoleEndpoints } from "./endpoints/roles.js";
 import { GroupEndpoints } from "./endpoints/groups.js";
@@ -23,6 +25,15 @@ import type { AttachmentsManager } from "../../../utilities/attachments/attachme
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
+
+/**
+ * Servicio opcional capaz de purgar datos privados de un usuario tras la
+ * retención. Se resuelve perezosamente para no acoplar el kernel a presets.
+ */
+interface UserDataPurger {
+	name: string;
+	run: (userId: string) => Promise<void>;
+}
 
 /**
  * IdentityManagerService - Gestión centralizada de identidades, usuarios, roles y grupos
@@ -76,6 +87,10 @@ export default class IdentityManagerService extends BaseService {
 	#moderationService: ModerationService | null = null;
 	#moderationLookupAttempted = false;
 
+	// Servicios de datos privados del usuario (lazy, opcionales) — purga en cascada
+	// tras vencer la retención. No se acopla a presets concretos.
+	#userDataPurgers: UserDataPurger[] | null = null;
+
 	// Timer para limpieza periódica de cuentas con retención vencida.
 	#retentionTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -101,6 +116,7 @@ export default class IdentityManagerService extends BaseService {
 
 	#avatarAttachmentsManager: AttachmentsManager | null = null;
 
+	@OnlyKernel()
 	@EnableEndpoints({
 		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints],
 	})
@@ -480,6 +496,7 @@ export default class IdentityManagerService extends BaseService {
 		};
 	}
 
+	@OnlyKernel()
 	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
 		// Limpiar cache de conexiones por organización
@@ -515,28 +532,106 @@ export default class IdentityManagerService extends BaseService {
 	}
 
 	/**
+	 * Resuelve perezosamente los servicios opcionales que almacenan datos
+	 * privados del usuario (project-manager, email, ...) para purgarlos en
+	 * cascada. No falla si los presets no están cargados.
+	 */
+	#getUserDataPurgers(): UserDataPurger[] {
+		if (this.#userDataPurgers) return this.#userDataPurgers;
+		const purgers: UserDataPurger[] = [];
+		const kernelKey = this.#kernelKey;
+		if (!kernelKey) return [];
+
+		const candidates: Array<{ service: string; method: string }> = [
+			{ service: "ProjectManagerService", method: "purgeUserPrivateData" },
+			{ service: "EmailService", method: "purgeUserData" },
+		];
+
+		for (const { service, method } of candidates) {
+			try {
+				const instance = this.getMyService<Record<string, unknown>>(service);
+				const fn = instance?.[method];
+				if (typeof fn === "function") {
+					purgers.push({
+						name: service,
+						run: (userId: string) => (fn as (k: symbol, u: string) => Promise<void>).call(instance, kernelKey, userId),
+					});
+				}
+			} catch {
+				/* preset no cargado: se omite */
+			}
+		}
+
+		this.#userDataPurgers = purgers;
+		return purgers;
+	}
+
+	/**
 	 * Purga usuarios con `metadata.scheduledDeletionAt <= now`.
-	 * Usa el manager interno (sin token) para borrar.
+	 *
+	 * Cada usuario se procesa como un pipeline reanudable vía `OperationsService.stepper`
+	 * (estado en MongoDB, TTL 48h). Si el proceso cae a mitad de la cascada, en el
+	 * siguiente tick del timer el usuario sigue "due" (aún no borrado) y el stepper
+	 * salta los pasos ya completados, reanudando los siguientes. El borrado del
+	 * registro de usuario es SIEMPRE el último paso para preservar esta propiedad.
+	 *
+	 * Nota de diseño: es una tarea de mantenimiento automática (no iniciada por el
+	 * usuario), por eso vive en el timer de retención y NO en un endpoint HTTP ni en
+	 * el JobManager (cuya cola está pensada para endpoints async). La resiliencia la
+	 * aporta el stepper (Mongo) + la re-ejecución periódica, sin requerir RabbitMQ.
 	 */
 	async #runRetentionPurge(): Promise<void> {
 		if (!this.#internalUserManager) return;
 		const due = await this.#internalUserManager.findUsersDueForDeletion();
 		if (due.length === 0) return;
 		this.logger.logInfo(`Retention purge: ${due.length} usuarios pendientes de borrado`);
+		const purgers = this.#getUserDataPurgers();
 		for (const { id } of due) {
 			try {
-				await this.#internalUserManager.deleteUser(id);
-				// Mejor esfuerzo: limpiar registros de moderación del usuario.
+				await this.#purgeUserResumable(id, purgers);
+			} catch (err: any) {
+				// El usuario sigue "due": se reintentará en el próximo tick desde el paso fallido.
+				this.logger.logWarn(`Retention purge falló para ${id} (se reintentará): ${err?.message || err}`);
+			}
+		}
+	}
+
+	/**
+	 * Ejecuta la purga en cascada de un usuario como pipeline reanudable.
+	 * Pasos (orden estable): [purgers de datos privados…, limpieza de moderación,
+	 * borrado del registro de usuario]. El stepper salta los ya completados.
+	 */
+	async #purgeUserResumable(userId: string, purgers: UserDataPurger[]): Promise<void> {
+		const internalUserManager = this.#internalUserManager;
+		if (!internalUserManager) return;
+
+		const steps: Step[] = [
+			// 0..N-1: purga de datos privados en cada servicio opcional (PM, email…).
+			// Estos métodos ya son idempotentes en cascada, por lo que reejecutarlos es seguro.
+			...purgers.map((purger) => async () => {
+				await purger.run(userId);
+			}),
+			// N: limpieza de moderación (mejor esfuerzo, nunca corta el pipeline).
+			async () => {
 				try {
 					const moderation = this.tryGetModerationService();
 					if (moderation && this.#kernelKey)
-						await moderation._internal(this.#kernelKey).unbanByUserIdInternal(id, "auto-retention-purge");
-				} catch {
-					/* swallow */
+						await moderation._internal(this.#kernelKey).unbanByUserIdInternal(userId, "auto-retention-purge");
+				} catch (e: any) {
+					this.logger.logWarn(`Retention purge: limpieza moderación de ${userId}: ${e?.message || e}`);
 				}
-			} catch (err: any) {
-				this.logger.logWarn(`Retention purge falló para ${id}: ${err?.message || err}`);
-			}
+			},
+			// N+1 (último): borrar el registro de usuario. Hasta aquí el usuario sigue "due".
+			async () => {
+				await internalUserManager.deleteUser(userId);
+			},
+		];
+
+		const failedStep = await this.#operationsService.stepper(0, "retention-purge", userId, steps);
+		if (failedStep !== null) {
+			const err = new Error(`retention-purge falló en el paso ${failedStep}`);
+			(err as any).failedStep = failedStep;
+			throw err;
 		}
 	}
 }

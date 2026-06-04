@@ -1,7 +1,12 @@
 import { Permission } from "./Permission.ts";
 
 export type OrganizationStatus = "active" | "inactive" | "blocked";
-export type OrganizationTier = "default";
+export type OrganizationTier = "default" | "team" | "enterprise";
+
+/** Tiers de organización en orden ascendente (`default` = free).
+ * @public
+ */
+export const ORGANIZATION_TIERS: readonly OrganizationTier[] = ["default", "team", "enterprise"] as const;
 
 /**
  * Organización

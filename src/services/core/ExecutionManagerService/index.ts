@@ -2,6 +2,7 @@ import * as os from "node:os";
 import { Worker } from "node:worker_threads";
 import { BaseService } from "../../BaseService.js";
 import { assignWorker } from "../../../utils/decorators/Distributed.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import type { WorkerInfo, SystemLoad, IExecutionManager } from "./types.js";
 import crypto from "node:crypto";
 
@@ -53,6 +54,7 @@ export default class ExecutionManagerService extends BaseService implements IExe
 		this.logger.logInfo(`Configurado para ${this.minWorkers}-${this.maxWorkers} workers (CPUs: ${cpuCount})`);
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 
@@ -67,6 +69,7 @@ export default class ExecutionManagerService extends BaseService implements IExe
 		this.logger.logOk("ExecutionManagerService iniciado");
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		// Detener monitoreo

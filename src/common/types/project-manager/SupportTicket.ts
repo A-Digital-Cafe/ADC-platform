@@ -25,7 +25,9 @@ export interface SupportTicketConfig {
 	supportTicketsProjectId?: string;
 }
 
-/** Límites de validación para support tickets  */
+/** Límites de validación para support tickets
+ * @public
+ */
 export const SUPPORT_TICKET_CONSTRAINTS = {
 	title: { min: 5, max: 200 },
 	description: { min: 10, max: 5000 },
@@ -35,6 +37,9 @@ export const SUPPORT_TICKET_CONSTRAINTS = {
 /** Email regex (RFC-like) */
 const EMAIL_REGEX = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/u;
 
+/** Opciones de tipos de ticket
+ * @public
+ */
 export interface SelectOption {
 	value: SupportTicketType;
 	label: string;

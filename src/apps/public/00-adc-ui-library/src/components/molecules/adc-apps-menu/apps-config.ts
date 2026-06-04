@@ -9,6 +9,7 @@ export const DEFAULT_APPS: AppMenuItem[] = [
 	{ id: "community", name: "Community", url: getUrl(3010, "community.adigitalcafe.com") },
 	{ id: "identity", name: "Identity", url: getUrl(3014, "identity.adigitalcafe.com"), requires: canAccessIdentity },
 	{ id: "projects", name: "Projects", url: getUrl(3018, "projects.adigitalcafe.com") },
+	{ id: "mail", name: "Mail", url: getUrl(3030, "mail.adigitalcafe.com") },
 ];
 
 /** Identity: solo admin, admin de organización o security_manager (detectado por permiso `users` READ). */

@@ -7,6 +7,7 @@ import { isSagaStep, type Step, type StepperDocument, type StepperResult } from 
 import { stepperSchema } from "./domain/stepperSchema.js";
 import { executeSaga } from "./helpers/executeSaga.js";
 import { CircuitBreaker } from "./parts/CircuitBreaker.ts";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 
 export type { Step, SagaStep, StepFunction, StepperResult } from "./types.js";
 export { CircuitBreaker, CircuitState, type CircuitBreakerConfig } from "./parts/CircuitBreaker.ts";
@@ -26,6 +27,7 @@ export default class OperationsService extends BaseService {
 		this.circuitBreaker = new CircuitBreaker();
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 		this.#redis = this.getMyProvider<RedisProvider>("queue/redis");
@@ -94,6 +96,7 @@ export default class OperationsService extends BaseService {
 		}
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		this.#redis = null;
 		this.#stepperModel = null;

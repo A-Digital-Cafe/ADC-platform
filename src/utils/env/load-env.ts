@@ -16,9 +16,7 @@ function loadEnvFile(fileName: string): void {
 }
 
 loadEnvFile(".env");
-loadEnvFile(".env.local");
 
 if (process.env.NODE_ENV) {
 	loadEnvFile(`.env.${process.env.NODE_ENV}`);
-	loadEnvFile(`.env.${process.env.NODE_ENV}.local`);
 }

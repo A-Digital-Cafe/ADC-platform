@@ -47,6 +47,14 @@ const MICROAPPS: Microapp[] = [
 		icon: <adc-icon-members size="2rem" />,
 	},
 	{
+		id: "mail",
+		name: "Mail",
+		description: "Envía y recibe correos con el dominio de tu organización.",
+		iconColor: "text-accentcyan",
+		href: getUrl(3030, "mail.adigitalcafe.com"),
+		icon: <adc-icon-app-mail size="2rem" />,
+	},
+	{
 		id: "help-legal",
 		name: "Help & Legal",
 		description: "Accede a documentación legal, políticas, transparencia y ayuda.",

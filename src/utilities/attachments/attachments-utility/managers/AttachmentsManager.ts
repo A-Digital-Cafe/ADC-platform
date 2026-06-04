@@ -354,6 +354,51 @@ export class AttachmentsManager {
 	}
 
 	/**
+	 * ⚠️ Borrado masivo sin `permissionChecker` de TODOS los adjuntos de un
+	 * `(ownerType, ownerId)`, incluyendo objetos S3. Para cascadas de confianza
+	 * (p.ej. purga de cuenta tras retención). Protegido por `@OnlyKernel()`.
+	 * Devuelve la cantidad de docs eliminados.
+	 */
+	@OnlyKernel()
+	async forceDeleteByOwner(_kernelKey: symbol, ownerType: string, ownerId: string): Promise<number> {
+		const docs = await this.#model.find({ ownerType, ownerId }).lean<Array<AttachmentDoc & { _id: string }>>();
+		let removed = 0;
+		for (const d of docs) {
+			try {
+				await this.#s3.deleteObject({ bucket: d.bucket, key: d.storageKey });
+			} catch {
+				// continuar: si el objeto no existe en S3, igual borramos el doc
+			}
+			await this.#model.deleteOne({ _id: d._id });
+			removed++;
+		}
+		return removed;
+	}
+
+	/**
+	 * ⚠️ Borrado masivo por prefijo de `subPath` dentro de un `basePath`,
+	 * incluyendo objetos S3. Útil cuando los adjuntos se agrupan por una ruta
+	 * derivada (p.ej. `email` → `${userId}/...`). Para cascadas de confianza
+	 * (purga de cuenta tras retención). Protegido por `@OnlyKernel()`.
+	 */
+	@OnlyKernel()
+	async forceDeleteBySubPathPrefix(_kernelKey: symbol, basePath: string, subPathPrefix: string): Promise<number> {
+		const escaped = subPathPrefix.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+		const docs = await this.#model.find({ basePath, subPath: { $regex: `^${escaped}` } }).lean<Array<AttachmentDoc & { _id: string }>>();
+		let removed = 0;
+		for (const d of docs) {
+			try {
+				await this.#s3.deleteObject({ bucket: d.bucket, key: d.storageKey });
+			} catch {
+				// continuar: si el objeto no existe en S3, igual borramos el doc
+			}
+			await this.#model.deleteOne({ _id: d._id });
+			removed++;
+		}
+		return removed;
+	}
+
+	/**
 	 * ⚠️ Operación de mantenimiento global. NO exponer por HTTP.
 	 * Borra adjuntos `pending` cuya creación supera `olderThanMs`. Devuelve
 	 * cantidad eliminada. Protegido por `@OnlyKernel()`: requiere construir el

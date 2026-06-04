@@ -23,7 +23,6 @@
 		"lint:fix": "eslint src --ext .ts --fix",
 		"typecheck": "bash scripts/recursive-typecheck.sh && knip --exports",
 		"extra-checks": "bash scripts/find-large-files.sh && knip --dependencies",
-		"security:matrix": "node scripts/generate-backend-security-matrix.mjs",
 		"cleanup": "bash scripts/cleanup-processes.sh",
 		"proto:gen": "cd src/common/ADC/proto && npx buf generate",
 		"create:app": "node scripts/create-app.mjs",

@@ -13,3 +13,4 @@ public/help 3022
 public/adc-home 3024
 public/adc-error 3026
 public/adc-org-management 3028
+public/adc-email-frontend 3030

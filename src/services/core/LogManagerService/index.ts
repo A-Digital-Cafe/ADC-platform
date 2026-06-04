@@ -4,6 +4,7 @@ import { BaseService } from "../../BaseService.js";
 import { Kernel } from "../../../kernel.js";
 import { ILogManagerService } from "./types.js";
 import { ModuleTypes } from "../../../utils/registry/ModuleRegistry.js";
+import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 
 export default class LogManagerService extends BaseService implements ILogManagerService {
 	public readonly name = "LogManagerService";
@@ -13,6 +14,7 @@ export default class LogManagerService extends BaseService implements ILogManage
 		super(kernel, options);
 	}
 
+	@OnlyKernel()
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 
@@ -38,6 +40,7 @@ export default class LogManagerService extends BaseService implements ILogManage
 		this.logger.logOk("LogManagerService started");
 	}
 
+	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		if (this.cleanupInterval) {
@@ -126,7 +129,7 @@ export default class LogManagerService extends BaseService implements ILogManage
 					this.logger.logDebug(`Deleted old log file (count limit): ${file.name}`);
 				}
 			}
-		} catch (error) {
+		} catch {
 			// Directory might not exist yet or access denied
 		}
 	}

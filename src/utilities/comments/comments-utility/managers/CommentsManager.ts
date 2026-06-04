@@ -474,4 +474,30 @@ export class CommentsManager {
 			}
 		}
 	}
+
+	/**
+	 * ⚠️ Purga masiva de TODOS los comentarios de un target (y sus adjuntos),
+	 * sin `permissionChecker`. Para cascadas de confianza (p.ej. purga de cuenta
+	 * tras retención). Protegida por la `kernelKey` de adjuntos del bounded
+	 * context. Devuelve la cantidad de comentarios eliminados.
+	 */
+	async purgeByTarget(kernelKey: symbol, targetType: string, targetId: string): Promise<number> {
+		if (!this.#attachmentsKernelKey || kernelKey !== this.#attachmentsKernelKey) {
+			throw new Error("Acceso denegado: kernel key inválida");
+		}
+		const docs = await this.#model.find({ targetType, targetId }, { attachmentIds: 1 }).lean<Array<{ attachmentIds?: string[] }>>();
+		if (this.#attachments) {
+			for (const d of docs) {
+				for (const id of d.attachmentIds ?? []) {
+					try {
+						await this.#attachments.forceDelete(this.#attachmentsKernelKey, id);
+					} catch {
+						// ignorable: el adjunto pudo ya estar borrado.
+					}
+				}
+			}
+		}
+		const res = await this.#model.deleteMany({ targetType, targetId });
+		return res.deletedCount ?? 0;
+	}
 }

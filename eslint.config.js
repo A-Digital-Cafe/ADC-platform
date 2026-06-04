@@ -6,7 +6,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['**/*.d.ts', '**/utils/react-jsx.ts'],
+    ignores: ['**/*.d.ts', '**/utils/react-jsx.ts', 'src/common/docker/adc-haraka-core/**'],
   },
   {
     files: [

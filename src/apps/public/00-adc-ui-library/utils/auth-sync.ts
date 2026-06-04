@@ -141,6 +141,10 @@ export interface AvatarUpdatePayload {
 	sender?: string;
 }
 
+/**
+ * Publica cambios de avatar emitidos en `broadcastAvatarUpdate`.
+ * @public
+ */
 export function broadcastAvatarUpdate(payload: AvatarUpdatePayload): void {
 	const enriched: AvatarUpdatePayload & { ts: number } = { ...payload, sender: SENDER_ID, ts: Date.now() };
 	if (typeof BroadcastChannel !== "undefined") {

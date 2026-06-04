@@ -104,19 +104,3 @@ export interface RegisteredEndpoint {
 export interface EnableEndpointsConfig {
 	managers?: () => object[];
 }
-
-/** Service call request */
-export interface ServiceCallRequest {
-	serviceName: string;
-	methodName: string;
-	args: unknown[];
-	requiredPermissions?: string[];
-	callerToken?: string;
-}
-
-/** Service call response */
-export interface ServiceCallResponse<T = unknown> {
-	success: boolean;
-	result?: T;
-	error?: string;
-}
