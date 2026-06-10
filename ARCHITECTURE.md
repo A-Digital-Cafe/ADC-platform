@@ -247,6 +247,16 @@ Soportados: `1.0.0` (exacta), `^1.0.0` (caret), `~1.2.3` (tilde), `>=1.0.0`, `>1
 }
 ```
 
+## Presets (módulos opcionales)
+
+Los presets (`presets/<topic>/{apps,services,providers,utilities}`) son repos git independientes que el kernel monta como capas nativas. Convenciones:
+
+-   **tsconfig**: el tsconfig raíz del preset cubre SOLO `services/**/*.ts` (con `paths` relativos a `../../src/...`); cada app UI mantiene su propio tsconfig (jsx + aliases `@ui-library`). No usar `baseUrl` (eliminado en tsgo).
+-   **Imports**: todo import que escape del preset usa aliases (`@common`, `@services`, `@providers`, `@utilities`, `@interfaces`, `@adc/utils`, `@kernel`). Imports internos relativos.
+-   **Contratos con `src`**: las apps de `src` que consumen un servicio de preset opcional dependen de una interfaz en `@common/types` (ej. `IContentService`), nunca del tipo concreto del preset.
+-   **Docs**: cada preset incluye `README.md` (propósito, módulos, deps externas, env vars críticas, `kernelMode` si aplica), `LICENSE`/`LICENCE`, y `CODE_OF_CONDUCT.md`/`SECURITY.md` apuntando al repo principal.
+-   **Env vars**: cada servicio de preset con configuración externa documenta sus variables en un `.env.example` propio.
+
 ## Interoperabilidad Multi-Lenguaje
 
 ADC Platform soporta módulos en múltiples lenguajes mediante IPC (named pipes):

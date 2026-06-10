@@ -17,16 +17,33 @@ A continuación se detallan las instrucciones para inicializar, aislar y registr
 cd presets/XYZ
 git init -b main
 
-# 2. (Opcional) un .gitignore mínimo del preset
+# 2. (Opcional) Archivos Base Obligatorios
 
-cat > .gitignore <<'EOF'
-node_modules/
-dist/
-\*.log
-.env
-.env.\*
-!.env.example
-EOF
+Todo preset nuevo debe incluir los siguientes archivos en su raíz antes del primer commit:
+
+| Archivo              | Descripción                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| `.gitignore`         | Excluye `node_modules/`, `dist/`, `.env`, logs, etc.               |
+| `LICENCE.md`         | Licencia del código: ISC (público) o All rights reserved (privado) |
+| `SECURITY.md`        | Política de seguridad — redirige al repositorio principal          |
+| `CODE_OF_CONDUCT.md` | Código de conducta — redirige al repositorio principal             |
+
+## Generación automática
+
+Usa el script `private/scripts/init-preset.mjs` para copiar estos archivos desde las plantillas ubicadas en `private/scripts/templates/`. El script es interactivo y permite elegir el tipo de preset:
+
+- **public** → `LICENCE.md` con ISC License (open source)
+- **private** → `LICENCE.md` con All rights reserved (propietario)
+
+```bash
+# Modo interactivo
+node private/scripts/init-preset.mjs
+
+# Con flags (no interactivo)
+node private/scripts/init-preset.mjs --name my-preset --type public
+```
+
+> El script solo copia los archivos que no existen aún, por lo que es seguro ejecutarlo sobre un preset parcialmente inicializado.
 
 # 3. Primer commit
 
