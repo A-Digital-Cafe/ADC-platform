@@ -106,7 +106,7 @@ export function BlocksEditor({ value, onChange }: Props) {
 		return registerBlocksClipboard<Block>(el, {
 			getBlocks: (ev) => {
 				if (isEditableTarget(ev.target)) return null;
-				const sel = window.getSelection();
+				const sel = globalThis.getSelection();
 				if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return null;
 				const all = clipboardApiRef.current.getAll();
 				return all.length > 0 ? all : null;

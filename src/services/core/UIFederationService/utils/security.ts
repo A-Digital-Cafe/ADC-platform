@@ -12,6 +12,6 @@ function isRealProduction(): boolean {
 export function getUIModuleHostOptions(config: UIModuleConfig): HostOptions {
 	const security = config.security;
 	const envOverrides = isRealProduction() ? security?.production?.headers : security?.development?.headers;
-	const headers = { ...(security?.headers ?? {}), ...(envOverrides ?? {}) };
+	const headers = { ...security?.headers, ...envOverrides };
 	return Object.keys(headers).length > 0 ? { spaFallback: true, headers } : { spaFallback: true };
 }

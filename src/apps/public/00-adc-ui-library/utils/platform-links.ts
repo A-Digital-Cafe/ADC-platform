@@ -280,9 +280,9 @@ function remoteEntryUrl(app: PlatformApp): string {
 /** Inyecta una sola vez el script `remoteEntry.js` de un contenedor federado. */
 function loadRemoteEntryScript(url: string, remoteName: string): Promise<void> {
 	if (typeof document === "undefined") return Promise.reject(new Error("no-dom"));
-	const existing = document.querySelector(`script[data-platform-remote="${remoteName}"]`);
+	const existing = document.querySelector<HTMLScriptElement>(`script[data-platform-remote="${remoteName}"]`);
 	if (existing) {
-		if (existing.getAttribute("data-loaded") === "true") return Promise.resolve();
+		if (existing.dataset.loaded === "true") return Promise.resolve();
 		return new Promise((resolve, reject) => {
 			existing.addEventListener("load", () => resolve(), { once: true });
 			existing.addEventListener("error", () => reject(new Error(`remoteEntry failed: ${url}`)), { once: true });
@@ -333,7 +333,7 @@ function loadRemoteResolver(app: PlatformApp): Promise<PlatformLinkResolver | nu
 			}
 			const factory = await container.get(app.resolverExpose);
 			const mod = factory() as { default?: PlatformLinkResolver } | PlatformLinkResolver;
-			const resolver = (typeof mod === "function" ? mod : mod?.default) as PlatformLinkResolver | undefined;
+			const resolver = typeof mod === "function" ? mod : mod?.default;
 			if (typeof resolver !== "function") return null;
 			registry.resolvers.set(app.id, resolver);
 			return resolver;
