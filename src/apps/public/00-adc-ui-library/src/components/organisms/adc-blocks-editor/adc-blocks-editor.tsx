@@ -112,12 +112,12 @@ export class AdcBlocksEditor {
 		const escaped = AdcBlocksEditor.escapeHtml(md);
 		// Orden: enlaces antes que énfasis; bold antes que italic para evitar que `*` capture `**`.
 		return escaped
-			.replace(/\[([^\]\n]+?)\]\(([^)\s]+?)\)/g, (m, text: string, url: string) => {
+			.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (m, text: string, url: string) => {
 				const href = AdcBlocksEditor.sanitizeUrl(url);
 				return href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>` : m;
 			})
-			.replaceAll(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
-			.replaceAll(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>")
+			.replaceAll(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+			.replaceAll(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
 			.replaceAll(/`([^`\n]+?)`/g, "<code>$1</code>");
 	}
 
@@ -946,7 +946,7 @@ export class AdcBlocksEditor {
 	};
 
 	/**
-	 * Bloques a copiar: sólo cuando la selección abarca TODO el contenido del
+	 * Bloques a copiar: sólo cuando la selección abarca por completo el contenido del
 	 * editor (select-all). Para selecciones parciales devolvemos `null` y dejamos
 	 * el copiado nativo intacto (texto/HTML del fragmento seleccionado).
 	 */
@@ -1018,7 +1018,7 @@ export class AdcBlocksEditor {
 			while (n && n.parentNode !== this.editorEl) n = n.parentNode;
 			anchor = n?.nodeType === Node.ELEMENT_NODE ? (n as HTMLElement) : null;
 		}
-		let cursor: Node | null = anchor && anchor.parentNode === this.editorEl ? anchor : null;
+		let cursor: Node | null = anchor?.parentNode === this.editorEl ? anchor : null;
 		let last: Node | null = null;
 		for (const node of nodes) {
 			if (cursor) {
@@ -1031,7 +1031,7 @@ export class AdcBlocksEditor {
 		}
 		this.ensureTrailingParagraph();
 		// Mover caret al final del último bloque insertado.
-		if (last && last.nodeType === Node.ELEMENT_NODE) {
+		if (last?.nodeType === Node.ELEMENT_NODE) {
 			const range = document.createRange();
 			range.selectNodeContents(last);
 			range.collapse(false);

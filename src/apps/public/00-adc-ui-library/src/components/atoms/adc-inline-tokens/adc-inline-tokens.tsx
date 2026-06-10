@@ -10,7 +10,7 @@ export interface InlineToken {
 }
 
 // Regex para detectar tokens inline: [texto](url), **bold**, *italic*, ~~strike~~, `code`
-const INLINE_PATTERN = /\[[^\]]+?\]\([^)\s]+?\)|\*\*[^*]+?\*\*|~~[^~]+?~~|`[^`]+?`|\*[^*]+?\*/g;
+const INLINE_PATTERN = /\[[^\]]+\]\([^)\s]+\)|\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`|\*[^*]+\*/g;
 
 // Acepta http(s) y rutas relativas; descarta esquemas peligrosos (javascript:, data:).
 function sanitizeHref(href: string): string | null {

@@ -123,8 +123,10 @@ function blockToHtml(b: BlockData): string {
 			const items = (b.items || []).map((it) => `<li>${inlineMarkdownToHtml(it || "")}</li>`).join("");
 			return `<${tag}>${items}</${tag}>`;
 		}
-		case "code":
-			return `<pre><code${b.language ? ` class="language-${escapeHtml(b.language)}"` : ""}>${escapeHtml(b.content || "")}</code></pre>`;
+		case "code": {
+			const lang = b.language ? ` class="language-${escapeHtml(b.language)}"` : "";
+			return `<pre><code${lang}>${escapeHtml(b.content || "")}</code></pre>`;
+		}
 		case "quote":
 			return `<blockquote>${inlineMarkdownToHtml(b.text || "")}</blockquote>`;
 		case "callout":
@@ -142,9 +144,15 @@ function blockToHtml(b: BlockData): string {
 
 function tableToHtml(b: BlockData): string {
 	const head = (b.header || []).map((h) => `<th>${escapeHtml(h)}</th>`).join("");
-	const body = (b.rows || []).map((row) => `<tr>${row.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("");
+	const body = (b.rows || [])
+		.map((row) => {
+			const cells = row.map((c) => `<td>${escapeHtml(c)}</td>`).join("");
+			return `<tr>${cells}</tr>`;
+		})
+		.join("");
 	const caption = b.caption ? `<caption>${escapeHtml(b.caption)}</caption>` : "";
-	return `<table>${caption}${head ? `<thead><tr>${head}</tr></thead>` : ""}<tbody>${body}</tbody></table>`;
+	const headText = head ? `<thead><tr>${head}</tr></thead>` : "";
+	return `<table>${caption}${headText}<tbody>${body}</tbody></table>`;
 }
 
 /** Convierte una lista de bloques a texto plano legible. */
@@ -163,7 +171,12 @@ function blockToPlainText(b: BlockData): string {
 		case "checkbox":
 			return `${b.checked ? "[x]" : "[ ]"} ${stripInlineMarkdown(b.text || "")}`;
 		case "list":
-			return (b.items || []).map((it, i) => `${b.ordered ? `${i + 1}.` : "-"} ${stripInlineMarkdown(it || "")}`).join("\n");
+			return (b.items || [])
+				.map((it, i) => {
+					const order = b.ordered ? `${i + 1}.` : "-";
+					return `${order} ${stripInlineMarkdown(it || "")}`;
+				})
+				.join("\n");
 		case "code":
 			return b.content || "";
 		case "quote":
@@ -293,7 +306,7 @@ export function textToBlocks<B extends BlockData = BlockData>(text: string): B[]
 		.split(/\n{2,}/)
 		.map((chunk) => chunk.trim())
 		.filter((chunk) => chunk.length > 0)
-		.map((chunk) => ({ type: "paragraph", text: chunk }) as BlockData) as B[];
+		.map((chunk) => ({ type: "paragraph", text: chunk })) as B[];
 }
 
 // ── DataTransfer (eventos copy/cut/paste) ───────────────────────────────────

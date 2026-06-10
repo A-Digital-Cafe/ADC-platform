@@ -53,14 +53,14 @@ export class AdcPlatformLink {
 	}
 
 	/** Estado "sin acceso": el chip no navega ni propaga el click a routers SPA. */
-	private blockNavigation = (ev: MouseEvent) => {
+	private readonly blockNavigation = (ev: MouseEvent) => {
 		ev.preventDefault();
 		ev.stopPropagation();
 	};
 
 	private renderIcon(iconTag?: string) {
 		if (iconTag) {
-			const IconTag = iconTag as unknown as string;
+			const IconTag = iconTag;
 			return <IconTag size="1rem" class="adc-platform-link__icon shrink-0"></IconTag>;
 		}
 		return (
