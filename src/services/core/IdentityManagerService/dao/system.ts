@@ -48,7 +48,6 @@ export class SystemManager {
 			await this.userModel.create(this.#systemUser);
 
 			this.logger.logOk(`Usuario SYSTEM creado: ${username} (Contraseña disponible solo en este arranque)`);
-			this.logger.logInfo(`[SYSTEM USER CREDENTIALS] Username: ${username}, Password: ${password}`);
 		} catch (error) {
 			this.logger.logError(`Error inicializando usuario SYSTEM: ${error}`);
 		}

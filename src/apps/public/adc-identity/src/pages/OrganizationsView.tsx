@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Organization, RegionInfo, Permission, OrganizationStatus, OrganizationTier } from "@common/types/identity/index.d.ts";
-import { identityApi } from "../utils/identity-api.ts";
+import { identityApi } from "@ui-library/utils/api-identity";
 import { Scope, canWrite, canUpdate, canDelete } from "../utils/permissions.ts";
 import { DataTable, type Column } from "../components/DataTable.tsx";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal.tsx";

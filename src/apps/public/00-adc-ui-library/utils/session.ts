@@ -14,7 +14,6 @@ export type { SessionUser, SessionResponse };
 const api = createAdcApi({
 	basePath: "/api/auth",
 	devPort: 3000,
-	credentials: "include",
 });
 
 const CACHE_TTL_MS = 30_000;

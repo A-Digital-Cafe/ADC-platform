@@ -12,8 +12,16 @@ export function hashPassword(password: string): string {
 
 export function verifyPassword(password: string, passwordHash: string): boolean {
 	const [salt, hash] = passwordHash.split(":");
-	const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-	return computed === hash;
+	if (!salt || !hash) return false;
+	const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512");
+	let expected: Buffer;
+	try {
+		expected = Buffer.from(hash, "hex");
+	} catch {
+		return false;
+	}
+	// Comparación constant-time para evitar timing attacks
+	return computed.length === expected.length && crypto.timingSafeEqual(computed, expected);
 }
 
 export function generateRandomCredentials(): { username: string; password: string } {

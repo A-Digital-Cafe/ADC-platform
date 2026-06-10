@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
-import { identityApi } from "../utils/identity-api.ts";
+import { identityApi } from "@ui-library/utils/api-identity";
 import type { Group, Organization, Permission, Role } from "@common/types/identity/index.d.ts";
 import { Scope, canWrite, canUpdate, canDelete } from "../utils/permissions.ts";
 import { DataTable, type Column } from "../components/DataTable.tsx";

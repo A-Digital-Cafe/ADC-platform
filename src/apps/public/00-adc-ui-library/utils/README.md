@@ -2,11 +2,27 @@
 
 ## adc-fetch.ts
 
-Cliente HTTP común para microfrontends. Maneja errores, idempotencia y agrega `X-CSRF-Token` automáticamente en POST/PUT/PATCH/DELETE cuando las credenciales no son `omit`.
+Cliente HTTP común para microfrontends. Maneja errores, idempotencia, timeout (30s), retry de red en GET/HEAD y agrega `X-CSRF-Token` automáticamente en POST/PUT/PATCH/DELETE cuando las credenciales no son `omit`. La política de `credentials` es única para toda la plataforma (`DEFAULT_CREDENTIALS`: `include` en dev, `same-origin` en prod) — no hardcodear `include` en los clientes. `assertSafeId()` valida ids interpolados en paths.
+
+## api-identity.ts
+
+Cliente compartido de Identity API (`/api/identity`). Fuente única: las apps re-exportan desde aquí (no duplicar el cliente por app).
+
+## sanitize-svg.ts
+
+`sanitizeSvg(svg)` — allowlist de elementos/atributos SVG (sin `on*`, `<script>`, `foreignObject` ni URIs externas). Obligatorio antes de inyectar iconos por `innerHTML` en componentes.
+
+## ui-logger.ts
+
+`createUiLogger(prefix)` — logger con niveles para apps UI (en prod solo warn/error; `localStorage adc:debug=1` reactiva debug). Usar en lugar de `console.*`.
+
+## use-abortable.ts
+
+`useAbortable(fn)` — hook React para llamadas cancelables (aborta la anterior y al desmontar; los `AbortError` devuelven `undefined`).
 
 ## auth-sync.ts
 
-Sincroniza login/logout entre pestañas y expone un logout forzado con recarga para errores globales de sesión.
+Sincroniza login/logout entre pestañas y expone un logout forzado con recarga para errores globales de sesión. En `localStorage` solo persiste un fingerprint no reversible (`authMarkerFor`), nunca el userId real.
 
 ## blocks-clipboard.ts
 

@@ -274,7 +274,12 @@ function remoteEntryUrl(app: PlatformApp): string {
 	const hostname = globalThis.location?.hostname ?? "localhost";
 	if (isPrivateHostname(hostname)) return `http://${hostname}:${app.devPort}/remoteEntry.js`;
 	const prodHost = app.prodHostname ?? `${app.subdomain}.${PROD_BASE_DOMAIN}`;
-	return `http://${prodHost}:3000/remoteEntry.js`;
+	// Module Federation carga código ejecutable remoto: bajo HTTPS el remote DEBE ir por
+	// https (evita MITM y mixed content). Protocolo y puerto se heredan de la página actual
+	// (prod real: https sin puerto; start:prodtests: http con puerto 3000).
+	const protocol = globalThis.location?.protocol === "https:" ? "https" : "http";
+	const port = globalThis.location?.port;
+	return `${protocol}://${prodHost}${port ? `:${port}` : ""}/remoteEntry.js`;
 }
 
 /** Inyecta una sola vez el script `remoteEntry.js` de un contenedor federado. */

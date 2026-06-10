@@ -1,7 +1,7 @@
 import type { AuthenticatedUserInfo } from "../types.js";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { RESOURCE_MAP } from "@common/types/resources.ts";
-import type SessionManagerService from "../../../security/SessionManagerService/index.ts";
+import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 
 const ACTION_NAMES: Record<number, string> = Object.fromEntries(Object.entries(CRUDXAction).map(([key, value]) => [value, key]));
 
@@ -77,7 +77,7 @@ function checkUserPermissions(user: AuthenticatedUserInfo, requiredPermissions: 
  * @param getSessionManager - Una función que devuelve la instancia de SessionManagerService.
  * @returns Una función asíncrona que valida un token contra una lista de permisos.
  */
-export function createPermissionValidator(getSessionManager: () => SessionManagerService | null) {
+export function createPermissionValidator(getSessionManager: () => ISessionVerifier | null) {
 	return async (
 		token: string | null,
 		requiredPermissions: string[]

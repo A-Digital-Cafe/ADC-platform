@@ -14,6 +14,12 @@ export interface EndpointConfig {
 	 * Si no, El DAO debe autorizar vía Requests.
 	 */
 	deferAuth?: boolean;
+	/**
+	 * Si es `true`, exige sesión válida (401 si no hay usuario autenticado) sin
+	 * chequear permisos concretos: la autorización fina la hace el DAO por scope.
+	 * Preferir esto sobre `deferAuth` cuando el endpoint NUNCA debe ejecutarse anónimo.
+	 */
+	requireAuth?: boolean;
 	options?: EndpointOptions;
 }
 
@@ -21,6 +27,12 @@ export interface EndpointConfig {
 interface EndpointOptions {
 	/** Rate limit per IP. timeWindow is in milliseconds. */
 	rateLimit?: { max: number; timeWindow: number };
+	/**
+	 * Schemas de validación de entrada. Usar `Type` de `@sinclair/typebox`:
+	 * se validan en cada request (400 con detalles) y alimentan el doc OpenAPI
+	 * en `/api/docs`. JSON Schema plano también es aceptado (solo documentación,
+	 * sin validación runtime).
+	 */
 	schema?: {
 		body?: Record<string, unknown>;
 		querystring?: Record<string, unknown>;

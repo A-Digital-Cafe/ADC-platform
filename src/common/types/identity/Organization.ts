@@ -1,4 +1,4 @@
-import { Permission } from "./Permission.ts";
+import { Permission } from "./Permission.js";
 
 export type OrganizationStatus = "active" | "inactive" | "blocked";
 export type OrganizationTier = "default" | "team" | "enterprise";

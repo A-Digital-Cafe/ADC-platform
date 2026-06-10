@@ -9,7 +9,7 @@ import type { AttachmentDTO } from "@common/types/attachments/Attachment.js";
 export type { Comment, CommentDraft, CommentsPage, RatingStats };
 export { buildCommentsTree, type CommentTreeNode } from "@ui-library/utils/comments-tree";
 
-const api = createAdcApi({ basePath: "/api/learning", devPort: 3000, credentials: "include" });
+const api = createAdcApi({ basePath: "/api/learning", devPort: 3000 });
 
 const forArticle = (slug: string) => {
 	const prefix = `/articles/${slug}`;

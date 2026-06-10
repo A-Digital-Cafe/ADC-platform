@@ -60,7 +60,9 @@ export abstract class ViteBaseStrategy extends BaseFrameworkStrategy {
 				host: true,
 				port: devPort,
 				strictPort: true,
-				cors: { origin: "*", credentials: true },
+				// Dev server: limitar CORS a orígenes locales conocidos. "*" + credentials es
+				// inválido según spec y expondría el dev server a cualquier web abierta.
+				cors: { origin: /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[\w.-]+\.local\.com)(:\d+)?$/, credentials: true },
 				hmr: { protocol: "ws", clientPort: devPort },
 			},
 			optimizeDeps: {

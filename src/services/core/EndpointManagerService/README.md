@@ -12,12 +12,18 @@ Los endpoints se definen directamente en los métodos de un servicio utilizando 
 
 ```typescript
 import { EnableEndpoints, DisableEndpoints, RegisterEndpoint, EndpointCtx } from "./EndpointManagerService/index.js";
+import { Type } from "@sinclair/typebox";
 
 class MyDataService extends BaseService {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/data/:id",
 		permissions: ["data.read"], // Permisos requeridos
+		options: {
+			// Validación declarativa con TypeBox: 400 automático si la entrada no cumple.
+			// Los schemas también alimentan el doc OpenAPI servido en /api/docs (Swagger UI).
+			schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }) },
+		},
 	})
 	async getData(ctx: EndpointCtx<{ id: string }>) {
 		// La validación de permisos y el contexto ya están resueltos.
@@ -29,6 +35,13 @@ class MyDataService extends BaseService {
 	// ... ciclo de vida del servicio
 }
 ```
+
+Notas de seguridad/operación:
+
+- `requireAuth: true` exige sesión válida (401 sin usuario) sin chequear permisos finos — preferirlo sobre `deferAuth` cuando el endpoint nunca debe ejecutarse anónimo (el DAO autoriza por scope).
+- Los endpoints públicos (`permissions: []`) SIEMPRE reciben rate limit por defecto: el kill-switch `ENDPOINT_RATE_LIMIT_ENABLED` no los afecta.
+- Las denegaciones 401/403 se auditan en logs (`[AUTHZ-DENY] …`), y los errores 500 responden con `correlationId` (detalle solo en logs del servidor).
+- Swagger UI: `/api/docs` (activo en dev; en producción requiere `API_DOCS_ENABLED=true`).
 
 ### 2. Ciclo de Vida Automático
 

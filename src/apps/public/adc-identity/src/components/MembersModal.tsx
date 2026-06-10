@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
-import { identityApi } from "../utils/identity-api.ts";
+import { identityApi } from "@ui-library/utils/api-identity";
 import type { ClientUser } from "@common/types/identity/User.js";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 

@@ -4,7 +4,6 @@ import type { Article, LearningPath, Block, PathItemLevel } from "@ui-library/ut
 const api = createAdcApi({
 	basePath: "/api/learning",
 	devPort: 3000,
-	credentials: "include",
 });
 
 export interface ArticlePayload {

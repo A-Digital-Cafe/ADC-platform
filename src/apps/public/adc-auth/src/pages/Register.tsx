@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { authApi } from "../utils/auth-api.ts";
-import { identityApi } from "../utils/identity-api.ts";
+import { identityApi } from "@ui-library/utils/api-identity";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { showError } from "@ui-library/utils/error-handler";
+import { useAbortable } from "@ui-library/utils/use-abortable";
 import { getBaseUrl } from "@common/utils/url-utils.js";
 import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
 
@@ -39,30 +40,24 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 	const [loading, setLoading] = useState(false);
 	const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
 
-	const controllerRef = useRef<AbortController | null>(null);
+	const checkUsernameRequest = useAbortable((signal, value: string) => identityApi.checkUsernameExists(value, signal));
 
 	const checkUsername = async (username: string) => {
-		controllerRef.current?.abort(); // cancelar request anterior
-
 		// Validación estricta inline antes de consultar disponibilidad.
 		if (!USERNAME_PATTERN.test(username)) {
 			setUsernameStatus("idle");
 			return;
 		}
 
-		const controller = new AbortController();
-		controllerRef.current = controller;
-
 		try {
 			setUsernameStatus("checking");
-			const res = await identityApi.checkUsernameExists(username, controller.signal);
+			const res = await checkUsernameRequest(username);
+			if (!res) return; // abortada: una nueva petición decidirá el estado
 			if (res.status === 200) setUsernameStatus("unavailable");
 			else if (res.status === 404) setUsernameStatus("available");
 			else setUsernameStatus("idle");
-		} catch (err: any) {
-			if (err?.name !== "AbortError") {
-				setUsernameStatus("idle");
-			}
+		} catch {
+			setUsernameStatus("idle");
 		}
 	};
 

@@ -11,6 +11,7 @@ import {
 	type SetCookie,
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
+import { Type } from "@sinclair/typebox";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
 import type { AuthenticatedUser, ModerationLookupService } from "../types.js";
@@ -129,7 +130,18 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/register",
 		permissions: [],
-		options: { rateLimit: { max: 2, timeWindow: 3_600_000 } },
+		options: {
+			rateLimit: { max: 2, timeWindow: 3_600_000 },
+			// Validación declarativa (TypeBox): tipos/formatos antes del handler.
+			// Reglas de negocio adicionales en validateRegisterBody.
+			schema: {
+				body: Type.Object({
+					username: Type.String({ minLength: 3, maxLength: 32 }),
+					email: Type.String({ minLength: 5, maxLength: 254 }),
+					password: Type.String({ minLength: 8, maxLength: 256 }),
+				}),
+			},
+		},
 	})
 	static async handleRegister(ctx: EndpointCtx<Record<string, string>, RegisterBody>): Promise<unknown> {
 		const { username, email, password } = AuthEndpoints.validateRegisterBody(ctx.data);
@@ -203,6 +215,7 @@ export class AuthEndpoints {
 		method: "GET",
 		url: "/api/auth/session",
 		permissions: [],
+		options: { rateLimit: { max: 120, timeWindow: 60_000 } },
 	})
 	static async handleSession(ctx: EndpointCtx): Promise<unknown> {
 		const token = ctx.cookies?.[ACCESS_COOKIE_NAME];
@@ -401,6 +414,7 @@ export class AuthEndpoints {
 		method: "GET",
 		url: "/api/auth/user-orgs",
 		permissions: [],
+		options: { rateLimit: { max: 30, timeWindow: 60_000 } },
 	})
 	static async handleUserOrgs(ctx: EndpointCtx): Promise<unknown> {
 		const token = ctx.cookies?.[ACCESS_COOKIE_NAME];

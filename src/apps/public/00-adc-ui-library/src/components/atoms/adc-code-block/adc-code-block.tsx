@@ -16,6 +16,8 @@ export class AdcCodeBlock {
 		if (!this.language) {
 			return escapeHtml(decoded);
 		}
+		// Contrato de seguridad: toda HighlighterStrategy DEBE escapar el input con
+		// escapeHtml() ANTES de envolver tokens en <span>. El innerHTML de abajo confía en ello.
 		const highlighter = getHighlighter(this.language);
 		return highlighter ? highlighter.highlight(decoded) : escapeHtml(decoded);
 	}

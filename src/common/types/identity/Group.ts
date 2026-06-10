@@ -1,4 +1,4 @@
-import { Permission } from "./Permission.ts";
+import { Permission } from "./Permission.js";
 
 export interface ClientGroup {
 	id: string;

@@ -134,6 +134,7 @@ export function RegisterEndpoint(config: Omit<EndpointConfig, "handler">): Metho
 		const originalMethod = descriptor.value;
 		const permissions = config.permissions || [];
 		const deferAuth = config.deferAuth === true;
+		const requireAuth = config.requireAuth === true;
 
 		// Guardar metadata del endpoint
 		const endpoints = getEndpointMetadata(target);
@@ -148,32 +149,7 @@ export function RegisterEndpoint(config: Omit<EndpointConfig, "handler">): Metho
 
 		// Wrap del método para validar permisos SIEMPRE (incluso llamadas directas)
 		descriptor.value = async function (this: any, ctx: EndpointCtx<any, any>) {
-			// deferAuth: solo verificar token (si hay) y poblar ctx.user. El DAO autoriza.
-			if (deferAuth) {
-				const validator = getPermissionValidator(this);
-				if (validator) {
-					const result = await validator(ctx.token, []);
-					(ctx as any).user = result.user;
-				}
-			} else if (permissions.length > 0) {
-				const validator = getPermissionValidator(this);
-
-				if (validator) {
-					const result = await validator(ctx.token, permissions);
-
-					if (!result.valid)
-						throw new AuthError(
-							ctx.token ? 403 : 401,
-							ctx.token ? "FORBIDDEN" : "UNAUTHORIZED",
-							result.error || (ctx.token ? "Insufficient permissions" : "Authentication required")
-						);
-
-					// Actualizar user en ctx con el resultado de la validación
-					(ctx as any).user = result.user;
-				}
-				// Sin validador configurado - si hay permisos requeridos, fallar
-				else throw new AuthError(503, "AUTH_UNAVAILABLE", "Authentication service not available");
-			}
+			await enforceEndpointAuth(this, ctx, { deferAuth, requireAuth, permissions });
 
 			// Ejecutar método original
 			return originalMethod.call(this, ctx);
@@ -181,6 +157,49 @@ export function RegisterEndpoint(config: Omit<EndpointConfig, "handler">): Metho
 
 		return descriptor;
 	};
+}
+
+/** Aplica la política de auth del endpoint (deferAuth/requireAuth/permissions) sobre el ctx. */
+async function enforceEndpointAuth(
+	instance: object,
+	ctx: EndpointCtx<any, any>,
+	policy: { deferAuth: boolean; requireAuth: boolean; permissions: string[] }
+): Promise<void> {
+	const { deferAuth, requireAuth, permissions } = policy;
+
+	// deferAuth/requireAuth: verificar token (si hay) y poblar ctx.user. El DAO autoriza.
+	if (deferAuth || requireAuth) {
+		const validator = getPermissionValidator(instance);
+		if (validator) {
+			const result = await validator(ctx.token, []);
+			(ctx as any).user = result.user;
+		} else if (requireAuth) {
+			throw new AuthError(503, "AUTH_UNAVAILABLE", "Authentication service not available");
+		}
+		// requireAuth: red de seguridad — sin sesión válida el handler nunca se ejecuta.
+		if (requireAuth && !(ctx as any).user) {
+			throw new AuthError(401, "UNAUTHORIZED", "Authentication required");
+		}
+		return;
+	}
+
+	if (permissions.length === 0) return;
+
+	const validator = getPermissionValidator(instance);
+	// Sin validador configurado - si hay permisos requeridos, fallar
+	if (!validator) throw new AuthError(503, "AUTH_UNAVAILABLE", "Authentication service not available");
+
+	const result = await validator(ctx.token, permissions);
+	if (!result.valid) {
+		throw new AuthError(
+			ctx.token ? 403 : 401,
+			ctx.token ? "FORBIDDEN" : "UNAUTHORIZED",
+			result.error || (ctx.token ? "Insufficient permissions" : "Authentication required")
+		);
+	}
+
+	// Actualizar user en ctx con el resultado de la validación
+	(ctx as any).user = result.user;
 }
 
 /**

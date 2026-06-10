@@ -14,7 +14,7 @@ interface PublicProfile {
 	avatar?: string | null;
 }
 
-const api = createAdcApi({ basePath: "/api/identity", devPort: 3000, credentials: "include" });
+const api = createAdcApi({ basePath: "/api/identity", devPort: 3000 });
 
 const cache = new Map<string, PublicProfile>();
 const inflight = new Map<string, Promise<PublicProfile>>();

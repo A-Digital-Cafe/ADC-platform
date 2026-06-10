@@ -46,7 +46,11 @@ export class PermissionChecker {
 
 		if (options.allowIf) {
 			try {
-				if (await options.allowIf(result.userId, { orgId: result.orgId })) return result.userId;
+				// Contrato estricto: solo concede si retorna EXACTAMENTE `true` y el userId
+				// verificado es un string no vacío (evita bypass por valores truthy accidentales
+				// o comparaciones undefined === undefined en los callbacks).
+				const granted = await options.allowIf(result.userId, { orgId: result.orgId });
+				if (granted === true && result.userId.trim().length > 0) return result.userId;
 			} catch {
 				// Si allowIf falla, continuamos al chequeo de permiso formal.
 			}

@@ -218,6 +218,37 @@ Campos que suelen ser inmutables:
 - ownership.
 - contadores derivados.
 
+## Paginación obligatoria en listados
+
+Todo método que devuelva colecciones (`list*`, `search*`, `getAll*`) DEBE aceptar `limit`/`offset` (o cursor) y aplicar un **máximo duro** del lado del DAO. Nunca depender de que el endpoint o el cliente "se porten bien": una respuesta sin límite es un DoS accidental con colecciones grandes.
+
+```ts
+/** Límites del recurso: default razonable + máximo duro innegociable. */
+const DEFAULT_LIST_LIMIT = 25;
+const MAX_LIST_LIMIT = 100;
+
+async list(opts: { limit?: number; offset?: number } = {}, token?: string): Promise<{ items: Resource[]; total: number }> {
+    await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, Scopes.RESOURCE);
+
+    const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+    const offset = Math.max(opts.offset ?? 0, 0);
+
+    const [docs, total] = await Promise.all([
+        this.model.find({}).skip(offset).limit(limit).lean(),
+        this.model.countDocuments({}),
+    ]);
+    return { items: docs.map(docToPlain<Resource>), total };
+}
+```
+
+Reglas:
+
+- `limit` se clampa SIEMPRE en el DAO (`Math.min(Math.max(...))`), aunque el endpoint también valide.
+- Definir `DEFAULT_*_LIMIT` y `MAX_*_LIMIT` como constantes nombradas (nada de magic numbers inline).
+- Devolver `total` (o `nextCursor`) para que la UI pueda paginar.
+- Para colecciones con crecimiento no acotado (mensajes, logs, comments) preferir cursor (`createdAt + id`) sobre `skip`, que degrada en Mongo con offsets grandes.
+- Los queries con `$regex` derivados de input DEBEN escapar el patrón con `escapeRegex` de `@common/utils/escape.ts`.
+
 ## Dependencias entre DAOs
 
 Si un DAO necesita leer o mutar datos internos de otro, exponer internals controlados desde el manager dueño del recurso.
@@ -261,3 +292,5 @@ Usar logging de negocio, no logging narrativo.
 - [ ] Los campos inmutables están centralizados en una constante.
 - [ ] Los métodos devuelven objetos planos del dominio.
 - [ ] Hay logs en cambios de estado importantes.
+- [ ] Todo listado/búsqueda pagina con `limit` clampado a un máximo duro.
+- [ ] Los `$regex` desde input usan `escapeRegex` de `@common/utils/escape.ts`.

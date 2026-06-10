@@ -6,8 +6,14 @@ import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-v
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
+import { escapeRegex } from "@common/utils/escape.ts";
 
 export type UserAuthenticationResult = Partial<User> | { id: string; isActive: boolean } | { id: string; wrongPassword: boolean } | null;
+
+/** Máximo de perfiles públicos por petición (mitiga scraping/DoS en endpoints sin auth). */
+const MAX_PUBLIC_PROFILES = 50;
+/** Límite por defecto de resultados de búsqueda de usuarios. */
+const DEFAULT_SEARCH_LIMIT = 10;
 
 export class UserManager {
 	readonly #permissionChecker: PermissionChecker;
@@ -103,7 +109,7 @@ export class UserManager {
 	 */
 	async getPublicProfiles(userIds: readonly string[]): Promise<Map<string, { username?: string; avatar: string | null }>> {
 		const out = new Map<string, { username?: string; avatar: string | null }>();
-		const ids = Array.from(new Set(userIds.filter(Boolean))).slice(0, 50);
+		const ids = Array.from(new Set(userIds.filter(Boolean))).slice(0, MAX_PUBLIC_PROFILES);
 		if (ids.length === 0) return out;
 		try {
 			const docs = await this.userModel
@@ -558,12 +564,11 @@ export class UserManager {
 	 * @param token Token de autenticación
 	 * @param orgId Si se proporciona, filtra usuarios que pertenecen a esta organización
 	 */
-	async searchUsers(query: string, limit: number = 10, token?: string, orgId?: string): Promise<User[]> {
+	async searchUsers(query: string, limit: number = DEFAULT_SEARCH_LIMIT, token?: string, orgId?: string): Promise<User[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS, orgId);
 
 		try {
-			const escapedQuery = query.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-			const regex = new RegExp(escapedQuery, "i");
+			const regex = new RegExp(escapeRegex(query), "i");
 			const filter: any = { $or: [{ username: regex }, { email: regex }] };
 			if (orgId) filter["orgMemberships.orgId"] = orgId;
 			const docs = await this.userModel.find(filter).limit(limit);

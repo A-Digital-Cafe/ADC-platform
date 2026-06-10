@@ -32,8 +32,10 @@ export interface AdcApiConfig {
 	 */
 	devPort?: number;
 	/**
-	 * Credentials mode for fetch requests
-	 * @default "same-origin" (safer than "include" for same-domain requests)
+	 * Credentials mode for fetch requests.
+	 * @default "include" en desarrollo (apps en puertos distintos ⇒ cross-origin),
+	 * "same-origin" en producción (las APIs se sirven en el mismo origen).
+	 * Política única de la plataforma: no hardcodear "include" en los clientes.
 	 */
 	credentials?: RequestCredentials;
 	headers?: HeadersInit;
@@ -43,6 +45,15 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const CIRCUIT_BREAKER_THRESHOLD = 5;
+
+/** Política única de credentials de la plataforma (ver AdcApiConfig.credentials). */
+export const DEFAULT_CREDENTIALS: RequestCredentials = IS_DEV ? "include" : "same-origin";
+
+/** Timeout por defecto de cada request (evita requests colgadas indefinidamente). */
+const REQUEST_TIMEOUT_MS = 30_000;
+/** Reintentos automáticos ante errores de red, solo para métodos idempotentes. */
+const RETRYABLE_METHODS: ReadonlySet<HttpMethod> = new Set(["GET", "HEAD"]);
+const MAX_NETWORK_RETRIES = 2;
 
 let failingBurstSecond = -1;
 let failingBurstCount = 0;
@@ -88,7 +99,12 @@ function registerRateLimit(method: HttpMethod, url: string, response: Response, 
 
 	if (!seconds) seconds = 30;
 	const ms = Math.min(seconds * 1000, RATE_LIMIT_MAX_COOLDOWN_MS);
-	rateLimitCooldowns.set(rateLimitKey(method, url), Date.now() + ms);
+	// Barrido perezoso: purgar entradas expiradas al insertar (evita crecimiento indefinido).
+	const now = Date.now();
+	for (const [key, until] of rateLimitCooldowns) {
+		if (until <= now) rateLimitCooldowns.delete(key);
+	}
+	rateLimitCooldowns.set(rateLimitKey(method, url), now + ms);
 }
 
 /**
@@ -202,6 +218,77 @@ async function parseErrorResponse(response: Response): Promise<never> {
 }
 
 /**
+ * Valida ids interpolados en paths de API (sanity-check temprano para UX/debug;
+ * el backend siempre revalida). Devuelve el id codificado para URL.
+ */
+export function assertSafeId(value: string, name = "id"): string {
+	if (!/^[\w.:@-]{1,128}$/.test(value)) {
+		throw new HttpError(400, "INVALID_ID", `Parámetro "${name}" inválido`);
+	}
+	return encodeURIComponent(value);
+}
+
+/** Combina la señal del caller con un timeout automático (si la plataforma lo soporta). */
+function withTimeoutSignal(signal: AbortSignal | undefined, ms: number): AbortSignal | undefined {
+	const timeoutSignal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
+	if (!timeoutSignal) return signal;
+	if (!signal) return timeoutSignal;
+	return AbortSignal.any ? AbortSignal.any([signal, timeoutSignal]) : signal;
+}
+
+/** fetch con reintentos exponenciales SOLO ante errores de red y métodos idempotentes. */
+async function fetchWithRetry(url: string, init: RequestInit, method: HttpMethod): Promise<Response> {
+	const attempts = RETRYABLE_METHODS.has(method) ? MAX_NETWORK_RETRIES + 1 : 1;
+	let lastErr: unknown;
+	for (let attempt = 0; attempt < attempts; attempt++) {
+		try {
+			return await fetch(url, init);
+		} catch (err) {
+			lastErr = err;
+			const aborted = err instanceof DOMException && (err.name === "AbortError" || err.name === "TimeoutError");
+			if (aborted || attempt === attempts - 1) throw err;
+			await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+		}
+	}
+	throw lastErr;
+}
+
+/** Clasifica un error de request (timeout / red / negocio) en errorKey + httpStatus. */
+function classifyRequestError(err: unknown): { errorKey: string; httpStatus: number | undefined } {
+	if (err instanceof DOMException && err.name === "TimeoutError") {
+		return { errorKey: "REQUEST_TIMEOUT", httpStatus: 408 };
+	}
+	const isNetworkError =
+		!(err instanceof ADCCustomError) &&
+		err instanceof TypeError &&
+		(err.message.includes("Failed to fetch") || err.message.includes("CONNECTION_REFUSED") || err.message.includes("NetworkError"));
+	if (isNetworkError) {
+		return { errorKey: "CONNECTION_REFUSED", httpStatus: 503 };
+	}
+	return { errorKey: (err as ADCCustomError).errorKey || "UNKNOWN_ERROR", httpStatus: (err as ADCCustomError).status };
+}
+
+/** Registra el cooldown de un 429 y resuelve la respuesta del cliente (lanza toast salvo silent). */
+async function handleRateLimitedResponse(
+	method: HttpMethod,
+	url: string,
+	response: Response,
+	silent: boolean | undefined
+): Promise<AdcFetchResult<never>> {
+	let parsedBody: { retryAfter?: number } | undefined;
+	try {
+		parsedBody = (await response.clone().json()) as { retryAfter?: number };
+	} catch {
+		/* body opcional */
+	}
+	registerRateLimit(method, url, response, parsedBody);
+	if (!silent) {
+		await parseErrorResponse(response);
+	}
+	return { success: false, status: 429, errorKey: "RATE_LIMIT_EXCEEDED" };
+}
+
+/**
  * Creates a configured API client with automatic error handling.
  *
  * @example
@@ -224,7 +311,7 @@ async function parseErrorResponse(response: Response): Promise<never> {
  * ```
  */
 export function createAdcApi(config: AdcApiConfig) {
-	const { basePath, devPort, credentials = "same-origin", headers: defaultHeaders } = config;
+	const { basePath, devPort, credentials = DEFAULT_CREDENTIALS, headers: defaultHeaders } = config;
 
 	// Build base URL based on environment
 	const baseUrl = IS_DEV && devPort ? getDevUrl(devPort, basePath) : basePath;
@@ -251,8 +338,9 @@ export function createAdcApi(config: AdcApiConfig) {
 			credentials,
 			headers: skipCsrf ? requestHeaders : await appendCsrfHeader(method, url, requestHeaders, credentials, signal),
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
-			...(signal ? { signal } : {}),
 		};
+		const effectiveSignal = withTimeoutSignal(signal, REQUEST_TIMEOUT_MS);
+		if (effectiveSignal) fetchOptions.signal = effectiveSignal;
 
 		// Cortar avalanchas: si el endpoint está en cooldown por 429, no salir a la red.
 		const rlRemaining = getRateLimitRemainingMs(method, url);
@@ -261,20 +349,10 @@ export function createAdcApi(config: AdcApiConfig) {
 		}
 
 		try {
-			const response = await fetch(url, fetchOptions);
+			const response = await fetchWithRetry(url, fetchOptions, method);
 
 			if (response.status === 429) {
-				let parsedBody: { retryAfter?: number } | undefined;
-				try {
-					parsedBody = (await response.clone().json()) as { retryAfter?: number };
-				} catch {
-					/* body opcional */
-				}
-				registerRateLimit(method, url, response, parsedBody);
-				if (!options.silent) {
-					await parseErrorResponse(response);
-				}
-				return { success: false, status: 429, errorKey: "RATE_LIMIT_EXCEEDED" };
+				return await handleRateLimitedResponse(method, url, response, options.silent);
 			}
 
 			if (!response.ok && !options.silent) {
@@ -293,14 +371,7 @@ export function createAdcApi(config: AdcApiConfig) {
 			return { success: true, data, status: response.status };
 		} catch (err) {
 			// Detect network-level errors (connection refused, offline, etc.)
-
-			const isNetworkError =
-				!(err instanceof ADCCustomError) &&
-				err instanceof TypeError &&
-				(err.message.includes("Failed to fetch") || err.message.includes("CONNECTION_REFUSED") || err.message.includes("NetworkError"));
-
-			const errorKey = isNetworkError ? "CONNECTION_REFUSED" : (err as ADCCustomError).errorKey || "UNKNOWN_ERROR";
-			const httpStatus = isNetworkError ? 503 : (err as ADCCustomError).status;
+			const { errorKey, httpStatus } = classifyRequestError(err);
 			const breakerTriggered = await registerCircuitBreakerFailure(httpStatus);
 
 			// Extract error data and generate translation params

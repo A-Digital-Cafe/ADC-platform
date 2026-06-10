@@ -26,7 +26,18 @@ const SENDER_ID = (() => {
 
 let logoutInFlight: Promise<void> | null = null;
 
-export function getStoredAuthUser(): string | null {
+/**
+ * Fingerprint NO reversible del userId. Nunca persistimos el identificador real
+ * en localStorage (accesible ante XSS y rastreable entre pestañas); solo un
+ * marcador para detectar transiciones de sesión (login/cambio de cuenta).
+ */
+export function authMarkerFor(userId: string): string {
+	let h = 5381;
+	for (const ch of userId) h = ((h << 5) + h + (ch.codePointAt(0) ?? 0)) >>> 0;
+	return `fp_${h.toString(36)}`;
+}
+
+export function getStoredAuthMarker(): string | null {
 	try {
 		return globalThis.localStorage?.getItem(AUTH_USER_KEY) ?? null;
 	} catch {
@@ -34,10 +45,10 @@ export function getStoredAuthUser(): string | null {
 	}
 }
 
-export function setStoredAuthUser(userId: string | null): void {
+export function setStoredAuthMarker(userId: string | null): void {
 	try {
 		if (userId) {
-			globalThis.localStorage?.setItem(AUTH_USER_KEY, userId);
+			globalThis.localStorage?.setItem(AUTH_USER_KEY, authMarkerFor(userId));
 			return;
 		}
 		globalThis.localStorage?.removeItem(AUTH_USER_KEY);
@@ -112,7 +123,7 @@ export async function forceLogoutAndRefresh(logoutUrl = getDefaultLogoutUrl()): 
 			/* ignore */
 		}
 
-		setStoredAuthUser(null);
+		setStoredAuthMarker(null);
 		broadcastAuthChange("logout");
 		globalThis.location?.reload();
 	})();

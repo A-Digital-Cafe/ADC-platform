@@ -2,13 +2,14 @@ import { BaseService } from "../../BaseService.js";
 import type { IHostBasedHttpProvider } from "../../../interfaces/modules/providers/IHttpServer.js";
 import { type HttpMethod, type EndpointConfig, type EndpointHandler } from "./types.js";
 import { setPermissionValidator } from "./decorators.js";
-import SessionManagerService from "../../security/SessionManagerService/index.ts";
+import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import OperationsService from "../OperationsService/index.ts";
 import type RabbitMQProvider from "../../../providers/queue/rabbitmq/index.ts";
 import type RedisProvider from "../../../providers/queue/redis/index.ts";
 import { EndpointRegistry } from "./parts/EndpointRegistry.js";
 import { createPermissionValidator } from "./parts/validator.js";
 import { createHttpWrapper } from "./parts/http.js";
+import { buildOpenApiDocument } from "./parts/openapi.js";
 import { JobManager } from "./parts/JobManager.ts";
 import { registerCsrfEndpoint } from "./parts/csrf.js";
 import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
@@ -41,7 +42,7 @@ export default class EndpointManagerService extends BaseService {
 
 	#httpProvider: IHostBasedHttpProvider | null = null;
 	// SessionManager se carga con lazy-load pattern en #getSessionManager()
-	#sessionManager: SessionManagerService | null = null;
+	#sessionManager: ISessionVerifier | null = null;
 	#operationsService: OperationsService | null = null;
 	readonly #registry = new EndpointRegistry(this.logger);
 	#jobManager: JobManager | null = null;
@@ -76,17 +77,29 @@ export default class EndpointManagerService extends BaseService {
 			registerCsrfEndpoint(this.#httpProvider, this.#csrfConfig);
 		}
 
+		// Swagger UI (U-01): habilitado en dev por defecto; en producción requiere opt-in explícito.
+		const docsEnabled =
+			process.env.API_DOCS_ENABLED === "true" || (process.env.NODE_ENV !== "production" && process.env.API_DOCS_ENABLED !== "false");
+		if (docsEnabled && this.#httpProvider?.registerApiDocs) {
+			try {
+				await this.#httpProvider.registerApiDocs(() => buildOpenApiDocument(this.#registry.getAllFull()));
+			} catch (error) {
+				this.logger.logWarn(`No se pudo registrar Swagger UI: ${error}`);
+			}
+		}
+
 		this.logger.logOk("EndpointManagerService iniciado");
 	}
 
 	/**
 	 * Lazy-load singleton getter para SessionManagerService
-	 * Intenta obtener el servicio solo si no está cargado
+	 * Intenta obtener el servicio solo si no está cargado.
+	 * Tipado contra el contrato ISessionVerifier (no la clase concreta).
 	 */
-	#getSessionManager(): SessionManagerService | null {
+	#getSessionManager(): ISessionVerifier | null {
 		if (!this.#sessionManager) {
 			try {
-				this.#sessionManager = this.getMyService<SessionManagerService>("SessionManagerService");
+				this.#sessionManager = this.getMyService<ISessionVerifier>("SessionManagerService");
 			} catch {
 				// SessionManagerService no disponible todavía
 			}

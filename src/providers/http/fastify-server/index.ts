@@ -152,6 +152,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private readonly globalStaticPaths = new Map<string, string>();
 	private defaultHost: RegisteredHost | null = null;
 	private readonly isDev = process.env.NODE_ENV === "development";
+	private apiDocsRegistered = false;
 
 	constructor() {
 		super();
@@ -482,6 +483,29 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		this.globalRoutes.sort((a, b) => b.specificity - a.specificity);
 
 		this.logger.logDebug(`Ruta global registrada: ${method.toUpperCase()} ${path}`);
+	}
+
+	/**
+	 * Registra Swagger UI en `/api/docs`. El documento OpenAPI se resuelve por
+	 * request vía `transformSpecification`, de modo que refleja los endpoints
+	 * registrados dinámicamente después del arranque.
+	 */
+	async registerApiDocs(getDocument: () => Record<string, unknown>): Promise<void> {
+		if (this.apiDocsRegistered) return;
+		this.apiDocsRegistered = true;
+
+		const { default: fastifySwagger } = await import("@fastify/swagger");
+		const { default: fastifySwaggerUi } = await import("@fastify/swagger-ui");
+
+		await this.app.register(fastifySwagger, {
+			openapi: { info: { title: "ADC Platform API", version: "1.0.0" } },
+		});
+		await this.app.register(fastifySwaggerUi, {
+			routePrefix: "/api/docs",
+			transformSpecification: () => getDocument() as any,
+		});
+
+		this.logger.logOk("Swagger UI disponible en /api/docs");
 	}
 
 	serveStatic(urlPath: string, directory: string): void {

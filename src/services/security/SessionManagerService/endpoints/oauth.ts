@@ -120,6 +120,7 @@ export class OAuthEndpoints {
 		method: "GET",
 		url: "/api/auth/login/:provider",
 		permissions: [],
+		options: { rateLimit: { max: 10, timeWindow: 60_000 } },
 	})
 	static async handleLogin(ctx: EndpointCtx<ProviderParams>): Promise<never> {
 		const provider = ctx.params.provider || "platform";
@@ -182,6 +183,7 @@ export class OAuthEndpoints {
 		method: "GET",
 		url: "/api/auth/callback/:provider",
 		permissions: [],
+		options: { rateLimit: { max: 10, timeWindow: 60_000 } },
 	})
 	static async handleCallback(ctx: EndpointCtx<ProviderParams>): Promise<never> {
 		const provider = ctx.params.provider || "platform";
@@ -503,6 +505,11 @@ export class OAuthEndpoints {
 		];
 	}
 
+	/**
+	 * Identificador best-effort del dispositivo SOLO para telemetría/UX (listado de sesiones).
+	 * No es criptográficamente fuerte ni resistente a suplantación: NUNCA usarlo para
+	 * decisiones de seguridad (authz, rate limiting, detección de fraude).
+	 */
 	private static generateDeviceId(headers: Record<string, string | undefined>): string {
 		const ua = headers["user-agent"]?.toString() || "";
 		const accept = headers["accept"]?.toString() || "";
@@ -530,8 +537,13 @@ export class OAuthEndpoints {
 	 * Valida que la URL de redirect pertenece a un dominio permitido (anti open redirect).
 	 */
 	private static isAllowedRedirectUrl(url: string): boolean {
-		// Solo paths relativos o URLs a dominios permitidos
-		if (url.startsWith("/")) return true;
+		// Límite defensivo de longitud
+		if (url.length > 2048) return false;
+
+		// Solo paths relativos. Rechazar protocol-relative ("//evil.com") y "/\" (backslash trick)
+		if (url.startsWith("/")) {
+			return !url.startsWith("//") && !url.startsWith("/\\");
+		}
 
 		try {
 			const parsed = new URL(url);

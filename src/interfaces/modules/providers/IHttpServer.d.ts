@@ -90,6 +90,12 @@ export interface IHostBasedHttpProvider extends IHttpServerProvider {
 	 * @param options Opciones para Connect RPC
 	 */
 	registerConnectRPC(routes: (router: ConnectRouter) => void, options?: { prefix?: string }): Promise<void>;
+
+	/**
+	 * Registra la documentación interactiva de la API (Swagger UI) en `/api/docs`.
+	 * @param getDocument Función que devuelve el documento OpenAPI actual (se evalúa por request)
+	 */
+	registerApiDocs?(getDocument: () => Record<string, unknown>): Promise<void>;
 }
 
 export interface HostOptions {

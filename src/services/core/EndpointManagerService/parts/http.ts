@@ -2,7 +2,7 @@ import type { FastifyRequest, FastifyReply } from "../../../../interfaces/module
 import { UncommonResponse, type RegisteredEndpoint, type EndpointCtx, type AuthenticatedUserInfo, type HttpMethod } from "../types.js";
 import ADCCustomError from "@common/types/ADCCustomError.js";
 import { IdempotencyError } from "@common/types/custom-errors/IdempotencyError.ts";
-import type SessionManagerService from "../../../security/SessionManagerService/index.ts";
+import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import type OperationsService from "../../OperationsService/index.ts";
 import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts";
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { validateCsrf, type TokenSource } from "./csrf.js";
 import type { CsrfRuntimeConfig } from "./csrf-config.js";
 import { resolveRateLimit } from "./rate-limit.js";
+import { compileEndpointSchemas, validateEndpointInput } from "./schema.js";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const JOB_TTL_SECONDS = 600; // 10 min
@@ -20,7 +21,7 @@ interface ExtractedToken {
 	source: TokenSource;
 }
 
-function extractToken(req: FastifyRequest<any>, getSessionManager: () => SessionManagerService | null): ExtractedToken {
+function extractToken(req: FastifyRequest<any>, getSessionManager: () => ISessionVerifier | null): ExtractedToken {
 	// 1. Intentar desde cookie via SessionManager
 	const sessionManager = getSessionManager();
 	if (sessionManager) {
@@ -45,7 +46,7 @@ function extractToken(req: FastifyRequest<any>, getSessionManager: () => Session
 
 export function createHttpWrapper(
 	endpoint: RegisteredEndpoint,
-	getSessionManager: () => SessionManagerService | null,
+	getSessionManager: () => ISessionVerifier | null,
 	operationsService: OperationsService,
 	logger: ILogger,
 	csrfConfig: CsrfRuntimeConfig,
@@ -57,6 +58,8 @@ export function createHttpWrapper(
 	const rl = resolveRateLimit(endpoint);
 	const rlTtlSeconds = rl ? Math.max(1, Math.ceil(rl.timeWindow / 1000)) : 0;
 	const rlKeyPrefix = rl ? `rl:${endpoint.method}:${endpoint.url}:` : "";
+	// Schemas TypeBox compilados una sola vez por endpoint (S-11)
+	const compiledSchemas = compileEndpointSchemas(endpoint);
 
 	return async (req: FastifyRequest<any>, reply: FastifyReply<any>) => {
 		// ── Rate limiting (Redis INCR + EXPIRE) ─────────────────────────
@@ -106,6 +109,9 @@ export function createHttpWrapper(
 
 		try {
 			validateCsrf(endpoint, req, tokenInfo.source, csrfConfig);
+
+			// Validación declarativa de entrada (TypeBox) antes del handler
+			if (compiledSchemas) validateEndpointInput(compiledSchemas, ctx);
 
 			let result: unknown;
 
@@ -180,43 +186,65 @@ export function createHttpWrapper(
 				reply.status(200).send(result);
 			}
 		} catch (error: any) {
-			// Capturar UncommonResponse para respuestas especiales (cookies, redirects)
-			if (error instanceof UncommonResponse) {
-				const rep = reply as any;
-				// Establecer cookies
-				for (const cookie of error.cookies) {
-					rep.setCookie(cookie.name, cookie.value, cookie.options || {});
-				}
-				// Limpiar cookies
-				for (const cookie of error.clearCookies) {
-					rep.clearCookie(cookie.name, cookie.options || {});
-				}
-				// Establecer headers custom
-				for (const [name, value] of Object.entries(error.headers)) {
-					reply.header(name, value);
-				}
-				// Redirect o JSON
-				if (error.type === "redirect") {
-					reply.status(error.status).redirect(error.redirectUrl!);
-				} else {
-					reply.status(error.status).send(error.body);
-				}
-				return;
-			}
-
-			// Capturar ADCCustomError (HttpError, IdempotencyError y otros) para errores de negocio
-			else if (error instanceof ADCCustomError) {
-				reply.status(error.status).send(error.toJSON());
-				return;
-			}
-
-			// Error inesperado
-			logger.logError(`Error en endpoint ${endpoint.method} ${endpoint.url}: ${error.message}`);
-
-			reply.status(500).send({
-				error: "INTERNAL_ERROR",
-				message: process.env.NODE_ENV === "development" ? error.message : "Error interno del servidor",
-			});
+			handleEndpointError(error, endpoint, ctx, reply, logger);
 		}
 	};
+}
+
+/** Maneja UncommonResponse, errores de negocio y errores inesperados de un endpoint. */
+function handleEndpointError(
+	error: any,
+	endpoint: RegisteredEndpoint,
+	ctx: EndpointCtx<any, any>,
+	reply: FastifyReply<any>,
+	logger: ILogger
+): void {
+	// Capturar UncommonResponse para respuestas especiales (cookies, redirects)
+	if (error instanceof UncommonResponse) {
+		sendUncommonResponse(error, reply);
+		return;
+	}
+
+	// Capturar ADCCustomError (HttpError, IdempotencyError y otros) para errores de negocio
+	if (error instanceof ADCCustomError) {
+		// Auditoría de denegaciones de authz/authn para detectar intentos de escalación
+		if (error.status === 401 || error.status === 403) {
+			logger.logWarn(
+				`[AUTHZ-DENY] ${endpoint.method} ${endpoint.url} status=${error.status} user=${ctx.user?.id ?? "anon"} ip=${ctx.ip}`
+			);
+		}
+		reply.status(error.status).send(error.toJSON());
+		return;
+	}
+
+	// Error inesperado: nunca exponer detalles internos al cliente (en ningún entorno).
+	// El mensaje/stack completo va a logs del servidor, correlacionado por ID.
+	const correlationId = crypto.randomUUID();
+	const stack = error.stack ? `\n${error.stack}` : "";
+	logger.logError(`[${correlationId}] Error en endpoint ${endpoint.method} ${endpoint.url}: ${error.message}` + stack);
+
+	reply.status(500).send({
+		error: "INTERNAL_ERROR",
+		message: "Error interno del servidor",
+		correlationId,
+	});
+}
+
+/** Envía una UncommonResponse (cookies, headers custom, redirect o JSON). */
+function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply<any>): void {
+	const rep = reply as any;
+	for (const cookie of error.cookies) {
+		rep.setCookie(cookie.name, cookie.value, cookie.options || {});
+	}
+	for (const cookie of error.clearCookies) {
+		rep.clearCookie(cookie.name, cookie.options || {});
+	}
+	for (const [name, value] of Object.entries(error.headers)) {
+		reply.header(name, value);
+	}
+	if (error.type === "redirect") {
+		reply.status(error.status).redirect(error.redirectUrl!);
+	} else {
+		reply.status(error.status).send(error.body);
+	}
 }

@@ -1,4 +1,5 @@
 import { Component, Prop, Event, EventEmitter, Watch, State } from "@stencil/core";
+import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
 
 export interface TabItem {
 	id: string;
@@ -107,7 +108,7 @@ export class AdcTabs {
 							onClick={() => this.handleTabClick(tab)}
 							onKeyDown={(e) => this.handleKeyDown(e, tab)}
 						>
-							{tab.icon && <span class="mr-1.5" innerHTML={tab.icon}></span>}
+							{tab.icon && <span class="mr-1.5" innerHTML={sanitizeSvg(tab.icon)}></span>}
 							{tab.label}
 						</button>
 					);

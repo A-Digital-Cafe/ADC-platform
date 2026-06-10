@@ -1,6 +1,6 @@
 import type { IHostBasedHttpProvider } from "../../../../interfaces/modules/providers/IHttpServer.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
-import type SessionManagerService from "../../../security/SessionManagerService/index.ts";
+import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import type OperationsService from "../../OperationsService/index.ts";
 import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts";
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
@@ -25,7 +25,7 @@ interface QueueOptions {
 
 interface JobManagerDeps {
 	logger: ILogger;
-	getSessionManager: () => SessionManagerService | null;
+	getSessionManager: () => ISessionVerifier | null;
 	operationsService: OperationsService;
 	rabbitmq: RabbitMQProvider | null;
 	redis: RedisProvider | null;
@@ -37,7 +37,7 @@ export class JobManager {
 	static readonly JOB_TTL_SECONDS = 600; // 10 min
 
 	readonly #logger: ILogger;
-	readonly #getSessionManager: () => SessionManagerService | null;
+	readonly #getSessionManager: () => ISessionVerifier | null;
 
 	#rabbitmq: RabbitMQProvider | null;
 	#redis: RedisProvider | null;

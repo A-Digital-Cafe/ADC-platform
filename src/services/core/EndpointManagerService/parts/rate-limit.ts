@@ -28,7 +28,11 @@ function normalize(limit: RuntimeRateLimit): RuntimeRateLimit | null {
 export function resolveRateLimit(endpoint: RegisteredEndpoint): RuntimeRateLimit | null {
 	const explicit = endpoint.options?.rateLimit;
 	if (explicit) return normalize(explicit);
-	if (isDisabled()) return null;
+
+	// Endpoints públicos (sin permisos) SIEMPRE reciben el límite por defecto:
+	// el kill-switch global ENDPOINT_RATE_LIMIT_ENABLED no aplica a superficies sin auth.
+	const isPublic = (endpoint.permissions?.length ?? 0) === 0;
+	if (!isPublic && isDisabled()) return null;
 
 	const isMutation = MUTATIVE_METHODS.has(endpoint.method);
 	return {

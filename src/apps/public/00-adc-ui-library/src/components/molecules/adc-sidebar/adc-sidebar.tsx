@@ -1,4 +1,5 @@
 import { Component, Prop, Event, EventEmitter, State, Element } from "@stencil/core";
+import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
 
 export interface SidebarItem {
 	label: string;
@@ -74,7 +75,7 @@ export class AdcSidebar {
 									{item.iconSvg && (
 										<span
 											class="flex items-center justify-center shrink-0 w-adc-xl h-adc-xl"
-											innerHTML={item.iconSvg}
+											innerHTML={sanitizeSvg(item.iconSvg)}
 										></span>
 									)}
 

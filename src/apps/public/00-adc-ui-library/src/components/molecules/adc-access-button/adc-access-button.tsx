@@ -1,14 +1,17 @@
 import { Component, Prop, State, Event, EventEmitter, Listen, Element } from "@stencil/core";
 import { isPrivateHost } from "../../../utils/url.js";
 import {
+	authMarkerFor,
 	broadcastAuthChange,
 	forceLogoutAndRefresh,
-	getStoredAuthUser,
-	setStoredAuthUser,
+	getStoredAuthMarker,
+	setStoredAuthMarker,
 	setupAuthSync,
 	setupAvatarSync,
 	type AvatarUpdatePayload,
 } from "../../../../utils/auth-sync.js";
+import { DEFAULT_CREDENTIALS } from "../../../../utils/adc-fetch.js";
+import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
 import { appendCsrfHeader } from "../../../../utils/csrf.js";
 import { buildAvatarUrl } from "../../../../utils/avatar.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
@@ -175,7 +178,7 @@ export class AdcAccessButton {
 		try {
 			const response = await fetch(this.getApiUrl(this.sessionApiUrl), {
 				method: "GET",
-				credentials: "include",
+				credentials: DEFAULT_CREDENTIALS,
 			});
 
 			// Si no hay sesión (401) o hay error, marcar como no autenticado
@@ -218,14 +221,15 @@ export class AdcAccessButton {
 	 * evitando spam de mensajes y recargas cruzadas por cada re-render.
 	 */
 	private syncLoginState(currentUserId: string | null) {
-		const previousUserId = getStoredAuthUser();
-		if (currentUserId === previousUserId) return;
+		const currentMarker = currentUserId ? authMarkerFor(currentUserId) : null;
+		const previousMarker = getStoredAuthMarker();
+		if (currentMarker === previousMarker) return;
 
-		setStoredAuthUser(currentUserId);
+		setStoredAuthMarker(currentUserId);
 
 		// Sólo notificamos cuando efectivamente hay un login nuevo aquí.
 		// (El logout ya emite su propio broadcast en handleLogout).
-		if (currentUserId && previousUserId !== currentUserId) {
+		if (currentUserId && previousMarker !== currentMarker) {
 			broadcastAuthChange("login");
 		}
 	}
@@ -253,7 +257,7 @@ export class AdcAccessButton {
 		try {
 			const response = await fetch(this.getApiUrl("/api/auth/user-orgs"), {
 				method: "GET",
-				credentials: "include",
+				credentials: DEFAULT_CREDENTIALS,
 			});
 
 			if (response.ok) {
@@ -270,10 +274,10 @@ export class AdcAccessButton {
 	private readonly handleSwitchOrg = async (orgId?: string) => {
 		try {
 			const url = this.getApiUrl("/api/auth/switch-org");
-			const headers = await appendCsrfHeader("POST", url, { "Content-Type": "application/json" }, "include");
+			const headers = await appendCsrfHeader("POST", url, { "Content-Type": "application/json" }, DEFAULT_CREDENTIALS);
 			const response = await fetch(url, {
 				method: "POST",
-				credentials: "include",
+				credentials: DEFAULT_CREDENTIALS,
 				headers,
 				body: JSON.stringify({ orgId }),
 			});
@@ -395,7 +399,9 @@ export class AdcAccessButton {
 										class="flex items-center gap-2 px-4 py-2 hover:bg-accent text-text transition-colors"
 										role="menuitem"
 									>
-										{item.icon && <span class="w-5 h-5 flex items-center justify-center" innerHTML={item.icon}></span>}
+										{item.icon && (
+											<span class="w-5 h-5 flex items-center justify-center" innerHTML={sanitizeSvg(item.icon)}></span>
+										)}
 										{item.label}
 									</a>
 								))}

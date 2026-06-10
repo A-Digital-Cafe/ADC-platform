@@ -2,7 +2,7 @@ import "@ui-library/utils/react-jsx";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { router } from "@common/utils/router";
-import { identityApi } from "./utils/identity-api.ts";
+import { identityApi } from "@ui-library/utils/api-identity";
 import type { Permission } from "@common/types/identity/Permission.ts";
 import type { Organization } from "@common/types/identity/Organization.ts";
 import { getVisibleTabs, type IdentityTab } from "./utils/permissions.ts";

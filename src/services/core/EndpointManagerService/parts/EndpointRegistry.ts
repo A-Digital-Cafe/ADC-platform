@@ -96,6 +96,14 @@ export class EndpointRegistry {
 	}
 
 	/**
+	 * Obtiene los endpoints completos (incluye options/methodName/handler).
+	 * Uso interno del servicio (ej. generación del documento OpenAPI).
+	 */
+	public getAllFull(): RegisteredEndpoint[] {
+		return Array.from(this.#endpoints.values());
+	}
+
+	/**
 	 * Genera estadísticas sobre los endpoints registrados.
 	 * @returns Un objeto con las estadísticas.
 	 */

@@ -5,6 +5,9 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { createUiLogger } from "./ui-logger.js";
+
+const logger = createUiLogger("i18n-react");
 
 interface ADCGlobal {
 	__ADC_I18N__?: {
@@ -180,7 +183,7 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 				try {
 					await customThis.loadTranslations(namespaces);
 				} catch (err) {
-					console.error("[i18n-react] Error loading translations:", err);
+					logger.error("Error loading translations:", err);
 				}
 			}
 
