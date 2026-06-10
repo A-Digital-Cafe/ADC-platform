@@ -126,6 +126,14 @@ npm run build:ui         # Compile Stencil UI library (check for build errors)
 npm run cleanup          # Kill orphaned processes
 ```
 
+> ⚠️ **Never run `tsgo`/`tsc -p <tsconfig>` without `--noEmit`.** The module
+> `tsconfig.json` files do NOT set `noEmit`, so a bare `tsgo -p ...` emits
+> hundreds of `.js`/`.d.ts` files next to the `.ts`/`.tsx` sources (and into
+> referenced `src/common/**`), polluting the tree. To validate types, use
+> `npm run typecheck` (the official `scripts/recursive-typecheck.sh` already
+> passes `--noEmit`) or, for a scoped check, `npx tsgo -p <module>/tsconfig.json --noEmit`.
+> To test/run a module, use the npm scripts above — never hand-compile.
+
 ### Creating Modules
 
 Use scaffolding scripts:

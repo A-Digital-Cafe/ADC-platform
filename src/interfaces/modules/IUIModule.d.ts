@@ -18,9 +18,18 @@ interface UIHostingConfig {
 	subdomains?: string[];
 }
 
-interface UIModuleSecurityConfig {
+interface UIModuleSecurityHeaders {
 	/** Headers HTTP adicionales o overrides para el host estático del módulo */
 	headers?: Record<string, string>;
+}
+
+interface UIModuleSecurityConfig {
+	/** Headers comunes a todos los entornos (base sobre la que se aplican los overrides) */
+	headers?: Record<string, string>;
+	/** Overrides para entornos locales: `npm run dev` y `start:prodtests` (PROD_PORT=3000) */
+	development?: UIModuleSecurityHeaders;
+	/** Overrides para producción real: `npm run start` (PROD_PORT != 3000) */
+	production?: UIModuleSecurityHeaders;
 }
 
 /**

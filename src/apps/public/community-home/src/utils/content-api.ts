@@ -84,3 +84,27 @@ export const contentAPI = {
 		return result.data?.article;
 	},
 };
+
+export interface ContentLinkInfo {
+	title?: string;
+	/** Status HTTP del fetch (401/403 → sin acceso, 404 → inexistente). */
+	status?: number;
+}
+
+/**
+ * Resuelve sólo el título (y el status HTTP) de un artículo/ruta para el chip
+ * `adc-platform-link`. Usa `silent` para no disparar toasts globales: el chip
+ * degrada a "sin acceso" (401/403) o "inexistente" (404) por su cuenta. El
+ * backend ya oculta borradores (`listed:false`) y rutas privadas (`public:false`)
+ * a quien no es su autor / no tiene el rol, devolviendo 403.
+ */
+export const contentLinkAPI = {
+	getArticle: async (slug: string): Promise<ContentLinkInfo> => {
+		const r = await api.get<GetArticleResponse>(`/articles/${slug}`, { silent: true });
+		return { title: r.data?.article?.title, status: r.status };
+	},
+	getPath: async (slug: string): Promise<ContentLinkInfo> => {
+		const r = await api.get<GetPathResponse>(`/paths/${slug}`, { silent: true });
+		return { title: r.data?.path?.title, status: r.status };
+	},
+};

@@ -1,5 +1,6 @@
 import { Component, Prop, Event, EventEmitter, State, Watch, Element } from "@stencil/core";
 import type { Block } from "../adc-blocks-renderer/adc-blocks-renderer";
+import { registerBlocksClipboard, type ClipboardBlocksPayload } from "../../../../utils/blocks-clipboard.js";
 
 /**
  * Editor WYSIWYG inline para bloques de comentario. Usa `contenteditable` con
@@ -33,6 +34,8 @@ export class AdcBlocksEditor {
 	@State() blockMenuOpen: boolean = false;
 	@State() headingMenuOpen: boolean = false;
 	@State() listMenuOpen: boolean = false;
+	@State() linkMenuOpen: boolean = false;
+	@State() linkDraft: string = "";
 
 	@Element() host!: HTMLElement;
 
@@ -46,9 +49,26 @@ export class AdcBlocksEditor {
 	/** Mapa estable id → bloque standalone para preservar orden entre DOM e input. */
 	private standaloneById: Map<string, Block> = new Map();
 	private nextStandaloneId: number = 1;
+	/** Limpieza de los listeners de portapapeles (copy/paste en 3 formatos). */
+	private clipboardCleanup: (() => void) | null = null;
+	/** Rango del editor guardado al abrir el popover de enlace (la selección se pierde al enfocar el input). */
+	private savedRange: Range | null = null;
+	/** Texto visible a usar al insertar un enlace sin selección. */
+	private linkDraftText: string = "";
 
 	componentDidLoad() {
 		this.syncDomFromBlocks();
+		if (this.editorEl) {
+			this.clipboardCleanup = registerBlocksClipboard(this.editorEl, {
+				getBlocks: () => this.getSelectionBlocks(),
+				onPaste: (payload, ev) => this.handleBlocksPaste(payload, ev),
+			});
+		}
+	}
+
+	disconnectedCallback() {
+		this.clipboardCleanup?.();
+		this.clipboardCleanup = null;
 	}
 
 	@Watch("blocks")
@@ -87,14 +107,26 @@ export class AdcBlocksEditor {
 		return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 	}
 
-	/** Convierte markdown inline a HTML seguro. Tokens soportados: **bold**, *italic*, `code`. */
+	/** Convierte markdown inline a HTML seguro. Tokens soportados: **bold**, *italic*, `code`, [texto](url). */
 	private static markdownToHtml(md: string): string {
 		const escaped = AdcBlocksEditor.escapeHtml(md);
-		// Orden: bold antes que italic para evitar que `*` capture `**`.
+		// Orden: enlaces antes que énfasis; bold antes que italic para evitar que `*` capture `**`.
 		return escaped
+			.replace(/\[([^\]\n]+?)\]\(([^)\s]+?)\)/g, (m, text: string, url: string) => {
+				const href = AdcBlocksEditor.sanitizeUrl(url);
+				return href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>` : m;
+			})
 			.replaceAll(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
 			.replaceAll(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>")
 			.replaceAll(/`([^`\n]+?)`/g, "<code>$1</code>");
+	}
+
+	/** Acepta http(s) y rutas relativas; rechaza esquemas peligrosos y caracteres que rompan el atributo. */
+	private static sanitizeUrl(url: string): string | null {
+		const value = url.trim();
+		if (!value || /["'<>]/.test(value)) return null;
+		if (value.startsWith("/") || value.startsWith("#")) return value;
+		return /^https?:\/\//i.test(value) ? value : null;
 	}
 
 	/** Recorre un nodo y emite markdown para texto + strong/em/code. Cualquier otro tag: extraer texto. */
@@ -108,6 +140,10 @@ export class AdcBlocksEditor {
 		if (tag === "strong" || tag === "b") return inner ? `**${inner}**` : "";
 		if (tag === "em" || tag === "i") return inner ? `*${inner}*` : "";
 		if (tag === "code") return inner ? `\`${inner}\`` : "";
+		if (tag === "a") {
+			const safe = AdcBlocksEditor.sanitizeUrl((node as HTMLElement).getAttribute("href") || "");
+			return safe && inner ? `[${inner}](${safe})` : inner;
+		}
 		// Bloques: cada <div>/<p> introduce salto de línea.
 		if (tag === "div" || tag === "p") return `\n${inner}`;
 		return inner;
@@ -354,48 +390,49 @@ export class AdcBlocksEditor {
 			this.charCount = 0;
 			return;
 		}
-		const html = flowBlocks
-			.map((b) => {
-				if (b.type === "heading") {
-					const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
-					return `<h${b.level}>${inner}</h${b.level}>`;
-				}
-				if (b.type === "list") {
-					const tag = b.ordered ? "ol" : "ul";
-					const lis = (b.items || []).map((it) => `<li>${AdcBlocksEditor.markdownToHtml(it || "") || "<br>"}</li>`).join("");
-					return `<${tag}>${lis || "<li><br></li>"}</${tag}>`;
-				}
-				if (b.type === "paragraph") {
-					const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
-					return `<div>${inner}</div>`;
-				}
-				if (b.type === "checkbox") {
-					const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
-					const checkedAttr = b.checked ? "checked" : "";
-					return (
-						`<div class="adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2">` +
-						`<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" ${checkedAttr} />` +
-						`<span class="flex-1">${inner}</span>` +
-						`</div>`
-					);
-				}
-				if (AdcBlocksEditor.isStandaloneCardBlock(b)) {
-					// Buscar id ya asignado.
-					let id = "";
-					for (const [k, v] of this.standaloneById)
-						if (v === b) {
-							id = k;
-							break;
-						}
-					return this.standaloneCardHtml(id, b);
-				}
-				return "";
-			})
-			.join("");
+		const html = flowBlocks.map((b) => this.renderFlowBlockHtml(b)).join("");
 		this.editorEl.innerHTML = html;
 		// Asegurar que siempre haya un párrafo vacío al final para escribir.
 		this.ensureTrailingParagraph();
 		this.charCount = (this.editorEl.textContent || "").length;
+	}
+
+	/** Genera el HTML de un bloque para el flujo del editor (reutilizado al sincronizar y al pegar). */
+	private renderFlowBlockHtml(b: Block): string {
+		if (b.type === "heading") {
+			const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
+			return `<h${b.level}>${inner}</h${b.level}>`;
+		}
+		if (b.type === "list") {
+			const tag = b.ordered ? "ol" : "ul";
+			const lis = (b.items || []).map((it) => `<li>${AdcBlocksEditor.markdownToHtml(it || "") || "<br>"}</li>`).join("");
+			return `<${tag}>${lis || "<li><br></li>"}</${tag}>`;
+		}
+		if (b.type === "paragraph") {
+			const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
+			return `<div>${inner}</div>`;
+		}
+		if (b.type === "checkbox") {
+			const inner = AdcBlocksEditor.markdownToHtml(b.text || "") || "<br>";
+			const checkedAttr = b.checked ? "checked" : "";
+			return (
+				`<div class="adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2">` +
+				`<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" ${checkedAttr} />` +
+				`<span class="flex-1">${inner}</span>` +
+				`</div>`
+			);
+		}
+		if (AdcBlocksEditor.isStandaloneCardBlock(b)) {
+			// Buscar id ya asignado.
+			let id = "";
+			for (const [k, v] of this.standaloneById)
+				if (v === b) {
+					id = k;
+					break;
+				}
+			return this.standaloneCardHtml(id, b);
+		}
+		return "";
 	}
 
 	/** Si el último hijo del editor es un standalone, añade un párrafo vacío para poder seguir escribiendo. */
@@ -486,6 +523,113 @@ export class AdcBlocksEditor {
 		}
 		this.updateActiveMarks();
 		this.emit();
+	}
+
+	// ── Enlaces ──────────────────────────────────────────────────────────────
+
+	/** Abre el popover de enlace, guardando la selección actual y prefijando el href existente. */
+	private openLinkMenu() {
+		if (!this.editorEl) return;
+		this.headingMenuOpen = false;
+		this.listMenuOpen = false;
+		this.blockMenuOpen = false;
+		const sel = globalThis.getSelection();
+		if (sel && sel.rangeCount > 0 && this.editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+			const range = sel.getRangeAt(0);
+			this.savedRange = range.cloneRange();
+			this.linkDraftText = range.toString();
+			const ancestor =
+				range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+					? (range.commonAncestorContainer as HTMLElement)
+					: range.commonAncestorContainer.parentElement;
+			const existing = ancestor?.closest("a");
+			this.linkDraft = existing && this.editorEl.contains(existing) ? existing.getAttribute("href") || "" : "";
+		} else {
+			this.savedRange = null;
+			this.linkDraftText = "";
+			this.linkDraft = "";
+		}
+		this.linkMenuOpen = true;
+	}
+
+	private closeLinkMenu() {
+		this.linkMenuOpen = false;
+		this.savedRange = null;
+	}
+
+	private restoreSavedRange(): Range | null {
+		const sel = globalThis.getSelection();
+		if (!sel || !this.savedRange) return null;
+		sel.removeAllRanges();
+		sel.addRange(this.savedRange);
+		return sel.getRangeAt(0);
+	}
+
+	private applyLink() {
+		if (!this.editorEl) return;
+		const url = AdcBlocksEditor.sanitizeUrl(this.linkDraft);
+		if (!url) {
+			this.closeLinkMenu();
+			return;
+		}
+		this.editorEl.focus();
+		const sel = globalThis.getSelection();
+		const range = this.restoreSavedRange();
+		if (!sel || !range) {
+			this.closeLinkMenu();
+			return;
+		}
+		const ancestor =
+			range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+				? (range.commonAncestorContainer as HTMLElement)
+				: range.commonAncestorContainer.parentElement;
+		const existing = ancestor?.closest("a");
+		if (existing && this.editorEl.contains(existing)) {
+			AdcBlocksEditor.setLinkAttrs(existing, url);
+		} else {
+			const a = document.createElement("a");
+			AdcBlocksEditor.setLinkAttrs(a, url);
+			if (sel.isCollapsed) {
+				a.textContent = (this.linkDraftText || url).trim() || url;
+				range.insertNode(a);
+			} else {
+				a.appendChild(range.extractContents());
+				range.insertNode(a);
+			}
+			range.setStartAfter(a);
+			range.collapse(true);
+			sel.removeAllRanges();
+			sel.addRange(range);
+		}
+		this.closeLinkMenu();
+		this.emit();
+	}
+
+	private removeLink() {
+		if (!this.editorEl) {
+			this.closeLinkMenu();
+			return;
+		}
+		this.editorEl.focus();
+		const range = this.restoreSavedRange();
+		const ancestor =
+			range && range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+				? (range.commonAncestorContainer as HTMLElement)
+				: range?.commonAncestorContainer.parentElement;
+		const existing = ancestor?.closest("a");
+		if (existing && this.editorEl.contains(existing)) {
+			const frag = document.createDocumentFragment();
+			while (existing.firstChild) frag.appendChild(existing.firstChild);
+			existing.replaceWith(frag);
+			this.emit();
+		}
+		this.closeLinkMenu();
+	}
+
+	private static setLinkAttrs(a: HTMLAnchorElement, url: string) {
+		a.setAttribute("href", url);
+		a.setAttribute("target", "_blank");
+		a.setAttribute("rel", "noopener noreferrer");
 	}
 
 	/**
@@ -609,6 +753,9 @@ export class AdcBlocksEditor {
 		} else if (key === "e") {
 			ev.preventDefault();
 			this.execMark("code");
+		} else if (key === "k") {
+			ev.preventDefault();
+			this.openLinkMenu();
 		}
 	};
 
@@ -798,10 +945,41 @@ export class AdcBlocksEditor {
 		}
 	};
 
-	private readonly handlePaste = (ev: ClipboardEvent) => {
-		// Forzar pegado como texto plano para no contaminar con HTML externo.
+	/**
+	 * Bloques a copiar: sólo cuando la selección abarca TODO el contenido del
+	 * editor (select-all). Para selecciones parciales devolvemos `null` y dejamos
+	 * el copiado nativo intacto (texto/HTML del fragmento seleccionado).
+	 */
+	private getSelectionBlocks(): Block[] | null {
+		if (!this.editorEl) return null;
+		const sel = globalThis.getSelection();
+		if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+		if (!this.editorEl.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+		const fullLen = (this.editorEl.textContent || "").trim().length;
+		if (fullLen === 0) return null;
+		const selLen = sel.toString().trim().length;
+		if (selLen < fullLen) return null;
+		const blocks = this.blocks || [];
+		return blocks.length > 0 ? blocks : null;
+	}
+
+	/**
+	 * Maneja el pegado con payload en 3 formatos. `adc-blocks`/HTML se insertan
+	 * como bloques estructurados; el texto plano se inserta inline (preservando
+	 * el comportamiento clásico de no contaminar con HTML externo).
+	 */
+	private handleBlocksPaste(payload: ClipboardBlocksPayload<Block>, ev: ClipboardEvent): boolean {
 		ev.preventDefault();
-		const text = ev.clipboardData?.getData("text/plain") ?? "";
+		if ((payload.source === "adc-blocks" || payload.source === "html") && payload.blocks && payload.blocks.length > 0) {
+			this.insertBlocksAtCaret(payload.blocks);
+			return true;
+		}
+		this.insertTextAtCaret(payload.text);
+		return true;
+	}
+
+	/** Inserta texto plano en el caret actual (sin HTML externo). */
+	private insertTextAtCaret(text: string) {
 		if (!text) return;
 		const sel = globalThis.getSelection();
 		if (!sel || sel.rangeCount === 0) return;
@@ -812,7 +990,56 @@ export class AdcBlocksEditor {
 		sel.removeAllRanges();
 		sel.addRange(range);
 		this.emit();
-	};
+	}
+
+	/**
+	 * Inserta una lista de bloques como nodos de flujo justo después del bloque
+	 * que contiene el caret (o al final si la selección está fuera del editor).
+	 * Registra los bloques standalone en `standaloneById` para que `extractFlowBlocks`
+	 * los conserve.
+	 */
+	private insertBlocksAtCaret(blocks: Block[]) {
+		if (!this.editorEl || blocks.length === 0) return;
+		// Registrar ids de bloques standalone antes de renderizar.
+		for (const b of blocks) {
+			if (AdcBlocksEditor.isStandaloneCardBlock(b)) {
+				this.standaloneById.set(`sa-${this.nextStandaloneId++}`, b);
+			}
+		}
+		const wrapper = document.createElement("div");
+		wrapper.innerHTML = blocks.map((b) => this.renderFlowBlockHtml(b)).join("");
+		const nodes = Array.from(wrapper.childNodes);
+		if (nodes.length === 0) return;
+		// Localizar el bloque top-level que contiene el caret.
+		const sel = globalThis.getSelection();
+		let anchor: HTMLElement | null = null;
+		if (sel && sel.rangeCount > 0 && this.editorEl.contains(sel.getRangeAt(0).startContainer)) {
+			let n: Node | null = sel.getRangeAt(0).startContainer;
+			while (n && n.parentNode !== this.editorEl) n = n.parentNode;
+			anchor = n?.nodeType === Node.ELEMENT_NODE ? (n as HTMLElement) : null;
+		}
+		let cursor: Node | null = anchor && anchor.parentNode === this.editorEl ? anchor : null;
+		let last: Node | null = null;
+		for (const node of nodes) {
+			if (cursor) {
+				(cursor as ChildNode).after(node);
+			} else {
+				this.editorEl.appendChild(node);
+			}
+			cursor = node;
+			last = node;
+		}
+		this.ensureTrailingParagraph();
+		// Mover caret al final del último bloque insertado.
+		if (last && last.nodeType === Node.ELEMENT_NODE) {
+			const range = document.createRange();
+			range.selectNodeContents(last);
+			range.collapse(false);
+			sel?.removeAllRanges();
+			sel?.addRange(range);
+		}
+		this.emit();
+	}
 
 	// ── Bloques estructurales (code/quote/callout/divider) ─────────────────
 
@@ -970,6 +1197,57 @@ export class AdcBlocksEditor {
 							onClick: () => this.execMark("code"),
 							children: <span class="font-mono text-xs">{"</>"}</span>,
 						})}
+						<div class="relative inline-flex">
+							{this.renderToolButton({
+								label: "Enlace",
+								shortcut: "Ctrl+K",
+								active: this.linkMenuOpen,
+								onClick: () => (this.linkMenuOpen ? this.closeLinkMenu() : this.openLinkMenu()),
+								children: <span aria-hidden="true">🔗</span>,
+							})}
+							{this.linkMenuOpen && (
+								<div
+									class="absolute top-full left-0 mt-1 z-50 flex items-center gap-1 bg-surface border border-alt rounded-md shadow-cozy p-2"
+									role="group"
+									aria-label="Enlace"
+								>
+									<input
+										type="url"
+										inputMode="url"
+										placeholder="https://… o /ruta"
+										value={this.linkDraft}
+										class="w-56 px-2 py-1 text-sm bg-background text-text border border-alt rounded outline-none focus:ring-1 focus:ring-primary"
+										onInput={(ev) => (this.linkDraft = (ev.target as HTMLInputElement).value)}
+										onKeyDown={(ev) => {
+											if (ev.key === "Enter") {
+												ev.preventDefault();
+												this.applyLink();
+											} else if (ev.key === "Escape") {
+												ev.preventDefault();
+												this.closeLinkMenu();
+											}
+										}}
+									/>
+									<button
+										type="button"
+										class="px-2 py-1 text-sm rounded bg-primary text-onPrimary hover:bg-primary cursor-pointer"
+										onMouseDown={(ev) => ev.preventDefault()}
+										onClick={() => this.applyLink()}
+									>
+										Aplicar
+									</button>
+									<button
+										type="button"
+										class="px-2 py-1 text-sm rounded text-text hover:bg-alt cursor-pointer"
+										onMouseDown={(ev) => ev.preventDefault()}
+										onClick={() => this.removeLink()}
+										aria-label="Quitar enlace"
+									>
+										Quitar
+									</button>
+								</div>
+							)}
+						</div>
 					</fieldset>
 
 					<span class="w-px h-5 bg-alt mx-1" aria-hidden="true" />
@@ -989,6 +1267,7 @@ export class AdcBlocksEditor {
 									this.headingMenuOpen = !this.headingMenuOpen;
 									this.listMenuOpen = false;
 									this.blockMenuOpen = false;
+									this.linkMenuOpen = false;
 								},
 								children: <span class="font-bold text-xs">H</span>,
 							})}
@@ -1024,6 +1303,7 @@ export class AdcBlocksEditor {
 									this.listMenuOpen = !this.listMenuOpen;
 									this.headingMenuOpen = false;
 									this.blockMenuOpen = false;
+									this.linkMenuOpen = false;
 								},
 								children: <span aria-hidden="true">•</span>,
 							})}
@@ -1084,6 +1364,7 @@ export class AdcBlocksEditor {
 								this.blockMenuOpen = !this.blockMenuOpen;
 								this.headingMenuOpen = false;
 								this.listMenuOpen = false;
+								this.linkMenuOpen = false;
 							},
 							children: <span class="font-bold">+</span>,
 						})}
@@ -1149,7 +1430,6 @@ export class AdcBlocksEditor {
 					onKeyDown={this.handleKeyDown}
 					onKeyUp={this.handleSelectionChange}
 					onMouseUp={this.handleSelectionChange}
-					onPaste={this.handlePaste}
 					onClick={this.handleEditorClick}
 					onChange={this.handleEditorChange}
 					onFocus={this.handleSelectionChange}

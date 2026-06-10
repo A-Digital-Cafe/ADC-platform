@@ -92,6 +92,45 @@ Referencia: cron de soft-delete en `IdentityManagerService` (`scheduledDeletionA
 - Añadir al menú de apps (`adc-apps-menu/apps-config.ts` → `DEFAULT_APPS`).
 - Crear el icono `adc-icon-app-<id>` en la UI library y regenerar `react-jsx`.
 
+## Enlaces de plataforma (chips `adc-platform-link`) y resolvers
+
+Los enlaces a entidades de otra app (un artículo, un tablero, una tarea…) se
+pintan como **chips** estilo Jira / Google Docs: icono de la app + título real de
+la entidad. El título lo aporta un **resolver** que cada app expone como _remote_
+de Module Federation y que el chip carga **bajo demanda** (aunque esa app nunca
+se haya abierto en la sesión).
+
+Mecanismo (en `00-adc-ui-library/utils/platform-links.ts`):
+
+1. **Registro de la app** en `DEFAULT_APPS` con `id`, `label`, `devPort`,
+   `subdomain`, `iconTag` (`adc-icon-app-<id>`), `remoteName` (= `name` del
+   `config.json` con `-`→`_`) y `resolverExpose` (la clave de `federationExposes`,
+   por convención `"./platformLinkResolver"`). Sin `resolverExpose` el chip sólo
+   muestra el nombre humanizado de la ruta (sin título enriquecido).
+2. **El `config.json` de la app** expone el resolver:
+   `"federationExposes": { "./platformLinkResolver": "./src/utils/platform-links-resolver.ts" }`.
+   Recuerda incluir en la CSP de la app los orígenes cross-app
+   (`script-src`/`connect-src`: `http://localhost:* https://*.adigitalcafe.com`).
+3. **El resolver** (`src/utils/platform-links-resolver.ts`) hace **`export default`**
+   de un `PlatformLinkResolver`: recibe la ref parseada (`segments`, `query`,
+   `hash`) y devuelve `Partial<PlatformLinkInfo>` (`{ title, subtitle? }`),
+   `{ status: "denied" | "missing" }`, o `null` (deja el fallback). Es asíncrono
+   (puede llamar a su API). Patrón de referencia: `community-home` y
+   `presets/project-management/apps/adc-project-manager`.
+
+**Control de acceso (importante):** el permiso se valida **server-side**, no en el
+chip. La API de la entidad debe devolver **403** (o 401) cuando el usuario no
+puede ver el recurso —p. ej. borradores/privados visibles sólo para su autor o un
+rol—; el resolver mapea **401/403 → `denied`** (chip "sin acceso", sin `href`, no
+navega) y cualquier otro fallo → `missing`. **Nunca** devuelvas el título de un
+recurso restringido: usa `silent: true` en el fetch (`adc-fetch`) para no disparar
+toasts y leer sólo `status`. Ejemplo: en community, `GET /articles/:slug` oculta
+`listed:false` y `GET /paths/:slug` oculta `public:false` (403) salvo autor / rol
+`COMMUNITY.PUBLISH_STATUS.WRITE`.
+
+Para una app **consumidora** no hay nada que hacer: los chips funcionan en
+cualquier app que use `adc-inline-tokens` / `adc-platform-link` (UI library).
+
 ## Empaquetado en presets
 
 Estructura de un preset (ver `presets/my-account/` y `presets/project-management/`):

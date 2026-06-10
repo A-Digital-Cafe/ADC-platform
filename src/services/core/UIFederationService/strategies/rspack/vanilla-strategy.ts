@@ -56,7 +56,8 @@ const { ModuleFederationPlugin } = rspack.container;
 
 		const htmlPlugin = isHost
 			? `
-        new rspack.HtmlRspackPlugin({${i18nScript}
+        new rspack.HtmlRspackPlugin({
+            publicPath: '/',${i18nScript}
         }),`
 			: "";
 

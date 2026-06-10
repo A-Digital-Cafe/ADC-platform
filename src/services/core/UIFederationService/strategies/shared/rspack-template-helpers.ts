@@ -25,17 +25,36 @@ export function resolveFederationConfig(
 	context: IBuildContext,
 	appExtension: string
 ): string {
+	const federationExposes = context.module.uiConfig.federationExposes;
+	const hasExposes = !!federationExposes && Object.keys(federationExposes).length > 0;
 	if (isLayout) return `remotes: ${JSON.stringify(remotes, null, 4)},`;
-	if (isRemote) return buildExposesConfig(context, appExtension);
+	// Un host también puede exponer remotes si declara `federationExposes`
+	// (ej: resolvers de enlaces de plataforma consumidos por otras apps).
+	if (isRemote || hasExposes) return buildExposesConfig(context, appExtension);
 	return "";
 }
 
 /** Decide el `publicPath` correcto según rol del módulo y entorno. */
-export function resolvePublicPath(opts: { isRemote: boolean; isHost: boolean; isProduction: boolean; devPort: number | undefined }): string {
-	const { isRemote, isHost, isProduction, devPort } = opts;
-	if (isRemote && devPort && !isProduction) {
+export function resolvePublicPath(opts: {
+	isRemote: boolean;
+	isHost: boolean;
+	isProduction: boolean;
+	devPort: number | undefined;
+	hasExposes?: boolean;
+}): string {
+	const { isRemote, isHost, isProduction, devPort, hasExposes } = opts;
+	// Un módulo que expone remotes (sea `isRemote` o un host con `federationExposes`)
+	// debe servir sus chunks desde su propio origen para que otras apps los consuman.
+	const servesRemote = isRemote || !!hasExposes;
+	// Un host (tiene su propio index.html y se abre directo) que además expone debe
+	// usar 'auto': resuelve sus chunks según el origen desde el que se cargue
+	// (localhost vs IP de LAN), evitando el error cross-origin "Script error." al
+	// inyectar `remoteEntry.js` con un host distinto al de la página.
+	if (servesRemote && isHost) return "'auto'";
+	if (servesRemote && devPort && !isProduction) {
 		return `'http://${getServerHost()}:${devPort}/'`;
 	}
+	if (servesRemote) return "'auto'";
 	if (isHost) return "'/'";
 	return "'auto'";
 }

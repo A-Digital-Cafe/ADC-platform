@@ -9,9 +9,14 @@ function shouldEnforceCsp(): boolean {
 	return process.env.SECURITY_CSP_ENFORCE === "true";
 }
 
+/** Producción real: NODE_ENV=production y NO el modo local de pruebas (start:prodtests usa PROD_PORT=3000). */
+function isRealProduction(): boolean {
+	return process.env.NODE_ENV === "production" && process.env.PROD_PORT !== "3000";
+}
+
 function shouldSendHsts(): boolean {
 	if (process.env.SECURITY_ENABLE_HSTS) return process.env.SECURITY_ENABLE_HSTS === "true";
-	return process.env.NODE_ENV === "production" && process.env.PROD_PORT !== "3000";
+	return isRealProduction();
 }
 
 function getCspHeaderName(): string {
@@ -19,6 +24,12 @@ function getCspHeaderName(): string {
 }
 
 function getDefaultCsp(): string {
+	const connectSrc = isRealProduction()
+		? "connect-src 'self' https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com"
+		: "connect-src 'self' http://localhost:* ws://localhost:* https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
+	const scriptSrc = isRealProduction()
+		? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh https://*.adigitalcafe.com"
+		: "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh http://localhost:* https://*.adigitalcafe.com";
 	return [
 		"default-src 'self'",
 		"base-uri 'self'",
@@ -28,8 +39,8 @@ function getDefaultCsp(): string {
 		"img-src 'self' data: blob:",
 		"font-src 'self' data:",
 		"style-src 'self' 'unsafe-inline'",
-		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh",
-		"connect-src 'self' http://localhost:* ws://localhost:* https://esm.sh",
+		scriptSrc,
+		connectSrc,
 		"worker-src 'self' blob:",
 		"manifest-src 'self'",
 	].join("; ");

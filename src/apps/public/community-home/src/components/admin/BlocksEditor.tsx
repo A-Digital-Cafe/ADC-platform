@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Block } from "@ui-library/utils/connect-rpc";
+import { registerBlocksClipboard, isEditableTarget } from "@ui-library/utils/blocks-clipboard";
 import { BlockFields } from "./BlockFields";
 
 interface Props {
@@ -67,6 +68,7 @@ export function BlocksEditor({ value, onChange }: Props) {
 	const [showJson, setShowJson] = useState(false);
 	const [jsonDraft, setJsonDraft] = useState<string>(value);
 	const skipSyncRef = useRef(false);
+	const containerRef = useRef<HTMLDivElement>(null);
 
 	// Sync from parent when `value` changes externally (ignore our own emissions)
 	useEffect(() => {
@@ -89,6 +91,35 @@ export function BlocksEditor({ value, onChange }: Props) {
 		setParseError("");
 		onChange(text, next);
 	}
+
+	// Portapapeles en 3 formatos (adc-blocks/HTML/texto): copiar todo el artículo
+	// y pegar bloques al final. No interfiere con inputs/textarea ni con la
+	// selección de texto nativa dentro de las previsualizaciones.
+	const clipboardApiRef = useRef({ getAll: (): Block[] => [], append: (_b: Block[]) => {} });
+	clipboardApiRef.current = {
+		getAll: () => blocks,
+		append: (incoming: Block[]) => commit([...blocks, ...incoming]),
+	};
+	useEffect(() => {
+		const el = containerRef.current;
+		if (!el) return;
+		return registerBlocksClipboard<Block>(el, {
+			getBlocks: (ev) => {
+				if (isEditableTarget(ev.target)) return null;
+				const sel = window.getSelection();
+				if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return null;
+				const all = clipboardApiRef.current.getAll();
+				return all.length > 0 ? all : null;
+			},
+			onPaste: (payload, ev) => {
+				if (isEditableTarget(ev.target)) return;
+				if (!payload.blocks || payload.blocks.length === 0) return;
+				ev.preventDefault();
+				clipboardApiRef.current.append(payload.blocks);
+				return true;
+			},
+		});
+	}, []);
 
 	function insert(type: BlockType, at: number) {
 		const spec = BLOCK_TYPES.find((t) => t.type === type);
@@ -126,7 +157,7 @@ export function BlocksEditor({ value, onChange }: Props) {
 	}
 
 	return (
-		<div className="flex flex-col gap-2">
+		<div ref={containerRef} className="flex flex-col gap-2">
 			<div className="flex items-center justify-between">
 				<span className="font-medium">Contenido</span>
 				<button

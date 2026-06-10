@@ -1,4 +1,5 @@
-import { Component, Prop, Event, EventEmitter } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, Element } from "@stencil/core";
+import { registerBlocksClipboard } from "../../../../utils/blocks-clipboard.js";
 
 type Align = "left" | "center" | "right";
 type AttachmentKind = "image" | "file";
@@ -52,6 +53,35 @@ export class AdcBlocksRenderer {
 
 	/** Se emite cuando el usuario solicita descargar un attachment cuyo URL no está resuelto. */
 	@Event() adcAttachmentRequest!: EventEmitter<string>;
+
+	@Element() host!: HTMLElement;
+
+	/** Limpieza del listener de copiado (3 formatos: adc-blocks, HTML, texto). */
+	private clipboardCleanup: (() => void) | null = null;
+
+	componentDidLoad() {
+		// Copiar como bloques sólo cuando se selecciona todo el contenido renderizado;
+		// las selecciones parciales conservan el copiado nativo de texto/HTML.
+		this.clipboardCleanup = registerBlocksClipboard(this.host, {
+			getBlocks: () => this.getSelectionBlocks(),
+			handlePaste: false,
+		});
+	}
+
+	disconnectedCallback() {
+		this.clipboardCleanup?.();
+		this.clipboardCleanup = null;
+	}
+
+	private getSelectionBlocks(): Block[] | null {
+		if (this.blocks.length === 0) return null;
+		const sel = globalThis.getSelection();
+		if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+		if (!this.host.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+		const fullLen = (this.host.textContent || "").trim().length;
+		if (fullLen === 0) return null;
+		return sel.toString().trim().length >= fullLen ? this.blocks : null;
+	}
 
 	private getAlignClass(align?: Align): string {
 		if (align === "center") return "text-center";

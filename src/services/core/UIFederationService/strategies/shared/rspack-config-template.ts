@@ -61,7 +61,8 @@ export function buildRspackConfigContent(options: IRspackConfigOptions): string 
 	const shared = buildSharedConfig(usedFrameworks);
 	const isRemote = module.uiConfig.isRemote ?? false;
 	const federationConfig = resolveFederationConfig(isLayout, isRemote, remotes, context, appExtension);
-	const publicPath = resolvePublicPath({ isRemote, isHost, isProduction, devPort: module.uiConfig.devPort });
+	const hasExposes = !!module.uiConfig.federationExposes && Object.keys(module.uiConfig.federationExposes).length > 0;
+	const publicPath = resolvePublicPath({ isRemote, isHost, isProduction, devPort: module.uiConfig.devPort, hasExposes });
 	const staticDirs = buildStaticDirectories(context);
 	const devServerConfig = buildDevServerBlock(module.uiConfig.devPort, !isProduction, staticDirs);
 
