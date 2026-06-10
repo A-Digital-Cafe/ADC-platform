@@ -2,6 +2,7 @@
 	"name": "SessionManagerService",
 	"version": "1.0.0",
 	"kernelMode": 70,
+	"failOnError": true,
 	"private": {
 		"discordClientId": "${DISCORD_CLIENT_ID}",
 		"discordClientSecret": "${DISCORD_CLIENT_SECRET}",

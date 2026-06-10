@@ -79,12 +79,41 @@ function mergeSecurityHeaders(overrides?: SecurityHeaders): SecurityHeaders {
 		if (cspOverride !== "") merged[getCspHeaderName()] = cspOverride;
 	}
 
+	// "Content-Security-Policy-Extend": fusiona fuentes/directivas adicionales sobre la
+	// CSP por defecto (que ya distingue dev/prod). Evita duplicar la política completa
+	// en cada config.json — las apps solo declaran su delta (ej. "img-src https:").
+	const cspExtend = overrides?.["Content-Security-Policy-Extend"];
+	if (cspExtend && cspOverride === undefined) {
+		merged[getCspHeaderName()] = extendCsp(getDefaultCsp(), cspExtend);
+	}
+
 	for (const [name, value] of Object.entries(overrides ?? {})) {
-		if (name === "Content-Security-Policy") continue;
+		if (name === "Content-Security-Policy" || name === "Content-Security-Policy-Extend") continue;
 		if (value === "") delete merged[name];
 		else merged[name] = value;
 	}
 	return merged;
+}
+
+/** Fusiona una extensión CSP ("dir src1 src2; dir2 ...") sobre una política base. */
+function extendCsp(baseCsp: string, extension: string): string {
+	const directives = new Map<string, string>();
+	for (const part of baseCsp.split(";")) {
+		const trimmed = part.trim();
+		if (!trimmed) continue;
+		const [name, ...values] = trimmed.split(/\s+/);
+		directives.set(name, values.join(" "));
+	}
+	for (const part of extension.split(";")) {
+		const trimmed = part.trim();
+		if (!trimmed) continue;
+		const [name, ...values] = trimmed.split(/\s+/);
+		const addition = values.join(" ");
+		const existing = directives.get(name);
+		if (existing === undefined) directives.set(name, addition);
+		else if (addition && !existing.includes(addition)) directives.set(name, `${existing} ${addition}`);
+	}
+	return [...directives.entries()].map(([name, value]) => (value ? `${name} ${value}` : name)).join("; ");
 }
 
 export function applySecurityHeaders(reply: HeaderReply, overrides?: SecurityHeaders): void {

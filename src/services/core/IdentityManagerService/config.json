@@ -2,6 +2,7 @@
 	"kernelMode": 60,
 	"name": "IdentityManagerService",
 	"version": "1.0.0",
+	"failOnError": true,
 	"providers": [
 		{
 			"name": "object/mongo",

@@ -18,9 +18,14 @@ Habilitar con `HTTP2_ENABLED=true`. Requiere certificados SSL:
 ## Hardening HTTP
 
 - Security headers por defecto, incluyendo CSP report-only, HSTS condicional y protección contra clickjacking/sniffing.
+- CSP centralizada: las apps NO duplican la política completa; declaran solo su delta con el header `Content-Security-Policy-Extend` (ej. `"img-src https:; frame-src https://www.youtube.com"`) y el provider lo fusiona sobre la CSP por defecto (que ya distingue dev/prod). `Content-Security-Policy` explícito sigue funcionando como override total.
 - CORS usa hosts registrados y `CORS_ALLOWED_ORIGINS`/`ADC_CORS_ALLOWED_ORIGINS` para orígenes extra.
 - `bodyLimit` se configura con `HTTP_BODY_LIMIT_BYTES`/`ADC_HTTP_BODY_LIMIT_BYTES`.
 - Los métodos HTTP se limitan a GET, POST, PUT, PATCH, DELETE, HEAD y OPTIONS.
+
+## API Docs (Swagger UI)
+
+`registerApiDocs(getDocument)` monta Swagger UI en `/api/docs` (lo invoca EndpointManagerService; el documento OpenAPI se genera desde los endpoints registrados).
 
 ## Connect RPC
 

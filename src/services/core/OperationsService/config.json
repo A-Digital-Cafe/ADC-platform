@@ -2,6 +2,7 @@
 	"name": "OperationsService",
 	"version": "1.0.0",
 	"kernelMode": 45,
+	"failOnError": true,
 	"providers": [
 		{
 			"name": "queue/redis",

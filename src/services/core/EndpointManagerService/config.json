@@ -2,6 +2,7 @@
 	"name": "EndpointManagerService",
 	"version": "1.0.0",
 	"kernelMode": 50,
+	"failOnError": true,
 	"private": {
 		"csrf": {
 			"enabled": "${CSRF_ENABLED}",

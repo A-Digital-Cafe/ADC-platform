@@ -2,6 +2,7 @@
 	"kernelMode": 65,
 	"name": "ModerationService",
 	"version": "1.0.0",
+	"failOnError": true,
 	"providers": [
 		{
 			"name": "object/mongo",
