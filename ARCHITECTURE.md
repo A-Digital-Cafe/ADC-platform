@@ -18,7 +18,7 @@ Serializadores, validadores, filtros, transformadores. Ubicados en `src/utilitie
 
 Funcionalidad reutilizable sin lógica de ejecución automática. Pueden ser stateful. Ubicados en `src/services/`. Pueden tener su propio `config.json` para cargar dependencias.
 
-**Servicios en Modo Kernel:** Algunos servicios críticos (como `ExecutionManagerService`) se ejecutan en modo kernel (`kernelMode: true` en config.json), lo que los hace disponibles globalmente y se cargan durante la inicialización del kernel.
+**Servicios en Modo Kernel:** Algunos servicios críticos (como `ExecutionManagerService`) se ejecutan en modo kernel (`kernelMode` en config.json), lo que los hace disponibles globalmente y se cargan durante la inicialización del kernel. `kernelMode` acepta `true` (prioridad 1) o un número que define el orden de carga — menor carga antes (ej.: `LangManagerService: 10` carga antes que `IdentityManagerService: 60`). Ver `src/core/services/KernelServiceFinder.ts`.
 
 ### Apps (Capa Negocio)
 
@@ -31,7 +31,7 @@ Es posible crear múltiples instancias de una misma aplicación proporcionando d
 1.  **Directorio Raíz de la App**: Archivos `config.json` o `config-*.json` en la raíz del directorio de la app.
 2.  **Directorio `configs`**: Archivos `config.json` o `config-*.json` dentro de un subdirectorio llamado `configs`.
 
-Por cada archivo de configuración encontrado, el Kernel creará una nueva instancia de la aplicación. El nombre de la instancia se generará combinando el nombre de la aplicación y el nombre del archivo de configuración (sin la extensión `.json`).
+Por cada archivo de configuración encontrado, el Kernel creará una nueva instancia de la aplicación. El nombre de la instancia combina el nombre de la app y el sufijo del archivo de configuración: el prefijo `config-` se elimina, y un `config.json` plano genera el sufijo `default` (ver `src/core/apps/AppFileUtils.ts`).
 
 Por ejemplo, para una aplicación llamada `user-profile`, la siguiente estructura de archivos creará tres instancias:
 
@@ -46,9 +46,9 @@ src/apps/user-profile/
 
 Las instancias creadas serán:
 
--   `user-profile:config-main`
--   `user-profile:config-web`
--   `user-profile:config-api`
+-   `user-profile:main`
+-   `user-profile:web`
+-   `user-profile:api`
 
 Cada instancia recibirá su propia configuración y se ejecutará de forma independiente. Esto permite, por ejemplo, tener la misma lógica de aplicación conectada a diferentes bases de datos o con diferentes parámetros de funcionamiento.
 
@@ -249,12 +249,12 @@ Soportados: `1.0.0` (exacta), `^1.0.0` (caret), `~1.2.3` (tilde), `>=1.0.0`, `>1
 
 ## Presets (módulos opcionales)
 
-Los presets (`presets/<topic>/{apps,services,providers,utilities}`) son repos git independientes que el kernel monta como capas nativas. Convenciones:
+Los presets (`presets/<topic>/{apps,services,providers,utilities}`) son repos git independientes que el kernel monta como capas nativas. El flujo de instalación, creación y extracción está en [docs/multirepo.md](./docs/multirepo.md). Convenciones de código:
 
 -   **tsconfig**: el tsconfig raíz del preset cubre SOLO `services/**/*.ts` (con `paths` relativos a `../../src/...`); cada app UI mantiene su propio tsconfig (jsx + aliases `@ui-library`). No usar `baseUrl` (eliminado en tsgo).
 -   **Imports**: todo import que escape del preset usa aliases (`@common`, `@services`, `@providers`, `@utilities`, `@interfaces`, `@adc/utils`, `@kernel`). Imports internos relativos.
 -   **Contratos con `src`**: las apps de `src` que consumen un servicio de preset opcional dependen de una interfaz en `@common/types` (ej. `IContentService`), nunca del tipo concreto del preset.
--   **Docs**: cada preset incluye `README.md` (propósito, módulos, deps externas, env vars críticas, `kernelMode` si aplica), `LICENSE`/`LICENCE`, y `CODE_OF_CONDUCT.md`/`SECURITY.md` apuntando al repo principal.
+-   **Docs**: cada preset incluye `README.md` (propósito, módulos, deps externas, env vars críticas, `kernelMode` si aplica), `LICENSE.md`, y `CODE_OF_CONDUCT.md`/`SECURITY.md` apuntando al repo principal.
 -   **Env vars**: cada servicio de preset con configuración externa documenta sus variables en un `.env.example` propio.
 
 ## Interoperabilidad Multi-Lenguaje
@@ -283,7 +283,10 @@ ADC Platform soporta módulos en múltiples lenguajes mediante IPC (named pipes)
 
 ## Sistema UI Framework-Agnostic
 
-El proyecto incluye una librería de componentes UI (`00-web-ui-library`) construida con **Stencil**, que genera Web Components nativos compatibles con cualquier framework (React, Vue, Angular, etc.).
+Las UI libraries del proyecto están construidas con **Stencil** y generan Web Components nativos compatibles con cualquier framework (React, Vue, Angular, etc.). Hay una librería por namespace:
+
+-   **`00-adc-ui-library`** (`src/apps/public/`): la librería principal de la plataforma, namespace `adc-platform`. Catálogo de componentes y utils en su `README.md`.
+-   **`00-web-ui-library`** y **`00-web-ui-library-mobile`** (`src/apps/test/`): librerías de desarrollo para los namespaces `default` y `mobile`.
 
 ### Características
 
@@ -291,13 +294,6 @@ El proyecto incluye una librería de componentes UI (`00-web-ui-library`) constr
 -   **Sin dependencias de framework:** Las apps que consumen los componentes no necesitan instalar React, Vue, etc.
 -   **Auto-registro:** Los componentes se registran automáticamente al importar el loader
 -   **TypeScript:** Tipado completo con definiciones generadas automáticamente
-
-### Componentes Disponibles
-
--   `<adc-button>`: Botón principal con eventos personalizados
--   `<adc-header>`: Encabezado de página con título y subtítulo
--   `<adc-container>`: Contenedor con padding y max-width
--   `<adc-stat-card>`: Tarjeta para mostrar estadísticas
 
 ### Uso en Apps
 
@@ -443,73 +439,7 @@ Esto permite acceder a la versión mobile via `m-cloud.local.com` o `cloud.m.loc
 
 ### LangManagerService (i18n)
 
-Servicio en modo kernel para internacionalización compartida entre apps UI.
-
-**Características:**
-
--   Lee archivos de traducción desde `/i18n/{locale}.js` o `.json` de cada app
--   Soporta locales con región (`es-AR`) y sin ella (`es`, `pt`, `en`)
--   Cada app tiene su propio namespace de traducciones (evita colisiones de keys)
--   Interpolación de parámetros con sintaxis `{{param}}`
--   Fallback automático a locale base y luego a locale por defecto
-
-**Configuración en app:**
-
-```json
-{
-	"uiModule": {
-		"name": "home",
-		"i18n": true
-	}
-}
-```
-
-**Estructura de archivos:**
-
-```
-src/apps/test/web-home-mobile/
-├── i18n/
-│   ├── en.js
-│   ├── es.js
-│   └── pt-BR.js
-└── ...
-```
-
-**Formato de archivos de traducción:**
-
-```javascript
-// i18n/es.js
-export default {
-	title: "Estadísticas",
-	stats: {
-		totalUsers: "Usuarios Totales",
-		welcome: "Bienvenido, {{name}}",
-	},
-};
-```
-
-**Endpoints:**
-
--   `GET /api/i18n/:namespace?locale=es` - Traducciones de un namespace
--   `GET /api/i18n?namespaces=home,layout&locale=es` - Traducciones combinadas
-
-**Uso client-side:**
-
-Las apps con `serviceWorker: true` en su layout reciben automáticamente:
-
-```javascript
-// Función t() global para traducciones
-t("stats.totalUsers"); // → "Usuarios Totales"
-t("welcome", { name: "Juan" }, "home"); // → "Bienvenido, Juan"
-
-// Cambiar idioma (persiste en localStorage)
-setLocale("en");
-
-// Obtener idioma actual
-getLocale(); // → "es" (de localStorage o navegador)
-```
-
-El locale se detecta automáticamente: `localStorage.language` → `navigator.language` → `'en'`
+Servicio en modo kernel para internacionalización compartida entre apps UI. Cada app declara `"i18n": true` en su `uiModule` y provee traducciones en `i18n/{locale}.js|json` (un namespace por app, interpolación `{{param}}`, fallback automático de locale). Detalle de endpoints y uso client-side en `src/services/core/LangManagerService/README.md`.
 
 ### Service Worker Dinámico
 

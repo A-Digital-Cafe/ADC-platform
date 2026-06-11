@@ -7,13 +7,16 @@ Utilizar patrones KISS, DRY, SOLID y YAGNI.
 
 ```
 src/
-├── kernel.ts          # Orquestador central
+├── kernel.ts          # Orquestador central (lógica de carga en src/core/)
 ├── apps/              # Aplicaciones (cada una con README.md)
 │   ├── public/        # Apps públicas (adc-platform namespace)
 │   └── test/          # Apps de desarrollo (default namespace)
-├── services/core/     # Servicios kernel (cada uno con README.md)
-├── providers/         # Proveedores (cada uno con README.md)
+├── services/          # Servicios (core/, data/, security/; cada uno con README.md)
+├── providers/         # Proveedores (http/, object/, queue/, ...; cada uno con README.md)
+├── utilities/         # Utilidades reutilizables
+├── common/            # Tipos y utilidades compartidas (@common)
 └── utils/             # Helpers internos
+presets/               # Módulos opcionales en repos git propios (ver docs/multirepo.md)
 ```
 
 ## Commands
@@ -48,6 +51,7 @@ src/
 		}
 	}
 }
+```
 
 ## UI Apps
 
@@ -57,6 +61,10 @@ import "@ui-library"; // Auto-registra Web Components
 import "@ui-library/styles"; // CSS base (variables, tipografía, etc.)
 import "./styles/tailwind.css"; // Extensiones locales (solo Tailwind + extensiones propias)
 ```
+
+## Creación de Módulos
+
+Para crear un módulo nuevo (service, app UI, etc.) leer primero `docs/structure/README.md`: contiene las plantillas y convenciones estándar (models, DAOs, endpoints, shell del servicio, apps frontend).
 
 ## Documentation Rules
 

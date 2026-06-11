@@ -2,7 +2,8 @@
 
 Guía / punto de partida para crear una app de nivel empresarial (correo, docs,
 calendario, etc.) sin tener que re-aprender toda la plataforma. Complementa
-`docs/structure/services/{endpoints,models,daos}.md`.
+`docs/structure/services/{models,daos,endpoints,service-shell}.md` y
+`docs/structure/apps/frontend.md` (ver el índice en `docs/structure/README.md`).
 
 ## Anatomía de una app empresarial
 
@@ -137,7 +138,7 @@ Estructura de un preset (ver `presets/my-account/` y `presets/project-management
 
 ```text
 presets/adc-<feature>-frontend/
-├── LICENCE.md
+├── LICENSE.md
 ├── README.md            # máx 15 líneas
 └── apps/adc-<feature>/  # la app UI
 
@@ -148,4 +149,10 @@ presets/adc-<feature>-backend/
 └── (docker compose vía src/common/docker/adc-*-core/)
 ```
 
-Registrar ambos en `presets/.presets.txt`.
+Registrar ambos en `presets/.presets.txt` (flujo completo en `docs/multirepo.md`).
+
+> **Nota sobre rutas:** los docs de `docs/structure/services/` usan
+> `src/services/<layer>/<MyService>/` como raíz de ejemplo. La estructura interna
+> del servicio es **idéntica** dentro de un preset; solo cambia la raíz:
+> `presets/<preset>/services/<feature>-service/`. Lo mismo aplica a las apps
+> (`src/apps/public/...` vs `presets/<preset>/apps/...`).

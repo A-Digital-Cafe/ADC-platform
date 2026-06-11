@@ -46,89 +46,31 @@ Los servicios en modo kernel se cargan automáticamente antes que las apps:
 
 ## Gestión de Identidades
 
-El `IdentityManagerService` proporciona:
-
-- **8 Roles Predefinidos:** SYSTEM, Admin, Network Manager, Security Manager, Data Manager, App Manager, Config Manager, User
-- **Usuario SYSTEM:** Creado automáticamente con credenciales aleatorias en cada arranque
-- **Roles Personalizados:** Posibilidad de crear nuevos roles con permisos granulares
-- **Grupos:** Agrupación de usuarios con asignación automática de roles
-- **Persistencia:** Usa MongoDB cuando está disponible, funciona con datos en memoria como fallback
-- **Seguridad:** Contraseñas hasheadas con PBKDF2 (100,000 iteraciones) y salt de 16 bytes
-
-### Ejemplo: Usar IdentityManager en una App
-
-```typescript
-// Obtener el servicio
-const identityService = this.kernel.getService<any>("IdentityManagerService");
-const identity = await identityService.getInstance();
-
-// Crear usuario
-const user = await identity.createUser("john", "password123", [roleId]);
-
-// Autenticar
-const authenticated = await identity.authenticate("john", "password123");
-
-// Crear grupo
-const group = await identity.createGroup("Team A", "Mi equipo", [roleId]);
-
-// Agregar usuario a grupo
-await identity.addUserToGroup(user.id, group.id);
-
-// Estadísticas
-const stats = await identity.getStats();
-console.log(`${stats.totalUsers} usuarios, ${stats.totalRoles} roles`);
-```
+El `IdentityManagerService` (servicio en modo kernel) gestiona usuarios, roles, grupos y organizaciones con persistencia en MongoDB, hashing PBKDF2 y permisos granulares por recurso/acción/alcance. Detalle en [ARCHITECTURE.md](./ARCHITECTURE.md) y en `src/services/core/IdentityManagerService/README.md`.
 
 ## Provisioning Automático con Docker Compose
 
-Si una app contiene un archivo `docker-compose.yml`, el kernel lo ejecutará automáticamente antes de iniciar la app:
-
-```yaml
-# src/apps/test/user-profile/docker-compose.yml
-version: "3.8"
-services:
-    mongo:
-        image: mongo:latest
-        ports:
-            - "27017:27017"
-        environment:
-            MONGO_INITDB_ROOT_USERNAME: admin
-            MONGO_INITDB_ROOT_PASSWORD: password
-```
-
-Luego en la configuración de la app (`default.json`), referencia el provider:
-
-```json
-{
-	"providers": [
-		{
-			"name": "mongo",
-			"global": true,
-			"custom": {
-				"uri": "mongodb://admin:password@localhost:27017/db-name"
-			}
-		}
-	]
-}
-```
+Si una app contiene un archivo `docker-compose.yml`, el kernel lo ejecutará automáticamente antes de iniciar la app. Ver detalles y ejemplos en [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Estructura del Proyecto
 
 ```
 src/
 ├── apps/                    # Aplicaciones
-│   ├── core/               # Apps de núcleo
-│   └── test/               # Apps de prueba
-├── providers/              # Proveedores (persistencia, base de datos, etc)
-│   ├── files/file-storage/
-│   └── object/mongo/       # Provider de MongoDB
+│   ├── public/             # Apps públicas (namespace adc-platform)
+│   └── test/               # Apps de desarrollo (namespace default)
+├── providers/              # Proveedores I/O (http/, object/, queue/, files/, security/)
 ├── services/               # Servicios de la plataforma
-│   ├── core/
-│   │   ├── ExecutionManagerService/
-│   │   └── IdentityManagerService/
-│   └── data/json-file-crud/
-└── utilities/              # Utilidades reutilizables
+│   ├── core/               # IdentityManager, UIFederation, EndpointManager, etc.
+│   ├── data/               # Servicios de datos
+│   └── security/           # SessionManager, Moderation, etc.
+├── utilities/              # Utilidades reutilizables
+├── common/                 # Tipos y utilidades compartidas (@common)
+└── utils/                  # Helpers internos del kernel
+presets/                    # Módulos opcionales en repos git propios (docs/multirepo.md)
 ```
+
+Para crear módulos nuevos de forma estandarizada, ver las plantillas en [docs/structure/README.md](./docs/structure/README.md).
 
 ## Configuración de Módulos
 

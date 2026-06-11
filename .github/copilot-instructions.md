@@ -103,7 +103,7 @@ class HeavyService extends BaseService {
 
 ### Kernel-Mode Services
 
-Services with `kernelMode: true` in their `config.json` load during kernel startup (before apps). Examples:
+Services with `kernelMode` in their `config.json` load during kernel startup (before apps). The value can be `true` (priority 1) or a number defining load order — lower loads first (e.g. `LangManagerService: 10` loads before `IdentityManagerService: 60`). Examples:
 
 - **ExecutionManagerService**: Manages worker pool for distributed execution
 - **IdentityManagerService**: User/role/group management with PBKDF2 hashing, MongoDB persistence
@@ -135,6 +135,8 @@ npm run cleanup          # Kill orphaned processes
 > To test/run a module, use the npm scripts above — never hand-compile.
 
 ### Creating Modules
+
+**Before creating a new service or UI app from scratch, read `docs/structure/README.md`** — it indexes the standard templates (models, DAOs, endpoints, service shell, frontend apps, enterprise apps).
 
 Use scaffolding scripts:
 
@@ -216,7 +218,7 @@ kernel.registerProvider("file-storage", instance, config);
 
 ## Reference Files
 
-- **Kernel orchestration**: `src/kernel.ts` (807 lines)
+- **Kernel orchestration**: `src/kernel.ts` (loading logic in `src/core/`)
 - **App base class**: `src/apps/BaseApp.ts`
 - **Service base**: `src/services/BaseService.ts`
 - **Provider base**: `src/providers/BaseProvider.ts`
