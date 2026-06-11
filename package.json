@@ -15,7 +15,7 @@
 		"presets/*/services/**"
 	],
 	"scripts": {
-		"postinstall": "bash scripts/sync-presets.sh || true",
+		"postinstall": "node scripts/sync-presets.mjs",
 		"start": "cross-env NODE_ENV=production bun src/index.ts",
 		"dev": "cross-env NODE_ENV=development ENABLE_TESTS=true bun src/index.ts",
 		"start:prodtests": "cross-env NODE_ENV=production ENABLE_TESTS=true PROD_PORT=3000 bun src/index.ts",
