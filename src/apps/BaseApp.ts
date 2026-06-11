@@ -1,4 +1,3 @@
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { IApp } from "../interfaces/modules/IApp.js";
 import { Kernel } from "../kernel.js";
@@ -7,6 +6,7 @@ import type { UIModuleConfig } from "../interfaces/modules/IUIModule.js";
 import UIFederationService from "../services/core/UIFederationService/index.ts";
 import { BaseModule } from "../common/BaseModule.js";
 import { OnlyKernel } from "../utils/decorators/OnlyKernel.ts";
+import { mergeAppConfigs, readBaseConfig } from "../core/apps/AppConfigMerger.js";
 
 /**
  * Clase base abstracta para todas las Apps.
@@ -96,52 +96,10 @@ export abstract class BaseApp extends BaseModule implements IApp {
 	}
 
 	async #mergeModuleConfigs(): Promise<void> {
-		const appDir = this.appDir;
-
-		let baseConfig: Partial<IModuleConfig> = {};
-		try {
-			const defaultConfigPath = path.join(appDir, "default.json");
-			const content = await fs.readFile(defaultConfigPath, "utf-8");
-			baseConfig = JSON.parse(content);
-		} catch {
-			// NOOP
-		}
-
+		const baseConfig = await readBaseConfig(this.appDir);
 		const instanceConfig: Partial<IModuleConfig> = this.config || {};
 
-		// Función auxiliar para fusionar módulos por nombre
-		const mergeModules = (base: IModuleConfig[] = [], instance: IModuleConfig[] = []): IModuleConfig[] => {
-			const byName = new Map(base.map((item) => [item.name, item]));
-			for (const item of instance) {
-				const existing = byName.get(item.name) || {};
-				byName.set(item.name, { ...existing, ...item });
-			}
-			return Array.from(byName.values());
-		};
-
-		const mergedProviders = mergeModules(baseConfig.providers, instanceConfig.providers);
-		const mergedUtilities = mergeModules(baseConfig.utilities, instanceConfig.utilities);
-		const mergedServices = mergeModules(baseConfig.services, instanceConfig.services);
-
-		// Los servicios SIN providers propios heredan los globales
-		// Esto permite que usen la configuración correcta del provider global
-		const servicesWithInheritedProviders = mergedServices.map((service: IModuleConfig) => {
-			if (!service.providers || service.providers.length === 0) {
-				return { ...service, providers: mergedProviders };
-			}
-			return service;
-		});
-
-		const mergedConfig: Partial<IModuleConfig> = {
-			...baseConfig,
-			...instanceConfig,
-			failOnError: instanceConfig.failOnError ?? baseConfig.failOnError,
-			providers: mergedProviders,
-			utilities: mergedUtilities,
-			services: servicesWithInheritedProviders,
-		};
-
-		this.config = mergedConfig as IModuleConfig;
+		this.config = mergeAppConfigs(baseConfig, instanceConfig);
 		Object.freeze(this.config); // Freezes config from modifications
 	}
 

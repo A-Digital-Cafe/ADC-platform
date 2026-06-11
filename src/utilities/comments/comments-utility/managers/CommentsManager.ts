@@ -1,19 +1,20 @@
 import { randomUUID } from "node:crypto";
 import type { Model } from "mongoose";
-import type { Comment, CommentDraft, CommentLabel, CommentsPage } from "../../../../common/types/comments/Comment.js";
+import type { Comment, CommentDraft, CommentLabel, CommentsPage } from "@common/types/comments/Comment.js";
 import {
 	COMMENT_MAX_ATTACHMENTS,
 	COMMENT_MAX_BLOCKS,
 	COMMENT_MAX_DEPTH,
 	COMMENT_REACTION_MAX_EMOJI_LENGTH,
-} from "../../../../common/types/comments/Comment.js";
-import type { Block } from "../../../../common/ADC/types/learning.js";
-import { extractAttachmentIdsFromBlocks, sanitizeBlocks } from "../../../../common/utils/blocks/sanitize.js";
+} from "@common/types/comments/Comment.js";
+import type { Block } from "@common/ADC/types/learning.js";
+import { extractAttachmentIdsFromBlocks, sanitizeBlocks } from "@common/utils/blocks/sanitize.js";
+import { assertOwnedAttachments } from "@common/utils/blocks/attachment-ownership.js";
 import type { CommentDoc } from "../schemas/comment.schema.js";
 import type { CommentDraftDoc } from "../schemas/draft.schema.js";
 import type { AttachmentsManager } from "../../../attachments/attachments-utility/managers/AttachmentsManager.js";
-import type { AttachmentDTO } from "../../../../common/types/attachments/Attachment.js";
-import { CommentError } from "../../../../common/types/custom-errors/CommentError.ts";
+import type { AttachmentDTO } from "@common/types/attachments/Attachment.js";
+import { CommentError } from "@common/types/custom-errors/CommentError.ts";
 import { DraftsRepository, type DraftKey, type DraftPayload } from "../helpers/drafts.ts";
 
 export type CommentAction = "list" | "create" | "reply" | "edit" | "delete" | "react" | "moderate";
@@ -137,15 +138,8 @@ export class CommentsManager {
 			throw err(400, "COMMENT_ATTACHMENTS_DISABLED", "Este servicio no soporta adjuntos en comentarios");
 		}
 		const found = await this.#attachments.getMany(ctx as any, all);
-		if (found.length !== all.length) {
-			throw err(400, "COMMENT_BAD_ATTACHMENT", "Adjunto inválido o no autorizado");
-		}
-		// El uploader debe coincidir con el autor del comentario
-		for (const att of found) {
-			if (att.uploadedBy !== ctx.userId) {
-				throw err(403, "COMMENT_ATTACHMENT_NOT_OWNED", "Solo puedes referenciar adjuntos que subiste");
-			}
-		}
+		// Regla compartida: existencia + uploader == autor (ver @common/utils/blocks/attachment-ownership)
+		assertOwnedAttachments({ requestedIds: all, found, userId: ctx.userId, errorPrefix: "COMMENT" });
 		return { ids: all, dtos: found.map((f) => this.#attachments!.toDto(f)) };
 	}
 

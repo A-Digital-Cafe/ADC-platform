@@ -18,9 +18,12 @@ self.addEventListener('fetch', (event) => {
 		return; // Ir directo a la red
 	}
 
-	// Chunks lazy de componentes de adc-ui-library: cache-first.
-	// Son assets reutilizados en muchas vistas; HMR, hot updates y lazy proxies quedan excluidos arriba.
-	if (isUILibraryComponentAsset(url)) {
+	// Chunks lazy de componentes de adc-ui-library: cache-first SOLO en producción.
+	// En desarrollo, la compilación lazy de Rspack regenera estos entry chunks con un
+	// mapa de módulos distinto (lazy-compilation-proxy). Servir una versión cacheada
+	// stale tras reiniciar el proyecto rompe los hot-updates entrantes con
+	// "Cannot set properties of undefined (... !lazy-compilation-proxy)".
+	if (!IS_DEVELOPMENT && isUILibraryComponentAsset(url)) {
 		event.respondWith(cacheFirst(request, UI_LIBRARY_CACHE));
 		return;
 	}

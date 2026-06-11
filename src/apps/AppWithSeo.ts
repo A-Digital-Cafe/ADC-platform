@@ -79,7 +79,14 @@ export abstract class AppWithSeo extends BaseApp {
 				});
 			}
 		} catch (e) {
-			this.logger.logDebug(`SEOService no disponible: ${(e as Error).message}`);
+			// Distinguir "servicio no registrado" (degradación esperada, debug) de un
+			// error interno real del SEOService (warn: el sitio pierde sitemaps/OG sin avisar).
+			const message = (e as Error).message ?? String(e);
+			if (/no encontrado|not found|no registrado|not registered/i.test(message)) {
+				this.logger.logDebug(`SEOService no disponible: ${message}`);
+			} else {
+				this.logger.logWarn(`SEOService falló durante el registro SEO de ${this.name}: ${message}`);
+			}
 		}
 	}
 }
