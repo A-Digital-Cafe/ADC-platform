@@ -78,6 +78,12 @@ ${imports}
 export default {
     mode: '${mode}',
     devtool: ${devtool},
+    // Top-level desde rspack 2.0 (antes experiments.lazyCompilation). Debe ser
+    // explícito: si queda undefined, \`rspack serve\` lo auto-activa con
+    // { imports: true }, creando módulos "!lazy-compilation-proxy" para los
+    // import() dinámicos de Stencil (*.entry.js) cuyos hot-updates rompen el
+    // runtime HMR ("Cannot set properties of undefined") al recompilar la UI library.
+    lazyCompilation: false,
     context: '${normalizeForConfig(module.appDir)}',
     entry: {
         main: '${mainEntry}',

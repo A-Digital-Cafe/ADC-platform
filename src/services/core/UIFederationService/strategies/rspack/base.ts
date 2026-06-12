@@ -108,11 +108,10 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 	protected abstract getPlugins(context: IBuildContext, isHost: boolean, usedFrameworks: Set<string>): string;
 	protected abstract getImports(): string;
 
-	/** Bloque `experiments` (overridable; default activa css y desactiva lazyCompilation). */
+	/** Bloque `experiments` (overridable; default activa css). */
 	protected getExperiments(): string {
 		return `
-        css: true,
-        lazyCompilation: false,`;
+        css: true,`;
 	}
 
 	/** Reglas extra concatenadas tras `moduleRules` (overridable). */
