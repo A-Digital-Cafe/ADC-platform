@@ -57,6 +57,7 @@ export default {
 		cookies: "Cookies",
 		contact: "Contacto",
 		team: "Equipo",
-		help: "Ayuda"
+		help: "Ayuda",
+		status: "Estado"
 	}
 };

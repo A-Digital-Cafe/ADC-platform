@@ -1,7 +1,7 @@
 import { Component, Prop, State } from "@stencil/core";
 import { IS_DEV } from "../../../utils/url.js";
 
-type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help";
+type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help" | "status";
 
 interface ADCGlobal {
 	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
@@ -11,15 +11,20 @@ interface ADCGlobal {
 
 const HELP_DEV_PORT = 3022;
 const HELP_HOST = "help.adigitalcafe.com";
+const STATUS_DEV_PORT = 3020;
+const STATUS_HOST = "status.adigitalcafe.com";
 const I18N_NAMESPACE = "adc-ui-library";
 
-const HELP_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string }> = [
-	{ key: "privacy", path: "/privacy" },
-	{ key: "terms", path: "/terms" },
-	{ key: "cookies", path: "/cookies" },
-	{ key: "contact", path: "/contact" },
-	{ key: "team", path: "/team" },
-	{ key: "help", path: "/" },
+type FooterHost = "help" | "status";
+
+const FOOTER_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string; target: FooterHost }> = [
+	{ key: "privacy", path: "/privacy", target: "help" },
+	{ key: "terms", path: "/terms", target: "help" },
+	{ key: "cookies", path: "/cookies", target: "help" },
+	{ key: "contact", path: "/contact", target: "help" },
+	{ key: "team", path: "/team", target: "help" },
+	{ key: "help", path: "/", target: "help" },
+	{ key: "status", path: "/", target: "status" },
 ];
 
 const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string>> = {
@@ -31,6 +36,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		contact: "Contacto",
 		team: "Equipo",
 		help: "Ayuda",
+		status: "Estado",
 	},
 	en: {
 		aria: "Help links",
@@ -40,6 +46,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		contact: "Contact",
 		team: "Team",
 		help: "Help",
+		status: "Status",
 	},
 };
 
@@ -47,8 +54,10 @@ const host = () => globalThis.location?.hostname ?? "localhost";
 const proto = () => globalThis.location?.protocol ?? "http:";
 const adcI18n = globalThis as typeof globalThis & ADCGlobal;
 
-function helpUrl(path: string): string {
-	return IS_DEV ? `${proto()}//${host()}:${HELP_DEV_PORT}${path}` : `${proto()}//${HELP_HOST}${path}`;
+function footerUrl(path: string, target: FooterHost): string {
+	const devPort = target === "status" ? STATUS_DEV_PORT : HELP_DEV_PORT;
+	const prodHost = target === "status" ? STATUS_HOST : HELP_HOST;
+	return IS_DEV ? `${proto()}//${host()}:${devPort}${path}` : `${proto()}//${prodHost}${path}`;
 }
 
 function fallbackLocale(): "es" | "en" {
@@ -105,8 +114,8 @@ export class AdcSiteFooter {
 	private helpLinksComponent() {
 		return (
 			<nav class="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-sm" aria-label={this.translateFooter("aria")}>
-				{HELP_LINKS.map((link) => (
-					<a key={link.key} href={helpUrl(link.path)} class="underline hover:no-underline">
+				{FOOTER_LINKS.map((link) => (
+					<a key={link.key} href={footerUrl(link.path, link.target)} class="underline hover:no-underline">
 						{this.translateFooter(link.key)}
 					</a>
 				))}

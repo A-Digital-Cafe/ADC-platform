@@ -120,7 +120,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 		subdomain: "",
 		prodHostname: PROD_BASE_DOMAIN,
 	},
-	{ id: "auth", label: "Auth", devPort: 3012, subdomain: "auth" },
+	{ id: "auth", label: "Auth", devPort: 3012, subdomain: "auth", iconTag: "adc-icon-app-auth" },
 	{
 		id: "community",
 		label: "Community",
@@ -141,10 +141,10 @@ const DEFAULT_APPS: PlatformApp[] = [
 	},
 	{ id: "identity", label: "Identity", devPort: 3014, subdomain: "identity", iconTag: "adc-icon-app-identity", remoteName: "adc_identity" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
-	{ id: "help", label: "Help", devPort: 3022, subdomain: "help" },
-	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account" },
-	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org" },
-	{ id: "status", label: "Status", devPort: 3020, subdomain: "status" },
+	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
+	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
+	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org", iconTag: "adc-icon-app-org" },
+	{ id: "status", label: "Status", devPort: 3020, subdomain: "status", iconTag: "adc-icon-app-status" },
 ];
 
 function getRegistry(): PlatformLinkRegistry {
