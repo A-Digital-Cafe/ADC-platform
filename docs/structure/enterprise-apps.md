@@ -72,7 +72,7 @@ Referencia: cron de soft-delete en `IdentityManagerService` (`scheduledDeletionA
 - `App.tsx`: `<adc-layout>` como raíz estable (nunca envolver en `main.tsx`).
 - Router y sesión: `@common/utils/router.js`, `@ui-library/utils/session`.
 - Reutilizar componentes de `00-adc-ui-library`; añadir nuevos átomos/organismos
-  allí si son reutilizables (no duplicar en cada app).
+  allí si son reutilizables (no duplicar en cada app).; leer su readme para ver utilidades disponibles.
 
 ## Errores e i18n
 

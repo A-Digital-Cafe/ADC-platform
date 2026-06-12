@@ -132,27 +132,6 @@ export default function App() {
 		return () => el.removeEventListener("adcTabChange", handler);
 	});
 
-	// Loading skeleton
-	if (!ready || loading) {
-		return (
-			<adc-layout>
-				<div className="max-w-6xl mx-auto px-4 py-8">
-					<adc-skeleton variant="rectangular" height="48px" class="mb-6" />
-					<adc-skeleton variant="rectangular" height="400px" />
-				</div>
-			</adc-layout>
-		);
-	}
-
-	// Unauthorized or no visible tabs - show landing view
-	if (unauthorized || visibleTabs.length === 0) {
-		return (
-			<adc-layout>
-				<LandingView />
-			</adc-layout>
-		);
-	}
-
 	const tabItems = visibleTabs.map((tab) => ({
 		id: tab.id,
 		label: t(`tabs.${tab.label}`),
@@ -183,33 +162,47 @@ export default function App() {
 		}
 	};
 
+	// Single stable <adc-layout> with one wrapper div as the sole slotted child.
+	// Stencil (shadow: false) physically moves direct children into slots — multiple
+	// conditional returns would cause React's removeChild to fail on reconciliation.
 	return (
 		<adc-layout>
-			<div className="max-w-6xl mx-auto px-4 py-8">
-				<h1 className="font-heading text-2xl font-bold text-text mb-6">{t("common.title")}</h1>
-
-				{/* Filtro de organización para admin global */}
-				{isAdmin && !tokenOrgId && organizations.length > 0 && (
-					<div className="mb-4 flex items-center gap-3">
-						<label className="text-sm font-medium text-text whitespace-nowrap">{t("common.orgFilter")}:</label>
-						<adc-combobox
-							ref={comboboxRef}
-							value={selectedOrgFilter || ""}
-							placeholder={t("common.globalView")}
-							options={JSON.stringify(organizations.map((org) => ({ label: org.slug, value: org.orgId })))}
-							class="min-w-50"
-						/>
-						{selectedOrgFilter && (
-							<adc-badge color="indigo" size="sm">
-								{organizations.find((o) => o.orgId === selectedOrgFilter)?.slug}
-							</adc-badge>
-						)}
+			<div>
+				{(!ready || loading) && (
+					<div className="max-w-6xl mx-auto px-4 py-8">
+						<adc-skeleton variant="rectangular" height="48px" class="mb-6" />
+						<adc-skeleton variant="rectangular" height="400px" />
 					</div>
 				)}
+				{ready && !loading && (unauthorized || visibleTabs.length === 0) && <LandingView />}
+				{ready && !loading && !unauthorized && visibleTabs.length > 0 && (
+					<div className="max-w-6xl mx-auto px-4 py-8">
+						<h1 className="font-heading text-2xl font-bold text-text mb-6">{t("common.title")}</h1>
 
-				<adc-tabs ref={tabsRef} tabs={JSON.stringify(tabItems)} activeTab={activeTab} variant="underline" />
+						{/* Filtro de organización para admin global */}
+						{isAdmin && !tokenOrgId && organizations.length > 0 && (
+							<div className="mb-4 flex items-center gap-3">
+								<label className="text-sm font-medium text-text whitespace-nowrap">{t("common.orgFilter")}:</label>
+								<adc-combobox
+									ref={comboboxRef}
+									value={selectedOrgFilter || ""}
+									placeholder={t("common.globalView")}
+									options={JSON.stringify(organizations.map((org) => ({ label: org.slug, value: org.orgId })))}
+									class="min-w-50"
+								/>
+								{selectedOrgFilter && (
+									<adc-badge color="indigo" size="sm">
+										{organizations.find((o) => o.orgId === selectedOrgFilter)?.slug}
+									</adc-badge>
+								)}
+							</div>
+						)}
 
-				<div className="mt-6">{renderActiveView()}</div>
+						<adc-tabs ref={tabsRef} tabs={JSON.stringify(tabItems)} activeTab={activeTab} variant="underline" />
+
+						<div className="mt-6">{renderActiveView()}</div>
+					</div>
+				)}
 			</div>
 		</adc-layout>
 	);
