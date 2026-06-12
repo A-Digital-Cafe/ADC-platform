@@ -13,6 +13,8 @@ import { TransparencyPage } from "./pages/TransparencyPage";
 import { ContactPage } from "./pages/ContactPage";
 import { RoadmapPage } from "./pages/RoadmapPage";
 import { TeamPage } from "./pages/TeamPage";
+import { TutorialsPage } from "./pages/TutorialsPage";
+import { TutorialArticlePage } from "./pages/TutorialArticlePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 
 const HELP_ROUTES = new Set([
@@ -28,7 +30,15 @@ const HELP_ROUTES = new Set([
 	"/contact",
 	"/team",
 	"/roadmap",
+	"/tutorials",
 ]);
+
+/** Rutas internas: las estáticas del set o cualquier subruta de tutoriales. */
+function isHelpRoute(pathname: string): boolean {
+	return HELP_ROUTES.has(pathname) || pathname.startsWith("/tutorials/");
+}
+
+const TUTORIAL_ARTICLE_RE = /^\/tutorials\/([^/]+)\/([^/]+)$/;
 
 interface RouteState {
 	path: string;
@@ -57,6 +67,11 @@ function scrollToHash(hash: string) {
 }
 
 function renderPage(path: string) {
+	const tutorialArticle = TUTORIAL_ARTICLE_RE.exec(path);
+	if (tutorialArticle) return <TutorialArticlePage appId={tutorialArticle[1]} slug={tutorialArticle[2]} />;
+	// `/tutorials` y `/tutorials/:appId` muestran el hub (anclas por app).
+	if (path === "/tutorials" || path.startsWith("/tutorials/")) return <TutorialsPage />;
+
 	switch (path) {
 		case "/":
 			return <HomePage />;
@@ -117,7 +132,7 @@ export default function App() {
 			if (!anchor || anchor.target || anchor.hasAttribute("download")) return;
 
 			const url = new URL(anchor.href, globalThis.location?.href);
-			if (url.origin !== globalThis.location?.origin || !HELP_ROUTES.has(url.pathname)) return;
+			if (url.origin !== globalThis.location?.origin || !isHelpRoute(url.pathname)) return;
 
 			event.preventDefault();
 			if (globalThis.location?.pathname !== url.pathname || globalThis.location?.hash !== url.hash) {

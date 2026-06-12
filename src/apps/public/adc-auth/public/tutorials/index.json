@@ -1,0 +1,10 @@
+{
+	"tutorials": [
+		{
+			"slug": "crear-cuenta-e-iniciar-sesion",
+			"title": "Crear tu cuenta e iniciar sesión",
+			"description": "Registro, inicio de sesión y cierre de sesión en la plataforma.",
+			"minutes": 2
+		}
+	]
+}

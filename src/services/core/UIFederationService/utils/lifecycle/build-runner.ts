@@ -3,6 +3,7 @@ import type { RegisteredUIModule } from "../../types.js";
 import type { IBuildContext } from "../../strategies/types.js";
 import { getStrategy } from "../../strategies/index.js";
 import type { UIFederationContext } from "../types/context.js";
+import { copyPublicFiles } from "../fs/file-operations.js";
 import { waitForDeclaredRemotes, waitForUILibraryBuild } from "./wait-helpers.js";
 
 function applyBuildResult(module: RegisteredUIModule, namespace: string, result: any, ctx: UIFederationContext): void {
@@ -48,6 +49,11 @@ export async function buildUIModule(module: RegisteredUIModule, namespace: strin
 		module.buildStatus = "built";
 
 		if (!buildCtx.isDevelopment) {
+			// En prod los assets de public/ (favicon, tutorials/, etc.) deben quedar en el
+			// output servido por host; en dev los sirve el devServer directamente.
+			if (framework !== "stencil" && module.outputPath) {
+				await copyPublicFiles(module.appDir, module.outputPath, ctx.logger);
+			}
 			ctx.logger.logOk(`Build completado para ${module.name} [${namespace}]`);
 		}
 	} catch (error: any) {

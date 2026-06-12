@@ -118,6 +118,22 @@ if (container) {
 3. Crear el icono `adc-icon-app-<id>` en la UI library y regenerar `react-jsx`.
 4. (Opcional) Exponer `./platformLinkResolver` para chips de enlaces cross-app — ver `docs/structure/enterprise-apps.md`.
 
+## Tutoriales
+
+Cada microfront publica sus tutoriales como estáticos en `public/tutorials/` (sin federación):
+
+```
+public/tutorials/index.json   # { "tutorials": [{ "slug", "title", "description"?, "minutes"? }] }
+public/tutorials/<slug>.md    # markdown breve; el título va en el manifiesto, NO como `#` en el .md
+```
+
+La app **help** los descubre en runtime sondeando `{origen}/tutorials/index.json` de cada app del
+registry de `platform-links` (la app debe estar en `DEFAULT_APPS`) y los renderiza con
+`@ui-library/utils/markdown-blocks` + `adc-blocks-renderer`. Subset markdown soportado: encabezados,
+listas, checkboxes, código cercado, citas, callouts (`> [!info]`), tablas, divisores e inline
+(`**`, `*`, `` ` ``, links — incluidos chips de plataforma). Una app sin tutoriales simplemente no
+publica el manifiesto.
+
 ## Checklist de creación
 
 - [ ] `config.json` con `uiModule` completo: namespace, `isHost`, `uiDependencies`, `devPort` único, `hosting`.

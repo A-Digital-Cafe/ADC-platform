@@ -1,0 +1,10 @@
+{
+	"tutorials": [
+		{
+			"slug": "bienvenida",
+			"title": "Bienvenida a la plataforma",
+			"description": "Qué es Abby's Digital Cafe y cómo moverte entre sus aplicaciones.",
+			"minutes": 2
+		}
+	]
+}

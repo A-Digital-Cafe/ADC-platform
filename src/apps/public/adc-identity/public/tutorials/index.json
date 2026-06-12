@@ -1,0 +1,10 @@
+{
+	"tutorials": [
+		{
+			"slug": "usuarios-grupos-y-roles",
+			"title": "Usuarios, grupos y roles",
+			"description": "Gestioná identidades y permisos de tu organización desde Identity.",
+			"minutes": 3
+		}
+	]
+}

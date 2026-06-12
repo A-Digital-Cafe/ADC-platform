@@ -85,6 +85,14 @@ export default resolvePlatformLink;
 
 > La app debe estar listada en `DEFAULT_APPS` (`platform-links.ts`) con su `remoteName` y `resolverExpose`. `registerPlatformLinkResolver(appId, fn)` sigue disponible como _fast-path_ opcional en proceso.
 
+## markdown-blocks.ts
+
+`markdownToBlocks(md)` — convierte markdown (subset: encabezados, listas, checkboxes, código, citas, callouts `> [!tone]`, tablas, divisores) en bloques para `adc-blocks-renderer`. El formato inline lo resuelve `adc-inline-tokens` al renderizar, incluidos los chips `adc-platform-link`.
+
+## tutorials.ts
+
+Descubrimiento y carga de tutoriales de plataforma. Cada microfront publica `public/tutorials/index.json` + `<slug>.md` en su propio origen; `fetchTutorialsCatalog()` sondea todas las apps del registry de `platform-links`, `fetchAppTutorials(app)` trae el manifiesto de una y `fetchTutorialMarkdown(app, slug)` el markdown. Tolerante a apps sin tutoriales (404/fallback SPA → se omiten). Ver `docs/structure/apps/frontend.md`.
+
 ## router.ts
 
 Router para navegación SPA sin recargar la página. Ubicado en `@common/utils/router.js`.

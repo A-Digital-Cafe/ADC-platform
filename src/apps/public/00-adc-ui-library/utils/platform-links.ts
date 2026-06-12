@@ -113,6 +113,15 @@ const PROD_BASE_DOMAIN = "adigitalcafe.com";
  */
 const DEFAULT_APPS: PlatformApp[] = [
 	{
+		id: "home",
+		label: "Abby's Digital Cafe",
+		devPort: 3024,
+		// Vive en el apex (sin subdominio): se matchea por `prodHostname`.
+		subdomain: "",
+		prodHostname: PROD_BASE_DOMAIN,
+	},
+	{ id: "auth", label: "Auth", devPort: 3012, subdomain: "auth" },
+	{
 		id: "community",
 		label: "Community",
 		devPort: 3010,
@@ -196,9 +205,12 @@ function findApp(hostname: string, portStr: string): PlatformApp | null {
 		for (const app of apps.values()) if (app.devPort === port) return app;
 		return null;
 	}
-	const subdomain = hostname.split(".")[0]?.toLowerCase();
+	const normalized = hostname.toLowerCase();
+	// Apps en el apex (sin subdominio, ej: home) se matchean por hostname completo.
+	for (const app of apps.values()) if (app.prodHostname && app.prodHostname.toLowerCase() === normalized) return app;
+	const subdomain = normalized.split(".")[0];
 	if (!subdomain) return null;
-	for (const app of apps.values()) if (app.subdomain === subdomain) return app;
+	for (const app of apps.values()) if (app.subdomain && app.subdomain === subdomain) return app;
 	return null;
 }
 
@@ -269,17 +281,25 @@ function buildBaseInfo(ref: PlatformLinkRef): PlatformLinkInfo {
 	};
 }
 
-/** URL del `remoteEntry.js` de una app (dev: por puerto; prod: por subdominio). */
-function remoteEntryUrl(app: PlatformApp): string {
+/**
+ * Origen (protocolo + host + puerto, sin slash final) de una app de plataforma
+ * visto desde la página actual: en dev por `devPort`, en prod por subdominio.
+ * Bajo HTTPS los recursos remotos van por https (evita MITM y mixed content);
+ * protocolo y puerto se heredan de la página actual (prod real: https sin
+ * puerto; start:prodtests: http con puerto 3000).
+ */
+export function getPlatformAppOrigin(app: PlatformApp): string {
 	const hostname = globalThis.location?.hostname ?? "localhost";
-	if (isPrivateHostname(hostname)) return `http://${hostname}:${app.devPort}/remoteEntry.js`;
+	if (isPrivateHostname(hostname)) return `http://${hostname}:${app.devPort}`;
 	const prodHost = app.prodHostname ?? `${app.subdomain}.${PROD_BASE_DOMAIN}`;
-	// Module Federation carga código ejecutable remoto: bajo HTTPS el remote DEBE ir por
-	// https (evita MITM y mixed content). Protocolo y puerto se heredan de la página actual
-	// (prod real: https sin puerto; start:prodtests: http con puerto 3000).
 	const protocol = globalThis.location?.protocol === "https:" ? "https" : "http";
 	const port = globalThis.location?.port;
-	return `${protocol}://${prodHost}${port ? `:${port}` : ""}/remoteEntry.js`;
+	return `${protocol}://${prodHost}${port ? `:${port}` : ""}`;
+}
+
+/** URL del `remoteEntry.js` de una app (dev: por puerto; prod: por subdominio). */
+function remoteEntryUrl(app: PlatformApp): string {
+	return `${getPlatformAppOrigin(app)}/remoteEntry.js`;
 }
 
 /** Inyecta una sola vez el script `remoteEntry.js` de un contenedor federado. */

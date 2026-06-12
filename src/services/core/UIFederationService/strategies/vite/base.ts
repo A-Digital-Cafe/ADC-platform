@@ -3,7 +3,6 @@ import { build, type InlineConfig } from "vite";
 import { BaseFrameworkStrategy } from "../base-strategy.js";
 import type { BundlerType, IBuildContext, IBuildResult } from "../types.js";
 import aliasGenerator from "../../utils/bundler/alias-generator.js";
-import { copyPublicFiles } from "../../utils/fs/file-operations.js";
 import { createStaticAssetsPlugin, createCommonPublicFallbackPlugin } from "../shared/vite-static.js";
 import { buildViteBuildConfig, startViteDevServer, startVitePreviewServer } from "../shared/vite-server.js";
 
@@ -96,7 +95,7 @@ export abstract class ViteBaseStrategy extends BaseFrameworkStrategy {
 		const outputPath = path.join(uiOutputBaseDir, module.uiConfig.name);
 		module.outputPath = outputPath;
 
-		await copyPublicFiles(module.appDir, outputPath, context.logger);
+		// La copia de public/ al output la centraliza build-runner para todas las estrategias.
 		context.logger?.logOk(`Build completado para ${module.uiConfig.name}`);
 		return { outputPath };
 	}

@@ -1,0 +1,16 @@
+{
+	"tutorials": [
+		{
+			"slug": "explorar-articulos",
+			"title": "Explorar y leer artículos",
+			"description": "Buscá artículos, leelos y participá con valoraciones y comentarios.",
+			"minutes": 3
+		},
+		{
+			"slug": "learning-paths",
+			"title": "Seguir una ruta de aprendizaje",
+			"description": "Las rutas ordenan artículos por nivel para aprender un tema completo.",
+			"minutes": 2
+		}
+	]
+}

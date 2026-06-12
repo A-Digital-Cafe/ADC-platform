@@ -1,16 +1,17 @@
 # Help
 
-Centro de ayuda público de Abby's Digital Cafe. Sirve como base legal/ética del sitio:
-GDPR básico, política de cookies y términos, valores + marco GNI ("Espacio seguro para todos"),
-código de ética con declaración ISO/IEC 17050-1 (compromiso/roadmap, sin certificación), contacto
-y roadmap público de cumplimiento.
+Centro de ayuda público de Abby's Digital Cafe: tutoriales de la plataforma y base legal/ética
+del sitio (GDPR básico, cookies, términos, valores + marco GNI, código de ética, contacto y
+roadmap público de cumplimiento).
 
 ## Estructura
 
 - `src/pages/`: páginas estáticas versionadas (`/`, `/privacy`, `/cookies`, `/terms`, `/values`,
-  `/ethics`, `/hria`, `/authority-requests`, `/transparency`, `/contact`, `/roadmap`).
+  `/ethics`, `/hria`, `/authority-requests`, `/transparency`, `/contact`, `/roadmap`) y
+  tutoriales (`/tutorials`, `/tutorials/:appId/:slug`).
 - `src/components/`: layout interno con sidebar y header.
 - `src/data/`: contactos y metadatos compartidos.
 
-Los tutoriales por dominio y el resto del roadmap (status/SLA, bug bounty real, ASVS L2+, ISO/SOC2,
-WCAG AA completo) se incorporan en fases siguientes vía `data/content-service`.
+Los tutoriales se descubren en runtime: cada microfront publica `public/tutorials/index.json`
++ `.md` en su propio origen y esta app los lista/renderiza vía `@ui-library/utils/tutorials`
+y `@ui-library/utils/markdown-blocks` (ver `docs/structure/apps/frontend.md`).

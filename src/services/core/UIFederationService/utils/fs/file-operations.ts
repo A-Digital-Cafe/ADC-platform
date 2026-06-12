@@ -20,13 +20,16 @@ export async function copyDirectory(source: string, target: string): Promise<voi
 	}
 }
 
-/** Copia el contenido (flat) de un directorio si existe. */
-async function copyFlatIfExists(sourceDir: string, outputDir: string, logger: any, label: string): Promise<void> {
+/** Copia el contenido de un directorio (recursivo, preservando subcarpetas) si existe. */
+async function copyContentsIfExists(sourceDir: string, outputDir: string, logger: any, label: string): Promise<void> {
 	try {
 		await fs.access(sourceDir);
-		const entries = await fs.readdir(sourceDir);
+		const entries = await fs.readdir(sourceDir, { withFileTypes: true });
 		for (const entry of entries) {
-			await fs.copyFile(path.join(sourceDir, entry), path.join(outputDir, entry));
+			const sourcePath = path.join(sourceDir, entry.name);
+			const targetPath = path.join(outputDir, entry.name);
+			if (entry.isDirectory()) await copyDirectory(sourcePath, targetPath);
+			else await fs.copyFile(sourcePath, targetPath);
 		}
 		logger?.logDebug(`${label} copiados desde ${sourceDir}`);
 	} catch {
@@ -39,8 +42,8 @@ async function copyFlatIfExists(sourceDir: string, outputDir: string, logger: an
  * Primero copia common/public (fallback global), luego la carpeta public/ del app (override).
  */
 export async function copyPublicFiles(appDir: string, outputDir: string, logger?: any): Promise<void> {
-	await copyFlatIfExists(getCommonPublicDir(), outputDir, logger, "Assets comunes");
-	await copyFlatIfExists(path.join(appDir, "public"), outputDir, logger, "Archivos públicos");
+	await copyContentsIfExists(getCommonPublicDir(), outputDir, logger, "Assets comunes");
+	await copyContentsIfExists(path.join(appDir, "public"), outputDir, logger, "Archivos públicos");
 }
 
 /**

@@ -1,0 +1,10 @@
+{
+	"tutorials": [
+		{
+			"slug": "usar-el-centro-de-ayuda",
+			"title": "Usar el Centro de Ayuda",
+			"description": "Dónde encontrar tutoriales, políticas y cómo contactarnos.",
+			"minutes": 1
+		}
+	]
+}

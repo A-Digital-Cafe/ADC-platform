@@ -18,7 +18,8 @@ import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 const __filename = fileURLToPath(import.meta.url);
-const ROOT = dirname(__filename).replace(/\/scripts$/, "");
+// `resolve` (y no un replace de "/scripts") para que funcione también con paths Windows.
+const ROOT = resolve(dirname(__filename), "..");
 
 // ─── Helpers ───
 
