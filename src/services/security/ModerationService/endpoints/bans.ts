@@ -6,6 +6,7 @@ import type ModerationService from "../index.js";
 import type { ModerationInternalApi } from "../index.js";
 import { parseBanRequest } from "./banValidation.js";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
+import * as BS from "./schemas/bans.js";
 
 interface BanBody {
 	userId?: string;
@@ -49,6 +50,12 @@ export class BanEndpoints {
 		method: "GET",
 		url: "/api/moderation/bans",
 		permissions: [P.IDENTITY.USERS.READ],
+		options: {
+			tag: "ModerationService/Bans",
+			summary: "Lista bans",
+			description: "Solo admin global. No expone los hashes de email/IP (PII); devuelve sus contadores.",
+			schema: { querystring: BS.ListBansQuery, response: { 200: BS.ListBansResponse } },
+		},
 	})
 	static async listBans(ctx: EndpointCtx) {
 		BanEndpoints.assertGlobalAdmin(ctx);
@@ -78,6 +85,12 @@ export class BanEndpoints {
 		method: "POST",
 		url: "/api/moderation/bans",
 		permissions: [P.IDENTITY.USERS.UPDATE],
+		options: {
+			tag: "ModerationService/Bans",
+			summary: "Crea un ban",
+			description: "Con `userId` orquesta el baneo completo (Identity + blocklist + permisos); con `emails`/`ips` agrega un ban raw.",
+			schema: { body: BS.CreateBanBody, response: { 200: BS.CreateBanResponse } },
+		},
 	})
 	static async createBan(ctx: EndpointCtx<Record<string, string>, BanBody>) {
 		BanEndpoints.assertGlobalAdmin(ctx);
@@ -102,6 +115,12 @@ export class BanEndpoints {
 		method: "POST",
 		url: "/api/moderation/unban",
 		permissions: [P.IDENTITY.USERS.UPDATE],
+		options: {
+			tag: "ModerationService/Bans",
+			summary: "Levanta un ban",
+			description: "Por `userId` o por (`source` + `externalId`). Devuelve cuántas entradas se eliminaron.",
+			schema: { body: BS.UnbanBody, response: { 200: BS.UnbanResponse } },
+		},
 	})
 	static async unban(ctx: EndpointCtx<Record<string, string>, UnbanBody>) {
 		BanEndpoints.assertGlobalAdmin(ctx);

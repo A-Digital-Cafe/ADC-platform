@@ -12,7 +12,7 @@ Los endpoints se definen directamente en los métodos de un servicio utilizando 
 
 ```typescript
 import { EnableEndpoints, DisableEndpoints, RegisterEndpoint, EndpointCtx } from "./EndpointManagerService/index.js";
-import { Type } from "@sinclair/typebox";
+import * as S from "./endpoints/schemas/data.js"; // schemas TypeBox en carpeta aparte
 
 class MyDataService extends BaseService {
 	@RegisterEndpoint({
@@ -20,9 +20,14 @@ class MyDataService extends BaseService {
 		url: "/api/data/:id",
 		permissions: ["data.read"], // Permisos requeridos
 		options: {
+			// Agrupa el endpoint en Swagger UI como sub-tag "MyDataService/Data".
+			tag: "MyDataService/Data",
+			summary: "Obtiene un registro por ID",
+			description: "Devuelve el registro identificado por `id`.",
 			// Validación declarativa con TypeBox: 400 automático si la entrada no cumple.
 			// Los schemas también alimentan el doc OpenAPI servido en /api/docs (Swagger UI).
-			schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }) },
+			// `response` es solo documentación (no se valida en runtime).
+			schema: { params: S.DataIdParams, response: { 200: S.DataResponse } },
 		},
 	})
 	async getData(ctx: EndpointCtx<{ id: string }>) {
@@ -42,6 +47,17 @@ Notas de seguridad/operación:
 - Los endpoints públicos (`permissions: []`) SIEMPRE reciben rate limit por defecto: el kill-switch `ENDPOINT_RATE_LIMIT_ENABLED` no los afecta.
 - Las denegaciones 401/403 se auditan en logs (`[AUTHZ-DENY] …`), y los errores 500 responden con `correlationId` (detalle solo en logs del servidor).
 - Swagger UI: `/api/docs` (activo en dev; en producción requiere `API_DOCS_ENABLED=true`).
+
+#### Documentación OpenAPI (Swagger UI)
+
+`options` admite campos de documentación que alimentan `/api/docs`:
+
+- **`tag`**: sub-tag plano con convención `"Servicio/Recurso"` (ej. `"IdentityManagerService/Users"`). Los sub-tags que comparten prefijo se agrupan y ordenan juntos en Swagger UI. Si se omite, se usa el nombre del servicio.
+- **`summary`** / **`description`**: título de una línea y descripción larga (markdown) del endpoint.
+- **`deprecated`**: marca el endpoint como obsoleto.
+- **`schema.response`**: schemas TypeBox de respuesta por código (`{ 200: ..., 404: ... }`). Solo documentación: NO se validan en runtime (a diferencia de `body`/`querystring`/`params`).
+
+> Convención: los schemas TypeBox viven en una carpeta aparte `endpoints/schemas/<dominio>.ts` (un módulo por dominio) para no inflar los archivos de endpoints. Se importan con extensión `.js` (ESM).
 
 ### 2. Ciclo de Vida Automático
 

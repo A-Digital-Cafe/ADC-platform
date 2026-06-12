@@ -20,6 +20,11 @@ export class StatsEndpoints {
 		method: "GET",
 		url: "/api/identity/stats",
 		permissions: [P.IDENTITY.STATS.READ],
+		options: {
+			tag: "IdentityManagerService/Stats",
+			summary: "Estadísticas globales de identidad",
+			description: "Solo accesible en modo global (admin sin organización activa).",
+		},
 	})
 	static async getStats(ctx: EndpointCtx) {
 		if (ctx.user?.orgId) {

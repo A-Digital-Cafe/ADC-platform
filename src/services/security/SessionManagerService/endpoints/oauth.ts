@@ -24,6 +24,7 @@ import {
 	requireValidPendingLinkEntry,
 	type PendingLinkEntry,
 } from "../utils/pendingLinks.js";
+import * as OAS from "./schemas/oauth.js";
 
 /** Nombre de las cookies */
 const STATE_COOKIE_NAME = "oauth_state";
@@ -120,7 +121,13 @@ export class OAuthEndpoints {
 		method: "GET",
 		url: "/api/auth/login/:provider",
 		permissions: [],
-		options: { rateLimit: { max: 10, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/OAuth",
+			summary: "Inicia el flujo OAuth de un proveedor",
+			description: "Genera el `state` (CSRF) y redirige (302) a la URL de autorización del proveedor. Acepta `returnUrl` para el redirect post-auth.",
+			rateLimit: { max: 10, timeWindow: 60_000 },
+			schema: { params: OAS.ProviderParams, querystring: OAS.OAuthLoginQuery },
+		},
 	})
 	static async handleLogin(ctx: EndpointCtx<ProviderParams>): Promise<never> {
 		const provider = ctx.params.provider || "platform";
@@ -183,7 +190,13 @@ export class OAuthEndpoints {
 		method: "GET",
 		url: "/api/auth/callback/:provider",
 		permissions: [],
-		options: { rateLimit: { max: 10, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/OAuth",
+			summary: "Callback OAuth del proveedor",
+			description: "Intercambia el `code`, crea/recupera el usuario y redirige (302). Si el email coincide con una cuenta existente, redirige a vinculación.",
+			rateLimit: { max: 10, timeWindow: 60_000 },
+			schema: { params: OAS.ProviderParams },
+		},
 	})
 	static async handleCallback(ctx: EndpointCtx<ProviderParams>): Promise<never> {
 		const provider = ctx.params.provider || "platform";
@@ -242,7 +255,14 @@ export class OAuthEndpoints {
 		method: "POST",
 		url: "/api/auth/link-account",
 		permissions: [],
-		options: { skipIdempotency: true, rateLimit: { max: 3, timeWindow: 300_000 } },
+		options: {
+			tag: "SessionManagerService/OAuth",
+			summary: "Vincula una cuenta OAuth con un usuario existente",
+			description: "Requiere el token de vinculación pendiente (cookie) y la contraseña del usuario existente.",
+			skipIdempotency: true,
+			rateLimit: { max: 3, timeWindow: 300_000 },
+			schema: { body: OAS.LinkAccountBody },
+		},
 	})
 	static async handleLinkAccount(ctx: EndpointCtx<Record<string, string>>): Promise<never> {
 		const pendingToken = requirePendingLinkToken(ctx.cookies?.[PENDING_LINK_COOKIE_NAME]);

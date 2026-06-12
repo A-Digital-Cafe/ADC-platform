@@ -1,5 +1,5 @@
 import { CRUDXAction } from "./Actions.js";
-import { RESOURCES, type ResourceDef, type ScopeDef } from "./resources.js";
+import { RESOURCES, RESOURCE_MAP, type ResourceDef, type ScopeDef } from "./resources.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Typed permission builder
@@ -141,4 +141,62 @@ export function hasPermissionString(userPerms: readonly string[], required: stri
 		if ((scope & reqScope) === reqScope && (action & reqAction) === reqAction) return true;
 	}
 	return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Human-readable permission descriptions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Acciones atómicas (bit → nombre) para descomponer el bitfield de acción. */
+const ATOMIC_ACTIONS: ReadonlyArray<readonly [number, string]> = [
+	[CRUDXAction.READ, "read"],
+	[CRUDXAction.WRITE, "write"],
+	[CRUDXAction.UPDATE, "update"],
+	[CRUDXAction.DELETE, "delete"],
+	[CRUDXAction.EXECUTE, "execute"],
+];
+
+/** Convierte un bitfield de acción en una etiqueta legible (`delete`, `read+write`, `crud`, `all`). */
+function actionToLabel(action: number): string {
+	if (action === CRUDXAction.ALL) return "all";
+	if (action === CRUDXAction.CRUD) return "crud";
+	const names = ATOMIC_ACTIONS.filter(([bit]) => (action & bit) === bit).map(([, name]) => name);
+	return names.length > 0 ? names.join("+") : String(action);
+}
+
+/** Convierte un bitfield de scope en sus claves (`groups`, `groups+users`). */
+function scopeToLabel(resource: ResourceDef, scopeBits: number): string {
+	const keys = resource.scopes.filter((s) => (scopeBits & s.value) === s.value).map((s) => s.key);
+	return keys.length > 0 ? keys.join("+") : String(scopeBits);
+}
+
+/**
+ * Traduce un permiso a una etiqueta legible para documentación/logs.
+ *
+ * - Scoped (`identity.8.8`) → `identity:groups (delete)`
+ * - Combinado (`identity.10.2`) → `identity:groups+users (write)`
+ * - Simple (`content.write`) → `content (write)`
+ *
+ * Si el permiso no se reconoce, se devuelve tal cual (fallback seguro).
+ *
+ * @public
+ */
+export function describePermission(permission: string): string {
+	const parts = permission.split(".");
+
+	// Simple: `resource.action` (acción como nombre directo)
+	if (parts.length === 2) return `${parts[0]} (${parts[1]})`;
+
+	// Scoped: `resource.scopeBits.actionBits`
+	if (parts.length === 3) {
+		const [resourceId, scopeRaw, actionRaw] = parts;
+		const resource = RESOURCE_MAP.get(resourceId);
+		const scopeBits = Number(scopeRaw);
+		const actionBits = Number(actionRaw);
+		if (resource && Number.isFinite(scopeBits) && Number.isFinite(actionBits)) {
+			return `${resourceId}:${scopeToLabel(resource, scopeBits)} (${actionToLabel(actionBits)})`;
+		}
+	}
+
+	return permission;
 }

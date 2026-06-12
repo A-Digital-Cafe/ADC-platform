@@ -8,6 +8,8 @@ import type { AttachmentsManager } from "../../../../utilities/attachments/attac
 import type { User } from "@common/types/identity/User.ts";
 import type IdentityManagerService from "../index.js";
 import type { UserAvatarEndpointCtx } from "../permissions/userAvatarAttachments.js";
+import * as AS from "./schemas/avatar.js";
+import { SuccessResponse } from "./schemas/common.js";
 
 interface PresignBody {
 	fileName: string;
@@ -77,6 +79,12 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/me/avatar/options",
+		options: {
+			tag: "IdentityManagerService/Avatars",
+			summary: "Lista opciones de avatar del usuario actual",
+			description: "Incluye `default` (DiceBear), cuentas vinculadas con avatar, `custom` (si hay) y `none`.",
+			schema: { response: { 200: AS.AvatarOptionsResponse } },
+		},
 	})
 	static async listOptions(ctx: EndpointCtx) {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
@@ -127,7 +135,13 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/identity/users/me/avatar/presign",
-		options: { rateLimit: AVATAR_RATE_LIMIT },
+		options: {
+			tag: "IdentityManagerService/Avatars",
+			summary: "Genera URL prefirmada para subir un avatar",
+			description: "Devuelve una URL S3 prefirmada para subir un avatar custom. Confirmar luego con `/confirm`.",
+			rateLimit: AVATAR_RATE_LIMIT,
+			schema: { body: AS.PresignAvatarBody },
+		},
 	})
 	static async presign(ctx: EndpointCtx<Record<string, string>, PresignBody>) {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
@@ -151,7 +165,13 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/identity/users/me/avatar/:attachmentId/confirm",
-		options: { rateLimit: AVATAR_RATE_LIMIT },
+		options: {
+			tag: "IdentityManagerService/Avatars",
+			summary: "Confirma la subida de un avatar custom",
+			description: "Confirma la subida a S3, actualiza la metadata del usuario y borra el adjunto anterior si existía.",
+			rateLimit: AVATAR_RATE_LIMIT,
+			schema: { params: AS.AvatarAttachmentParams },
+		},
 	})
 	static async confirm(ctx: EndpointCtx<{ attachmentId: string }>) {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
@@ -191,7 +211,13 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "DELETE",
 		url: "/api/identity/users/me/avatar",
-		options: { rateLimit: AVATAR_RATE_LIMIT },
+		options: {
+			tag: "IdentityManagerService/Avatars",
+			summary: "Elimina el avatar custom actual",
+			description: "Borra el avatar custom y, si era la fuente seleccionada, vuelve al avatar automático.",
+			rateLimit: AVATAR_RATE_LIMIT,
+			schema: { response: { 200: SuccessResponse } },
+		},
 	})
 	static async removeCustom(ctx: EndpointCtx) {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
@@ -222,7 +248,14 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "PUT",
 		url: "/api/identity/users/me/avatar/select",
-		options: { rateLimit: AVATAR_RATE_LIMIT, skipIdempotency: true },
+		options: {
+			tag: "IdentityManagerService/Avatars",
+			summary: "Selecciona la fuente de avatar",
+			description: "Fuente válida: `default`, `custom`, `none` o `linked:<provider>`.",
+			rateLimit: AVATAR_RATE_LIMIT,
+			skipIdempotency: true,
+			schema: { body: AS.SelectAvatarBody, response: { 200: AS.AvatarSourceResponse } },
+		},
 	})
 	static async select(ctx: EndpointCtx<Record<string, string>, SelectBody>) {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
@@ -263,7 +296,13 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/:userId/avatar/raw",
-		options: { rateLimit: { max: 60, timeWindow: 60_000 } },
+		options: {
+			tag: "IdentityManagerService/Avatars",
+			summary: "Redirige al avatar custom de un usuario",
+			description: "Endpoint público: responde 302 hacia la URL S3 prefirmada. 404 si el usuario no tiene avatar custom.",
+			rateLimit: { max: 60, timeWindow: 60_000 },
+			schema: { params: AS.AvatarUserParams },
+		},
 	})
 	static async raw(ctx: EndpointCtx<{ userId: string }>) {
 		const targetUserId = ctx.params.userId;

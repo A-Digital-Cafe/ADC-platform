@@ -11,7 +11,7 @@ import {
 	type SetCookie,
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
-import { Type } from "@sinclair/typebox";
+import * as AS from "./schemas/auth.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
 import type { AuthenticatedUser, ModerationLookupService } from "../types.js";
@@ -72,7 +72,14 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/login",
 		permissions: [],
-		options: { skipIdempotency: true, rateLimit: { max: 4, timeWindow: 300_000 } },
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Login con usuario/contraseña",
+			description: "Autentica con credenciales nativas. Si el usuario pertenece a organizaciones y no se envía `orgId`, devuelve `requiresOrgSelection` con las opciones.",
+			skipIdempotency: true,
+			rateLimit: { max: 4, timeWindow: 300_000 },
+			schema: { body: AS.LoginBody, response: { 200: AS.LoginResponse } },
+		},
 	})
 	static async handleNativeLogin(ctx: EndpointCtx<Record<string, string>, NativeLoginBody>): Promise<unknown> {
 		const { username, password, orgId } = validateNativeLoginBody(ctx.data);
@@ -131,16 +138,12 @@ export class AuthEndpoints {
 		url: "/api/auth/register",
 		permissions: [],
 		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Registro de nuevo usuario",
+			description: "Crea una cuenta nativa y emite tokens (login automático). Reglas de negocio adicionales en validateRegisterBody.",
 			rateLimit: { max: 2, timeWindow: 3_600_000 },
 			// Validación declarativa (TypeBox): tipos/formatos antes del handler.
-			// Reglas de negocio adicionales en validateRegisterBody.
-			schema: {
-				body: Type.Object({
-					username: Type.String({ minLength: 3, maxLength: 32 }),
-					email: Type.String({ minLength: 5, maxLength: 254 }),
-					password: Type.String({ minLength: 8, maxLength: 256 }),
-				}),
-			},
+			schema: { body: AS.RegisterBody, response: { 200: AS.RegisterResponse } },
 		},
 	})
 	static async handleRegister(ctx: EndpointCtx<Record<string, string>, RegisterBody>): Promise<unknown> {
@@ -215,7 +218,13 @@ export class AuthEndpoints {
 		method: "GET",
 		url: "/api/auth/session",
 		permissions: [],
-		options: { rateLimit: { max: 120, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Verifica la sesión actual",
+			description: "Valida la cookie de acceso y devuelve el usuario enriquecido (perms bitfield, isAdmin, isOrgAdmin, groupIds).",
+			rateLimit: { max: 120, timeWindow: 60_000 },
+			schema: { response: { 200: AS.SessionResponse } },
+		},
 	})
 	static async handleSession(ctx: EndpointCtx): Promise<unknown> {
 		const token = ctx.cookies?.[ACCESS_COOKIE_NAME];
@@ -283,7 +292,14 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/refresh",
 		permissions: [],
-		options: { skipIdempotency: true, rateLimit: { max: 20, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Refresca los tokens de sesión",
+			description: "Rota access/refresh tokens validando cambios de ubicación (geo) y actividad sospechosa.",
+			skipIdempotency: true,
+			rateLimit: { max: 20, timeWindow: 60_000 },
+			schema: { response: { 200: AS.RefreshResponse } },
+		},
 	})
 	static async handleRefresh(ctx: EndpointCtx): Promise<never> {
 		const refreshToken = ctx.cookies?.[REFRESH_COOKIE_NAME];
@@ -354,7 +370,14 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/switch-org",
 		permissions: [],
-		options: { skipIdempotency: true, rateLimit: { max: 20, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Cambia el contexto de organización",
+			description: "Re-emite tokens con el nuevo `orgId` (o acceso personal). Valida la pertenencia a la organización.",
+			skipIdempotency: true,
+			rateLimit: { max: 20, timeWindow: 60_000 },
+			schema: { body: AS.SwitchOrgBody, response: { 200: AS.SwitchOrgResponse } },
+		},
 	})
 	static async handleSwitchOrg(ctx: EndpointCtx<Record<string, string>, { orgId?: string }>): Promise<never> {
 		const token = ctx.cookies?.[ACCESS_COOKIE_NAME];
@@ -414,7 +437,11 @@ export class AuthEndpoints {
 		method: "GET",
 		url: "/api/auth/user-orgs",
 		permissions: [],
-		options: { rateLimit: { max: 30, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Organizaciones del usuario autenticado",
+			schema: { response: { 200: AS.UserOrgsResponse } },
+		},
 	})
 	static async handleUserOrgs(ctx: EndpointCtx): Promise<unknown> {
 		const token = ctx.cookies?.[ACCESS_COOKIE_NAME];
@@ -449,7 +476,14 @@ export class AuthEndpoints {
 		method: "POST",
 		url: "/api/auth/logout",
 		permissions: [],
-		options: { skipIdempotency: true, rateLimit: { max: 3, timeWindow: 60_000 } },
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Cierra la sesión",
+			description: "Revoca el refresh token y limpia las cookies de sesión.",
+			skipIdempotency: true,
+			rateLimit: { max: 3, timeWindow: 60_000 },
+			schema: { response: { 200: AS.LogoutResponse } },
+		},
 	})
 	static async handleLogout(ctx: EndpointCtx): Promise<never> {
 		const refreshToken = ctx.cookies?.[REFRESH_COOKIE_NAME];

@@ -2,6 +2,8 @@ import { RegisterEndpoint, type EndpointCtx } from "../../EndpointManagerService
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
+import * as RS from "./schemas/roles.js";
+import { JobAcceptedResponse, OrgIdQuery } from "./schemas/common.js";
 
 /**
  * Verifica que un rol sea custom y accesible para el caller.
@@ -34,6 +36,12 @@ export class RoleEndpoints {
 		method: "GET",
 		url: "/api/identity/roles",
 		permissions: [P.IDENTITY.ROLES.READ],
+		options: {
+			tag: "IdentityManagerService/Roles",
+			summary: "Lista roles",
+			description: "El admin global puede filtrar por `orgId`; al filtrar por org se inicializan los roles predefinidos.",
+			schema: { querystring: OrgIdQuery, response: { 200: RS.RolesListResponse } },
+		},
 	})
 	static async listRoles(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
@@ -48,6 +56,11 @@ export class RoleEndpoints {
 		method: "GET",
 		url: "/api/identity/roles/:roleId",
 		permissions: [P.IDENTITY.ROLES.READ],
+		options: {
+			tag: "IdentityManagerService/Roles",
+			summary: "Obtiene un rol por ID",
+			schema: { params: RS.RoleIdParams, response: { 200: RS.RoleResponse } },
+		},
 	})
 	static async getRole(ctx: EndpointCtx<{ roleId: string }>) {
 		const role = await RoleEndpoints.identity.roles.getRole(ctx.params.roleId, ctx.token!);
@@ -64,6 +77,11 @@ export class RoleEndpoints {
 		method: "POST",
 		url: "/api/identity/roles",
 		permissions: [P.IDENTITY.ROLES.WRITE],
+		options: {
+			tag: "IdentityManagerService/Roles",
+			summary: "Crea un rol",
+			schema: { body: RS.CreateRoleBody, response: { 200: RS.RoleResponse } },
+		},
 	})
 	static async createRole(
 		ctx: EndpointCtx<Record<string, string>, { name: string; description: string; permissions?: any[]; orgId?: string }>
@@ -88,6 +106,12 @@ export class RoleEndpoints {
 		method: "PUT",
 		url: "/api/identity/roles/:roleId",
 		permissions: [P.IDENTITY.ROLES.UPDATE],
+		options: {
+			tag: "IdentityManagerService/Roles",
+			summary: "Actualiza un rol",
+			description: "No permite modificar roles predefinidos (`isCustom: false`).",
+			schema: { params: RS.RoleIdParams, body: RS.UpdateRoleBody, response: { 200: RS.RoleResponse } },
+		},
 	})
 	static async updateRole(ctx: EndpointCtx<{ roleId: string }, Partial<{ name: string; description: string; permissions: any[] }>>) {
 		await assertRoleOrgAccess(RoleEndpoints.identity, ctx.params.roleId, ctx.user?.orgId, ctx.token!);
@@ -100,7 +124,14 @@ export class RoleEndpoints {
 		method: "DELETE",
 		url: "/api/identity/roles/:roleId",
 		permissions: [P.IDENTITY.ROLES.DELETE],
-		options: { enqueue: true, queueOptions: { maxRetries: 3, jobTimeoutMs: 20_000 } },
+		options: {
+			tag: "IdentityManagerService/Roles",
+			summary: "Elimina un rol",
+			description: "Operación **encolada** (202) con reanudación por pasos. No permite eliminar roles predefinidos.",
+			enqueue: true,
+			queueOptions: { maxRetries: 3, jobTimeoutMs: 20_000 },
+			schema: { params: RS.RoleIdParams, response: { 202: JobAcceptedResponse } },
+		},
 	})
 	static async deleteRole(ctx: EndpointCtx<{ roleId: string }>) {
 		try {

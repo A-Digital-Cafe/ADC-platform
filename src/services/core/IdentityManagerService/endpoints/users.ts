@@ -3,6 +3,8 @@ import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.js";
 import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
+import * as US from "./schemas/users.js";
+import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
 
 /**
  * CAMPOS DE USUARIO - MATRIZ DE MODIFICABILIDAD
@@ -171,6 +173,12 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "HEAD",
 		url: "/api/identity/users/username/:username",
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Comprueba si un username existe",
+			description: "Responde 200 si el usuario existe; 404 si no. No expone datos del usuario.",
+			schema: { params: US.UsernameParams },
+		},
 	})
 	static async checkUsername(ctx: EndpointCtx<{ username: string }>) {
 		const { username } = ctx.params;
@@ -192,7 +200,13 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/avatars",
-		options: { rateLimit: { max: 60, timeWindow: 60_000 } },
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Resuelve avatares públicos por IDs",
+			description: "Devuelve `username` + `avatar` (datos públicos) para los IDs indicados en `ids` (separados por coma).",
+			rateLimit: { max: 60, timeWindow: 60_000 },
+			schema: { querystring: US.AvatarsQuery, response: { 200: US.PublicAvatarsResponse } },
+		},
 	})
 	static async getAvatars(ctx: EndpointCtx) {
 		const idsParam = (ctx.query?.ids ?? "").toString().trim();
@@ -211,6 +225,12 @@ export class UserEndpoints {
 		method: "GET",
 		url: "/api/identity/users",
 		permissions: [P.IDENTITY.USERS.READ],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Lista usuarios",
+			description: "Lista usuarios del contexto. El admin global puede filtrar por `orgId`; el admin de org usa su propia organización.",
+			schema: { querystring: US.ListUsersQuery, response: { 200: US.UsersListResponse } },
+		},
 	})
 	static async listUsers(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
@@ -237,6 +257,12 @@ export class UserEndpoints {
 		method: "GET",
 		url: "/api/identity/users/search",
 		permissions: [P.IDENTITY.USERS.READ],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Busca usuarios",
+			description: "Búsqueda por texto (`q`, mín. 2 caracteres). Devuelve hasta 10 resultados.",
+			schema: { querystring: US.SearchUsersQuery, response: { 200: US.UsersArrayResponse } },
+		},
 	})
 	static async searchUsers(ctx: EndpointCtx) {
 		const q = ctx.query?.q?.trim();
@@ -250,6 +276,12 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/me",
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Usuario autenticado actual",
+			description: "Devuelve el perfil del usuario autenticado (sin `passwordHash`).",
+			schema: { response: { 200: US.UserResponse } },
+		},
 	})
 	static async getCurrentUser(ctx: EndpointCtx) {
 		if (!ctx.user) {
@@ -267,6 +299,11 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/me/preferences",
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Preferencias del usuario actual",
+			schema: { response: { 200: US.PreferencesResponse } },
+		},
 	})
 	static async getMyPreferences(ctx: EndpointCtx) {
 		if (!ctx.user) throw new AuthError(401, "UNAUTHORIZED", "No hay usuario autenticado");
@@ -279,6 +316,12 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "PATCH",
 		url: "/api/identity/users/me/preferences",
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Actualiza preferencias del usuario actual",
+			description: "Merge superficial de las preferencias enviadas con las existentes.",
+			schema: { body: US.PreferencesBody, response: { 200: US.PreferencesResponse } },
+		},
 	})
 	static async patchMyPreferences(ctx: EndpointCtx<Record<string, string>, Record<string, unknown>>) {
 		if (!ctx.user) throw new AuthError(401, "UNAUTHORIZED", "No hay usuario autenticado");
@@ -298,6 +341,11 @@ export class UserEndpoints {
 		method: "GET",
 		url: "/api/identity/users/:userId",
 		permissions: [P.IDENTITY.USERS.READ],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Obtiene un usuario por ID",
+			schema: { params: US.UserIdParams, response: { 200: US.UserResponse } },
+		},
 	})
 	static async getUser(ctx: EndpointCtx<{ userId: string }>) {
 		const callerOrgId = ctx.user?.orgId;
@@ -310,7 +358,13 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/identity/users/change-password",
-		options: { rateLimit: { max: 3, timeWindow: 300_000 } },
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Cambia la contraseña propia",
+			description: "Verifica `currentPassword` y establece `newPassword` (mín. 8 caracteres).",
+			rateLimit: { max: 3, timeWindow: 300_000 },
+			schema: { body: US.ChangePasswordBody, response: { 200: SuccessResponse } },
+		},
 	})
 	static async changePassword(ctx: EndpointCtx<Record<string, string>, { currentPassword: string; newPassword: string }>) {
 		if (!ctx.user) {
@@ -347,6 +401,12 @@ export class UserEndpoints {
 		method: "POST",
 		url: "/api/identity/users",
 		permissions: [P.IDENTITY.USERS.WRITE],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Crea un usuario",
+			description: "El admin de org lo asocia automáticamente a su organización; el admin global puede indicar `orgId`.",
+			schema: { body: US.CreateUserBody, response: { 200: US.UserResponse } },
+		},
 	})
 	static async createUser(
 		ctx: EndpointCtx<Record<string, string>, { username: string; password: string; roleIds?: string[]; orgId?: string }>
@@ -376,6 +436,12 @@ export class UserEndpoints {
 		method: "PUT",
 		url: "/api/identity/users/:userId",
 		permissions: [P.IDENTITY.USERS.UPDATE],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Actualiza un usuario",
+			description: "Campos sensibles (isActive, permissions) restringidos a admin global. `passwordHash`/`id` se ignoran.",
+			schema: { params: US.UserIdParams, querystring: OrgIdQuery, body: US.UpdateUserBody, response: { 200: US.UserResponse } },
+		},
 	})
 	static async updateUser(
 		ctx: EndpointCtx<
@@ -447,6 +513,12 @@ export class UserEndpoints {
 		method: "DELETE",
 		url: "/api/identity/users/:userId",
 		permissions: [P.IDENTITY.USERS.DELETE],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Elimina un usuario",
+			description: "En modo org, solo quita la membresía de la organización; el admin global elimina el usuario.",
+			schema: { params: US.UserIdParams, querystring: OrgIdQuery, response: { 200: SuccessResponse } },
+		},
 	})
 	static async deleteUser(ctx: EndpointCtx<{ userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
@@ -468,6 +540,12 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "DELETE",
 		url: "/api/identity/users/me",
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Solicita la baja de la cuenta propia",
+			description: "Programa el borrado de la cuenta en 30 días. Acepta un `reason` opcional.",
+			schema: { body: US.DeleteSelfBody, response: { 200: US.DeleteSelfResponse } },
+		},
 	})
 	static async deleteSelf(ctx: EndpointCtx<Record<string, string>, { reason?: string }>) {
 		if (!ctx.user) throw new AuthError(401, "UNAUTHORIZED", "No hay sesión");

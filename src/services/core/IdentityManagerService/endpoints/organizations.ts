@@ -2,6 +2,8 @@ import { RegisterEndpoint, type EndpointCtx } from "../../EndpointManagerService
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
+import * as OS from "./schemas/organizations.js";
+import { SuccessResponse, JobAcceptedResponse } from "./schemas/common.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
 
@@ -32,6 +34,12 @@ export class OrgEndpoints {
 		method: "GET",
 		url: "/api/identity/organizations",
 		permissions: [P.IDENTITY.ORGANIZATIONS.READ],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Lista organizaciones",
+			description: "Solo accesible en modo global (admin sin organización activa).",
+			schema: { response: { 200: OS.OrganizationsListResponse } },
+		},
 	})
 	static async listOrganizations(ctx: EndpointCtx) {
 		requireGlobalAccess(ctx);
@@ -47,6 +55,12 @@ export class OrgEndpoints {
 		method: "GET",
 		url: "/api/identity/organizations/check-slug/:slug",
 		permissions: [P.IDENTITY.ORGANIZATIONS.READ],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Comprueba disponibilidad de un slug",
+			description: "`default` está reservado. El slug debe cumplir `^[a-z0-9-]+$`.",
+			schema: { params: OS.OrgSlugParams, response: { 200: OS.CheckSlugResponse } },
+		},
 	})
 	static async checkOrgSlug(ctx: EndpointCtx<{ slug: string }>) {
 		requireGlobalAccess(ctx);
@@ -62,6 +76,11 @@ export class OrgEndpoints {
 		method: "GET",
 		url: "/api/identity/organizations/:orgId",
 		permissions: [P.IDENTITY.ORGANIZATIONS.READ],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Obtiene una organización por ID",
+			schema: { params: OS.OrgIdParams, response: { 200: OS.OrganizationResponse } },
+		},
 	})
 	static async getOrganization(ctx: EndpointCtx<{ orgId: string }>) {
 		const org = await OrgEndpoints.identity.organizations.getOrganization(ctx.params.orgId, ctx.token!);
@@ -72,6 +91,11 @@ export class OrgEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/organizations/:orgId/slug",
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Resuelve el slug de una organización",
+			schema: { params: OS.OrgIdParams, response: { 200: OS.OrgSlugResponse } },
+		},
 	})
 	static async getOrganizationSlug(ctx: EndpointCtx<{ orgId: string }>) {
 		const result = await OrgEndpoints.identity.organizations.resolveOrganizationSlug(ctx.params.orgId, ctx.token!);
@@ -83,7 +107,14 @@ export class OrgEndpoints {
 		method: "POST",
 		url: "/api/identity/organizations",
 		permissions: [P.IDENTITY.ORGANIZATIONS.WRITE],
-		options: { enqueue: true, queueOptions: { maxRetries: 3 } },
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Crea una organización",
+			description: "Operación **encolada** (202): también inicializa los roles predefinidos. Consultar estado vía `pollUrl`.",
+			enqueue: true,
+			queueOptions: { maxRetries: 3 },
+			schema: { body: OS.CreateOrgBody, response: { 202: JobAcceptedResponse } },
+		},
 	})
 	static async createOrganization(
 		ctx: EndpointCtx<Record<string, string>, { slug: string; region?: string; metadata?: Record<string, any> }>
@@ -105,6 +136,11 @@ export class OrgEndpoints {
 		method: "PUT",
 		url: "/api/identity/organizations/:orgId",
 		permissions: [P.IDENTITY.ORGANIZATIONS.UPDATE],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Actualiza una organización",
+			schema: { params: OS.OrgIdParams, body: OS.UpdateOrgBody, response: { 200: OS.OrganizationResponse } },
+		},
 	})
 	static async updateOrganization(
 		ctx: EndpointCtx<{ orgId: string }, Partial<Pick<Organization, "slug" | "region" | "status" | "metadata">>>
@@ -119,7 +155,14 @@ export class OrgEndpoints {
 		method: "DELETE",
 		url: "/api/identity/organizations/:orgId",
 		permissions: [P.IDENTITY.ORGANIZATIONS.DELETE],
-		options: { enqueue: true, queueOptions: { maxRetries: 4, jobTimeoutMs: 30_000 } },
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Elimina una organización",
+			description: "Operación **encolada** (202) con reanudación por pasos. Consultar estado vía `pollUrl`.",
+			enqueue: true,
+			queueOptions: { maxRetries: 4, jobTimeoutMs: 30_000 },
+			schema: { params: OS.OrgIdParams, response: { 202: JobAcceptedResponse } },
+		},
 	})
 	static async deleteOrganization(ctx: EndpointCtx<{ orgId: string }>) {
 		requireGlobalAccess(ctx);
@@ -135,6 +178,11 @@ export class OrgEndpoints {
 		method: "GET",
 		url: "/api/identity/organizations/:orgId/members",
 		permissions: [P.IDENTITY.ORGANIZATIONS.READ],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Lista miembros de una organización",
+			schema: { params: OS.OrgIdParams, response: { 200: OS.OrgMembersResponse } },
+		},
 	})
 	static async listOrgMembers(ctx: EndpointCtx<{ orgId: string }>) {
 		const org = await OrgEndpoints.identity.organizations.getOrganization(ctx.params.orgId, ctx.token!);
@@ -152,6 +200,11 @@ export class OrgEndpoints {
 		method: "POST",
 		url: "/api/identity/organizations/:orgId/members/:userId",
 		permissions: [P.IDENTITY.ORGANIZATIONS.UPDATE],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Añade un miembro a una organización",
+			schema: { params: OS.OrgMemberParams, body: OS.AddOrgMemberBody, response: { 200: SuccessResponse } },
+		},
 	})
 	static async addOrgMember(ctx: EndpointCtx<{ orgId: string; userId: string }, { roleIds?: string[] }>) {
 		requireGlobalAccess(ctx);
@@ -167,6 +220,11 @@ export class OrgEndpoints {
 		method: "DELETE",
 		url: "/api/identity/organizations/:orgId/members/:userId",
 		permissions: [P.IDENTITY.ORGANIZATIONS.DELETE],
+		options: {
+			tag: "IdentityManagerService/Organizations",
+			summary: "Quita un miembro de una organización",
+			schema: { params: OS.OrgMemberParams, response: { 200: SuccessResponse } },
+		},
 	})
 	static async removeOrgMember(ctx: EndpointCtx<{ orgId: string; userId: string }>) {
 		requireGlobalAccess(ctx);

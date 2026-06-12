@@ -37,7 +37,26 @@ interface EndpointOptions {
 		body?: Record<string, unknown>;
 		querystring?: Record<string, unknown>;
 		params?: Record<string, unknown>;
+		/**
+		 * Schemas de respuesta por código de estado (ej. `"200"`, `"404"`). Solo
+		 * documentación: alimentan el doc OpenAPI en `/api/docs`, NO se validan en
+		 * runtime. Usar `Type` de `@sinclair/typebox`.
+		 */
+		response?: Record<string, Record<string, unknown>>;
 	};
+	/**
+	 * Sub-tag OpenAPI para agrupar el endpoint en Swagger UI. Convención:
+	 * `"Servicio/Recurso"` (ej. `"IdentityManagerService/Users"`). Si se omite,
+	 * se usa el nombre del servicio (`ownerName`). Los sub-tags que comparten
+	 * prefijo se agrupan y ordenan juntos en `/api/docs`.
+	 */
+	tag?: string;
+	/** Resumen de una línea mostrado como título del endpoint en Swagger UI. */
+	summary?: string;
+	/** Descripción larga (markdown) del endpoint para el doc OpenAPI. */
+	description?: string;
+	/** Marca el endpoint como obsoleto (`deprecated`) en el doc OpenAPI. */
+	deprecated?: boolean;
 	/** Skip automatic idempotency check for this endpoint (default: false). */
 	skipIdempotency?: boolean;
 	/** Skip cookie-auth CSRF validation for this endpoint (default: false). */

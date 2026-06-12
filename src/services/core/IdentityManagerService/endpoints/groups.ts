@@ -4,6 +4,9 @@ import { P } from "@common/types/Permissions.ts";
 import { IdentityScopes } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import type IdentityManagerService from "../index.js";
+import * as GS from "./schemas/groups.js";
+import { UsersArrayResponse } from "./schemas/users.js";
+import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
 
 /**
  * Verifica que un grupo sea accesible para el caller.
@@ -57,6 +60,12 @@ export class GroupEndpoints {
 		method: "GET",
 		url: "/api/identity/groups",
 		permissions: [P.IDENTITY.GROUPS.READ],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Lista grupos",
+			description: "El admin global puede filtrar por `orgId`; el admin de org usa su propia organización.",
+			schema: { querystring: OrgIdQuery, response: { 200: GS.GroupsListResponse } },
+		},
 	})
 	static async listGroups(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
@@ -68,6 +77,12 @@ export class GroupEndpoints {
 		method: "GET",
 		url: "/api/identity/groups/search",
 		permissions: [P.IDENTITY.GROUPS.READ],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Busca grupos",
+			description: "Búsqueda por texto (`q`, mín. 2 caracteres). Devuelve hasta 10 resultados.",
+			schema: { querystring: GS.SearchGroupsQuery, response: { 200: GS.GroupsListResponse } },
+		},
 	})
 	static async searchGroups(ctx: EndpointCtx) {
 		const q = ctx.query?.q?.trim();
@@ -81,6 +96,11 @@ export class GroupEndpoints {
 		method: "GET",
 		url: "/api/identity/groups/:groupId",
 		permissions: [P.IDENTITY.GROUPS.READ],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Obtiene un grupo por ID",
+			schema: { params: GS.GroupIdParams, response: { 200: GS.GroupResponse } },
+		},
 	})
 	static async getGroup(ctx: EndpointCtx<{ groupId: string }>) {
 		const group = await GroupEndpoints.identity.groups.getGroup(ctx.params.groupId, ctx.token!);
@@ -96,6 +116,11 @@ export class GroupEndpoints {
 		method: "POST",
 		url: "/api/identity/groups",
 		permissions: [P.IDENTITY.GROUPS.WRITE],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Crea un grupo",
+			schema: { body: GS.CreateGroupBody, response: { 200: GS.GroupResponse } },
+		},
 	})
 	static async createGroup(
 		ctx: EndpointCtx<Record<string, string>, { name: string; description: string; roleIds?: string[]; orgId?: string }>
@@ -123,6 +148,11 @@ export class GroupEndpoints {
 		method: "PUT",
 		url: "/api/identity/groups/:groupId",
 		permissions: [P.IDENTITY.GROUPS.UPDATE],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Actualiza un grupo",
+			schema: { params: GS.GroupIdParams, body: GS.UpdateGroupBody, response: { 200: GS.GroupResponse } },
+		},
 	})
 	static async updateGroup(
 		ctx: EndpointCtx<
@@ -144,6 +174,11 @@ export class GroupEndpoints {
 		method: "DELETE",
 		url: "/api/identity/groups/:groupId",
 		permissions: [P.IDENTITY.GROUPS.DELETE],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Elimina un grupo",
+			schema: { params: GS.GroupIdParams, response: { 200: SuccessResponse } },
+		},
 	})
 	static async deleteGroup(ctx: EndpointCtx<{ groupId: string }>) {
 		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, ctx.user?.orgId, ctx.token!);
@@ -156,6 +191,11 @@ export class GroupEndpoints {
 		method: "GET",
 		url: "/api/identity/groups/:groupId/users",
 		permissions: [P.IDENTITY.GROUPS.READ],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Lista miembros de un grupo",
+			schema: { params: GS.GroupIdParams, response: { 200: UsersArrayResponse } },
+		},
 	})
 	static async listGroupMembers(ctx: EndpointCtx<{ groupId: string }>) {
 		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, ctx.user?.orgId, ctx.token!);
@@ -166,6 +206,11 @@ export class GroupEndpoints {
 		method: "POST",
 		url: "/api/identity/groups/:groupId/users/:userId",
 		permissions: [`identity.${IdentityScopes.GROUPS | IdentityScopes.USERS}.${CRUDXAction.WRITE}`],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Añade un usuario a un grupo",
+			schema: { params: GS.GroupUserParams, response: { 200: SuccessResponse } },
+		},
 	})
 	static async addUserToGroup(ctx: EndpointCtx<{ groupId: string; userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
@@ -180,6 +225,11 @@ export class GroupEndpoints {
 		method: "DELETE",
 		url: "/api/identity/groups/:groupId/users/:userId",
 		permissions: [`identity.${IdentityScopes.GROUPS | IdentityScopes.USERS}.${CRUDXAction.DELETE}`],
+		options: {
+			tag: "IdentityManagerService/Groups",
+			summary: "Quita un usuario de un grupo",
+			schema: { params: GS.GroupUserParams, response: { 200: SuccessResponse } },
+		},
 	})
 	static async removeUserFromGroup(ctx: EndpointCtx<{ groupId: string; userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
