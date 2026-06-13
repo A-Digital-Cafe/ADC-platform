@@ -229,7 +229,7 @@ function PathsAdminBody() {
 					    que dispara forceUpdate ante cambios de slot y, bajo React.StrictMode, el texto
 					    puede quedar fuera del slot-fb y no renderizarse. `label` es un prop reactivo. */}
 					<adc-button type="submit" disabled={saving} aria-label={editing ? "Guardar path" : "Crear path"} label={btnLabel} />
-					{editing && <adc-button type="button" variant="accent" aria-label="Cancelar edición" onClick={resetForm} label="Cancelar" />}
+					{editing && <adc-button type="button" variant="accent-outlined" aria-label="Cancelar edición" onClick={resetForm} label="Cancelar" />}
 				</div>
 			</form>
 			<div>

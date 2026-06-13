@@ -6,6 +6,22 @@
 
 export type AttachmentStatus = "pending" | "ready";
 
+/**
+ * Metadata de cifrado en reposo del objeto S3 (envelope encryption por usuario).
+ * El binario en S3 es ciphertext AES-256-GCM; la DEK del usuario vive envuelta
+ * por la master key de la plataforma. `size` sigue siendo el tamaño en claro
+ * (GCM no expande; el auth tag se guarda aquí, no en el objeto).
+ */
+export interface AttachmentEncryption {
+	scheme: "aes-256-gcm";
+	/** IV por objeto (base64, 12 bytes). */
+	iv: string;
+	/** Auth tag GCM (base64, 16 bytes). */
+	authTag: string;
+	/** userId dueño de la DEK con la que se cifró. */
+	keyRef: string;
+}
+
 export interface Attachment {
 	id: string;
 	/** `basePath` constante por servicio (ej. "projects", "articles"). */
@@ -23,6 +39,8 @@ export interface Attachment {
 	storageKey: string;
 	etag?: string | null;
 	status: AttachmentStatus;
+	/** Presente cuando el objeto en S3 está cifrado en reposo. */
+	encryption?: AttachmentEncryption | null;
 	uploadedBy: string;
 	/** Contexto de la subida (del token): null = personal, string = organización. Define dónde cuenta la cuota. */
 	orgId: string | null;

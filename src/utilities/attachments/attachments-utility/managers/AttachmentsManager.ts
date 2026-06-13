@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
 import type { Model } from "mongoose";
 import type { Attachment, AttachmentDTO } from "../../../../common/types/attachments/Attachment.js";
 import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from "../../../../common/types/attachments/Attachment.js";
@@ -6,6 +7,7 @@ import type { AttachmentDoc } from "../schemas/attachment.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
 import { OnlyKernel } from "../../../../utils/decorators/OnlyKernel.ts";
 import type { QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
+import { ENCRYPTION_SCHEME, createObjectCipher, createObjectDecipher, type UserKeyStore } from "../crypto/userKeys.js";
 
 export type AttachmentAction = "upload" | "read" | "delete";
 
@@ -43,6 +45,14 @@ export interface S3Like {
 	getPresignedDownloadUrl(input: { bucket?: string; key: string; ttl?: number; filename?: string; inline?: boolean }): Promise<string>;
 	headObject(input: { bucket?: string; key: string }): Promise<{ contentType?: string; size?: number; etag?: string }>;
 	deleteObject(input: { bucket?: string; key: string }): Promise<void>;
+	putObject(input: {
+		bucket?: string;
+		key: string;
+		body: Readable | Buffer;
+		contentType?: string;
+		contentLength?: number;
+	}): Promise<{ bucket: string; key: string; etag: string | null }>;
+	getObjectStream(input: { bucket?: string; key: string }): Promise<{ stream: Readable; contentType?: string; size?: number }>;
 }
 
 export interface SubPathContext extends AttachmentPermissionContext {
@@ -63,6 +73,12 @@ export interface AttachmentsManagerOptions {
 	kernelKey: symbol;
 	/** Tracking/enforcement de cuota de almacenamiento (opcional, fail-open). */
 	quota?: AttachmentsQuotaOptions;
+	/**
+	 * Cifrado en reposo por usuario (envelope encryption). Al confirmar la subida
+	 * el objeto se re-escribe cifrado con la DEK del uploader; las descargas deben
+	 * salir por `openDownloadStream` (las URLs presignadas devolverían ciphertext).
+	 */
+	encryption?: { keyStore: UserKeyStore };
 	/** Logger opcional para avisos de cuota (fail-open). */
 	logger?: { logWarn(msg: string): void };
 }
@@ -113,6 +129,7 @@ export class AttachmentsManager {
 	readonly #allowedMimes: ReadonlySet<string> | null;
 	readonly #presignTtl: number;
 	readonly #quota?: AttachmentsQuotaOptions;
+	readonly #encryption?: { keyStore: UserKeyStore };
 	readonly #logger?: { logWarn(msg: string): void };
 	// Pública para que `@OnlyKernel()` pueda leerla vía `this.kernelKey`.
 	private kernelKey?: symbol;
@@ -128,6 +145,7 @@ export class AttachmentsManager {
 		this.#allowedMimes = opts.allowedMimeTypes === null ? null : new Set(opts.allowedMimeTypes ?? ATTACHMENT_DEFAULT_ALLOWED_MIMES);
 		this.#presignTtl = opts.presignTtl ?? opts.s3Provider.getDefaultPresignTtl();
 		this.#quota = opts.quota;
+		this.#encryption = opts.encryption;
 		this.#logger = opts.logger;
 		this.setKernelKey(opts.kernelKey);
 	}
@@ -307,6 +325,19 @@ export class AttachmentsManager {
 			throw new AttachmentError(413, "ATTACHMENT_QUOTA_EXCEEDED", "Cuota de almacenamiento agotada");
 		}
 
+		// Cifrado en reposo: re-escribe el objeto cifrado con la DEK del uploader.
+		// El PUT presignado llega en claro; esta ventana se cierra acá (y el GC de
+		// pending limpia los huérfanos si el proceso muere en el medio).
+		let encryptionSet: Record<string, unknown> = {};
+		if (this.#encryption) {
+			try {
+				encryptionSet = await this.#encryptObject(attachment, head.size);
+			} catch (e) {
+				await this.#releaseQuota(attachment.uploadedBy, attachment.orgId, head.size);
+				throw new AttachmentError(500, "ATTACHMENT_ENCRYPTION_FAILED", `No se pudo cifrar el adjunto: ${(e as Error).message}`);
+			}
+		}
+
 		await this.#model.updateOne(
 			{ _id: attachmentId },
 			{
@@ -315,12 +346,50 @@ export class AttachmentsManager {
 					etag: head.etag ?? null,
 					size: head.size,
 					uploadedAt: new Date(),
+					...encryptionSet,
 				},
 			}
 		);
 
 		const refreshed = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
 		return refreshed ? this.#docToAttachment(refreshed) : { ...attachment, status: "ready" };
+	}
+
+	/**
+	 * Re-escribe el objeto en claro como ciphertext AES-256-GCM bajo `<key>.enc`
+	 * y borra el original. Devuelve el `$set` con storageKey + metadata de cifrado.
+	 * GCM no expande el payload (el auth tag va al doc), así que ContentLength es
+	 * el tamaño en claro.
+	 */
+	async #encryptObject(attachment: Attachment, size: number): Promise<Record<string, unknown>> {
+		const keyStore = this.#encryption!.keyStore;
+		const dek = await keyStore.getUserKey(attachment.uploadedBy);
+		const { iv, cipher } = createObjectCipher(dek);
+		const source = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey });
+		const encryptedKey = `${attachment.storageKey}.enc`;
+		try {
+			await this.#s3.putObject({
+				bucket: attachment.bucket,
+				key: encryptedKey,
+				body: source.stream.pipe(cipher),
+				contentType: "application/octet-stream",
+				contentLength: size,
+			});
+		} catch (e) {
+			source.stream.destroy();
+			await this.#s3.deleteObject({ bucket: attachment.bucket, key: encryptedKey }).catch(() => undefined);
+			throw e;
+		}
+		await this.#s3.deleteObject({ bucket: attachment.bucket, key: attachment.storageKey }).catch(() => undefined);
+		return {
+			storageKey: encryptedKey,
+			encryption: {
+				scheme: ENCRYPTION_SCHEME,
+				iv: iv.toString("base64"),
+				authTag: cipher.getAuthTag().toString("base64"),
+				keyRef: attachment.uploadedBy,
+			},
+		};
 	}
 
 	async getById(ctx: AttachmentPermissionContext, attachmentId: string): Promise<Attachment | null> {
@@ -379,12 +448,11 @@ export class AttachmentsManager {
 		attachmentId: string,
 		opts: { ttl?: number; inline?: boolean } = {}
 	): Promise<{ url: string; attachment: Attachment; expiresIn: number }> {
-		const attachment = await this.getById(ctx, attachmentId);
-		if (!attachment) {
-			throw new AttachmentError(404, "ATTACHMENT_NOT_FOUND", "Adjunto no encontrado");
-		}
-		if (attachment.status !== "ready") {
-			throw new AttachmentError(409, "ATTACHMENT_PENDING", "Adjunto aún no disponible");
+		const attachment = await this.#getReadyForRead(ctx, attachmentId);
+		if (attachment.encryption) {
+			// Una URL presignada devolvería ciphertext: el consumer debe proxyear
+			// la descarga con `openDownloadStream`.
+			throw new AttachmentError(409, "ATTACHMENT_ENCRYPTED", "Adjunto cifrado: descargar vía streaming del servicio");
 		}
 		const ttl = opts.ttl ?? this.#presignTtl;
 		const url = await this.#s3.getPresignedDownloadUrl({
@@ -395,6 +463,37 @@ export class AttachmentsManager {
 			inline: opts.inline,
 		});
 		return { url, attachment, expiresIn: ttl };
+	}
+
+	/**
+	 * Stream de descarga del binario (descifrado al vuelo si está cifrado).
+	 * Mismo modelo de permisos que `getDownloadUrl`; pensado para que el servicio
+	 * lo proxyee por HTTP con sus propios headers de disposición.
+	 */
+	async openDownloadStream(ctx: AttachmentPermissionContext, attachmentId: string): Promise<{ stream: Readable; attachment: Attachment }> {
+		const attachment = await this.#getReadyForRead(ctx, attachmentId);
+		const object = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey });
+		if (!attachment.encryption) return { stream: object.stream, attachment };
+		if (!this.#encryption) {
+			throw new AttachmentError(409, "ATTACHMENT_ENCRYPTED", "Adjunto cifrado pero el manager no tiene keyStore configurado");
+		}
+		const dek = await this.#encryption.keyStore.getUserKey(attachment.encryption.keyRef);
+		const decipher = createObjectDecipher(dek, attachment.encryption.iv, attachment.encryption.authTag);
+		const stream = object.stream.pipe(decipher);
+		// Propagar errores de la fuente al stream resultante (pipe no lo hace solo).
+		object.stream.on("error", (err) => decipher.destroy(err));
+		return { stream, attachment };
+	}
+
+	async #getReadyForRead(ctx: AttachmentPermissionContext, attachmentId: string): Promise<Attachment> {
+		const attachment = await this.getById(ctx, attachmentId);
+		if (!attachment) {
+			throw new AttachmentError(404, "ATTACHMENT_NOT_FOUND", "Adjunto no encontrado");
+		}
+		if (attachment.status !== "ready") {
+			throw new AttachmentError(409, "ATTACHMENT_PENDING", "Adjunto aún no disponible");
+		}
+		return attachment;
 	}
 
 	async delete(ctx: AttachmentPermissionContext, attachmentId: string): Promise<void> {
@@ -554,6 +653,7 @@ export class AttachmentsManager {
 			storageKey: doc.storageKey,
 			etag: doc.etag ?? null,
 			status: doc.status,
+			encryption: doc.encryption ?? null,
 			uploadedBy: doc.uploadedBy,
 			orgId: doc.orgId ?? null,
 			createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),

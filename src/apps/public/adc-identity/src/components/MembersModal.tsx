@@ -147,7 +147,7 @@ export function MembersModal({
 				{membersComponent}
 			</div>
 			<div slot="footer" className="flex justify-end">
-				<adc-button variant="accent" onClick={onClose}>
+				<adc-button variant="accent-outlined" onClick={onClose}>
 					{t("common.close")}
 				</adc-button>
 			</div>

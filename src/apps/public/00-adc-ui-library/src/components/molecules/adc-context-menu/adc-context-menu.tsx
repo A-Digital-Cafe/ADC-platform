@@ -104,7 +104,7 @@ export class AdcContextMenu {
 		const children = item.children ?? [];
 		const hasSubmenu = children.length > 0;
 		const expanded = this.openSubmenu === index;
-		const tone = item.danger ? "text-danger hover:bg-danger hover:text-tdanger" : "text-text hover:bg-primary hover:text-tprimary";
+		const tone = item.danger ? "text-tdanger hover:bg-danger hover:text-tdanger" : "text-text hover:bg-primary hover:text-tprimary";
 		const submenuSide = this.flipSubmenu ? "right-full mr-1" : "left-full ml-1";
 		return (
 			<div
@@ -118,7 +118,7 @@ export class AdcContextMenu {
 					role="menuitem"
 					aria-haspopup={hasSubmenu ? "menu" : undefined}
 					aria-expanded={hasSubmenu ? String(expanded) : undefined}
-					class={`flex w-full items-center gap-2 px-3 py-2 mx-1 rounded-md text-left text-sm whitespace-nowrap cursor-pointer transition-colors ${tone}`}
+					class={`flex w-full items-center gap-2 px-3 py-2 mx-1 rounded-lg text-left text-sm whitespace-nowrap cursor-pointer transition-colors ${tone}`}
 					onClick={() => this.select(item)}
 				>
 					{item.iconSvg && (
@@ -134,7 +134,7 @@ export class AdcContextMenu {
 
 				{hasSubmenu && (
 					<div
-						class={`absolute top-0 ${submenuSide} min-w-44 py-1 rounded-xl border border-surface bg-background/95 backdrop-blur-sm shadow-cozy text-text ${expanded ? "block" : "hidden"}`}
+						class={`absolute top-0 ${submenuSide} min-w-44 py-1 rounded-xl border border-surface bg-surface shadow-cozy text-text ${expanded ? "block" : "hidden"}`}
 						role="menu"
 					>
 						{children.map((child, i) => this.renderItem(child, i, true))}
@@ -148,7 +148,7 @@ export class AdcContextMenu {
 		return (
 			<div
 				ref={(node) => (this.panelEl = node ?? null)}
-				class={`fixed z-100 min-w-52 py-1 rounded-xl border border-surface bg-background/95 backdrop-blur-sm shadow-cozy text-text ${
+				class={`fixed z-100 min-w-52 py-1 rounded-xl border border-surface bg-surface backdrop-blur-sm shadow-cozy text-text ${
 					this.open ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"
 				}`}
 				role="menu"

@@ -56,11 +56,13 @@ Todo preset nuevo debe incluir los siguientes archivos en su raíz antes del pri
 **Generación automática (requiere el repo privado `private/`):** si tenés clonado el repo interno `private/` junto al monorepo, el script `private/scripts/init-preset.mjs` copia estos archivos desde las plantillas de `private/scripts/templates/`. Es interactivo y permite elegir el tipo de preset (`public` → LICENSE ISC, `private` → All rights reserved); solo copia los archivos que no existan aún.
 
 ```bash
+cd private
+
 # Modo interactivo
-node private/scripts/init-preset.mjs
+bun run init-preset
 
 # Con flags (no interactivo)
-node private/scripts/init-preset.mjs --name my-preset --type public
+bun run init-preset --name my-preset --type public
 ```
 
 **Alternativa manual (sin acceso a `private/`):** copiá los cuatro archivos desde cualquier preset existente (ej. `presets/my-account/`) y ajustá la licencia según el tipo de preset.

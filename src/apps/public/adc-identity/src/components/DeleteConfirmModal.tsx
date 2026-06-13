@@ -18,7 +18,7 @@ export function DeleteConfirmModal({ message, onClose, onConfirm }: DeleteConfir
 		<adc-modal ref={ref} open modalTitle={t("common.confirmDelete")} size="sm">
 			<p className="text-text">{message}</p>
 			<div slot="footer" className="flex justify-end gap-2">
-				<adc-button variant="accent" onClick={onClose}>
+				<adc-button variant="accent-outlined" onClick={onClose}>
 					{t("common.cancel")}
 				</adc-button>
 				<adc-button variant="primary" onClick={onConfirm}>

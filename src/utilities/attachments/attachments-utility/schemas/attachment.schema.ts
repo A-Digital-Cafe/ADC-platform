@@ -19,6 +19,18 @@ function buildAttachmentSchema(connection: Connection): Schema<AttachmentDoc> {
 			bucket: { type: String, required: true, maxlength: 80 },
 			storageKey: { type: String, required: true, unique: true, maxlength: 600 },
 			etag: { type: String, default: null },
+			encryption: {
+				type: new SchemaCtor(
+					{
+						scheme: { type: String, required: true, enum: ["aes-256-gcm"] },
+						iv: { type: String, required: true, maxlength: 32 },
+						authTag: { type: String, required: true, maxlength: 32 },
+						keyRef: { type: String, required: true, maxlength: 80 },
+					},
+					{ _id: false }
+				),
+				default: null,
+			},
 			status: { type: String, required: true, enum: ["pending", "ready"] satisfies AttachmentStatus[], default: "pending", index: true },
 			uploadedBy: { type: String, required: true, maxlength: 64, index: true },
 			// Docs previos al campo se tratan como personales (null).

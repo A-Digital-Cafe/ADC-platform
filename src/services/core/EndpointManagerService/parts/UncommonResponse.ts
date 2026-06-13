@@ -23,11 +23,12 @@ export interface ClearCookie {
 }
 
 /**
- * UncommonResponse - For endpoints that need cookies, redirects, or custom headers
- * Throw this instead of returning data when you need HTTP-level control
+ * UncommonResponse - For endpoints that need cookies, redirects, custom headers
+ * or streaming bodies. Throw this instead of returning data when you need
+ * HTTP-level control
  */
 export class UncommonResponse {
-	public readonly type: "json" | "redirect";
+	public readonly type: "json" | "redirect" | "stream";
 	public readonly status: number;
 	public readonly body?: unknown;
 	public readonly redirectUrl?: string;
@@ -36,7 +37,7 @@ export class UncommonResponse {
 	public readonly clearCookies: ClearCookie[];
 
 	private constructor(config: {
-		type: "json" | "redirect";
+		type: "json" | "redirect" | "stream";
 		status: number;
 		body?: unknown;
 		redirectUrl?: string;
@@ -70,6 +71,26 @@ export class UncommonResponse {
 			headers: options?.headers,
 			cookies: options?.cookies,
 			clearCookies: options?.clearCookies,
+		});
+	}
+
+	/**
+	 * Streaming response (Node Readable). Útil para proxyear binarios (ej:
+	 * descargas descifradas al vuelo). Setear `Content-Type` y
+	 * `Content-Disposition` vía `headers`; `Content-Length` si se conoce.
+	 */
+	static stream(
+		body: NodeJS.ReadableStream,
+		options?: {
+			status?: number;
+			headers?: Record<string, string>;
+		}
+	): UncommonResponse {
+		return new UncommonResponse({
+			type: "stream",
+			status: options?.status || 200,
+			body,
+			headers: options?.headers,
 		});
 	}
 

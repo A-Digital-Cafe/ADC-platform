@@ -13,6 +13,7 @@ import {
 	type PresignUploadInput,
 	type PresignUploadResult,
 } from "./managers/AttachmentsManager.js";
+import { UserKeyStore, resolveStorageMasterKey, createObjectCipher, createObjectDecipher } from "./crypto/userKeys.js";
 
 export type {
 	AttachmentsManagerOptions,
@@ -25,11 +26,18 @@ export type {
 	PresignUploadInput,
 	PresignUploadResult,
 };
-export { AttachmentsManager };
+export { AttachmentsManager, UserKeyStore, resolveStorageMasterKey, createObjectCipher, createObjectDecipher };
 
 export interface CreateAttachmentsManagerOptions extends Omit<AttachmentsManagerOptions, "model"> {
 	mongoConnection: Connection;
 	collectionName: string;
+}
+
+export interface CreateUserKeyStoreOptions {
+	mongoConnection: Connection;
+	/** Colección de DEKs envueltas, una por app (ej: "drive_user_keys"). */
+	collectionName: string;
+	logger?: { logWarn(msg: string): void };
 }
 
 export default class AttachmentsUtility extends BaseUtility {
@@ -49,7 +57,21 @@ export default class AttachmentsUtility extends BaseUtility {
 			presignTtl: opts.presignTtl,
 			kernelKey: opts.kernelKey,
 			quota: opts.quota,
+			encryption: opts.encryption,
 			logger: opts.logger,
+		});
+	}
+
+	/**
+	 * Almacén de DEKs por usuario (envelope encryption con la master key de la
+	 * plataforma: `ADC_STORAGE_MASTER_KEY`). Compartir la misma instancia entre el
+	 * manager y otros consumidores del servicio (ej: archivos zip temporales).
+	 */
+	createUserKeyStore(opts: CreateUserKeyStoreOptions): UserKeyStore {
+		return new UserKeyStore({
+			connection: opts.mongoConnection,
+			collectionName: opts.collectionName,
+			masterKey: resolveStorageMasterKey(opts.logger),
 		});
 	}
 }

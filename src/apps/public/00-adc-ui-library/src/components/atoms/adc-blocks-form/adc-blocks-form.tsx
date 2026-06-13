@@ -141,7 +141,7 @@ export class AdcBlocksForm {
 				/>
 				<div class="flex items-center justify-end gap-2">
 					{this.showCancel && (
-						<adc-button type="button" variant="accent" onClick={this.handleCancel} disabled={this.submitting} label="Cancelar" />
+						<adc-button type="button" variant="accent-outlined" onClick={this.handleCancel} disabled={this.submitting} label="Cancelar" />
 					)}
 					<adc-button type="submit" disabled={disabled} label={this.submitting ? "Publicando..." : this.submitLabel} />
 				</div>

@@ -245,6 +245,7 @@ function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply<any>)
 	if (error.type === "redirect") {
 		reply.status(error.status).redirect(error.redirectUrl!);
 	} else {
+		// "stream": Fastify pipea Node Readables nativamente vía send().
 		reply.status(error.status).send(error.body);
 	}
 }

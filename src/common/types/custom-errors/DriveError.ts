@@ -19,7 +19,18 @@ type ExpectedDriveErrorTypes =
 	| "NOT_IN_TRASH"
 	| "ALREADY_IN_TRASH"
 	| "NO_PENDING_REVISION"
-	| "LINK_EXPIRED";
+	| "LINK_EXPIRED"
+	// PIN de carpetas
+	| "PIN_REQUIRED"
+	| "PIN_INVALID"
+	// Accesos directos
+	| "SHORTCUT_INVALID"
+	| "SHORTCUT_TARGET_NOT_FOUND"
+	| "NOT_DOWNLOADABLE"
+	// Archivos comprimidos (descarga múltiple)
+	| "ARCHIVE_NOT_FOUND"
+	| "ARCHIVE_EMPTY"
+	| "ARCHIVE_TOO_LARGE";
 
 type UnexpectedDriveErrorTypes = "DRIVE_UNAVAILABLE";
 

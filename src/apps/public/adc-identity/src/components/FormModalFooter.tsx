@@ -10,7 +10,7 @@ export function FormModalFooter({ onCancel, submitting }: FormModalFooterProps) 
 
 	return (
 		<div slot="footer" className="flex justify-end gap-2">
-			<adc-button variant="accent" type="button" onClick={onCancel}>
+			<adc-button variant="accent-outlined" type="button" onClick={onCancel}>
 				{t("common.cancel")}
 			</adc-button>
 			<adc-button variant="primary" type="submit" disabled={submitting}>
