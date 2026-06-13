@@ -93,11 +93,60 @@ if (container) {
 - **Nunca** envolver `<App />` con componentes Stencil `shadow: false` (como `adc-layout`) en `main.tsx`: rompen el reconciler de React (`NotFoundError: removeChild`).
 - `<adc-layout>` va **dentro de `App.tsx`** como raíz estable que no cambia entre renders.
 
+## Layout con sidebar (`adc-sidebar` + `adc-page-shell`)
+
+Apps con navegación lateral (`adc-sidebar`) deben envolver el contenido de **cada página** en
+`<adc-page-shell>`. El page-shell aporta el espaciado correcto respecto al sidebar fijo vía su prop
+`sidebarOffset` (default `true` → `pl-25 lg:pl-70`) y, opcionalmente, el encabezado de la página
+(`heading` / `description` / `headerSpacing`). **No** recrear ese offset a mano con `ml-*`/`pl-*` por
+página: usar siempre `adc-page-shell` para que todas las secciones queden alineadas igual.
+
+```tsx
+// Vista (page) de una app con sidebar
+export default function MiVista() {
+	return (
+		<adc-page-shell heading={t("seccion.title")} description={t("seccion.subtitle")}>
+			{/* contenido de la página */}
+		</adc-page-shell>
+	);
+}
+```
+
+- Si la página tiene un header propio (acciones, breadcrumb, toolbar), usar `<adc-page-shell>` sin
+  `heading` y mantener el header dentro del slot.
+- Páginas públicas/sin sidebar (ej: vista de enlace compartido): `sidebarOffset={false}`.
+- Referencia: `presets/my-account` y `presets/adc-drive` (todas las vistas usan `adc-page-shell`).
+
 ## Router y sesión
 
 - Navegación SPA: `@common/utils/router.js`.
 - Sesión/usuario: `@ui-library/utils/session`.
 - Fetch con manejo de errores y toasts: `adc-fetch` de la UI library (usar `silent: true` cuando solo importa el `status`).
+
+## Idempotencia en mutaciones (obligatorio)
+
+`EndpointManagerService` **rechaza toda mutación** (`POST`/`PUT`/`PATCH`/`DELETE`) que llegue sin el
+header `Idempotency-Key`, devolviendo `400 IDEMPOTENCY_KEY_MISSING` (salvo que el endpoint declare
+`skipIdempotency: true`). El síntoma típico es "falta la clave de idempotencia" al guardar/borrar.
+
+Por eso **cada llamada mutativa** del cliente debe pasar una clave por `adc-fetch`:
+
+- `idempotencyData: <obj>` — genera una clave determinista hasheando el objeto (preferido para
+  create/update; incluí los campos que distinguen la operación, p. ej. `{ action, id, ...body }`).
+- `idempotencyKey: <string>` — clave explícita (útil para `DELETE` por id: `{ idempotencyKey: id }`).
+
+```ts
+// PUT/POST/PATCH: hashea los datos de la operación
+api.put<Override>("/admin/overrides", { body: input, idempotencyData: input });
+api.patch<FileDTO>(`/files/${id}`, { body: patch, idempotencyData: { action: "patch-file", id, ...patch } });
+
+// DELETE por id: el propio id como clave
+api.delete(`/admin/overrides/${id}`, { idempotencyKey: id });
+```
+
+> La clave dedup vive 2 min (`HTTP_CHECK_TTL_SECONDS`) por `método+url+clave`: repetir la **misma**
+> operación dentro de esa ventana responde `409 IDEMPOTENCY_RUNNING`. Usá datos que cambien entre
+> operaciones legítimamente distintas (no una constante para acciones repetibles).
 
 ## i18n
 

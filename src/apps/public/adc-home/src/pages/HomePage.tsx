@@ -31,8 +31,8 @@ const MICROAPPS: Microapp[] = [
 		icon: <adc-icon-app-projects size="2rem" />,
 	},
 	{
-		id: "org-management",
-		name: "Org Management",
+		id: "org-requests",
+		name: "Org Requests",
 		description: "Solicita la creación de una organización dentro de la plataforma.",
 		iconColor: "text-accentpurple",
 		href: getUrl(3020, "org.adigitalcafe.com"),

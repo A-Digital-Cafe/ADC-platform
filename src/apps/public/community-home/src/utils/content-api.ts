@@ -85,7 +85,7 @@ export const contentAPI = {
 	},
 };
 
-export interface ContentLinkInfo {
+interface ContentLinkInfo {
 	title?: string;
 	/** Status HTTP del fetch (401/403 → sin acceso, 404 → inexistente). */
 	status?: number;

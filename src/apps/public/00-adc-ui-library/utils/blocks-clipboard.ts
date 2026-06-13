@@ -46,7 +46,7 @@ export interface BlockData {
 }
 
 /** MIME propietario para serializar bloques sin pérdida en el portapapeles. */
-export const ADC_BLOCKS_MIME = "application/x-adc-blocks";
+const ADC_BLOCKS_MIME = "application/x-adc-blocks";
 /** Variante con prefijo `web ` exigida por el async Clipboard API (Chromium). */
 const ADC_BLOCKS_WEB_MIME = `web ${ADC_BLOCKS_MIME}`;
 
@@ -66,12 +66,12 @@ export interface ClipboardBlocksPayload<B extends BlockData = BlockData> {
 // ── Serialización ───────────────────────────────────────────────────────────
 
 /** Serializa bloques al formato JSON `adc-blocks`. */
-export function serializeBlocks(blocks: readonly BlockData[]): string {
+function serializeBlocks(blocks: readonly BlockData[]): string {
 	return JSON.stringify(blocks);
 }
 
 /** Parsea JSON `adc-blocks`; devuelve `null` si no es un array de bloques. */
-export function deserializeBlocks<B extends BlockData = BlockData>(json: string): B[] | null {
+function deserializeBlocks<B extends BlockData = BlockData>(json: string): B[] | null {
 	if (!json) return null;
 	try {
 		const parsed = JSON.parse(json);
@@ -104,7 +104,7 @@ function stripInlineMarkdown(md: string): string {
 }
 
 /** Convierte una lista de bloques a HTML interoperable. */
-export function blocksToHtml(blocks: readonly BlockData[]): string {
+function blocksToHtml(blocks: readonly BlockData[]): string {
 	return blocks.map(blockToHtml).join("");
 }
 
@@ -156,7 +156,7 @@ function tableToHtml(b: BlockData): string {
 }
 
 /** Convierte una lista de bloques a texto plano legible. */
-export function blocksToPlainText(blocks: readonly BlockData[]): string {
+function blocksToPlainText(blocks: readonly BlockData[]): string {
 	return blocks
 		.map(blockToPlainText)
 		.filter((s) => s.length > 0)
@@ -229,7 +229,7 @@ function detectCodeLanguage(pre: HTMLElement): string | undefined {
  * resto a párrafos: nunca inyecta HTML crudo, por lo que es seguro frente a
  * contenido externo no confiable.
  */
-export function htmlToBlocks<B extends BlockData = BlockData>(html: string | HTMLElement): B[] {
+function htmlToBlocks<B extends BlockData = BlockData>(html: string | HTMLElement): B[] {
 	let root: HTMLElement;
 	if (typeof html === "string") {
 		const doc = new DOMParser().parseFromString(html, "text/html");
@@ -301,7 +301,7 @@ function tableElementToBlock(el: HTMLElement): BlockData {
 }
 
 /** Convierte texto plano en párrafos (bloques separados por línea en blanco). */
-export function textToBlocks<B extends BlockData = BlockData>(text: string): B[] {
+function textToBlocks<B extends BlockData = BlockData>(text: string): B[] {
 	return text
 		.split(/\n{2,}/)
 		.map((chunk) => chunk.trim())
@@ -312,14 +312,14 @@ export function textToBlocks<B extends BlockData = BlockData>(text: string): B[]
 // ── DataTransfer (eventos copy/cut/paste) ───────────────────────────────────
 
 /** Escribe los 3 formatos en un `DataTransfer` (handler de `copy`/`cut`). */
-export function writeBlocksToDataTransfer(dt: DataTransfer, blocks: readonly BlockData[]): void {
+function writeBlocksToDataTransfer(dt: DataTransfer, blocks: readonly BlockData[]): void {
 	dt.setData(ADC_BLOCKS_MIME, serializeBlocks(blocks));
 	dt.setData("text/html", blocksToHtml(blocks));
 	dt.setData("text/plain", blocksToPlainText(blocks));
 }
 
 /** Lee un `DataTransfer` priorizando `adc-blocks` → HTML → texto. */
-export function readBlocksFromDataTransfer<B extends BlockData = BlockData>(dt: DataTransfer): ClipboardBlocksPayload<B> {
+function readBlocksFromDataTransfer<B extends BlockData = BlockData>(dt: DataTransfer): ClipboardBlocksPayload<B> {
 	const adc = dt.getData(ADC_BLOCKS_MIME);
 	const html = dt.getData("text/html");
 	const text = dt.getData("text/plain");
@@ -338,7 +338,7 @@ export function readBlocksFromDataTransfer<B extends BlockData = BlockData>(dt: 
 
 // ── Async Clipboard API (botones explícitos) ────────────────────────────────
 
-/** Copia bloques al portapapeles en los 3 formatos. Best-effort multi-navegador. */
+/** @public Copia bloques al portapapeles en los 3 formatos. Best-effort multi-navegador. */
 export async function copyBlocksToClipboard(blocks: readonly BlockData[]): Promise<void> {
 	const text = blocksToPlainText(blocks);
 	const html = blocksToHtml(blocks);
@@ -359,7 +359,7 @@ export async function copyBlocksToClipboard(blocks: readonly BlockData[]): Promi
 	}
 }
 
-/** Lee bloques del portapapeles (async). Requiere permiso de lectura. */
+/** @public Lee bloques del portapapeles (async). Requiere permiso de lectura. */
 export async function pasteBlocksFromClipboard<B extends BlockData = BlockData>(): Promise<ClipboardBlocksPayload<B>> {
 	try {
 		const items = await navigator.clipboard.read();

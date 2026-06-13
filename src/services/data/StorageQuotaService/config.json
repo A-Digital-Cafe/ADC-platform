@@ -1,0 +1,32 @@
+{
+	"kernelMode": 65,
+	"name": "StorageQuotaService",
+	"version": "1.0.0",
+	"failOnError": false,
+	"providers": [
+		{
+			"name": "object/mongo",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"uri": "mongodb://admin:password@localhost:27017/adc-core?authSource=admin",
+				"maxRetries": 5,
+				"retryDelay": 5000
+			}
+		}
+	],
+	"services": [
+		{
+			"name": "IdentityManagerService",
+			"version": "latest"
+		},
+		{
+			"name": "EndpointManagerService",
+			"version": "latest",
+			"optional": true
+		}
+	],
+	"private": {
+		"reconcileIntervalMs": "${STORAGE_QUOTA_RECONCILE_MS:-0}"
+	}
+}

@@ -1,9 +1,10 @@
 {
 	"name": "@adc-platform/fastify-server",
 	"version": "1.0.0",
+	"private": true,
 	"type": "module",
 	"dependencies": {
-		"fastify": "^5.7.3",
+		"fastify": "^5.8.5",
 		"@fastify/cors": "^11.1.0",
 		"@fastify/cookie": "^11.0.2",
 		"@fastify/formbody": "^8.0.2",

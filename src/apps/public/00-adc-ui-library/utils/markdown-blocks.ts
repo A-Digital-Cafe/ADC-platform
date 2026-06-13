@@ -215,3 +215,63 @@ export function markdownToBlocks(markdown: string): MarkdownBlock[] {
 	flushParagraph();
 	return blocks;
 }
+
+/**
+ * @public Serializa bloques de vuelta a Markdown (inverso de `markdownToBlocks`).
+ * El texto inline se persiste tal cual (los marks ya viven como `**bold**` etc.).
+ * Bloques desconocidos (ej: `attachment`) se omiten.
+ */
+export function blocksToMarkdown(blocks: MarkdownBlock[]): string {
+	const out: string[] = [];
+
+	for (const block of blocks) {
+		switch (block.type) {
+			case "heading":
+				out.push(`${"#".repeat(Math.min(Math.max(block.level ?? 1, 1), 6))} ${block.text ?? ""}`);
+				break;
+			case "paragraph":
+				out.push(block.text ?? "");
+				break;
+			case "list": {
+				const start = block.start ?? 1;
+				out.push((block.items ?? []).map((item, i) => (block.ordered ? `${start + i}. ${item}` : `- ${item}`)).join("\n"));
+				break;
+			}
+			case "checkbox":
+				out.push(`- [${block.checked ? "x" : " "}] ${block.text ?? ""}`);
+				break;
+			case "code":
+				out.push(`\`\`\`${block.language ?? ""}\n${block.content ?? ""}\n\`\`\``);
+				break;
+			case "quote":
+				out.push(
+					(block.text ?? "")
+						.split("\n")
+						.map((line) => `> ${line}`)
+						.join("\n")
+				);
+				break;
+			case "callout": {
+				const lines = (block.text ?? "").split("\n");
+				out.push([`> [!${block.tone ?? "info"}] ${lines[0] ?? ""}`, ...lines.slice(1).map((line) => `> ${line}`)].join("\n"));
+				break;
+			}
+			case "table": {
+				const header = block.header ?? [];
+				const aligns: Align[] = block.columnAlign ?? header.map(() => "left");
+				const separators: Record<Align, string> = { left: "---", center: ":---:", right: "---:" };
+				const sep = aligns.map((a) => separators[a]);
+				const row = (cells: string[]) => `| ${cells.join(" | ")} |`;
+				out.push([row(header), row(sep), ...(block.rows ?? []).map(row)].join("\n"));
+				break;
+			}
+			case "divider":
+				out.push("---");
+				break;
+			default:
+				break;
+		}
+	}
+
+	return out.join("\n\n") + (out.length ? "\n" : "");
+}

@@ -1,6 +1,7 @@
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { RESOURCE_NAME, IdentityScopes } from "@common/types/identity/permissions.ts";
 import { PMScopes, PM_RESOURCE_NAME } from "@common/types/project-manager/permissions.ts";
+import { StorageScopes, STORAGE_RESOURCE_NAME } from "@common/types/storage/permissions.ts";
 import { BaseRole } from "@common/types/identity/Role.ts";
 import { COMMUNITY_SCOPES_BITS } from "@common/types/resources.ts";
 
@@ -50,6 +51,7 @@ export const ORG_PREDEFINED_ROLES: Array<BaseRole> = [
 		permissions: [
 			{ resource: "data", action: CRUDXAction.CRUD, scope: 0xff },
 			{ resource: "database", action: CRUDXAction.CRUD, scope: 0xff },
+			{ resource: STORAGE_RESOURCE_NAME, action: CRUDXAction.CRUD, scope: StorageScopes.ALL },
 		],
 	},
 	{

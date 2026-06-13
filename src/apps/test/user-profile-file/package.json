@@ -1,6 +1,6 @@
 {
 	"name": "@adc-platform/user-profile-file",
 	"type": "module",
+	"private": true,
 	"dependencies": {}
 }
-

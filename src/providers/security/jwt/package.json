@@ -2,6 +2,7 @@
 	"name": "@adc/provider-jwt",
 	"version": "1.0.0",
 	"type": "module",
+	"private": true,
 	"main": "index.ts",
 	"dependencies": {
 		"jose": "^6.1.3"

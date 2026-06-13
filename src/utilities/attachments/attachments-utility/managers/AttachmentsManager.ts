@@ -5,11 +5,22 @@ import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from ".
 import type { AttachmentDoc } from "../schemas/attachment.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
 import { OnlyKernel } from "../../../../utils/decorators/OnlyKernel.ts";
+import type { QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
 
 export type AttachmentAction = "upload" | "read" | "delete";
 
 export interface AttachmentPermissionContext {
 	userId: string;
+	/** Contexto de organización del caller (del token); alimenta el tracker de cuota. */
+	orgId?: string | null;
+}
+
+/** Integración opcional con StorageQuotaService. */
+export interface AttachmentsQuotaOptions {
+	/** Identificador estable de la app consumidora (ej: "drive", "avatars"); el mínimo garantizado lo resuelve el servicio. */
+	appId: string;
+	/** Getter lazy del tracker; null si el servicio de cuotas no está disponible. */
+	getTracker: QuotaTrackerGetter;
 }
 
 export type AttachmentPermissionChecker = (
@@ -50,6 +61,10 @@ export interface AttachmentsManagerOptions {
 	allowedMimeTypes?: ReadonlyArray<string> | null;
 	presignTtl?: number;
 	kernelKey: symbol;
+	/** Tracking/enforcement de cuota de almacenamiento (opcional, fail-open). */
+	quota?: AttachmentsQuotaOptions;
+	/** Logger opcional para avisos de cuota (fail-open). */
+	logger?: { logWarn(msg: string): void };
 }
 
 export interface PresignUploadInput {
@@ -97,6 +112,8 @@ export class AttachmentsManager {
 	readonly #maxSize: number;
 	readonly #allowedMimes: ReadonlySet<string> | null;
 	readonly #presignTtl: number;
+	readonly #quota?: AttachmentsQuotaOptions;
+	readonly #logger?: { logWarn(msg: string): void };
 	// Pública para que `@OnlyKernel()` pueda leerla vía `this.kernelKey`.
 	private kernelKey?: symbol;
 
@@ -110,6 +127,8 @@ export class AttachmentsManager {
 		this.#maxSize = opts.maxSize ?? ATTACHMENT_DEFAULT_MAX_SIZE;
 		this.#allowedMimes = opts.allowedMimeTypes === null ? null : new Set(opts.allowedMimeTypes ?? ATTACHMENT_DEFAULT_ALLOWED_MIMES);
 		this.#presignTtl = opts.presignTtl ?? opts.s3Provider.getDefaultPresignTtl();
+		this.#quota = opts.quota;
+		this.#logger = opts.logger;
 		this.setKernelKey(opts.kernelKey);
 	}
 
@@ -163,10 +182,58 @@ export class AttachmentsManager {
 		}
 	}
 
+	/**
+	 * Chequeo informativo de cuota previo al presign (fail-open: si el tracker no
+	 * está disponible o falla, se permite y se loguea). El enforcement real y
+	 * atómico ocurre en `confirmUpload` con el tamaño real del objeto.
+	 */
+	async #checkQuotaAllowance(ctx: AttachmentPermissionContext, sizeBytes: number): Promise<void> {
+		if (!this.#quota) return;
+		try {
+			const tracker = this.#quota.getTracker();
+			if (!tracker) return;
+			const result = await tracker.checkAllowance({ userId: ctx.userId, orgId: ctx.orgId ?? null }, this.#quota.appId, sizeBytes);
+			if (!result.allowed) {
+				throw new AttachmentError(413, "ATTACHMENT_QUOTA_EXCEEDED", "Cuota de almacenamiento agotada", {
+					usedTotal: result.usedTotal,
+					effectiveLimit: result.effectiveLimit,
+				});
+			}
+		} catch (e) {
+			if (e instanceof AttachmentError) throw e;
+			this.#logger?.logWarn(`Attachments(${this.#quota.appId}): tracker de cuota no disponible (${(e as Error).message}); se permite`);
+		}
+	}
+
+	/** Comitea bytes contra la cuota; `false` solo si el tracker rechazó (agotada). */
+	async #commitQuota(ctx: AttachmentPermissionContext, bytes: number): Promise<boolean> {
+		if (!this.#quota) return true;
+		try {
+			const tracker = this.#quota.getTracker();
+			if (!tracker) return true;
+			return await tracker.commit({ userId: ctx.userId, orgId: ctx.orgId ?? null }, this.#quota.appId, bytes);
+		} catch (e) {
+			this.#logger?.logWarn(`Attachments(${this.#quota.appId}): commit de cuota falló (${(e as Error).message}); se permite`);
+			return true;
+		}
+	}
+
+	/** Libera bytes comiteados (solo attachments `ready`) en el contexto donde se subieron. Nunca lanza. */
+	async #releaseQuota(uploadedBy: string, orgId: string | null, bytes: number): Promise<void> {
+		if (!this.#quota || bytes <= 0) return;
+		try {
+			const tracker = this.#quota.getTracker();
+			await tracker?.release({ userId: uploadedBy, orgId }, this.#quota.appId, bytes);
+		} catch (e) {
+			this.#logger?.logWarn(`Attachments(${this.#quota.appId}): release de cuota falló (${(e as Error).message})`);
+		}
+	}
+
 	async presignUpload(ctx: AttachmentPermissionContext, input: PresignUploadInput): Promise<PresignUploadResult> {
 		this.#validateUploadInput(input);
 		const subCtx: SubPathContext = { ...ctx, ownerType: input.ownerType, ownerId: input.ownerId };
 		await this.#checkPermission("upload", subCtx);
+		await this.#checkQuotaAllowance(ctx, input.size);
 
 		const attachmentId = randomUUID();
 		const subPath = this.#subPathResolver(subCtx);
@@ -185,6 +252,7 @@ export class AttachmentsManager {
 			storageKey: key,
 			status: "pending",
 			uploadedBy: ctx.userId,
+			orgId: ctx.orgId ?? null,
 			createdAt: new Date(),
 		});
 
@@ -224,6 +292,19 @@ export class AttachmentsManager {
 		const head = await this.#s3.headObject({ bucket: attachment.bucket, key: attachment.storageKey });
 		if (!head.size || head.size <= 0) {
 			throw new AttachmentError(409, "ATTACHMENT_NOT_UPLOADED", "Objeto no encontrado en S3 tras upload");
+		}
+
+		// Enforcement real de cuota con el tamaño verificado en S3 (no el declarado
+		// por el cliente). Si no entra, se revierte la subida completa.
+		const committed = await this.#commitQuota(ctx, head.size);
+		if (!committed) {
+			try {
+				await this.#s3.deleteObject({ bucket: attachment.bucket, key: attachment.storageKey });
+			} catch {
+				// el GC de pending limpiará el objeto si este delete falla
+			}
+			await this.#model.deleteOne({ _id: attachmentId });
+			throw new AttachmentError(413, "ATTACHMENT_QUOTA_EXCEEDED", "Cuota de almacenamiento agotada");
 		}
 
 		await this.#model.updateOne(
@@ -332,6 +413,10 @@ export class AttachmentsManager {
 			// ignorable: si el objeto no existe en S3, igual borramos el doc
 		}
 		await this.#model.deleteOne({ _id: attachmentId });
+		// Los `pending` nunca comitearon cuota; solo se liberan los `ready`.
+		if (attachment!.status === "ready") {
+			await this.#releaseQuota(attachment!.uploadedBy, attachment!.orgId, attachment!.size);
+		}
 	}
 
 	/**
@@ -351,6 +436,7 @@ export class AttachmentsManager {
 			// si el objeto no existe en S3, igual borramos el doc
 		}
 		await this.#model.deleteOne({ _id: attachmentId });
+		if (doc.status === "ready") await this.#releaseQuota(doc.uploadedBy, doc.orgId ?? null, doc.size);
 	}
 
 	/**
@@ -370,6 +456,7 @@ export class AttachmentsManager {
 				// continuar: si el objeto no existe en S3, igual borramos el doc
 			}
 			await this.#model.deleteOne({ _id: d._id });
+			if (d.status === "ready") await this.#releaseQuota(d.uploadedBy, d.orgId ?? null, d.size);
 			removed++;
 		}
 		return removed;
@@ -393,9 +480,24 @@ export class AttachmentsManager {
 				// continuar: si el objeto no existe en S3, igual borramos el doc
 			}
 			await this.#model.deleteOne({ _id: d._id });
+			if (d.status === "ready") await this.#releaseQuota(d.uploadedBy, d.orgId ?? null, d.size);
 			removed++;
 		}
 		return removed;
+	}
+
+	/**
+	 * Uso real por (usuario, contexto) de los attachments `ready` de ESTA
+	 * colección/app. Alimenta `computeUsage` del registro en StorageQuotaService
+	 * (reconciliación). Protegido por `@OnlyKernel()`.
+	 */
+	@OnlyKernel()
+	async aggregateUsageByUser(_kernelKey: symbol): Promise<Array<{ userId: string; orgId: string | null; bytes: number; count: number }>> {
+		const rows = await this.#model.aggregate<{ _id: { u: string; o: string | null }; bytes: number; count: number }>([
+			{ $match: { status: "ready" } },
+			{ $group: { _id: { u: "$uploadedBy", o: { $ifNull: ["$orgId", null] } }, bytes: { $sum: "$size" }, count: { $sum: 1 } } },
+		]);
+		return rows.map((r) => ({ userId: String(r._id.u), orgId: r._id.o ?? null, bytes: r.bytes, count: r.count }));
 	}
 
 	/**
@@ -453,6 +555,7 @@ export class AttachmentsManager {
 			etag: doc.etag ?? null,
 			status: doc.status,
 			uploadedBy: doc.uploadedBy,
+			orgId: doc.orgId ?? null,
 			createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),
 			uploadedAt,
 		};

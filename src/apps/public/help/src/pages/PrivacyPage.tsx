@@ -119,6 +119,25 @@ export function PrivacyPage() {
 				Trabajamos en formalizar un proceso interno de respuesta a incidentes que afecten datos personales. Hasta entonces, si detectas o
 				sufres un incidente, repórtalo por los canales de <a href="/contact#canales">contacto</a>.
 			</p>
+
+			<h2 id="contenido-de-usuarios-y-solicitudes-de-terceros">11. Contenido subido por usuarios y solicitudes de terceros</h2>
+			<p>
+				Las apps de la plataforma (Drive, adjuntos de proyectos y artículos, correo) permiten subir y compartir archivos. Ese contenido es{" "}
+				<strong>responsabilidad de quien lo sube</strong>: nosotros lo almacenamos por cuenta del usuario y no lo revisamos de forma
+				previa. Los archivos eliminados pasan por una papelera y se borran definitivamente (incluido el binario en el almacenamiento) al
+				vaciarla, al borrarse la cuenta o al vencer la retención.
+			</p>
+			<p>
+				Si sos un <strong>tercero</strong> y considerás que un archivo compartido (por ejemplo, mediante un enlace público de Drive) afecta
+				tus datos personales o tus derechos, podés solicitar su revisión o retiro creando un ticket de tipo <strong>“Datos”</strong> en la
+				sección <em>Tickets de Soporte</em> de{" "}
+				<a href="https://status.adigitalcafe.com/status/tickets" rel="noreferrer">
+					status.adigitalcafe.com
+				</a>{" "}
+				incluyendo el enlace al contenido y el motivo. Tratamos estas solicitudes en un plazo máximo de <strong>30 días</strong>;
+				mientras se evalúan podemos suspender preventivamente el acceso al contenido reportado. Esto también canaliza solicitudes GDPR de
+				acceso, rectificación o supresión sobre datos tratados por terceros dentro de la plataforma.
+			</p>
 		</PageShell>
 	);
 }

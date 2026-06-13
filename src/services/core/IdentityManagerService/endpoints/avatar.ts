@@ -61,7 +61,8 @@ export class AvatarEndpoints {
 	}
 
 	static #ctxFor(callerId: string, targetUserId: string): UserAvatarEndpointCtx {
-		return { userId: callerId, targetUserId };
+		// orgId null: los avatares cuentan SIEMPRE en la cuota personal.
+		return { userId: callerId, targetUserId, orgId: null };
 	}
 
 	static async #getUser(userId: string, token?: string | null) {

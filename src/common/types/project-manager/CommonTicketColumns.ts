@@ -1,9 +1,10 @@
-export type SupportTicketType = "complaint" | "suggestion" | "security";
+export type SupportTicketType = "complaint" | "suggestion" | "security" | "data";
 
 /**
  * Columnas tipadas del proyecto común donde se guardan:
  * - Solicitudes de organizaciones
- * - Tickets de soporte (reclamos, sugerencias, reportes de seguridad)
+ * - Tickets de soporte (reclamos, sugerencias, reportes de seguridad,
+ *   solicitudes de datos/GDPR/takedown de terceros)
  */
 export type CommonTicketColumnKey = "organizations" | "support" | "security";
 
@@ -14,6 +15,7 @@ export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
 	complaint: "RECLAMO",
 	suggestion: "SUGERENCIA",
 	security: "SEGURIDAD",
+	data: "DATOS",
 };
 
 /**
@@ -23,6 +25,7 @@ export const TICKET_TYPE_CATEGORIES: Record<SupportTicketType, string> = {
 	complaint: "bug",
 	suggestion: "task",
 	security: "security",
+	data: "task",
 };
 
 /**
@@ -34,4 +37,5 @@ export const TICKET_COLUMN_MAP = {
 	complaint: "support",
 	suggestion: "support",
 	security: "security",
+	data: "support",
 } as const satisfies Record<"org-request" | SupportTicketType, CommonTicketColumnKey>;

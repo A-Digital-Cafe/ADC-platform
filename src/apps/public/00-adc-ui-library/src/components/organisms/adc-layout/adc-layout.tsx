@@ -61,7 +61,7 @@ export class AdcLayout {
 					<slot />
 				</main>
 
-				<adc-site-footer class="mt-12" brand-name={this.brandName} brand-slogan={this.brandSlogan}>
+				<adc-site-footer class="z-40 mt-12" brand-name={this.brandName} brand-slogan={this.brandSlogan}>
 					<slot name="footer" />
 				</adc-site-footer>
 			</div>

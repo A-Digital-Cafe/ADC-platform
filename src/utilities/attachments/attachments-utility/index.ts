@@ -4,6 +4,7 @@ import { getOrCreateAttachmentModel } from "./schemas/attachment.schema.js";
 import {
 	AttachmentsManager,
 	type AttachmentsManagerOptions,
+	type AttachmentsQuotaOptions,
 	type AttachmentPermissionChecker,
 	type AttachmentPermissionContext,
 	type AttachmentAction,
@@ -15,6 +16,7 @@ import {
 
 export type {
 	AttachmentsManagerOptions,
+	AttachmentsQuotaOptions,
 	AttachmentPermissionChecker,
 	AttachmentPermissionContext,
 	AttachmentAction,
@@ -46,6 +48,8 @@ export default class AttachmentsUtility extends BaseUtility {
 			allowedMimeTypes: opts.allowedMimeTypes,
 			presignTtl: opts.presignTtl,
 			kernelKey: opts.kernelKey,
+			quota: opts.quota,
+			logger: opts.logger,
 		});
 	}
 }

@@ -1,5 +1,6 @@
 {
 	"name": "@adc-platform/json-file-crud-service",
 	"type": "module",
+	"private": true,
 	"dependencies": {}
 }

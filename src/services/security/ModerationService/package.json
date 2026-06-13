@@ -1,6 +1,7 @@
 {
-	"name": "ModerationService",
+	"name": "@adc/moderation-service",
 	"version": "1.0.0",
+	"private": true,
 	"description": "Anti-evasion ban list (hash-based) + Discord modlog sync",
 	"type": "module",
 	"main": "index.ts"

@@ -118,6 +118,18 @@ export function TermsPage() {
 				Conservas los derechos sobre el contenido que publicas. Nos otorgas una licencia limitada para mostrarlo dentro de la plataforma
 				con la finalidad para la que lo publicaste, incluyendo copias técnicas necesarias para operar el servicio.
 			</p>
+			<p>
+				<strong>Archivos subidos y compartidos (Drive y adjuntos):</strong> sos responsable del contenido que subís, almacenás o compartís
+				(incluido el compartido por enlace público), y declarás contar con los derechos necesarios. No está permitido usar el
+				almacenamiento para material ilegal, que infrinja derechos de terceros o que viole las{" "}
+				<a href="#conductas-prohibidas">conductas prohibidas</a>. El espacio disponible depende de tu plan o del de tu organización.
+				Podemos suspender el acceso a contenido reportado mientras se evalúa una solicitud de retiro: cualquier persona puede reportar
+				contenido mediante un ticket de tipo <strong>“Datos”</strong> en{" "}
+				<a href="https://status.adigitalcafe.com/status/tickets" rel="noreferrer">
+					status.adigitalcafe.com
+				</a>{" "}
+				(ver <a href="/privacy#contenido-de-usuarios-y-solicitudes-de-terceros">política de privacidad</a>).
+			</p>
 
 			<h2 id="enlaces-y-servicios-externos">6. Enlaces y servicios externos</h2>
 			<p>

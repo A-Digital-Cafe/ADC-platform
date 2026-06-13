@@ -1,6 +1,7 @@
 export { IdentityScopes as Scope } from "@common/types/identity/permissions.ts";
 
 import { IdentityScopes } from "@common/types/identity/permissions.ts";
+import { StorageScopes, STORAGE_RESOURCE_NAME } from "@common/types/storage/permissions.ts";
 import type { Permission } from "@common/types/identity/Permission.js";
 import { CRUDXAction } from "@common/types/Actions";
 import { hasPermission } from "@common/utils/perms.ts";
@@ -13,6 +14,8 @@ export interface IdentityTab {
 	label: string;
 	requiredScope: number;
 	requiredAction: number;
+	/** Resource del permiso requerido (default: "identity"). */
+	resource?: string;
 }
 
 /**
@@ -24,6 +27,7 @@ const IDENTITY_TABS: IdentityTab[] = [
 	{ id: "groups", label: "groups", requiredScope: IdentityScopes.GROUPS, requiredAction: CRUDXAction.READ },
 	{ id: "organizations", label: "organizations", requiredScope: IdentityScopes.ORGANIZATIONS, requiredAction: CRUDXAction.READ },
 	{ id: "regions", label: "regions", requiredScope: IdentityScopes.REGIONS, requiredAction: CRUDXAction.READ },
+	{ id: "storage", label: "storage", requiredScope: StorageScopes.LIMITS, requiredAction: CRUDXAction.READ, resource: STORAGE_RESOURCE_NAME },
 ];
 
 const RESOURCE = "identity";
@@ -35,7 +39,7 @@ const RESOURCE = "identity";
 export function getVisibleTabs(perms: Permission[], orgId?: string): IdentityTab[] {
 	return IDENTITY_TABS.filter((tab) => {
 		if (orgId && (tab.id === "organizations" || tab.id === "regions")) return false;
-		return hasPermission(perms, RESOURCE, tab.requiredAction, tab.requiredScope);
+		return hasPermission(perms, tab.resource ?? RESOURCE, tab.requiredAction, tab.requiredScope);
 	});
 }
 

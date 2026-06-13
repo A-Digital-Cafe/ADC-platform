@@ -8,6 +8,7 @@ Factory de `AttachmentsManager` reutilizable. Cada servicio host instancia su pr
 - `subPathResolver(ctx)` para subrutas variables (`<projectId>/<issueId>`, `<slug>`).
 - `permissionChecker(action, ctx, attachment?)` callback por servicio.
 - `maxSize`, `allowedMimeTypes`, `presignTtl` opcionales.
+- `quota: { appId, getTracker }` opcional: el attachment persiste el `orgId` del ctx (contexto de cuota) y release/reconcile descuentan en ese contexto.
 
 ## API del Manager
 

@@ -12,6 +12,7 @@ import { RolesView } from "./pages/RolesView.tsx";
 import { GroupsView } from "./pages/GroupsView.tsx";
 import { OrganizationsView } from "./pages/OrganizationsView.tsx";
 import { RegionsView } from "./pages/RegionsView.tsx";
+import { StorageView } from "./pages/StorageView.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { getSession } from "@ui-library/utils/session";
 
@@ -157,6 +158,8 @@ export default function App() {
 				return <OrganizationsView perms={perms} />;
 			case "regions":
 				return <RegionsView perms={perms} />;
+			case "storage":
+				return <StorageView perms={perms} orgId={effectiveOrgId} />;
 			default:
 				return null;
 		}

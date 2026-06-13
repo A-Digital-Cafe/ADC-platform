@@ -1,0 +1,9 @@
+{
+	"name": "storage-quota-service",
+	"version": "1.0.0",
+	"description": "Tracking centralizado de uso de almacenamiento y límites por plan/override",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"dependencies": {}
+}

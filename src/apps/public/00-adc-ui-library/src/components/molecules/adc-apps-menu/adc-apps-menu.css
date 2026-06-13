@@ -25,7 +25,9 @@
     right: 0;
     top: 100%;
     margin-top: 0.5rem;
-    background: var(--c-surface);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    background-color: var(--c-surface);
     border: 1px solid oklch(from currentColor l c h / 0.1);
     border-radius: var(--r-xxl);
     box-shadow: var(--shadow);

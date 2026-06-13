@@ -47,10 +47,11 @@ El tier es transversal (`@common/types/tiers.ts` para usuarios,
 - Tier de usuario: `user.metadata.accountTier` (default `free`).
 - Tier de org: `org.tier` vía `identity.forOrg(orgId).getOrganization()`.
 
-Define los límites en `@common/types/<feature>/<feature>-tier-limits.ts` como
-`Record<Tier, Limits>` con un getter (`getXxxTierLimits(tier)`), igual que
-`project-manager/tier-limits.ts`. Aplica el límite **en el DAO**, lanzando un
-error tipado `40x` (`QUOTA_EXCEEDED` / `TIER_LIMIT_REACHED`).
+Define los límites en `@common/types/tiers/<feature>.ts` (matriz central de
+tiers de la plataforma) como `Record<Tier, Limits>` con un getter
+(`getXxxTierLimits(tier)`), igual que `tiers/project-manager.ts` o
+`tiers/email.ts`. Aplica el límite **en el DAO**, lanzando un error tipado
+`40x` (`QUOTA_EXCEEDED` / `TIER_LIMIT_REACHED`).
 
 ### Trabajos programados (scheduled)
 

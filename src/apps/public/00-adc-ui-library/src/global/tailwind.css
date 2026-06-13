@@ -84,6 +84,12 @@
         --c-app-green: #4ade80;
     }
 
+    :root[crystal-theme] .bg-surface {
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+        background-color: var(--c-surface);
+    }
+
     :root[crystal-theme] {
         --palette-tone-1: var(--custom-tone-1);
         --palette-tone-2: var(--custom-tone-2);
@@ -95,13 +101,13 @@
         --c-header: oklch(94% 0.04 var(--palette-tone-2) / 55%);
         --c-theader: oklch(25% 0.08 var(--palette-tone-2));
         --c-background: oklch(96% 0.025 var(--palette-tone-1));
-        --c-surface: oklch(98.39% 0.03 var(--palette-tone-1) / 75%);
+        --c-surface: oklch(98.39% 0.03 var(--palette-tone-1) / 68%);
         --c-tsurface: oklch(25% 0.05 var(--palette-tone-2));
 
         --c-primary: oklch(38% 0.15 var(--palette-tone-2));
         --c-tprimary: oklch(97% 0.015 var(--palette-tone-1));
         --c-accent: oklch(58% 0.22 var(--palette-tone-2));
-        --c-alt: oklch(98.39% 0.03 var(--palette-tone-1) / 75%);
+        --c-alt: oklch(98.39% 0.03 var(--palette-tone-1) / 68%);
 
         --r-xxl: 6px;
         --shadow: 0 4px 32px rgba(100, 110, 160, 0.12), 0 1px 3px rgba(100, 110, 160, 0.08);
@@ -128,12 +134,12 @@
         --c-header: oklch(24% 0.09 var(--palette-tone-2) / 65%);
         --c-theader: oklch(92% 0.04 var(--palette-tone-1));
         --c-background: oklch(15% 0.045 var(--palette-tone-1));
-        --c-surface: oklch(27% 0.085 var(--palette-tone-1) / 68%);
+        --c-surface: oklch(23% 0.085 var(--palette-tone-1) / 68%);
         --c-tsurface: oklch(90% 0.03 var(--palette-tone-2));
         --c-primary: oklch(72% 0.22 var(--palette-tone-2));
         --c-tprimary: oklch(14% 0.03 var(--palette-tone-2));
         --c-accent: oklch(76% 0.22 var(--palette-tone-2));
-        --c-alt: oklch(27% 0.085 var(--palette-tone-1) / 68%);
+        --c-alt: oklch(23% 0.085 var(--palette-tone-1) / 68%);
 
         --c-text: oklch(93% 0.03 var(--palette-tone-1));
         --c-muted: oklch(60% 0.025 var(--palette-tone-1));
@@ -185,6 +191,7 @@
         margin: 0;
         font-family: Inter, system-ui, sans-serif;
         font-size: 13px;
+        --footer-offset: 75px;
     }
 
     * {

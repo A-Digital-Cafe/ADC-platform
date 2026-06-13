@@ -21,17 +21,21 @@ presets/               # Módulos opcionales en repos git propios (ver docs/mult
 
 ## Commands
 
+> **Usar `bun` como runtime/package manager** (no `npm`): `bun run dev`, `bun install`, etc.
+
 | Command | Description |
 | ------- | ----------- |
-| `npm run dev` | Desarrollo (hot reload) |
-| `npm run start:prodtests` | Simular producción + tests habilitados |
-| `npm run start` | Producción (puerto 80) |
-| `npm run typecheck` | TypeScript check + knip unused exports |
-| `npm run lint` | ESLint (zero warnings) |
-| `npm run build:ui` | Compilar Stencil UI library |
-| `npm run cleanup` | Limpiar procesos |
+| `bun run dev` | Desarrollo (hot reload) |
+| `bun run start:prodtests` | Simular producción + tests habilitados |
+| `bun run start` | Producción (puerto 80) |
+| `bun run typecheck` | TypeScript check + knip unused exports |
+| `bun run lint` | ESLint (zero warnings) |
+| `bun run build:ui` | Compilar Stencil UI library |
+| `bun run cleanup` | Limpiar procesos |
 
 > ⚠️ **Nunca ejecutar `tsgo`/`tsc -p <tsconfig>` sin `--noEmit`.** Los `tsconfig.json` de módulos NO tienen `noEmit`, por lo que un `tsgo -p ...` sin flag emite cientos de `.js`/`.d.ts` junto a los fuentes, contaminando el árbol. Usar `npm run typecheck` o `npx tsgo -p <module>/tsconfig.json --noEmit` para validar tipos.
+
+> ⚠️ **NUNCA trabajar sobre compilados.** No editar NI usar como fuente de verdad nada bajo `temp/` (`temp/ui-builds`, `temp/stencil-cache`, `temp/configs`, ...) ni cualquier `dist`/output generado. Son artefactos de build, se regeneran y no reflejan necesariamente la fuente. Razonar y modificar SIEMPRE desde el código fuente (`src/`, `presets/.../src/`).
 
 ## Module Base Classes & Lifecycle
 
@@ -103,8 +107,8 @@ UI apps usan **UIFederationService** para arquitectura micro-frontend:
 - Service Worker: habilitar solo en **layout apps** — cascadea automáticamente a apps hijas
 
 **Modos de despliegue:**
-- `npm run dev`: Apps en puertos individuales via `devPort` en config
-- `npm run start`/`start:prodtests`: Todas via subdomain routing (`hosting.subdomains` en config)
+- `bun run dev`: Apps en puertos individuales via `devPort` en config
+- `bun run start`/`start:prodtests`: Todas via subdomain routing (`hosting.subdomains` en config)
 
 **Configuración de hosting en `config.json`:**
 
@@ -192,6 +196,7 @@ this.logger.logOk("Success");
 7. **Worker Assignment**: `@Distributed` no garantiza ejecución en worker — `ExecutionManagerService` decide según carga
 8. **Instance Names**: Instancias de app siguen formato `{appName}:{configSuffix}` (ej: `user-profile:main`)
 9. **Stencil `shadow: false` + React root swaps**: Componentes Stencil con `shadow: false` (como `adc-layout`, `adc-feature-card`, `adc-skeleton`) reposicionan físicamente los slotted children. Nunca renderizar tal componente en `main.tsx` envolviendo `<App />`, y nunca retornar nodos JSX top-level diferentes entre renders dentro de ellos — el reconciler de React lanzará `NotFoundError: removeChild` al unmount. Colocar `<adc-layout>` dentro de `App.tsx` como root estable, o envolver ramas con `key` props distintas para forzar remount completo.
+10. **React 19 sincroniza props de custom elements durante el bubbling**: al abrir un popover/menú desde un handler de evento React (ej: `onContextMenu` que setea `open=true` en un web component Stencil), React 19 fija la prop síncronamente y el MISMO evento sigue burbujeando. Un listener `@Listen("<evento>", { target: "document" })` que cierra "al hacer click/contextmenu afuera" verá `open=true` y lo cerrará en el mismo gesto (abre y cierra al instante). Cerrar con un evento distinto al de apertura (ej: abrir en `contextmenu`, cerrar en `mousedown` — que precede al `contextmenu`). Ver `adc-context-menu`.
 
 ## Documentation Rules
 

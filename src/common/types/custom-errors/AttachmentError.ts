@@ -7,7 +7,8 @@ type AttachmentErrorTypes =
 	| "ATTACHMENT_FORBIDDEN"
 	| "ATTACHMENT_NOT_FOUND"
 	| "ATTACHMENT_NOT_UPLOADED"
-	| "ATTACHMENT_PENDING";
+	| "ATTACHMENT_PENDING"
+	| "ATTACHMENT_QUOTA_EXCEEDED";
 
 export class AttachmentError extends ADCCustomError<Record<string, unknown>, AttachmentErrorTypes> {
 	public readonly name = "AttachmentError";

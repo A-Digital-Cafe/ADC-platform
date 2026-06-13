@@ -76,8 +76,8 @@ UI apps use **UIFederationService** for micro-frontend architecture:
 
 **Deployment modes**:
 
-- `npm run dev`: Apps serve on individual ports via `devPort` in config
-- `npm run start`/`start:prodtests`: All apps serve via subdomain routing (`hosting.subdomains` in config)
+- `bun run dev`: Apps serve on individual ports via `devPort` in config
+- `bun run start`/`start:prodtests`: All apps serve via subdomain routing (`hosting.subdomains` in config)
 
 **Service Worker pattern**: Only enable `serviceWorker: true` in **layout apps** - it automatically works for all their child apps without re-enabling.
 
@@ -116,23 +116,25 @@ If an app directory contains `docker-compose.yml`, the Kernel automatically runs
 
 ### Commands (see `package.json`)
 
+> **Usar `bun` como runtime/package manager** (no `npm`): `bun run dev`, `bun install`, etc.
+
 ```bash
-npm run dev              # Development with hot-reload + test apps (individual ports)
-npm run start            # Production mode (port 80, no test apps, subdomain routing)
-npm run start:prodtests  # Production mode with test apps (port 3000, subdomain routing)
-npm run lint             # ESLint check with zero warnings
-npm run typecheck        # Recursive TypeScript check + knip unused exports
-npm run build:ui         # Compile Stencil UI library (check for build errors)
-npm run cleanup          # Kill orphaned processes
+bun run dev              # Development with hot-reload + test apps (individual ports)
+bun run start            # Production mode (port 80, no test apps, subdomain routing)
+bun run start:prodtests  # Production mode with test apps (port 3000, subdomain routing)
+bun run lint             # ESLint check with zero warnings
+bun run typecheck        # Recursive TypeScript check + knip unused exports
+bun run build:ui         # Compile Stencil UI library (check for build errors)
+bun run cleanup          # Kill orphaned processes
 ```
 
 > ⚠️ **Never run `tsgo`/`tsc -p <tsconfig>` without `--noEmit`.** The module
 > `tsconfig.json` files do NOT set `noEmit`, so a bare `tsgo -p ...` emits
 > hundreds of `.js`/`.d.ts` files next to the `.ts`/`.tsx` sources (and into
 > referenced `src/common/**`), polluting the tree. To validate types, use
-> `npm run typecheck` (the official `scripts/recursive-typecheck.sh` already
+> `bun run typecheck` (the official `scripts/recursive-typecheck.sh` already
 > passes `--noEmit`) or, for a scoped check, `npx tsgo -p <module>/tsconfig.json --noEmit`.
-> To test/run a module, use the npm scripts above — never hand-compile.
+> To test/run a module, use the node scripts above — never hand-compile.
 
 ### Creating Modules
 
@@ -141,10 +143,10 @@ npm run cleanup          # Kill orphaned processes
 Use scaffolding scripts:
 
 ```bash
-npm run create:app -- my-app           # Creates src/apps/my-app/
-npm run create:service -- my-service   # Creates src/services/my-service/
-npm run create:provider -- my-provider # Creates src/providers/my-provider/
-npm run create:utility -- my-utility   # Creates src/utilities/my-utility/
+bun run create:app -- my-app           # Creates src/apps/my-app/
+bun run create:service -- my-service   # Creates src/services/my-service/
+bun run create:provider -- my-provider # Creates src/providers/my-provider/
+bun run create:utility -- my-utility   # Creates src/utilities/my-utility/
 ```
 
 ### Hot Reload Behavior

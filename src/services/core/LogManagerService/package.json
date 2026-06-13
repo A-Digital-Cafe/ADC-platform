@@ -1,13 +1,14 @@
 {
-  "name": "log-manager-service",
-  "version": "1.0.0",
-  "description": "Service for managing application logs",
-  "main": "index.ts",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+	"name": "log-manager-service",
+	"version": "1.0.0",
+	"type": "module",
+	"private": true,
+	"description": "Service for managing application logs",
+	"main": "index.ts",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC"
 }
-

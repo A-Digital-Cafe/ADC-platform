@@ -50,9 +50,9 @@ export interface PlatformApp {
 	prodHostname?: string;
 }
 
-export type PlatformLinkStatus = "ok" | "denied" | "missing" | "error";
+type PlatformLinkStatus = "ok" | "denied" | "missing" | "error";
 
-/** Referencia resuelta de un enlace de plataforma (app + ruta parseada). */
+/** @public Referencia resuelta de un enlace de plataforma (app + ruta parseada). */
 export interface PlatformLinkRef {
 	app: PlatformApp;
 	/** URL absoluta normalizada. */
@@ -82,7 +82,7 @@ export interface PlatformLinkInfo {
 }
 
 /**
- * Resolver de título para una app. Recibe la referencia parseada y devuelve los
+ * @public Resolver de título para una app. Recibe la referencia parseada y devuelve los
  * campos de `PlatformLinkInfo` que conozca (normalmente `title`, `subtitle` y
  * opcionalmente `status: "denied"` si el usuario no tiene acceso). Puede ser
  * asíncrono (fetch a servicios). Devolver `null` deja el fallback por defecto.
@@ -140,6 +140,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 		resolverExpose: "./platformLinkResolver",
 	},
 	{ id: "identity", label: "Identity", devPort: 3014, subdomain: "identity", iconTag: "adc-icon-app-identity", remoteName: "adc_identity" },
+	{ id: "drive", label: "Drive", devPort: 3032, subdomain: "drive", iconTag: "adc-icon-app-drive" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
 	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
 	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
@@ -162,26 +163,9 @@ function getRegistry(): PlatformLinkRegistry {
 	return registry;
 }
 
-/** Registra o sustituye una app de plataforma (útil para presets/multirepo). */
-export function registerPlatformApp(app: PlatformApp): void {
-	getRegistry().apps.set(app.id, app);
-}
-
 /** Lista las apps de plataforma conocidas. */
 export function getPlatformApps(): PlatformApp[] {
 	return Array.from(getRegistry().apps.values());
-}
-
-/**
- * Registra manualmente el resolver de una app (sobrescribe el federado). Útil
- * como *fast-path* cuando estás dentro de la propia app y prefieres resolver tus
- * enlaces en proceso, o para tests. El mecanismo principal es la carga federada
- * bajo demanda (`federationExposes`), por lo que esto es opcional.
- */
-export function registerPlatformLinkResolver(appId: string, resolver: PlatformLinkResolver): void {
-	const registry = getRegistry();
-	registry.resolvers.set(appId, resolver);
-	registry.cache.clear();
 }
 
 /** Limpia la caché de resoluciones (ej: tras cambiar de sesión/permisos). */
@@ -207,7 +191,7 @@ function findApp(hostname: string, portStr: string): PlatformApp | null {
 	}
 	const normalized = hostname.toLowerCase();
 	// Apps en el apex (sin subdominio, ej: home) se matchean por hostname completo.
-	for (const app of apps.values()) if (app.prodHostname && app.prodHostname.toLowerCase() === normalized) return app;
+	for (const app of apps.values()) if (app.prodHostname?.toLowerCase() === normalized) return app;
 	const subdomain = normalized.split(".")[0];
 	if (!subdomain) return null;
 	for (const app of apps.values()) if (app.subdomain && app.subdomain === subdomain) return app;
@@ -218,7 +202,7 @@ function findApp(hostname: string, portStr: string): PlatformApp | null {
  * Resuelve una URL (absoluta o relativa) a una referencia de plataforma, o
  * `null` si no apunta a ningún microfront conocido (enlace externo).
  */
-export function resolvePlatformLink(rawUrl: string): PlatformLinkRef | null {
+function resolvePlatformLink(rawUrl: string): PlatformLinkRef | null {
 	if (!rawUrl) return null;
 	let u: URL;
 	try {
@@ -294,7 +278,8 @@ export function getPlatformAppOrigin(app: PlatformApp): string {
 	const prodHost = app.prodHostname ?? `${app.subdomain}.${PROD_BASE_DOMAIN}`;
 	const protocol = globalThis.location?.protocol === "https:" ? "https" : "http";
 	const port = globalThis.location?.port;
-	return `${protocol}://${prodHost}${port ? `:${port}` : ""}`;
+	const portTxt = port ? `:${port}` : "";
+	return `${protocol}://${prodHost}${portTxt}`;
 }
 
 /** URL del `remoteEntry.js` de una app (dev: por puerto; prod: por subdominio). */

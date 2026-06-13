@@ -63,6 +63,12 @@ const COMMUNITY_SCOPES: ScopeDef[] = [
 	{ key: "attachments", value: COMMUNITY_SCOPES_BITS.ATTACHMENTS },
 ];
 
+/** Storage scopes — alineados con StorageScopes en types/storage/permissions.ts */
+const STORAGE_SCOPES: ScopeDef[] = [
+	{ key: "usage", value: 1 },
+	{ key: "limits", value: 1 << 1 },
+];
+
 /** Project Manager scopes — alineados con PMScopes en types/project-manager/permissions.ts */
 const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
 	{ key: "projects", value: 1 },
@@ -83,6 +89,7 @@ const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
 export const RESOURCES: ResourceDef[] = [
 	{ id: "identity", label: "resources.identity", scopes: IDENTITY_SCOPES },
 	{ id: "content", label: "resources.content", scopes: [], simple: true },
+	{ id: "storage", label: "resources.storage", scopes: STORAGE_SCOPES },
 	{ id: "community", label: "resources.community", scopes: COMMUNITY_SCOPES },
 	{ id: "project-manager", label: "resources.project-manager", scopes: PROJECT_MANAGER_SCOPES },
 ];

@@ -1,5 +1,6 @@
 {
 	"name": "@adc-platform/json-file-adapter-utility",
 	"type": "module",
+	"private": true,
 	"dependencies": {}
 }

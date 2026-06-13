@@ -2,10 +2,10 @@
 	"name": "@adc/session-manager-service",
 	"version": "1.0.0",
 	"type": "module",
+	"description": "Servicio en modo kernel que gestiona las sesiones de usuario y su autenticación",
+	"private": true,
 	"main": "index.ts",
-	"dependencies": {
-		"@sinclair/typebox": "^0.34.0"
-	},
+	"dependencies": {},
 	"devDependencies": {
 		"fastify": "^5.7.3"
 	}

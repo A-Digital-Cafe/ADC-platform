@@ -29,6 +29,19 @@ pkill -9 -f "start-broker.js" 2>/dev/null && echo "✓ Brokers de Module Federat
 echo "Buscando procesos de ADC-platform..."
 pkill -9 -f "ADC-platform" 2>/dev/null && echo "✓ Procesos de ADC-platform terminados" || echo "✗ No se encontraron procesos de ADC-platform"
 
+# Matar el kernel ADC (bun src/index.ts): bun no propaga el Ctrl-C al hijo, que
+# queda huérfano reteniendo el puerto 3000. `pkill -f "ADC-platform"` no lo
+# alcanza porque "ADC-platform" solo está en el cwd, no en la línea de comando.
+echo "Buscando kernel ADC..."
+pkill -9 -f "bun src/index.ts" 2>/dev/null && echo "✓ Kernel ADC terminado" || echo "✗ No se encontró kernel ADC"
+
+# Red de seguridad: liberar los puertos de dev por si algo siguió escuchando
+# (3000 API + subdominios UI vía devPort).
+echo "Liberando puertos de dev..."
+for port in 3000 3012 3016 3020 3032; do
+    fuser -k -9 "${port}/tcp" 2>/dev/null && echo "✓ Puerto ${port} liberado" || true
+done
+
 # Matar procesos de Rspack (webpack-dev-server / rspack-dev-server)
 echo "Buscando procesos de Rspack..."
 pkill -9 -f "rspack" 2>/dev/null && echo "✓ Procesos de Rspack terminados" || echo "✗ No se encontraron procesos de Rspack"

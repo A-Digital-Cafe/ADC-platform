@@ -12,6 +12,8 @@ import type { AttachmentPermissionChecker } from "../../../../utilities/attachme
 export interface UserAvatarEndpointCtx {
 	userId: string; // caller
 	targetUserId: string; // owner del avatar
+	/** Los avatares cuentan SIEMPRE en el contexto personal, sin importar el token. */
+	orgId: null;
 }
 
 export const userAvatarAttachmentsChecker: AttachmentPermissionChecker = (action, ctx, attachment) => {

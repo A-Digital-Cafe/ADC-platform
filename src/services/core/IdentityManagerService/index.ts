@@ -25,6 +25,8 @@ import type { AttachmentsManager } from "../../../utilities/attachments/attachme
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
+import type { QuotaTrackerGetter } from "@common/types/storage/quota.ts";
+import { createQuotaTrackerGetter } from "../../data/StorageQuotaService/index.js";
 
 /**
  * Servicio opcional capaz de purgar datos privados de un usuario tras la
@@ -103,8 +105,12 @@ export default class IdentityManagerService extends BaseService {
 	// Cache de conexiones por organización
 	readonly #orgConnectionCache: Map<string, { connection: Connection; managers: OrgScopedManagers }> = new Map();
 
+	/** Tracker de cuota lazy: StorageQuotaService carga después (kernelMode mayor). */
+	readonly #getQuotaTracker: QuotaTrackerGetter;
+
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
+		this.#getQuotaTracker = createQuotaTrackerGetter(kernel);
 		this.#mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
 		this.#operationsService = kernel.registry.getService<OperationsService>("OperationsService");
 	}
@@ -231,6 +237,8 @@ export default class IdentityManagerService extends BaseService {
 					maxSize: 2 * 1024 * 1024, // 2 MB
 					allowedMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
 					kernelKey,
+					quota: { appId: "avatars", getTracker: this.#getQuotaTracker },
+					logger: this.logger,
 				});
 			} catch (e) {
 				this.logger.logWarn(
@@ -314,6 +322,7 @@ export default class IdentityManagerService extends BaseService {
 		users: UserManager;
 		organizations: OrgManager;
 		roles: RoleManager;
+		avatarAttachments: AttachmentsManager | null;
 		discordGuildId: string | undefined;
 		getDiscordRoleMap: (guildId: string) => Promise<Record<string, string> | null>;
 	} {
@@ -325,6 +334,7 @@ export default class IdentityManagerService extends BaseService {
 			users: this.#internalUserManager!,
 			organizations: this.#internalOrgManager!,
 			roles: this.#internalRoleManager!,
+			avatarAttachments: this.#avatarAttachmentsManager,
 			discordGuildId: configPrivate.discordGuildId,
 			/**
 			 * Obtiene el mapeo Discord Role ID → nombre de rol de plataforma para un guild.
@@ -545,6 +555,7 @@ export default class IdentityManagerService extends BaseService {
 		const candidates: Array<{ service: string; method: string }> = [
 			{ service: "ProjectManagerService", method: "purgeUserPrivateData" },
 			{ service: "EmailService", method: "purgeUserData" },
+			{ service: "DriveService", method: "purgeUserPrivateData" },
 		];
 
 		for (const { service, method } of candidates) {

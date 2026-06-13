@@ -24,6 +24,8 @@ export interface Attachment {
 	etag?: string | null;
 	status: AttachmentStatus;
 	uploadedBy: string;
+	/** Contexto de la subida (del token): null = personal, string = organización. Define dónde cuenta la cuota. */
+	orgId: string | null;
 	createdAt: Date;
 	uploadedAt?: Date;
 }
