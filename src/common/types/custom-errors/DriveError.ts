@@ -5,11 +5,13 @@ type ExpectedDriveErrorTypes =
 	| "NOT_AUTHENTICATED"
 	| "DRIVE_FORBIDDEN"
 	| "SHARE_NOT_ALLOWED"
+	| "ORG_ACCESS_DENIED"
 	// Not found
 	| "FOLDER_NOT_FOUND"
 	| "FILE_NOT_FOUND"
 	| "SHARE_NOT_FOUND"
 	| "LINK_NOT_FOUND"
+	| "USER_NOT_FOUND"
 	// Validation
 	| "MISSING_FIELDS"
 	| "INVALID_FIELD"

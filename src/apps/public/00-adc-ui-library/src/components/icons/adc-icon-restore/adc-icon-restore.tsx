@@ -24,7 +24,8 @@ export class AdcIconRestore {
 					aria-hidden="true"
 				>
 					<path d="M3 3v6h6" />
-					<path d="M3.51 9a9 9 0 1 0 2.13-3.36L3 9" />
+					{/* La cola del arco arranca con un pequeño gap respecto a la punta de la flecha. */}
+					<path d="M4.6 9a7.6 7.6 0 1 0 2.1-3.4" />
 				</svg>
 			</Host>
 		);

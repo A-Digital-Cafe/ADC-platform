@@ -55,6 +55,13 @@ export interface DriveFolder {
 	trashedAt?: Date | null;
 	/** parentId al momento de ir a papelera (para restaurar). */
 	trashedFromParentId?: string | null;
+	/**
+	 * Retención legal: fecha en que el recurso pasó a "eliminado permanentemente"
+	 * (sale de la papelera pero se conserva internamente). Solo en la raíz de la
+	 * operación, igual que `trashedAt`. Recuperable por un admin hasta
+	 * `DRIVE_LEGAL_HOLD_RETENTION_DAYS` días; luego se purga de verdad.
+	 */
+	purgedAt?: Date | null;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -86,6 +93,8 @@ export interface DriveFile {
 	status: DriveFileStatus;
 	trashedAt?: Date | null;
 	trashedFromFolderId?: string | null;
+	/** Retención legal (ver `DriveFolder.purgedAt`). */
+	purgedAt?: Date | null;
 	createdAt: Date;
 	updatedAt: Date;
 }
@@ -190,6 +199,12 @@ export interface DriveShareDTO {
 	expiresAt: string | null;
 	createdAt: string;
 }
+
+/** Retención de borrado en dos etapas (papelera → eliminado permanentemente → purga real). */
+// Días en papelera antes de pasar automáticamente a "eliminado permanentemente".
+export const DRIVE_TRASH_RETENTION_DAYS = 30;
+// Días en "eliminado permanentemente" (retención legal, recuperable por admin) antes de la purga real.
+export const DRIVE_LEGAL_HOLD_RETENTION_DAYS = 90;
 
 /** Límites operativos del Drive. */
 export const DRIVE_MAX_FILE_SIZE = 512 * 1024 * 1024; // 512 MB por archivo

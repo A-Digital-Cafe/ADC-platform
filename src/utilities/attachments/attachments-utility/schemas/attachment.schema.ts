@@ -31,7 +31,7 @@ function buildAttachmentSchema(connection: Connection): Schema<AttachmentDoc> {
 				),
 				default: null,
 			},
-			status: { type: String, required: true, enum: ["pending", "ready"] satisfies AttachmentStatus[], default: "pending", index: true },
+			status: { type: String, required: true, enum: ["pending", "ready", "retained"] satisfies AttachmentStatus[], default: "pending", index: true },
 			uploadedBy: { type: String, required: true, maxlength: 64, index: true },
 			// Docs previos al campo se tratan como personales (null).
 			orgId: { type: String, default: null, maxlength: 80 },

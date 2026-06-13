@@ -539,6 +539,33 @@ export class AttachmentsManager {
 	}
 
 	/**
+	 * ⚠️ Retención legal: marca un adjunto `ready` como `retained` y LIBERA su cuota,
+	 * SIN borrar el objeto en S3. El binario se conserva (no descargable, no cuenta
+	 * cuota) hasta una purga real (`forceDelete`) o su recuperación (`unretain`).
+	 * Para cascadas de confianza (la autorización ya fue evaluada). `@OnlyKernel()`.
+	 */
+	@OnlyKernel()
+	async retain(_kernelKey: symbol, attachmentId: string): Promise<void> {
+		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
+		if (doc?.status !== "ready") return;
+		await this.#model.updateOne({ _id: attachmentId }, { $set: { status: "retained" } });
+		await this.#releaseQuota(doc.uploadedBy, doc.orgId ?? null, doc.size);
+	}
+
+	/**
+	 * ⚠️ Recuperación de un adjunto `retained`: vuelve a `ready` y re-comitea su cuota.
+	 * El commit es incondicional (override de admin): la recuperación no debe fallar por
+	 * cuota agotada. Para cascadas de confianza. `@OnlyKernel()`.
+	 */
+	@OnlyKernel()
+	async unretain(_kernelKey: symbol, attachmentId: string): Promise<void> {
+		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
+		if (doc?.status !== "retained") return;
+		await this.#model.updateOne({ _id: attachmentId }, { $set: { status: "ready" } });
+		await this.#commitQuota({ userId: doc.uploadedBy, orgId: doc.orgId ?? null }, doc.size);
+	}
+
+	/**
 	 * ⚠️ Borrado masivo sin `permissionChecker` de TODOS los adjuntos de un
 	 * `(ownerType, ownerId)`, incluyendo objetos S3. Para cascadas de confianza
 	 * (p.ej. purga de cuenta tras retención). Protegido por `@OnlyKernel()`.

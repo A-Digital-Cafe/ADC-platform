@@ -202,6 +202,9 @@ export default {
 			settings: "Configuración",
 			stats: "Estadísticas",
 		},
+		drive: {
+			recover: "Recuperar eliminados",
+		},
 		toggleAll: "Alternar toda la columna",
 		toggleRow: "Alternar toda la fila",
 		addResource: "Agregar recurso",
@@ -237,6 +240,7 @@ export default {
 		identity: "Identidad",
 		content: "Contenido",
 		community: "Comunidad",
+		drive: "Drive",
 		"project-manager": "Project Manager",
 	},
 	errors: {

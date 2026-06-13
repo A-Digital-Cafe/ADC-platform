@@ -150,17 +150,17 @@ Servicios con `kernelMode` en `config.json` cargan durante el startup del kernel
 
 Si un directorio de app contiene `docker-compose.yml`, el Kernel ejecuta automáticamente `docker-compose up -d` antes de iniciar la app.
 
-## Creación de Módulos
+## Crear o editar módulos: leer la doc ANTES de tocar código
 
-**Antes de crear un módulo nuevo, leer `docs/structure/README.md`**: contiene las plantillas y convenciones estándar (models, DAOs, endpoints, shell del servicio, apps frontend).
+Antes de **crear o editar** una app o service, leé [docs/structure/README.md](docs/structure/README.md): rutea —por capa o tarea— al doc con la plantilla + checklist a seguir, e indica el orden de lectura. Para crear, extraer o instalar presets (repos git bajo `presets/`): [docs/multirepo.md](docs/multirepo.md). No dupliques el contenido de esas docs acá; leelas on-demand. (Las docs nuevas se enlazan desde el README, no desde este archivo.)
 
-Scripts de scaffolding:
+Scaffolding (genera el esqueleto; igual hay que leer la doc de la capa):
 
 ```bash
-npm run create:app -- my-app
-npm run create:service -- my-service
-npm run create:provider -- my-provider
-npm run create:utility -- my-utility
+bun run create:app -- my-app
+bun run create:service -- my-service
+bun run create:provider -- my-provider
+bun run create:utility -- my-utility
 ```
 
 ## Hot Reload Behavior

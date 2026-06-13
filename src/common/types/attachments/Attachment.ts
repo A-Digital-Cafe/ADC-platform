@@ -4,7 +4,13 @@
  * con archivos en `internal-s3-provider` (minIO/S3).
  */
 
-export type AttachmentStatus = "pending" | "ready";
+/**
+ * `pending`  — presignado, sin confirmar (no cuenta cuota).
+ * `ready`    — confirmado y disponible (cuenta cuota).
+ * `retained` — retenido por retención legal: el binario sigue en S3 pero NO cuenta
+ *              cuota ni es descargable. Vuelve a `ready` al recuperarse.
+ */
+export type AttachmentStatus = "pending" | "ready" | "retained";
 
 /**
  * Metadata de cifrado en reposo del objeto S3 (envelope encryption por usuario).

@@ -70,6 +70,12 @@ export function PrivacyPage() {
 				<a href="/roadmap#capa-etica-legal-cimientos">roadmap</a>.
 			</p>
 			<p>
+				<strong>Contenido en Drive y adjuntos:</strong> los archivos que eliminás pasan a la papelera, de la que se quitan
+				automáticamente a los <strong>30 días</strong>. A partir de ahí entran en un período de retención de hasta <strong>3 meses</strong>{" "}
+				en el que ya no son accesibles para vos ni cuentan contra tu cuota, pero un administrador todavía puede restaurarlos ante un borrado
+				accidental o un incidente. Cumplido ese plazo —o al borrarse la cuenta— el binario se elimina de forma definitiva del almacenamiento.
+			</p>
+			<p>
 				<strong>Cuentas baneadas o eliminadas:</strong> se conservan durante <strong>30 días</strong> desde el evento (ban o solicitud de
 				borrado) y luego se eliminan automáticamente. Para evitar la reentrada de cuentas baneadas mantenemos una{" "}
 				<em>lista anti-evasión</em> basada en <strong>hashes HMAC-SHA256</strong> del email normalizado y, durante un máximo de{" "}
@@ -124,8 +130,8 @@ export function PrivacyPage() {
 			<p>
 				Las apps de la plataforma (Drive, adjuntos de proyectos y artículos, correo) permiten subir y compartir archivos. Ese contenido es{" "}
 				<strong>responsabilidad de quien lo sube</strong>: nosotros lo almacenamos por cuenta del usuario y no lo revisamos de forma
-				previa. Los archivos eliminados pasan por una papelera y se borran definitivamente (incluido el binario en el almacenamiento) al
-				vaciarla, al borrarse la cuenta o al vencer la retención.
+				previa. Los archivos eliminados pasan por una papelera y, una vez vencida la retención (ver{" "}
+				<a href="/privacy#conservacion">§5 Conservación</a>), se borran definitivamente, incluido el binario en el almacenamiento.
 			</p>
 			<p>
 				Si sos un <strong>tercero</strong> y considerás que un archivo compartido (por ejemplo, mediante un enlace público de Drive) afecta

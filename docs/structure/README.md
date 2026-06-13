@@ -1,6 +1,8 @@
-# docs/structure — Plantillas para crear módulos
+# docs/structure — Plantillas para crear y editar módulos
 
-Estos documentos son el **prompt base** para crear módulos nuevos (por humanos o IAs) de forma pragmática y estandarizada. Cada uno define la estructura, plantillas de código y un checklist verificable. Seguirlos al pie de la letra; ante un caso no cubierto, imitar los módulos de referencia que cada doc cita.
+Estos documentos son el **prompt base** para crear o editar módulos (por humanos o IAs) de forma pragmática y estandarizada. Cada uno define la estructura, plantillas de código y un checklist verificable. Leer el doc de la capa que vas a tocar **antes** de escribir código; seguirlos al pie de la letra; ante un caso no cubierto, imitar los módulos de referencia que cada doc cita.
+
+> Este README es el índice único: al agregar un doc nuevo bajo `docs/structure/`, sumarlo a la tabla de abajo (no hace falta tocar `CLAUDE.md`, que redirige acá).
 
 ## Orden de lectura para un servicio backend nuevo
 
@@ -11,15 +13,15 @@ Estos documentos son el **prompt base** para crear módulos nuevos (por humanos 
 
 ## Según tu tarea
 
-| Tarea                                          | Documento                                            |
-| ---------------------------------------------- | ---------------------------------------------------- |
-| Crear una app empresarial completa (front+back) | [enterprise-apps.md](enterprise-apps.md)             |
-| Crear/modificar entidades persistidas          | [services/models.md](services/models.md)             |
-| Crear/modificar lógica de negocio o permisos   | [services/daos.md](services/daos.md)                 |
-| Crear/modificar rutas HTTP                     | [services/endpoints.md](services/endpoints.md)       |
-| Armar el `index.ts` y `config.json` del servicio | [services/service-shell.md](services/service-shell.md) |
-| Crear una app UI (micro-frontend)              | [apps/frontend.md](apps/frontend.md)                 |
-| Extraer módulos a un repo independiente        | [../multirepo.md](../multirepo.md)                   |
+| Tarea                                                   | Documento                                              |
+| ------------------------------------------------------- | ------------------------------------------------------ |
+| Crear/editar una app empresarial completa (front+back)  | [enterprise-apps.md](enterprise-apps.md)               |
+| Crear/modificar entidades persistidas                   | [services/models.md](services/models.md)               |
+| Crear/modificar lógica de negocio o permisos            | [services/daos.md](services/daos.md)                   |
+| Crear/modificar rutas HTTP                              | [services/endpoints.md](services/endpoints.md)         |
+| Armar/editar el `index.ts` y `config.json` del servicio | [services/service-shell.md](services/service-shell.md) |
+| Crear/editar una app UI (micro-frontend)                | [apps/frontend.md](apps/frontend.md)                   |
+| Crear, extraer o instalar un preset (repos git)         | [../multirepo.md](../multirepo.md)                     |
 
 ## Convenciones globales
 

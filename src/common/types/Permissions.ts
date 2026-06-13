@@ -101,6 +101,9 @@ export const P = buildAllPermissions() as {
 		readonly USAGE: ScopePermissions<"storage">;
 		readonly LIMITS: ScopePermissions<"storage">;
 	};
+	readonly DRIVE: {
+		readonly RECOVER: ScopePermissions<"drive">;
+	};
 	readonly PROJECT_MANAGER: {
 		readonly PROJECTS: ScopePermissions<"project-manager">;
 		readonly ISSUES: ScopePermissions<"project-manager">;
