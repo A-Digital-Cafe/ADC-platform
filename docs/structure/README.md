@@ -27,5 +27,6 @@ Estos documentos son el **prompt base** para crear o editar módulos (por humano
 
 - Rutas de ejemplo: `src/services/<layer>/<MyService>/` y `src/apps/public/<my-app>/`. Dentro de un preset la estructura interna es idéntica; solo cambia la raíz (`presets/<preset>/services/...`, `presets/<preset>/apps/...`).
 - Los tipos compartidos viven en `@common/types/<domain>/`; los errores tipados en `@common/types/custom-errors/`.
+- Los helpers reutilizables (escaping, paginación por cursor, crypto, …) viven en `@common/utils/`; no los reimplementes por servicio.
 - Cada módulo lleva `README.md` propio (máx 15 líneas) y `config.json` autodocumentado.
 - Visión general de la plataforma: [ARCHITECTURE.md](../../ARCHITECTURE.md).

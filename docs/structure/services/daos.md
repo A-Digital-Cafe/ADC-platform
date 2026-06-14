@@ -249,6 +249,14 @@ Reglas:
 - Para colecciones con crecimiento no acotado (mensajes, logs, comments) preferir cursor (`createdAt + id`) sobre `skip`, que degrada en Mongo con offsets grandes.
 - Los queries con `$regex` derivados de input DEBEN escapar el patrón con `escapeRegex` de `@common/utils/escape.ts`.
 
+### Barridos que deben procesar TODO
+
+Las operaciones de mantenimiento que recorren la colección entera (purga de cuenta, recuperación masiva, cascadas de borrado) no pueden clamearse ni cargar todo de una. Paginá por cursor con `forEachPage` de `@common/utils/batch.ts`: procesa en lotes acotados (memoria O(lote)) y nunca relee items ya vistos, así que no se cuelga aunque `handlePage` mute la colección.
+
+- Exponé desde el DAO un `findXPage(…, afterId, limit)` con `.sort({ id: 1 }).limit(limit)` y filtro `id > afterId`; no un método full-scan.
+- Borrá/marcá dentro de `handlePage`: el barrido queda naturalmente reanudable (si se corta, la próxima corrida retoma lo que quede).
+- Si además cruza varios pasos o servicios, hacelo reanudable a nivel orquestación con `OperationsService.stepper` (pasos idempotentes; borrá el registro raíz al final).
+
 ## Dependencias entre DAOs
 
 Si un DAO necesita leer o mutar datos internos de otro, exponer internals controlados desde el manager dueño del recurso.
@@ -293,4 +301,5 @@ Usar logging de negocio, no logging narrativo.
 - [ ] Los métodos devuelven objetos planos del dominio.
 - [ ] Hay logs en cambios de estado importantes.
 - [ ] Todo listado/búsqueda pagina con `limit` clampado a un máximo duro.
+- [ ] Los barridos full-collection (purga/cascada/recuperación) usan `forEachPage` por cursor, no full-scan.
 - [ ] Los `$regex` desde input usan `escapeRegex` de `@common/utils/escape.ts`.
