@@ -15,3 +15,4 @@ public/adc-error 3026
 public/adc-org-requests 3028
 public/adc-email-frontend 3030
 public/adc-drive 3032
+public/adc-image-editor 3034

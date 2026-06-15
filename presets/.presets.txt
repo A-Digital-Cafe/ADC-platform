@@ -21,3 +21,4 @@ project-management https://github.com/A-Digital-Cafe/project-management.git main
 adc-email-backend https://github.com/A-Digital-Cafe/adc-email-backend.git main
 adc-email-frontend https://github.com/A-Digital-Cafe/adc-email-frontend.git main
 adc-drive https://github.com/A-Digital-Cafe/adc-drive.git main
+adc-image-editor https://github.com/A-Digital-Cafe/adc-image-editor.git main
