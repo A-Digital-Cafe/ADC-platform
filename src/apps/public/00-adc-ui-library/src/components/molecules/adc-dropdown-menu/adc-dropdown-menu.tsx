@@ -64,6 +64,10 @@ export class AdcDropdownMenu {
 
 	@Listen("focusin")
 	handleFocusIn() {
+		// Sólo los menús tipo hover abren al recibir foco. En modo click (openOnHover
+		// = false) abrir acá entraba en conflicto con `handleToggle`: el mousedown
+		// enfocaba el trigger (abría) y el click del mismo gesto lo volvía a cerrar.
+		if (!this.openOnHover) return;
 		if (this.hoverTimeout) clearTimeout(this.hoverTimeout);
 		this.updatePosition();
 		this.isOpen = true;
