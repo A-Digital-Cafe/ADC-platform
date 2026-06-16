@@ -187,6 +187,28 @@ card propia.
 - Confirmaciones/avisos: **no** usar `window.confirm`/`window.alert`/`window.prompt`. Usar `adc-modal`
   (patrón `ConfirmModal` de `adc-drive`) y `toast` de `@ui-library/utils/toast` para notificaciones.
 
+### Controles de formulario: usar los átomos, no `<input>`/`<textarea>`/`<select>` nativos
+
+Estandarizar los campos con los átomos de la UI library en vez de elementos nativos:
+
+| Nativo | Átomo | Binding |
+| ------ | ----- | ------- |
+| `<input>` texto/número/fecha/password | `adc-input` | `value` + `onInput={(e) => set((e.target as HTMLInputElement).value)}` |
+| búsqueda con ícono + debounce | `adc-search-input` | emite `adcInput` (string): `onadcInput={(e) => set(e.detail)}` |
+| `<textarea>` | `adc-textarea` | `value` + `onInput` |
+| `<input type="checkbox">` | `adc-checkbox` | emite `adcChange` (boolean): `onadcChange={(e) => set(e.detail)}` |
+| `<select>` | `adc-select` | `options` (array) + emite `adcChange` (string) |
+
+- `adc-input` soporta `maxLength`, `min`/`max`/`step`, `required`, `readOnly`, `autoFocus` (foca de verdad
+  al montar), `inputMode` y `pattern`. Usar **`onInput`** (no `onChange`: en un custom element React lo
+  mapea al evento `change` nativo, que sólo dispara al perder foco). El ancho/posición va por `className`
+  en el host (el `<input>` interno ya es `w-full`); no se le pasan clases de estilo propio.
+- **Quedan nativos a propósito**: file pickers ocultos (`type="file"`); editores especializados (overlays
+  de texto posicionados sobre un canvas, editores monospace de archivos); controles inline densos de un
+  editor donde el estilo de formulario desentona; `<select>` con **opciones deshabilitadas** (`adc-select`
+  no las soporta) o dentro de modales con scroll (su dropdown puede recortarse); y checkboxes que ya
+  replican el estilo del átomo (convertirlos no aporta y arriesga regresiones).
+
 ## Integración con la plataforma
 
 1. Agregar la app a `adc-home` (`HomePage.tsx` → `MICROAPPS`).
@@ -218,6 +240,7 @@ publica el manifiesto.
 - [ ] `i18n/{es,en}.js` creados; solo claves de dominio propias (las genéricas vienen de la UI library).
 - [ ] Componentes reutilizables agregados a la UI library, no duplicados.
 - [ ] Diálogos/modales con `<adc-modal>` (no `inset-0` + backdrop a mano); sin `window.alert/confirm/prompt`.
+- [ ] Campos con átomos (`adc-input`/`adc-textarea`/`adc-checkbox`/`adc-select`), no `<input>`/`<textarea>`/`<select>` nativos (salvo las excepciones documentadas).
 - [ ] App registrada en `adc-home`, `adc-apps-menu` y con icono propio.
 - [ ] `serviceWorker` solo si la app es layout.
 - [ ] CSP extendida si expone módulos federados cross-app.
