@@ -6,6 +6,7 @@ import { contentAPI, type LearningPath } from "../../utils/content-api";
 import { adminApi, pathBannerApi, pathBannerRawUrl } from "../../utils/admin-api";
 import { AdminGate } from "../../components/admin/AdminGate";
 import { PathItemsEditor, type PathItem } from "../../components/admin/PathItemsEditor";
+import { ConfirmModal } from "../../components/ConfirmModal";
 
 /** Forma populada que devuelve el backend: los items incluyen el `element`
  *  (artículo o sub-path) resuelto, con su `title`. Ver content-service/endpoints/paths.ts. */
@@ -49,6 +50,8 @@ function PathsAdminBody() {
 	const [hasBanner, setHasBanner] = useState(false);
 	const [bannerBusy, setBannerBusy] = useState(false);
 	const [bannerVersion, setBannerVersion] = useState(0);
+	const [confirmSlug, setConfirmSlug] = useState<string | null>(null);
+	const [deletingPath, setDeletingPath] = useState(false);
 
 	useEffect(() => {
 		refresh();
@@ -129,13 +132,16 @@ function PathsAdminBody() {
 		}
 	}
 
-	async function handleDelete(slug: string) {
-		if (!globalThis.confirm(`¿Eliminar el path "${slug}"?`)) return;
-		const ok = await adminApi.deletePath(slug);
+	async function doDeletePath() {
+		if (!confirmSlug) return;
+		setDeletingPath(true);
+		const ok = await adminApi.deletePath(confirmSlug);
+		setDeletingPath(false);
 		if (ok) {
 			await refresh();
-			if (editing === slug) resetForm();
+			if (editing === confirmSlug) resetForm();
 		}
+		setConfirmSlug(null);
 	}
 	let btnLabel;
 	if (saving) btnLabel = "Guardando...";
@@ -253,7 +259,7 @@ function PathsAdminBody() {
 									<adc-icon-edit />
 								</adc-button-rounded>
 								{canPub && (
-									<adc-button-rounded variant="danger" aria-label={`Eliminar ${p.title}`} onClick={() => handleDelete(p.slug)}>
+									<adc-button-rounded variant="danger" aria-label={`Eliminar ${p.title}`} onClick={() => setConfirmSlug(p.slug)}>
 										<adc-icon-trash />
 									</adc-button-rounded>
 								)}
@@ -262,6 +268,14 @@ function PathsAdminBody() {
 					))}
 				</ul>
 			</div>
+			{confirmSlug && (
+				<ConfirmModal
+					message={`¿Eliminar el path "${confirmSlug}"?`}
+					busy={deletingPath}
+					onClose={() => setConfirmSlug(null)}
+					onConfirm={doDeletePath}
+				/>
+			)}
 		</div>
 	);
 }

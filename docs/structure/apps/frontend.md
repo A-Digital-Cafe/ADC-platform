@@ -160,6 +160,33 @@ api.delete(`/admin/overrides/${id}`, { idempotencyKey: id });
 - Átomos/organismos nuevos y reutilizables se agregan a la UI library, no se duplican en la app.
 - Tras crear un componente o icono en la UI library, regenerar las declaraciones JSX (`scripts/generate-react-jsx.mjs`).
 
+### Diálogos y modales: SIEMPRE `adc-modal` (no recrear el modal a mano)
+
+Todo diálogo/modal usa `<adc-modal>` de la UI library. **Nunca** recrear un modal con `fixed`/`absolute
+inset-0` + backdrop (`bg-black/…`) + card centrada: rompe la consistencia visual (animaciones, blur,
+header, tamaños, foco/scroll) y duplica accesibilidad que el componente ya resuelve. Síntoma del error:
+un `<div className="absolute inset-0 z-… flex items-center justify-center bg-black/…">` envolviendo una
+card propia.
+
+```tsx
+// El contenido va en el slot por defecto; las acciones en slot="footer".
+<adc-modal open size="lg" modalTitle="Título" onadcClose={onClose}>
+	<div className="flex flex-col gap-4">{/* cuerpo */}</div>
+	<div slot="footer" className="flex justify-end gap-2">
+		<adc-button variant="accent-outlined" label="Cancelar" onClick={onClose} />
+		<adc-button variant="primary" label="Guardar" onClick={onSave} />
+	</div>
+</adc-modal>
+```
+
+- Props: `open`, `modalTitle` (header con ✕), `size` (`sm`|`md`|`lg`|`lg2`|`xl`), `dismissOnBackdrop`,
+  `dismissOnEscape`. Emite `adcClose` al cerrar por ✕/backdrop/Escape → enganchar con `onadcClose` (o un
+  `ref` + `addEventListener("adcClose", …)`) para sincronizar el estado React.
+- Patrón de montaje: render condicional (`{open && <Mi… />}`) con `<adc-modal open …>`, igual que el
+  resto de las apps (ver `adc-drive/src/components/*Modal.tsx`, `adc-identity`, `ExportDialog` del editor).
+- Confirmaciones/avisos: **no** usar `window.confirm`/`window.alert`/`window.prompt`. Usar `adc-modal`
+  (patrón `ConfirmModal` de `adc-drive`) y `toast` de `@ui-library/utils/toast` para notificaciones.
+
 ## Integración con la plataforma
 
 1. Agregar la app a `adc-home` (`HomePage.tsx` → `MICROAPPS`).
@@ -190,6 +217,7 @@ publica el manifiesto.
 - [ ] `<adc-layout>` es raíz estable dentro de `App.tsx`.
 - [ ] `i18n/{es,en}.js` creados; solo claves de dominio propias (las genéricas vienen de la UI library).
 - [ ] Componentes reutilizables agregados a la UI library, no duplicados.
+- [ ] Diálogos/modales con `<adc-modal>` (no `inset-0` + backdrop a mano); sin `window.alert/confirm/prompt`.
 - [ ] App registrada en `adc-home`, `adc-apps-menu` y con icono propio.
 - [ ] `serviceWorker` solo si la app es layout.
 - [ ] CSP extendida si expone módulos federados cross-app.
