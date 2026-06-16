@@ -14,7 +14,7 @@ export class AdcModal {
 	@Prop() modalTitle: string = "";
 
 	/** Size variant */
-	@Prop() size: "sm" | "md" | "lg" | "xl" = "md";
+	@Prop() size: "sm" | "md" | "lg" | "lg2" | "xl" = "md";
 
 	/** Whether clicking the backdrop closes the modal */
 	@Prop() dismissOnBackdrop: boolean = true;
@@ -42,6 +42,8 @@ export class AdcModal {
 				return "max-w-sm";
 			case "lg":
 				return "max-w-2xl";
+			case "lg2":
+				return "max-w-3xl";
 			case "xl":
 				return "max-w-6xl";
 			default:

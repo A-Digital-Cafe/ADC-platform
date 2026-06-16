@@ -8,6 +8,8 @@ import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.d.ts";
 import { createHash } from "node:crypto";
+import type { Readable } from "node:stream";
+import { buffer as streamToBuffer } from "node:stream/consumers";
 import { validateCsrf, type TokenSource } from "./csrf.js";
 import type { CsrfRuntimeConfig } from "./csrf-config.js";
 import { resolveRateLimit } from "./rate-limit.js";
@@ -186,22 +188,22 @@ export function createHttpWrapper(
 				reply.status(200).send(result);
 			}
 		} catch (error: any) {
-			handleEndpointError(error, endpoint, ctx, reply, logger);
+			await handleEndpointError(error, endpoint, ctx, reply, logger);
 		}
 	};
 }
 
 /** Maneja UncommonResponse, errores de negocio y errores inesperados de un endpoint. */
-function handleEndpointError(
+async function handleEndpointError(
 	error: any,
 	endpoint: RegisteredEndpoint,
 	ctx: EndpointCtx<any, any>,
 	reply: FastifyReply<any>,
 	logger: ILogger
-): void {
+): Promise<void> {
 	// Capturar UncommonResponse para respuestas especiales (cookies, redirects)
 	if (error instanceof UncommonResponse) {
-		sendUncommonResponse(error, reply);
+		await sendUncommonResponse(error, reply);
 		return;
 	}
 
@@ -230,8 +232,8 @@ function handleEndpointError(
 	});
 }
 
-/** Envía una UncommonResponse (cookies, headers custom, redirect o JSON). */
-function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply<any>): void {
+/** Envía una UncommonResponse (cookies, headers custom, redirect, stream o JSON). */
+async function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply<any>): Promise<void> {
 	const rep = reply as any;
 	for (const cookie of error.cookies) {
 		rep.setCookie(cookie.name, cookie.value, cookie.options || {});
@@ -239,13 +241,27 @@ function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply<any>)
 	for (const cookie of error.clearCookies) {
 		rep.clearCookie(cookie.name, cookie.options || {});
 	}
-	for (const [name, value] of Object.entries(error.headers)) {
-		reply.header(name, value);
-	}
 	if (error.type === "redirect") {
+		for (const [name, value] of Object.entries(error.headers)) reply.header(name, value);
 		reply.status(error.status).redirect(error.redirectUrl!);
-	} else {
-		// "stream": Fastify pipea Node Readables nativamente vía send().
-		reply.status(error.status).send(error.body);
+		return;
 	}
+	if (error.type === "stream") {
+		// Bun: `reply.send(Readable)` tras un request HTTP saliente (ej: leer de S3
+		// para descifrar al vuelo) entrega 0 bytes; enviar un `Buffer` es confiable.
+		// Bufferizamos el stream (acotado por el tamaño de archivo permitido). Ver
+		// el bug reproducible documentado en los tests de descarga del Drive.
+		let body: Buffer;
+		try {
+			body = await streamToBuffer(error.body as Readable);
+		} catch {
+			reply.status(502).send({ error: "STREAM_READ_FAILED", message: "No se pudo leer el contenido" });
+			return;
+		}
+		for (const [name, value] of Object.entries(error.headers)) reply.header(name, value);
+		reply.status(error.status).send(body);
+		return;
+	}
+	for (const [name, value] of Object.entries(error.headers)) reply.header(name, value);
+	reply.status(error.status).send(error.body);
 }

@@ -57,7 +57,7 @@ export class AdcLayout {
 					<slot name="header" />
 				</adc-site-header>
 
-				<main class="flex-1">
+				<main class="flex flex-1 justify-center">
 					<slot />
 				</main>
 

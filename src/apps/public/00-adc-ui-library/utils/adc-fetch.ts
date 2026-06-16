@@ -364,7 +364,15 @@ export function createAdcApi(config: AdcApiConfig) {
 				return { success: response.ok, status: response.status };
 			}
 			if (!response.ok) {
-				return { success: false, status: response.status };
+				// Silent path: `silent` suprime el toast, NO el errorKey. Extraemos la
+				// clave de negocio del body para que el caller pueda mapear el mensaje.
+				let errorKey: string | undefined;
+				try {
+					errorKey = ((await response.json()) as { errorKey?: string })?.errorKey;
+				} catch {
+					/* respuesta sin body JSON */
+				}
+				return { success: false, status: response.status, errorKey };
 			}
 
 			const data = (await response.json()) as T;

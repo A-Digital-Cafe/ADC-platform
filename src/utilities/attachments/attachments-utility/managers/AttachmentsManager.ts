@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
+import { buffer as streamToBuffer } from "node:stream/consumers";
 import type { Model } from "mongoose";
 import type { Attachment, AttachmentDTO } from "../../../../common/types/attachments/Attachment.js";
 import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from "../../../../common/types/attachments/Attachment.js";
@@ -331,7 +332,7 @@ export class AttachmentsManager {
 		let encryptionSet: Record<string, unknown> = {};
 		if (this.#encryption) {
 			try {
-				encryptionSet = await this.#encryptObject(attachment, head.size);
+				encryptionSet = await this.#encryptObject(attachment);
 			} catch (e) {
 				await this.#releaseQuota(attachment.uploadedBy, attachment.orgId, head.size);
 				throw new AttachmentError(500, "ATTACHMENT_ENCRYPTION_FAILED", `No se pudo cifrar el adjunto: ${(e as Error).message}`);
@@ -361,22 +362,30 @@ export class AttachmentsManager {
 	 * GCM no expande el payload (el auth tag va al doc), así que ContentLength es
 	 * el tamaño en claro.
 	 */
-	async #encryptObject(attachment: Attachment, size: number): Promise<Record<string, unknown>> {
+	async #encryptObject(attachment: Attachment): Promise<Record<string, unknown>> {
 		const keyStore = this.#encryption!.keyStore;
 		const dek = await keyStore.getUserKey(attachment.uploadedBy);
 		const { iv, cipher } = createObjectCipher(dek);
 		const source = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey });
+
+		// Cifrado bufferizado y determinista: el auth tag de GCM SÓLO es válido tras
+		// `cipher.final()`. Hacerlo por streaming (pipe + `getAuthTag()` después del
+		// `putObject`) era una carrera: si el SDK resolvía antes del flush, el tag
+		// quedaba mal y el descifrado al vuelo fallaba → descarga de 0 bytes. El
+		// payload está acotado por el límite de subida (`#validateUploadInput`).
+		const plaintext = await streamToBuffer(source.stream);
+		const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+		const authTag = cipher.getAuthTag();
 		const encryptedKey = `${attachment.storageKey}.enc`;
 		try {
 			await this.#s3.putObject({
 				bucket: attachment.bucket,
 				key: encryptedKey,
-				body: source.stream.pipe(cipher),
+				body: ciphertext,
 				contentType: "application/octet-stream",
-				contentLength: size,
+				contentLength: ciphertext.length, // GCM no expande: == tamaño en claro
 			});
 		} catch (e) {
-			source.stream.destroy();
 			await this.#s3.deleteObject({ bucket: attachment.bucket, key: encryptedKey }).catch(() => undefined);
 			throw e;
 		}
@@ -386,7 +395,7 @@ export class AttachmentsManager {
 			encryption: {
 				scheme: ENCRYPTION_SCHEME,
 				iv: iv.toString("base64"),
-				authTag: cipher.getAuthTag().toString("base64"),
+				authTag: authTag.toString("base64"),
 				keyRef: attachment.uploadedBy,
 			},
 		};
@@ -477,12 +486,22 @@ export class AttachmentsManager {
 		if (!this.#encryption) {
 			throw new AttachmentError(409, "ATTACHMENT_ENCRYPTED", "Adjunto cifrado pero el manager no tiene keyStore configurado");
 		}
+		// Descifrado bufferizado (no por streaming): robusto frente al tipo de stream
+		// del runtime —en Bun el `res.Body` del SDK puede no ser un Node `Readable`
+		// con `.pipe`, lo que rompía el proxy— y produce un `Readable` de longitud
+		// exacta para el `Content-Length`. El tamaño está acotado por el límite de subida.
 		const dek = await this.#encryption.keyStore.getUserKey(attachment.encryption.keyRef);
 		const decipher = createObjectDecipher(dek, attachment.encryption.iv, attachment.encryption.authTag);
-		const stream = object.stream.pipe(decipher);
-		// Propagar errores de la fuente al stream resultante (pipe no lo hace solo).
-		object.stream.on("error", (err) => decipher.destroy(err));
-		return { stream, attachment };
+		const ciphertext = await streamToBuffer(object.stream);
+		let plaintext: Buffer;
+		try {
+			plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+		} catch (e) {
+			throw new AttachmentError(500, "ATTACHMENT_DECRYPT_FAILED", `No se pudo descifrar el adjunto: ${(e as Error).message}`);
+		}
+		// `[plaintext]` (no `plaintext`): un Buffer es iterable de bytes; envuelto en
+		// array se emite como un único chunk Buffer en vez de números sueltos.
+		return { stream: Readable.from([plaintext]), attachment };
 	}
 
 	async #getReadyForRead(ctx: AttachmentPermissionContext, attachmentId: string): Promise<Attachment> {

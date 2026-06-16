@@ -18,6 +18,12 @@ export const IMAGE_PROJECT_MIME = "application/x-adc-image-project";
 /** Extensión sugerida para archivos de proyecto. */
 export const IMAGE_PROJECT_EXT = "adcedit";
 
+/** Mime de una plantilla del editor (escena reutilizable como punto de partida). */
+export const IMAGE_TEMPLATE_MIME = "application/x-adc-image-template";
+
+/** Extensión sugerida para archivos de plantilla. */
+export const IMAGE_TEMPLATE_EXT = "adctmpl";
+
 /** Ventana de medición de una métrica de uso. */
 export type UsageWindow = "day" | "month";
 

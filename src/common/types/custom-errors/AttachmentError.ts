@@ -10,7 +10,8 @@ type AttachmentErrorTypes =
 	| "ATTACHMENT_PENDING"
 	| "ATTACHMENT_QUOTA_EXCEEDED"
 	| "ATTACHMENT_ENCRYPTED"
-	| "ATTACHMENT_ENCRYPTION_FAILED";
+	| "ATTACHMENT_ENCRYPTION_FAILED"
+	| "ATTACHMENT_DECRYPT_FAILED";
 
 export class AttachmentError extends ADCCustomError<Record<string, unknown>, AttachmentErrorTypes> {
 	public readonly name = "AttachmentError";

@@ -30,12 +30,16 @@ export interface ContextMenuItem {
 	shadow: false,
 })
 export class AdcContextMenu {
-	@Prop({ mutable: true, reflect: true }) open: boolean = false;
+	/** Controlado por el consumidor: el componente NO lo auto-muta (evita el desync
+	 * con React 19, que no re-empuja la prop si su valor no cambió). */
+	@Prop({ reflect: true }) open: boolean = false;
 	/** Coordenadas de viewport donde abrir el menú (ej: `event.clientX/Y`). */
 	@Prop() x: number = 0;
 	@Prop() y: number = 0;
 	@Prop() items: ContextMenuItem[] = [];
 
+	/** Visibilidad efectiva (derivada de `open` y de los gestos de cierre internos). */
+	@State() visible: boolean = false;
 	/** Índice del item de nivel superior cuyo submenú está abierto. */
 	@State() openSubmenu: number | null = null;
 	/** Abrir submenús hacia la izquierda cuando el panel queda pegado al borde derecho. */
@@ -48,15 +52,29 @@ export class AdcContextMenu {
 
 	private panelEl: HTMLDivElement | null = null;
 
+	componentWillLoad() {
+		this.visible = this.open;
+	}
+
 	@Watch("open")
 	onOpenChange() {
+		this.visible = this.open;
 		if (!this.open) this.openSubmenu = null;
+	}
+
+	// React 19 puede no re-empujar `open` si su valor no cambió entre renders (ej:
+	// abrir el menú en otra posición con un nuevo click derecho). Al cambiar las
+	// coordenadas reabrimos, evitando el desync "abre y deja de funcionar".
+	@Watch("x")
+	@Watch("y")
+	onCoordsChange() {
+		if (this.open) this.visible = true;
 	}
 
 	// Reposiciona tras cada render (sincrónico, antes del paint → sin flicker) para
 	// clampear el panel dentro del viewport en los extremos de la pantalla.
 	componentDidRender() {
-		if (this.open) this.reposition();
+		if (this.visible) this.reposition();
 	}
 
 	// Cierre al hacer click afuera. Usamos `mousedown` (no `contextmenu`): el click
@@ -65,18 +83,18 @@ export class AdcContextMenu {
 	// aún en false y no lo cierra en el mismo gesto.
 	@Listen("mousedown", { target: "document" })
 	handleDocumentMouseDown(event: MouseEvent) {
-		if (!this.open) return;
+		if (!this.visible) return;
 		if (this.el.contains(event.target as Node)) return;
 		this.close();
 	}
 
 	@Listen("keydown", { target: "document" })
 	handleDocumentKeyDown(event: KeyboardEvent) {
-		if (this.open && event.key === "Escape") this.close();
+		if (this.visible && event.key === "Escape") this.close();
 	}
 
 	private close() {
-		this.open = false;
+		this.visible = false;
 		this.adcContextMenuClose.emit();
 	}
 
@@ -149,10 +167,10 @@ export class AdcContextMenu {
 			<div
 				ref={(node) => (this.panelEl = node ?? null)}
 				class={`fixed z-100 min-w-52 py-1 rounded-xl border border-surface bg-surface backdrop-blur-sm shadow-cozy text-text ${
-					this.open ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"
+					this.visible ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"
 				}`}
 				role="menu"
-				aria-hidden={this.open ? "false" : "true"}
+				aria-hidden={this.visible ? "false" : "true"}
 			>
 				{this.items.map((item, index) => this.renderItem(item, index, false))}
 			</div>

@@ -141,6 +141,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 	},
 	{ id: "identity", label: "Identity", devPort: 3014, subdomain: "identity", iconTag: "adc-icon-app-identity", remoteName: "adc_identity" },
 	{ id: "drive", label: "Drive", devPort: 3032, subdomain: "drive", iconTag: "adc-icon-app-drive" },
+	{ id: "editor", label: "Image Editor", devPort: 3034, subdomain: "editor" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
 	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
 	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
