@@ -5,13 +5,15 @@ import { BannedPage } from "./pages/BannedPage.tsx";
 import { CsrfPage } from "./pages/CsrfPage.tsx";
 import { OAuthErrorPage } from "./pages/OAuthErrorPage.tsx";
 import { GenericErrorPage } from "./pages/GenericErrorPage.tsx";
+import { MaintenancePage } from "./pages/MaintenancePage.tsx";
 
-type Page = "banned" | "csrf" | "oauth" | "generic";
+type Page = "banned" | "csrf" | "oauth" | "maintenance" | "generic";
 
 const PATH_TO_PAGE: Record<string, Page> = {
 	"/banned": "banned",
 	"/csrf": "csrf",
 	"/oauth": "oauth",
+	"/maintenance": "maintenance",
 };
 
 function resolvePage(): Page {
@@ -34,6 +36,7 @@ export default function App() {
 			{page === "banned" && <BannedPage />}
 			{page === "csrf" && <CsrfPage />}
 			{page === "oauth" && <OAuthErrorPage />}
+			{page === "maintenance" && <MaintenancePage />}
 			{page === "generic" && <GenericErrorPage />}
 		</ErrorLayout>
 	);

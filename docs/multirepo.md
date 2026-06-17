@@ -74,10 +74,10 @@ Todo preset nuevo debe incluir los siguientes archivos en su raíz antes del pri
 cd private
 
 # Modo interactivo
-bun run init-preset
+bun run init:preset
 
 # Con flags (no interactivo)
-bun run init-preset --name my-preset --type public
+bun run init:preset --name my-preset --type public
 ```
 
 **Alternativa manual (sin acceso a `private/`):** copiá los cuatro archivos desde cualquier preset existente (ej. `presets/my-account/`) y ajustá la licencia según el tipo de preset.
@@ -86,7 +86,7 @@ bun run init-preset --name my-preset --type public
 
 ```bash
 git add .
-git commit -m "chore: initial XYZ preset extracted from ADC-platform"
+git commit -m "chore: initial XYZ preset files"
 ```
 
 ### 4. Vincular al remoto creado en GitHub

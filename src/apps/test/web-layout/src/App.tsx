@@ -4,6 +4,7 @@ import { Shell } from "./components/Shell.tsx";
 import { router, type RouteDefinition } from "@common/utils/router.js";
 import { lazyLoadRemoteComponent, type Framework } from "@adc/utils/react/loadRemoteComponent";
 import { getRemoteEntryUrl } from "@common/utils/url-utils.js";
+import { isAppUnavailable, maintenanceMessage } from "@common/utils/module-availability.js";
 
 // Las funciones t(), setLocale(), getLocale() están disponibles globalmente
 // desde adc-i18n.js (cargado en index.html)
@@ -42,6 +43,17 @@ const routes: RouteDefinition[] = [
 	{ module: "config", path: "/config", subdomain: "config" },
 ];
 const notFoundComponent = () => <div style={{ padding: 20, textAlign: "center", color: "#a0aec0" }}>Página no encontrada</div>;
+
+const maintenanceComponent = (message: string) => () =>
+	(
+		<div style={{ padding: 40, textAlign: "center", maxWidth: 520, margin: "0 auto" }}>
+			<div style={{ fontSize: 48 }} aria-hidden="true">
+				🛠️
+			</div>
+			<h2 style={{ marginBottom: 8 }}>No disponible temporalmente</h2>
+			<p style={{ color: "#a0aec0", lineHeight: 1.5 }}>{message}</p>
+		</div>
+	);
 
 export default function App() {
 	const [renderKey, setRenderKey] = useState(0);
@@ -88,6 +100,21 @@ export default function App() {
 
 			// Pequeño delay para dar feedback visual y permitir a React desmontar
 			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			// Si la app está deshabilitada (modules-manager), mostrar mantenimiento.
+			const availability = await isAppUnavailable(moduleName);
+			if (availability) {
+				setModuleData({
+					Component: maintenanceComponent(maintenanceMessage(availability.messageKey)),
+					moduleName: `${moduleName}-maintenance`,
+					timestamp: Date.now(),
+				});
+				setCurrentPath(getNavPath());
+				setRenderKey((prev) => prev + 1);
+				setLoading(false);
+				loadingPathRef.current = null;
+				return;
+			}
 
 			const definition = moduleDefinitions[moduleName];
 			const data = await lazyLoadRemoteComponent({
