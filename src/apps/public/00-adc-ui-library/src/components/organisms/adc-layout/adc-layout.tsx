@@ -28,6 +28,7 @@ export class AdcLayout {
 	@Prop() logoSrc: string = "/ui/images/mini-logo.webp";
 	@Prop() logoAlt: string = "ADC";
 	@Prop() homeHref: string = "/";
+	@Prop() fullWidth: boolean = false;
 	@Prop() showAccessButton: boolean = true;
 	@Prop() authUrl?: string;
 	@Prop() apiBaseUrl?: string;
@@ -57,7 +58,7 @@ export class AdcLayout {
 					<slot name="header" />
 				</adc-site-header>
 
-				<main class="flex flex-1 justify-center">
+				<main class={`flex-1 justify-center ${this.fullWidth ? "w-full" : "w-max min-w-7xl mx-auto"}`}>
 					<slot />
 				</main>
 

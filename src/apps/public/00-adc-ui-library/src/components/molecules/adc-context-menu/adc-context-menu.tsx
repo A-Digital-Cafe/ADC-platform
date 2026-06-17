@@ -136,7 +136,7 @@ export class AdcContextMenu {
 					role="menuitem"
 					aria-haspopup={hasSubmenu ? "menu" : undefined}
 					aria-expanded={hasSubmenu ? String(expanded) : undefined}
-					class={`flex w-full items-center gap-2 px-3 py-2 mx-1 rounded-lg text-left text-sm whitespace-nowrap cursor-pointer transition-colors ${tone}`}
+					class={`flex w-full items-center gap-2 px-3 py-2 rounded-lg text-left text-sm whitespace-nowrap cursor-pointer transition-colors ${tone}`}
 					onClick={() => this.select(item)}
 				>
 					{item.iconSvg && (

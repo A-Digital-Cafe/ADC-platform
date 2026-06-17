@@ -114,11 +114,19 @@ export class AdcDropdownMenu {
 		const children = item.children ?? [];
 		const hasSubmenu = children.length > 0;
 		const expanded = this.openSubmenu === index;
-		const baseClass = "flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-accent whitespace-normal wrap-break-word";
+		const baseClass =
+			"flex w-full items-center gap-2 px-3 py-2 text-left text-sm rounded-lg cursor-pointer transition-colors text-text hover:bg-primary hover:text-tprimary whitespace-normal wrap-break-word";
 
 		if (item.to && !hasSubmenu) {
 			return (
-				<a key={AdcDropdownMenu.keyPrefix + index} href={item.to} class={baseClass} role="menuitem" tabindex={-1} onClick={() => this.handleItemClick(item)}>
+				<a
+					key={AdcDropdownMenu.keyPrefix + index}
+					href={item.to}
+					class={baseClass}
+					role="menuitem"
+					tabindex={-1}
+					onClick={() => this.handleItemClick(item)}
+				>
 					<span class="flex-1 min-w-0 leading-snug wrap-break-word">{item.label}</span>
 				</a>
 			);
@@ -149,7 +157,10 @@ export class AdcDropdownMenu {
 					)}
 				</button>
 				{hasSubmenu && (
-					<div class={`absolute top-0 left-full ml-0.5 w-48 rounded shadow z-50 bg-primary text-tprimary ${expanded ? "block" : "hidden"}`} role="menu">
+					<div
+						class={`absolute top-0 left-full ml-1 min-w-44 py-1 rounded-xl border border-surface bg-surface shadow-cozy text-text z-50 ${expanded ? "block" : "hidden"}`}
+						role="menu"
+					>
 						{children.map((child, i) => this.renderItem(child, i, true))}
 					</div>
 				)}
@@ -176,7 +187,12 @@ export class AdcDropdownMenu {
 				</button>
 
 				{this.isOpen && (
-					<div class={`${panelClass} w-56 rounded shadow bg-primary text-tprimary`} style={panelStyle} role="menu" aria-orientation="vertical">
+					<div
+						class={`${panelClass} w-56 py-1 rounded-xl border border-surface bg-surface backdrop-blur-sm shadow-cozy text-text`}
+						style={panelStyle}
+						role="menu"
+						aria-orientation="vertical"
+					>
 						{this.items.map((item, index) => this.renderItem(item, index, false))}
 					</div>
 				)}
