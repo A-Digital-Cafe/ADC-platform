@@ -1,6 +1,6 @@
 # Service shell — Plantilla para crear un servicio
 
-Este documento define cómo ensamblar un servicio nuevo: el `index.ts` que une models, DAOs y endpoints, y el `config.json` que declara sus dependencias. Complementa `models.md`, `daos.md` y `endpoints.md`. Referencia real: `presets/project-management/services/ProjectManagerService/`.
+Este documento define cómo ensamblar un servicio nuevo: el `index.ts` que une models, DAOs y endpoints, y el `config.json` que declara sus dependencias. Complementa `models.md`, `daos.md` y `endpoints.md`. Para el versionado/lenguaje y la resolución de dependencias del `config.json`, ver [architecture/module-system.md](../../architecture/module-system.md); para instancias múltiples, hot reload y `kernelMode`, ver [architecture/app-runtime.md](../../architecture/app-runtime.md). Referencia real: `presets/project-management/services/ProjectManagerService/`.
 
 ## Estructura completa
 

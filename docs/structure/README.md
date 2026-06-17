@@ -29,4 +29,7 @@ Estos documentos son el **prompt base** para crear o editar módulos (por humano
 - Los tipos compartidos viven en `@common/types/<domain>/`; los errores tipados en `@common/types/custom-errors/`.
 - Los helpers reutilizables (escaping, paginación por cursor, crypto, …) viven en `@common/utils/`; no los reimplementes por servicio.
 - Cada módulo lleva `README.md` propio (máx 15 líneas) y `config.json` autodocumentado.
-- Visión general de la plataforma: [ARCHITECTURE.md](../../ARCHITECTURE.md).
+- Visión general de la plataforma: [docs/architecture/](../architecture/README.md). En particular,
+  para apps UI ver [ui-federation.md](../architecture/ui-federation.md) y para comportamiento runtime
+  de servicios/apps (instancias, versionado, deps) ver [app-runtime.md](../architecture/app-runtime.md)
+  y [module-system.md](../architecture/module-system.md).

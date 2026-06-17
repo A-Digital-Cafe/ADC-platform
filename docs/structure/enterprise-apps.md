@@ -3,7 +3,8 @@
 Guía / punto de partida para crear una app de nivel empresarial (correo, docs,
 calendario, etc.) sin tener que re-aprender toda la plataforma. Complementa
 `docs/structure/services/{models,daos,endpoints,service-shell}.md` y
-`docs/structure/apps/frontend.md` (ver el índice en `docs/structure/README.md`).
+`docs/structure/apps/frontend.md` (ver el índice en [README.md](README.md)). Para cómo se sirven y
+federan las apps UI, ver [architecture/ui-federation.md](../architecture/ui-federation.md).
 
 ## Anatomía de una app empresarial
 

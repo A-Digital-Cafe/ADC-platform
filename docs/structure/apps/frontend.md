@@ -1,6 +1,6 @@
 # Apps UI — Plantilla para crear un micro-frontend
 
-Este documento define cómo crear una app UI nueva de la plataforma (React + Module Federation + `adc-ui-library`). Complementa `docs/structure/enterprise-apps.md`. Referencia real: `presets/project-management/apps/adc-project-manager/`.
+Este documento define cómo crear una app UI nueva de la plataforma (React + Module Federation + `adc-ui-library`). Complementa [enterprise-apps.md](../enterprise-apps.md). Para el funcionamiento de Module Federation, namespaces, host-based routing, i18n y service workers, ver [architecture/ui-federation.md](../../architecture/ui-federation.md). Referencia real: `presets/project-management/apps/adc-project-manager/`.
 
 ## Estructura completa
 
@@ -62,7 +62,7 @@ src/apps/public/adc-<feature>/        # o presets/<preset>/apps/adc-<feature>/
 
 Reglas:
 
-- `devPort` único (revisar `docs/puertos.md` y los `config.json` existentes).
+- `devPort` único (revisar [../../guides/ports.md](../../guides/ports.md) y los `config.json` existentes).
 - `hosting` define los subdominios de producción; en dev cada app usa su `devPort`.
 - `serviceWorker: true` solo en apps layout: cascadea automáticamente a sus hijas.
 - Si la app expone `federationExposes` consumidos cross-app (ej. el resolver de platform links), extender la CSP con los orígenes cross-app (`script-src`/`connect-src`: `http://localhost:* https://*.adigitalcafe.com`).
@@ -117,11 +117,18 @@ export default function MiVista() {
 - Páginas públicas/sin sidebar (ej: vista de enlace compartido): `sidebarOffset={false}`.
 - Referencia: `presets/my-account` y `presets/adc-drive` (todas las vistas usan `adc-page-shell`).
 
-## Router y sesión
+## Tools de la UI library
+
+Catálogo completo con ejemplos en `00-adc-ui-library/utils/README.md` — reutilizar, no reimplementar.
+Los más usados:
 
 - Navegación SPA: `@common/utils/router.js`.
 - Sesión/usuario: `@ui-library/utils/session`.
-- Fetch con manejo de errores y toasts: `adc-fetch` de la UI library (usar `silent: true` cuando solo importa el `status`).
+- Fetch (errores + toasts + idempotencia + CSRF): `adc-fetch` (`silent: true` si solo importa el `status`).
+- Notificaciones: `toast` de `@ui-library/utils/toast`.
+- Llamadas cancelables en React: `useAbortable` (`@ui-library/utils/use-abortable`).
+- Logs (en vez de `console.*`): `createUiLogger` (`@ui-library/utils/ui-logger`).
+- Inyectar SVG por `innerHTML`: `sanitizeSvg` (`@ui-library/utils/sanitize-svg`), obligatorio.
 
 ## Idempotencia en mutaciones (obligatorio)
 
@@ -156,9 +163,19 @@ api.delete(`/admin/overrides/${id}`, { idempotencyKey: id });
 
 ## Componentes
 
-- Reutilizar los Web Components de `00-adc-ui-library` (catálogo en su `README.md`).
+- Reutilizar los Web Components de `00-adc-ui-library` (catálogo agrupado + design tokens en su `README.md`).
 - Átomos/organismos nuevos y reutilizables se agregan a la UI library, no se duplican en la app.
 - Tras crear un componente o icono en la UI library, regenerar las declaraciones JSX (`scripts/generate-react-jsx.mjs`).
+
+### Estilos: design tokens, no colores crudos
+
+Estilá con los tokens del preset Tailwind (`00-adc-ui-library/utils/tailwind-preset.js`), **no** con
+hex ni colores nativos de Tailwind: son CSS vars temables (`:root[coffee-theme]` + `[dark-mode]`), así
+el tema y el dark mode funcionan solos. Más usados: `text-text` / `text-muted` / `bg-surface` /
+`bg-primary` / `bg-accent`; tipografía `font-heading` / `font-text`; `rounded-xxl`, `shadow-cozy`,
+`animate-fade-in`. Tonos semánticos (info/success/warn/danger) y acentos de app: consumirlos vía
+componentes (`adc-callout`, `adc-badge`, `adc-button`), no como clases sueltas. Catálogo de tokens en
+el README de la librería.
 
 ### Diálogos y modales: SIEMPRE `adc-modal` (no recrear el modal a mano)
 
@@ -227,10 +244,8 @@ public/tutorials/<slug>.md    # markdown breve; el título va en el manifiesto, 
 
 La app **help** los descubre en runtime sondeando `{origen}/tutorials/index.json` de cada app del
 registry de `platform-links` (la app debe estar en `DEFAULT_APPS`) y los renderiza con
-`@ui-library/utils/markdown-blocks` + `adc-blocks-renderer`. Subset markdown soportado: encabezados,
-listas, checkboxes, código cercado, citas, callouts (`> [!info]`), tablas, divisores e inline
-(`**`, `*`, `` ` ``, links — incluidos chips de plataforma). Una app sin tutoriales simplemente no
-publica el manifiesto.
+`@ui-library/utils/markdown-blocks` + `adc-blocks-renderer` (subset markdown soportado: ver
+`markdown-blocks` en `utils/README.md`). Una app sin tutoriales simplemente no publica el manifiesto.
 
 ## Checklist de creación
 
@@ -241,6 +256,7 @@ publica el manifiesto.
 - [ ] Componentes reutilizables agregados a la UI library, no duplicados.
 - [ ] Diálogos/modales con `<adc-modal>` (no `inset-0` + backdrop a mano); sin `window.alert/confirm/prompt`.
 - [ ] Campos con átomos (`adc-input`/`adc-textarea`/`adc-checkbox`/`adc-select`), no `<input>`/`<textarea>`/`<select>` nativos (salvo las excepciones documentadas).
+- [ ] Estilos con design tokens del preset (`text-text`/`bg-surface`/`font-heading`/…), no hex ni colores crudos.
 - [ ] App registrada en `adc-home`, `adc-apps-menu` y con icono propio.
 - [ ] `serviceWorker` solo si la app es layout.
 - [ ] CSP extendida si expone módulos federados cross-app.

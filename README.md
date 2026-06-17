@@ -46,11 +46,11 @@ Los servicios en modo kernel se cargan automáticamente antes que las apps:
 
 ## Gestión de Identidades
 
-El `IdentityManagerService` (servicio en modo kernel) gestiona usuarios, roles, grupos y organizaciones con persistencia en MongoDB, hashing PBKDF2 y permisos granulares por recurso/acción/alcance. Detalle en [ARCHITECTURE.md](./ARCHITECTURE.md) y en `src/services/core/IdentityManagerService/README.md`.
+El `IdentityManagerService` (servicio en modo kernel) gestiona usuarios, roles, grupos y organizaciones con persistencia en MongoDB, hashing PBKDF2 y permisos granulares por recurso/acción/alcance. Detalle en [docs/architecture/README.md](./docs/architecture/README.md) y en `src/services/core/IdentityManagerService/README.md`.
 
 ## Provisioning Automático con Docker Compose
 
-Si una app contiene un archivo `docker-compose.yml`, el kernel lo ejecutará automáticamente antes de iniciar la app. Ver detalles y ejemplos en [ARCHITECTURE.md](./ARCHITECTURE.md).
+Si una app contiene un archivo `docker-compose.yml`, el kernel lo ejecutará automáticamente antes de iniciar la app. Ver detalles y ejemplos en [docs/architecture/app-runtime.md](./docs/architecture/app-runtime.md).
 
 ## Estructura del Proyecto
 
@@ -80,7 +80,7 @@ Cada módulo usa `package.json` para gestionar dependencias y un archivo de conf
 - **Services:** `config.json` (para definir providers/utilities internas)
 - **Apps:** `default.json` + `configs/*.json` (múltiples instancias)
 
-Para una descripción técnica detallada, consulta [ARCHITECTURE.md](./ARCHITECTURE.md).
+Para una descripción técnica detallada, consulta [docs/architecture/](./docs/architecture/README.md) (índice general en [docs/README.md](./docs/README.md)).
 
 ## License
 
