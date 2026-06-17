@@ -5,7 +5,6 @@
  * NOTA: Este archivo solo debe usarse en layouts que tengan React como sharedLib.
  */
 import React from "react";
-import { createApp } from "vue";
 
 export type Framework = "react" | "vue" | "vanilla";
 
@@ -39,14 +38,21 @@ function createVueWrapper(RemoteComponent: any, moduleName: string, timestamp: n
 		const vueAppRef = React.useRef<any>(null);
 
 		React.useEffect(() => {
+			let cancelled = false;
 			if (containerRef.current && !vueAppRef.current) {
+				// Vue se importa dinámicamente: así un host React-only que solo monta
+				// remotes React nunca descarga el runtime de Vue (queda en chunk aparte).
 				// NOTA: isCustomElement se configura en vue-loader (build-time), no aquí
-				vueAppRef.current = createApp(RemoteComponent, props);
-				vueAppRef.current.mount(containerRef.current);
-				console.log(`[Layout] Vue app montada: ${moduleName}`);
+				void import("vue").then(({ createApp }) => {
+					if (cancelled || !containerRef.current || vueAppRef.current) return;
+					vueAppRef.current = createApp(RemoteComponent, props);
+					vueAppRef.current.mount(containerRef.current);
+					console.log(`[Layout] Vue app montada: ${moduleName}`);
+				});
 			}
 
 			return () => {
+				cancelled = true;
 				if (vueAppRef.current) {
 					vueAppRef.current.unmount();
 					vueAppRef.current = null;
