@@ -51,10 +51,35 @@ export class AdcContextMenu {
 	@Event() adcContextMenuClose!: EventEmitter<void>;
 
 	private panelEl: HTMLDivElement | null = null;
+	private submenuTimeout?: ReturnType<typeof setTimeout>;
+
+	/** Margen mínimo al borde del viewport. */
+	private static readonly MARGIN = 4;
+	/** Gracia (ms) antes de cerrar el submenú al salir del item: permite cruzar el
+	 * hueco entre el item y su submenú con el cursor sin que se cierre. */
+	private static readonly SUBMENU_CLOSE_DELAY = 260;
 
 	componentWillLoad() {
 		this.visible = this.open;
 	}
+
+	/** Abre el submenú `index` de inmediato y cancela un cierre pendiente. */
+	private readonly openSub = (index: number) => {
+		if (this.submenuTimeout) {
+			clearTimeout(this.submenuTimeout);
+			this.submenuTimeout = undefined;
+		}
+		this.openSubmenu = index;
+	};
+
+	/** Cierra el submenú tras un breve delay (cancelable si el cursor vuelve). */
+	private readonly scheduleCloseSub = () => {
+		if (this.submenuTimeout) clearTimeout(this.submenuTimeout);
+		this.submenuTimeout = setTimeout(() => {
+			this.openSubmenu = null;
+			this.submenuTimeout = undefined;
+		}, AdcContextMenu.SUBMENU_CLOSE_DELAY);
+	};
 
 	@Watch("open")
 	onOpenChange() {
@@ -69,6 +94,40 @@ export class AdcContextMenu {
 	@Watch("y")
 	onCoordsChange() {
 		if (this.open) this.visible = true;
+	}
+
+	// Un menú contextual está anclado a un punto del documento (click derecho / botón
+	// "⋮"), no a un elemento que pueda seguir. Al scrollear lo cerramos (comportamiento
+	// estándar) en vez de dejarlo flotando fijo; en resize sólo reclampeamos.
+	private readonly handleScroll = () => {
+		if (this.visible) this.close();
+	};
+	private readonly handleResize = () => {
+		if (this.visible) this.reposition();
+	};
+
+	@Watch("visible")
+	onVisibleChange(visible: boolean) {
+		if (visible) {
+			window.addEventListener("scroll", this.handleScroll, true);
+			window.addEventListener("resize", this.handleResize);
+		} else {
+			this.removeViewportListeners();
+			if (this.submenuTimeout) {
+				clearTimeout(this.submenuTimeout);
+				this.submenuTimeout = undefined;
+			}
+		}
+	}
+
+	private removeViewportListeners() {
+		window.removeEventListener("scroll", this.handleScroll, true);
+		window.removeEventListener("resize", this.handleResize);
+	}
+
+	disconnectedCallback() {
+		this.removeViewportListeners();
+		if (this.submenuTimeout) clearTimeout(this.submenuTimeout);
 	}
 
 	// Reposiciona tras cada render (sincrónico, antes del paint → sin flicker) para
@@ -108,14 +167,40 @@ export class AdcContextMenu {
 	private reposition() {
 		const panel = this.panelEl;
 		if (!panel) return;
+		const m = AdcContextMenu.MARGIN;
 		const { offsetWidth, offsetHeight } = panel;
-		const left = Math.max(4, Math.min(this.x, window.innerWidth - offsetWidth - 4));
-		const top = Math.max(4, Math.min(this.y, window.innerHeight - offsetHeight - 4));
+		const left = Math.max(m, Math.min(this.x, window.innerWidth - offsetWidth - m));
+		const top = Math.max(m, Math.min(this.y, window.innerHeight - offsetHeight - m));
 		panel.style.left = `${left}px`;
 		panel.style.top = `${top}px`;
 		// Si no hay lugar a la derecha para un submenú (~12rem), abrirlo hacia la izquierda.
 		const flip = left + offsetWidth + 192 > window.innerWidth;
 		if (flip !== this.flipSubmenu) this.flipSubmenu = flip;
+		this.clampSubmenuVertical(m);
+	}
+
+	/**
+	 * Evita que el submenú abierto se corte por abajo: lo sube lo necesario y, si
+	 * aun así es más alto que el viewport, lo acota con scroll interno. (Sus items
+	 * son de un solo nivel, así que el scroll no recorta submenús anidados.)
+	 */
+	private clampSubmenuVertical(m: number) {
+		const sub = this.panelEl?.querySelector<HTMLElement>("[data-submenu]:not(.hidden)") ?? null;
+		if (!sub) return;
+		sub.style.top = "0px";
+		sub.style.maxHeight = "";
+		sub.style.overflowY = "";
+		let rect = sub.getBoundingClientRect();
+		if (rect.height > window.innerHeight - 2 * m) {
+			sub.style.maxHeight = `${window.innerHeight - 2 * m}px`;
+			sub.style.overflowY = "auto";
+			rect = sub.getBoundingClientRect();
+		}
+		const overflow = rect.bottom - (window.innerHeight - m);
+		if (overflow > 0) {
+			const shift = Math.min(overflow, rect.top - m);
+			if (shift > 0) sub.style.top = `${-shift}px`;
+		}
 	}
 
 	private renderItem(item: ContextMenuItem, index: number, inSubmenu: boolean) {
@@ -128,8 +213,8 @@ export class AdcContextMenu {
 			<div
 				class="relative"
 				role="none"
-				onMouseEnter={() => !inSubmenu && hasSubmenu && (this.openSubmenu = index)}
-				onMouseLeave={() => !inSubmenu && hasSubmenu && expanded && (this.openSubmenu = null)}
+				onMouseEnter={() => !inSubmenu && hasSubmenu && this.openSub(index)}
+				onMouseLeave={() => !inSubmenu && hasSubmenu && expanded && this.scheduleCloseSub()}
 			>
 				<button
 					type="button"
@@ -152,6 +237,7 @@ export class AdcContextMenu {
 
 				{hasSubmenu && (
 					<div
+						data-submenu
 						class={`absolute top-0 ${submenuSide} min-w-44 py-1 rounded-xl border border-surface bg-surface shadow-cozy text-text ${expanded ? "block" : "hidden"}`}
 						role="menu"
 					>
