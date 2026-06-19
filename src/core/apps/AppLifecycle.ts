@@ -59,7 +59,7 @@ export class AppLifecycle {
 		if (!registry.hasApp(instanceName)) return;
 		const app = registry.getApp(instanceName);
 		logger.logInfo(`Recargando instancia de App: ${instanceName}`);
-		await app.stop?.();
+		await app.stop?.(kernelKey);
 		await registry.cleanupAppModules(instanceName, kernelKey);
 		registry.deleteApp(instanceName);
 		tracker.removeFileKeysByInstance(instanceName);

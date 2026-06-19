@@ -47,6 +47,8 @@ export default class EndpointManagerService extends BaseService {
 	readonly #registry = new EndpointRegistry(this.logger);
 	#jobManager: JobManager | null = null;
 	#csrfConfig: CsrfRuntimeConfig | null = null;
+	/** Owners marcados como no disponibles (503). Mapea nombre→mensaje. */
+	readonly #unavailableOwners = new Map<string, string>();
 
 	static readonly JOB_TTL_SECONDS = JobManager.JOB_TTL_SECONDS;
 
@@ -139,7 +141,8 @@ export default class EndpointManagerService extends BaseService {
 			this.logger,
 			this.#csrfConfig ?? resolveCsrfConfig(this.config.csrf as CsrfOptions | undefined),
 			this.getMyProvider<RabbitMQProvider>("queue/rabbitmq"),
-			this.getMyProvider<RedisProvider>("queue/redis")
+			this.getMyProvider<RedisProvider>("queue/redis"),
+			() => this.#checkOwnerUnavailable(config.ownerName)
 		);
 
 		// Registrar en Fastify
@@ -173,6 +176,28 @@ export default class EndpointManagerService extends BaseService {
 		return this.#registry.unregisterByOwner(ownerName);
 	}
 
+	/**
+	 * Marca (o desmarca) un owner como "no disponible": sus endpoints responden 503
+	 * sin invocar el handler. El match cubre el owner exacto y sus managers
+	 * (`Owner::Manager`). Lo usa el ModuleOrchestrator al detener un servicio en
+	 * caliente (antes de descargarlo). Sólo invocable por el Kernel/orquestador.
+	 */
+	@OnlyKernel()
+	setOwnerUnavailable(_kernelKey: symbol, ownerName: string, on: boolean, message?: string): void {
+		if (on) this.#unavailableOwners.set(ownerName, message || "Servicio temporalmente no disponible");
+		else this.#unavailableOwners.delete(ownerName);
+		this.logger.logDebug(`Owner ${ownerName} ${on ? "marcado NO disponible (503)" : "disponible de nuevo"}`);
+	}
+
+	/** Devuelve el mensaje de 503 si el owner (o su prefijo de servicio) está no disponible. */
+	#checkOwnerUnavailable(ownerName: string): { message?: string } | null {
+		if (this.#unavailableOwners.size === 0) return null;
+		for (const [key, message] of this.#unavailableOwners) {
+			if (ownerName === key || ownerName.startsWith(`${key}::`)) return { message };
+		}
+		return null;
+	}
+
 	// Obtiene información sobre los endpoints registrados
 	getRegisteredEndpoints = () => this.#registry.getAll();
 
@@ -189,6 +214,7 @@ export default class EndpointManagerService extends BaseService {
 
 		// Limpiar todos los endpoints
 		this.#registry.clear();
+		this.#unavailableOwners.clear();
 
 		this.#httpProvider = null;
 		this.#csrfConfig = null;

@@ -5,6 +5,7 @@ import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
 import type { ModuleLoader } from "../../utils/loaders/ModuleLoader.js";
 import type { DockerManager } from "../../utils/system/DockerManager.js";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
+import type { DisabledRegistry } from "../orchestration/DisabledRegistry.js";
 
 interface KernelServiceEntry {
 	path: string;
@@ -20,7 +21,8 @@ export class KernelServiceLoader {
 		private readonly dockerManager: DockerManager,
 		private readonly logger: ILogger,
 		private readonly kernelKey: symbol,
-		private readonly isShuttingDown: () => boolean
+		private readonly isShuttingDown: () => boolean,
+		private readonly disabledRegistry: DisabledRegistry
 	) {}
 
 	async loadAll(servicesPath: string | string[]): Promise<void> {
@@ -49,6 +51,10 @@ export class KernelServiceLoader {
 
 	async #loadOne(svc: KernelServiceEntry): Promise<void> {
 		const { path: servicePath, name, configPath } = svc;
+		if (this.disabledRegistry.has("service", name)) {
+			this.logger.logWarn(`Servicio kernel ${name} deshabilitado (modules-manager): no se levanta.`);
+			return;
+		}
 		try {
 			await this.#startDocker(servicePath, name);
 			const { instance, config } = await this.moduleLoader.loadKernelService(servicePath, configPath, this.kernel, this.kernelKey);

@@ -38,7 +38,7 @@ pkill -9 -f "bun src/index.ts" 2>/dev/null && echo "✓ Kernel ADC terminado" ||
 # Red de seguridad: liberar los puertos de dev por si algo siguió escuchando
 # (3000 API + subdominios UI vía devPort).
 echo "Liberando puertos de dev..."
-for port in 3000 3012 3016 3020 3032; do
+for port in 3000 3012 3016 3020 3032 3036; do
     fuser -k -9 "${port}/tcp" 2>/dev/null && echo "✓ Puerto ${port} liberado" || true
 done
 

@@ -1,16 +1,23 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
+import { redirectIfUnderMaintenance } from "@common/utils/module-availability.js";
 import "@ui-library";
 import "@ui-library/styles";
 import "./styles/tailwind.css";
 
-const container = document.getElementById("root");
-if (container) {
-	const root = createRoot(container);
-	root.render(
-		<React.StrictMode>
-			<App />
-		</React.StrictMode>
-	);
+async function bootstrap() {
+	if (await redirectIfUnderMaintenance("adc-auth")) return;
+
+	const container = document.getElementById("root");
+	if (container) {
+		const root = createRoot(container);
+		root.render(
+			<React.StrictMode>
+				<App />
+			</React.StrictMode>
+		);
+	}
 }
+
+void bootstrap();

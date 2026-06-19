@@ -13,6 +13,8 @@ import { ConfigWatcher, watchLayer } from "./core/runtime/ConfigWatcher.js";
 import { shutdownKernel } from "./core/runtime/KernelShutdown.js";
 import { loadLayerRecursive } from "./core/apps/LayerLoader.js";
 import { DependencyReloader } from "./core/modules/DependencyReloader.js";
+import { DisabledRegistry } from "./core/orchestration/DisabledRegistry.js";
+import { ModuleOrchestrator } from "./core/orchestration/ModuleOrchestrator.js";
 
 export class Kernel {
 	static readonly #kernelKey: symbol = Symbol(crypto.randomUUID());
@@ -50,6 +52,8 @@ export class Kernel {
 	readonly #registrar: ModuleRegistrar;
 	readonly #kernelServiceLoader: KernelServiceLoader;
 	readonly #dependencyReloader: DependencyReloader;
+	readonly #disabledRegistry = new DisabledRegistry();
+	readonly #orchestrator: ModuleOrchestrator;
 
 	constructor() {
 		const isShuttingDown = () => this.#isShuttingDown;
@@ -62,9 +66,34 @@ export class Kernel {
 			this.#dockerManager,
 			this.#logger,
 			Kernel.#kernelKey,
-			isShuttingDown
+			isShuttingDown,
+			this.#disabledRegistry
 		);
 		this.#dependencyReloader = new DependencyReloader(this.registry, this.#registrar, this.#appLoader, this.#logger, Kernel.#kernelKey);
+		this.#orchestrator = new ModuleOrchestrator({
+			registry: this.registry,
+			appLoader: this.#appLoader,
+			registrar: this.#registrar,
+			dependencyReloader: this.#dependencyReloader,
+			disabledRegistry: this.#disabledRegistry,
+			logger: this.#logger,
+			kernelKey: Kernel.#kernelKey,
+			presetsPath: this.#presetsPath,
+			srcPath: this.#basePath,
+		});
+	}
+
+	/**
+	 * Devuelve el orquestador de módulos. Requiere `kernelKey` válido: sólo código
+	 * privilegiado (p.ej. el preset `adc-modules-manager`, que captura la kernelKey en
+	 * su `start()`) puede obtenerlo. No expone el símbolo.
+	 */
+	public getOrchestrator(kernelKey: symbol): ModuleOrchestrator {
+		if (kernelKey !== Kernel.#kernelKey) {
+			this.#logger.logError("getOrchestrator: kernelKey inválido. Llamada rechazada.");
+			throw new Error("Invalid kernelKey");
+		}
+		return this.#orchestrator;
 	}
 
 	public async start(): Promise<void> {

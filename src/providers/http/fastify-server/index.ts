@@ -150,6 +150,8 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private readonly registeredHosts = new Map<string, RegisteredHost>();
 	private readonly globalRoutes: GlobalRoute[] = [];
 	private readonly globalStaticPaths = new Map<string, string>();
+	/** Hosts en modo mantenimiento: patrón → mensaje. Sirven 503 en vez de la app. */
+	private readonly maintenanceHosts = new Map<string, string>();
 	private defaultHost: RegisteredHost | null = null;
 	private readonly isDev = process.env.NODE_ENV === "development";
 	private apiDocsRegistered = false;
@@ -278,6 +280,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private async handleStaticRequest(request: FastifyRequest, reply: FastifyReply): Promise<void> {
 		const matchedHost = (request as any).matchedHost as RegisteredHost | undefined;
 		let urlPath = request.url.split("?")[0];
+
+		// Modo mantenimiento: si el host está deshabilitado, servir 503 por default.
+		if (matchedHost && this.maintenanceHosts.has(matchedHost.pattern)) {
+			this.serveMaintenance(reply, this.maintenanceHosts.get(matchedHost.pattern)!);
+			return;
+		}
 
 		// Primero verificar rutas globales
 		for (const route of this.globalRoutes) {
@@ -511,6 +519,33 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	serveStatic(urlPath: string, directory: string): void {
 		this.globalStaticPaths.set(urlPath, directory);
 		this.logger.logDebug(`Archivos estáticos globales: ${urlPath} -> ${directory}`);
+	}
+
+	/**
+	 * Pone (o saca) un host en modo mantenimiento: mientras esté activo, cualquier
+	 * request a ese host responde 503 con una página de mantenimiento. Lo usa
+	 * UIFederationService cuando el modules-manager deshabilita una app (prod).
+	 */
+	@OnlyKernel()
+	setHostMaintenance(_kernelKey: symbol, hostPattern: string, on: boolean, message?: string): void {
+		if (on) this.maintenanceHosts.set(hostPattern, message || "Esta aplicación no está disponible temporalmente.");
+		else this.maintenanceHosts.delete(hostPattern);
+		this.logger.logDebug(`Host ${hostPattern} ${on ? "en mantenimiento (503)" : "operativo"}`);
+	}
+
+	private serveMaintenance(reply: FastifyReply, message: string): void {
+		applySecurityHeaders(reply);
+		reply.header("Content-Type", "text/html; charset=utf-8");
+		reply.header("Retry-After", "120");
+		const safe = message.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+		reply.code(503).send(
+			`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+				`<title>No disponible temporalmente</title><style>html,body{height:100%;margin:0}` +
+				`body{display:flex;align-items:center;justify-content:center;background:#0f1115;color:#e6e6e6;` +
+				`font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.box{max-width:32rem;padding:2rem;text-align:center}` +
+				`h1{font-size:1.4rem;margin:0 0 .75rem}p{color:#a0aec0;line-height:1.5}</style></head>` +
+				`<body><div class="box"><h1>No disponible temporalmente</h1><p>${safe}</p></div></body></html>`
+		);
 	}
 
 	registerHost(hostPattern: string, directory: string, options: HostOptions = {}): void {

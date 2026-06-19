@@ -12,6 +12,7 @@ import { ModuleRegistry } from "./utils/registry/module-registry.js";
 import { DEFAULT_NAMESPACE, type HostRegistryEntry, type UIFederationContext } from "./utils/types/context.js";
 import { stopAllWatchers } from "./utils/lifecycle/watcher-control.js";
 import { runRegisterFlow } from "./utils/lifecycle/register-flow.js";
+import { buildUIModule } from "./utils/lifecycle/build-runner.js";
 import { updateImportMap } from "./utils/server/import-map-updater.js";
 import { setupImportMapEndpoints } from "./utils/server/endpoints.js";
 import { computeStats, refreshAllImportMaps, unregisterUIModule, type UIStats } from "./utils/server/service-operations.js";
@@ -140,6 +141,51 @@ export default class UIFederationService extends BaseService {
 
 	getStats(): UIStats {
 		return computeStats(this.#ctx());
+	}
+
+	/**
+	 * Info de los módulos UI registrados (read-only). `isLibrary` = framework Stencil:
+	 * son librerías de Web Components compartidas (no se "despliegan"/detienen, se
+	 * recompilan). Lo consume el modules-manager para tratarlas distinto.
+	 */
+	listModulesInfo(): Array<{ name: string; namespace: string; framework: string; isLibrary: boolean; isHost: boolean; buildStatus: string }> {
+		return this.#registry.allModules.map((m) => ({
+			name: m.name,
+			namespace: m.namespace,
+			framework: m.uiConfig.framework || "astro",
+			isLibrary: (m.uiConfig.framework || "") === "stencil",
+			isHost: m.uiConfig.isHost ?? false,
+			buildStatus: m.buildStatus,
+		}));
+	}
+
+	/**
+	 * Recompila un módulo UI **en su lugar**, sin desregistrarlo (los consumidores no
+	 * se cortan; recogen el nuevo build). Pensado para ui-libraries Stencil tras un
+	 * `git pull`. En desarrollo el `stencil build --watch` ya reconstruye al cambiar
+	 * los archivos, así que es no-op; en producción re-ejecuta el build estático.
+	 */
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
+	@OnlyKernel()
+	async rebuildModule(_kernelKey: symbol, moduleName: string): Promise<{ rebuilt: boolean; mode: "watch" | "static"; error?: string }> {
+		const found = this.#registry.findModuleByName(moduleName);
+		if (!found) return { rebuilt: false, mode: this.#isDevelopment ? "watch" : "static", error: `Módulo UI no encontrado: ${moduleName}` };
+
+		if (this.#isDevelopment) {
+			this.logger.logInfo(`Rebuild ${moduleName}: en desarrollo el watch de Stencil/rspack reconstruye automáticamente.`);
+			return { rebuilt: true, mode: "watch" };
+		}
+
+		try {
+			this.logger.logInfo(`Recompilando módulo UI ${moduleName} [${found.namespace}] en producción...`);
+			await buildUIModule(found.module, found.namespace, this.#ctx());
+			this.logger.logOk(`Módulo UI ${moduleName} recompilado.`);
+			return { rebuilt: true, mode: "static" };
+		} catch (error: any) {
+			this.logger.logError(`Error recompilando ${moduleName}: ${error.message}`);
+			return { rebuilt: false, mode: "static", error: error.message };
+		}
 	}
 }
 

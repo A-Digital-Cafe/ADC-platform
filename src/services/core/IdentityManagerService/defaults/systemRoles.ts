@@ -59,7 +59,8 @@ export const ORG_PREDEFINED_ROLES: Array<BaseRole> = [
 		description: "Gestor de aplicaciones",
 		permissions: [
 			{ resource: "apps", action: CRUDXAction.CRUD, scope: 0xff },
-			{ resource: "modules", action: CRUDXAction.READ, scope: 0xff },
+			// modules: incluye EXECUTE (16) para iniciar/detener/recargar vía el modules-manager.
+			{ resource: "modules", action: CRUDXAction.ALL, scope: 0xff },
 		],
 	},
 	{

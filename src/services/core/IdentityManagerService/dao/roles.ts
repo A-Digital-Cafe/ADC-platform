@@ -171,7 +171,7 @@ export class RoleManager {
 	async deleteRole(roleId: string, token?: string, resumeFromStep?: number): Promise<void> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.DELETE, IdentityScopes.ROLES);
 
-		const role = (await this.roleModel.findOne({ id: roleId }).lean()) as Role | null;
+		const role = await this.roleModel.findOne<Role>({ id: roleId }).lean();
 		if (!role) {
 			throw new Error(`Rol ${roleId} no encontrado`);
 		}

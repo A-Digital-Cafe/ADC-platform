@@ -53,7 +53,13 @@ export function createHttpWrapper(
 	logger: ILogger,
 	csrfConfig: CsrfRuntimeConfig,
 	rabbitmq: RabbitMQProvider | null = null,
-	redis: RedisProvider | null = null
+	redis: RedisProvider | null = null,
+	/**
+	 * Si devuelve un objeto, el owner del endpoint está marcado como no disponible
+	 * (servicio detenido por el modules-manager) y la ruta responde 503 sin invocar
+	 * el handler. La ruta permanece registrada en Fastify; "re-registra" 503.
+	 */
+	checkUnavailable: () => { message?: string } | null = () => null
 ): (req: FastifyRequest<any>, reply: FastifyReply<any>) => Promise<void> {
 	const requiresIdempotency = MUTATIVE_METHODS.has(endpoint.method) && endpoint.options?.skipIdempotency !== true;
 	const shouldEnqueue = MUTATIVE_METHODS.has(endpoint.method) && endpoint.options?.enqueue === true && rabbitmq !== null;
@@ -64,6 +70,17 @@ export function createHttpWrapper(
 	const compiledSchemas = compileEndpointSchemas(endpoint);
 
 	return async (req: FastifyRequest<any>, reply: FastifyReply<any>) => {
+		// ── Service Unavailable (módulo detenido por el modules-manager) ──
+		const unavailable = checkUnavailable();
+		if (unavailable) {
+			reply.header("Retry-After", "30");
+			reply.status(503).send({
+				error: "SERVICE_UNAVAILABLE",
+				message: unavailable.message || "Servicio temporalmente no disponible",
+			});
+			return;
+		}
+
 		// ── Rate limiting (Redis INCR + EXPIRE) ─────────────────────────
 		if (rl && redis) {
 			const key = rlKeyPrefix + req.ip;

@@ -349,6 +349,21 @@ export class ModuleRegistry {
 		return [...(this.#getNameMap(moduleType).get(name) ?? [])];
 	}
 
+	/** Nombres lógicos de todos los módulos de un tipo registrados actualmente. */
+	getModuleNames(moduleType: ModuleType): string[] {
+		return [...this.#getNameMap(moduleType).keys()];
+	}
+
+	/** Instancia registrada bajo una uniqueKey (para deduplicar alias por identidad). */
+	getInstanceByUniqueKey(moduleType: ModuleType, uniqueKey: string): IModule | undefined {
+		return this.#getRegistry(moduleType).get(uniqueKey);
+	}
+
+	/** Snapshot inmutable de las dependencias app→módulo (para grafo de cascada). */
+	getAppModuleDependencies(): ReadonlyMap<string, ReadonlySet<{ type: ModuleType; uniqueKey: string }>> {
+		return this.#appModuleDependencies;
+	}
+
 	getDependentAppNames(moduleType: ModuleType, uniqueKey: string): string[] {
 		const result: string[] = [];
 		for (const [appName, deps] of this.#appModuleDependencies.entries()) {

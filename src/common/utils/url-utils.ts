@@ -1,5 +1,5 @@
 /** Returns true for localhost, 127.0.0.1 and private/LAN IPv4 addresses */
-function isPrivateHost(hostname: string): boolean {
+export function isPrivateHost(hostname: string): boolean {
 	if (hostname === "localhost" || hostname === "127.0.0.1") return true;
 	if (hostname.startsWith("192.168.")) return true;
 	if (hostname.startsWith("10.")) return true;

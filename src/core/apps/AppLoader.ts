@@ -69,6 +69,9 @@ export class AppLoader {
 		const appDir = path.dirname(filePath);
 		const appName = path.basename(appDir);
 
+		// Nota: una app deshabilitada por el modules-manager SÍ se levanta (su dev-server/host
+		// debe seguir sirviendo): el gate cliente la redirige a la página de mantenimiento.
+		// Sólo `disabled: true` en su config la excluye realmente del arranque.
 		if (await isAppDisabled(appDir, appName, this.logger)) return;
 
 		try {
@@ -124,10 +127,25 @@ export class AppLoader {
 		if (!instanceName || !this.registry.hasApp(instanceName)) return;
 		const app = this.registry.getApp(instanceName);
 		this.logger.logDebug(`Removiendo app: ${app.name}`);
-		await app.stop?.();
+		await app.stop?.(this.#kernelKey);
 		await this.registry.cleanupAppModules(instanceName, this.#kernelKey);
 		this.registry.deleteApp(app.name);
 		this.#tracker.removeByFileKey(key);
 		this.#tracker.removeAllByInstance(instanceName);
+	}
+
+	// ── API de orquestación (consultas usadas por ModuleOrchestrator) ──
+
+	/** Nombres de instancia de apps actualmente cargadas. */
+	get instanceNames(): string[] {
+		return [...new Set(this.#tracker.appFilePaths.values())];
+	}
+
+	/** Resuelve el filePath del `index.ts` de una instancia de app cargada. */
+	findFilePathByInstance(instanceName: string): string | undefined {
+		for (const [key, name] of this.#tracker.appFilePaths) {
+			if (name === instanceName) return key.slice(0, key.length - (`:${name}`).length);
+		}
+		return undefined;
 	}
 }

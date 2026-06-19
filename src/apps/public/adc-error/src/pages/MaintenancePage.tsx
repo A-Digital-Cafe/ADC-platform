@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { ErrorCard } from "../components/ErrorCard.tsx";
 import { readParam } from "../utils/params.ts";
+import { returnToAppIfAvailable } from "@common/utils/module-availability.js";
 
 /** Mensajes predefinidos (espejo de MAINTENANCE_MESSAGES en el core). */
 const MESSAGES: Record<string, string> = {
@@ -13,6 +15,13 @@ export function MaintenancePage() {
 	const reason = readParam("reason") || "unavailable";
 	const appName = readParam("app");
 	const message = readParam("message") || MESSAGES[reason] || MESSAGES.unavailable;
+
+	// Al cargar (incluido F5): si la app volvió a estar disponible, devolver al usuario
+	// a la URL original desde la que se lo redirigió a mantenimiento.
+	useEffect(() => {
+		const from = new URLSearchParams(globalThis.location?.search || "").get("from");
+		void returnToAppIfAvailable(appName, from);
+	}, [appName]);
 
 	return (
 		<ErrorCard

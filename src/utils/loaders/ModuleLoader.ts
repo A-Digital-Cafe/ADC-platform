@@ -148,6 +148,20 @@ export class ModuleLoader {
 	}
 
 	/**
+	 * `true` si el módulo está marcado como deshabilitado en runtime (modules-manager).
+	 * Evita que un service/provider/utility deshabilitado se vuelva a cargar como
+	 * dependencia de una app/servicio (p.ej. tras reiniciar el kernel). Degrada a
+	 * "no deshabilitado" si el orquestador aún no está disponible.
+	 */
+	#isModuleDisabled(kernel: Kernel, type: "provider" | "utility" | "service", name: string): boolean {
+		try {
+			return kernel.getOrchestrator(this.#kernelKey).isDisabled(type, name);
+		} catch {
+			return false;
+		}
+	}
+
+	/**
 	 * Carga todos los módulos (providers, utilities, services) desde un objeto de definición de módulos.
 	 * Usa el contexto de carga del kernel para reference counting.
 	 * @param modulesConfig - El objeto de definición de módulos.
@@ -160,6 +174,10 @@ export class ModuleLoader {
 			if (modulesConfig.providers && Array.isArray(modulesConfig.providers)) {
 				for (const providerConfig of modulesConfig.providers) {
 					const interpolatedProviderConfig = this.interpolateEnvVars(providerConfig);
+						if (this.#isModuleDisabled(kernel, "provider", interpolatedProviderConfig.name)) {
+							Logger.warn(`[ModuleLoader] Provider ${interpolatedProviderConfig.name} deshabilitado (modules-manager): no se carga.`);
+							continue;
+						}
 					if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) {
 						Logger.debug(`[ModuleLoader] Provider opcional ${interpolatedProviderConfig.name} omitido (uri vacía)`);
 						continue;
@@ -191,6 +209,10 @@ export class ModuleLoader {
 			// Cargar utilities globales (NO se registran como dependencias de la app)
 			if (modulesConfig.utilities && Array.isArray(modulesConfig.utilities)) {
 				for (const utilityConfig of modulesConfig.utilities) {
+					if (this.#isModuleDisabled(kernel, "utility", utilityConfig.name)) {
+						Logger.warn(`[ModuleLoader] Utility ${utilityConfig.name} deshabilitado (modules-manager): no se carga.`);
+						continue;
+					}
 					try {
 						const utility = await this.loadUtility(utilityConfig);
 						// Pasar null como appName para que NO se registre como dependencia de la app actual
@@ -212,6 +234,10 @@ export class ModuleLoader {
 			// Cargar services
 			if (modulesConfig.services && Array.isArray(modulesConfig.services)) {
 				for (const serviceConfig of modulesConfig.services) {
+					if (this.#isModuleDisabled(kernel, "service", serviceConfig.name)) {
+						Logger.warn(`[ModuleLoader] Service ${serviceConfig.name} deshabilitado (modules-manager): no se carga.`);
+						continue;
+					}
 					try {
 						// Clonar la configuración para poder mutarla, ya que el original está congelado
 						const mutableServiceConfig = structuredClone(serviceConfig);
