@@ -92,6 +92,23 @@ export default class UIFederationService extends BaseService {
 		this.logger.logOk("UIFederationService detenido");
 	}
 
+	/**
+	 * SEOService se reinició: la instancia previa quedó muerta y la nueva arranca sin
+	 * el hook `onSend` ni los datos. Re-adquirimos la instancia y la re-enganchamos a
+	 * fastify; las apps re-registran sus datos vía su propio `onDependencyRestored`.
+	 */
+	public override onDependencyRestored(dependencyName: string): void {
+		if (dependencyName !== "SEOService" || !this.#httpProvider) return;
+		try {
+			this.#seoService = this.getMyService<ISEOService>("SEOService");
+			this.#seoService.attachFastify(this.#httpProvider);
+			this.logger.logDebug("SEOService re-conectado tras reinicio");
+		} catch {
+			this.#seoService = null;
+			this.logger.logDebug("SEOService no disponible al intentar re-conectar");
+		}
+	}
+
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
 	@OnlyKernel()

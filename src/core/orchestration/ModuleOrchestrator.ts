@@ -37,6 +37,11 @@ interface StopNode {
 	name: string;
 }
 
+/** Módulo que opcionalmente reacciona al restablecimiento de una dependencia (ver BaseModule). */
+interface NotifiableModule {
+	onDependencyRestored?(dependencyName: string): void | Promise<void>;
+}
+
 /**
  * Orquestador de módulos en runtime. Centraliza la lógica de habilitar/deshabilitar
  * apps/services/providers/utilities con cascada de dependientes, el modo
@@ -161,8 +166,55 @@ export class ModuleOrchestrator {
 			await this.#startNode({ type: entry.type, name: entry.name });
 			affected.push(`${entry.type}:${entry.name}`);
 		}
+		// Re-conectar a los dependientes OPCIONALES que siguieron corriendo (no se
+		// cascadearon): su integración con `name` se perdió al detenerlo y ahora hay
+		// una instancia nueva. Los dependientes requeridos ya se re-arrancaron arriba.
+		await this.#notifyDependentsRestored(type, name);
 		this.#d.logger.logOk(`[orchestrator] enable ${type}:${name} → re-habilitados: ${affected.join(", ")}`);
 		return affected;
+	}
+
+	/**
+	 * Notifica `onDependencyRestored(name)` a los dependientes OPCIONALES de `name`
+	 * (los que no entran en la cascada y por tanto siguieron vivos con una referencia
+	 * obsoleta). Cada notificación va aislada: un fallo no corta al resto.
+	 */
+	async #notifyDependentsRestored(type: OrchestratorLayer, name: string): Promise<void> {
+		if (type === "app") return;
+		const all = await this.#collectDirectDependents(type, name, true);
+		const required = await this.#collectDirectDependents(type, name, false);
+		const reqApps = new Set(required.apps);
+		const reqServices = new Set(required.services);
+		const apps = all.apps.filter((a) => !reqApps.has(a));
+		const services = all.services.filter((s) => !reqServices.has(s));
+		for (const inst of apps) await this.#notifyRestored(this.#getAppSafe(inst), name, `app:${inst}`);
+		for (const svc of services) await this.#notifyRestored(this.#getServiceSafe(svc), name, `service:${svc}`);
+	}
+
+	#getAppSafe(instanceName: string): NotifiableModule | null {
+		try {
+			return this.#d.registry.getApp(instanceName) as unknown as NotifiableModule;
+		} catch {
+			return null;
+		}
+	}
+
+	#getServiceSafe(name: string): NotifiableModule | null {
+		try {
+			return this.#d.registry.getService<NotifiableModule>(name);
+		} catch {
+			return null;
+		}
+	}
+
+	async #notifyRestored(instance: NotifiableModule | null, depName: string, label: string): Promise<void> {
+		if (typeof instance?.onDependencyRestored !== "function") return;
+		try {
+			await instance.onDependencyRestored(depName);
+			this.#d.logger.logOk(`[orchestrator] ${label} re-conectó dependencia '${depName}'`);
+		} catch (e) {
+			this.#d.logger.logError(`[orchestrator] ${label}.onDependencyRestored('${depName}') falló: ${e}`);
+		}
 	}
 
 	async restart(type: OrchestratorLayer, name: string): Promise<void> {
@@ -281,7 +333,8 @@ export class ModuleOrchestrator {
 			const key = `${t}:${n}`;
 			if (visited.has(key)) return;
 			visited.add(key);
-			const deps = await this.#collectDirectDependents(t, n);
+			// Cascada: NO arrastrar dependientes opcionales (siguen corriendo aunque caiga su dep).
+			const deps = await this.#collectDirectDependents(t, n, false);
 			for (const app of deps.apps) await visit("app", app);
 			for (const svc of deps.services) await visit("service", svc);
 			order.push({ type: t, name: n });
@@ -295,10 +348,14 @@ export class ModuleOrchestrator {
 	 * services). Mapea nombres de carpeta de app → instancias en ejecución y filtra
 	 * services a los efectivamente cargados.
 	 */
-	async #collectDirectDependents(type: OrchestratorLayer, name: string): Promise<{ apps: string[]; services: string[] }> {
+	async #collectDirectDependents(
+		type: OrchestratorLayer,
+		name: string,
+		includeOptional = true
+	): Promise<{ apps: string[]; services: string[] }> {
 		if (type === "app") return { apps: [], services: [] };
 		const graph = await this.#ensureGraph();
-		const { apps: appBaseNames, services: serviceNames } = graph.directDependents(type as ModuleType, name);
+		const { apps: appBaseNames, services: serviceNames } = graph.directDependents(type as ModuleType, name, { includeOptional });
 
 		const running = this.#d.appLoader.instanceNames;
 		const apps = new Set<string>();

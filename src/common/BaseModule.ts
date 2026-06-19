@@ -37,6 +37,14 @@ export abstract class BaseModule implements IModule {
 	public abstract stop(_kernelKey?: symbol): Promise<void>;
 
 	/**
+	 * Hook llamado por el orquestador cuando una dependencia (típicamente opcional)
+	 * de este módulo vuelve a estar disponible tras un restart, mientras este módulo
+	 * siguió corriendo. Permite re-conectar integraciones cuya instancia/estado se
+	 * perdió (p.ej. re-registrar datos push-based como SEO). No-op por defecto.
+	 */
+	public onDependencyRestored(_dependencyName: string): void | Promise<void> {}
+
+	/**
 	 * Resuelve un item declarado en `config.providers/utilities/services`
 	 * aceptando match exacto o por basename (último segmento de la ruta
 	 * lógica, e.g. `"comments/comments-utility"` ↔ `"comments-utility"`).

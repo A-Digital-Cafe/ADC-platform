@@ -26,7 +26,8 @@
 		{
 			"name": "SEOService",
 			"version": "latest",
-			"language": "typescript"
+			"language": "typescript",
+			"optional": true
 		}
 	]
 }

@@ -35,7 +35,8 @@
 		},
 		{
 			"name": "SEOService",
-			"version": "latest"
+			"version": "latest",
+			"optional": true
 		}
 	]
 }

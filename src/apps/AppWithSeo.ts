@@ -41,13 +41,32 @@ export interface AppSeoConfig {
  * el servicio fusiona registraciones por host idempotentemente.
  */
 export abstract class AppWithSeo extends BaseApp {
+	/** Configs SEO ya registradas; se re-aplican si SEOService se reinicia. */
+	#seoConfigs: AppSeoConfig[] = [];
+
 	/**
 	 * Registra metadata SEO de la app contra el `SEOService`. Si el servicio
 	 * no está disponible (preset SEO no instalado o aún no cargado) se loguea
-	 * en debug y se continúa.
+	 * en debug y se continúa. Idempotente por host: puede llamarse varias veces.
 	 */
 	protected registerSeo(seoConfig: AppSeoConfig): void {
 		if (!seoConfig.sitemap && !seoConfig.pageMeta && !seoConfig.llms) return;
+		this.#seoConfigs.push(seoConfig);
+		this.#applySeo(seoConfig);
+	}
+
+	/**
+	 * Re-registra el SEO acumulado cuando SEOService vuelve tras un reinicio: la
+	 * instancia nueva arranca vacía, así que hay que volver a empujar los datos.
+	 */
+	public override onDependencyRestored(dependencyName: string): void {
+		if (dependencyName !== "SEOService" || this.#seoConfigs.length === 0) return;
+		this.logger.logDebug(`SEOService restablecido: re-registrando SEO de ${this.name}`);
+		for (const cfg of this.#seoConfigs) this.#applySeo(cfg);
+	}
+
+	/** Empuja una config SEO al servicio (sin acumularla). */
+	#applySeo(seoConfig: AppSeoConfig): void {
 		try {
 			const seo = this.getMyService<ISEOService>("SEOService");
 			const hosting = this.config?.uiModule?.hosting;

@@ -29,8 +29,12 @@ const LAYER_FIELD: Record<Exclude<Layer, "app">, "providers" | "utilities" | "se
 export class DependencyGraph {
 	/** consumidor(`layer:name`) → set de dependencias(`layer:name`). */
 	readonly #forward = new Map<string, Set<string>>();
-	/** dependencia(`layer:name` y `layer:basename`) → set de consumidores(`layer:name`). */
-	readonly #reverse = new Map<string, Set<string>>();
+	/**
+	 * dependencia(`layer:name` y `layer:basename`) → mapa de consumidores(`layer:name`) →
+	 * `optional` (true sólo si TODAS las declaraciones del consumidor son opcionales:
+	 * "required wins").
+	 */
+	readonly #reverse = new Map<string, Map<string, boolean>>();
 	readonly #nodes = new Map<string, GraphNode>();
 
 	#key(layer: Layer, name: string): string {
@@ -41,12 +45,14 @@ export class DependencyGraph {
 		return name.includes("/") ? name.split("/").pop()! : name;
 	}
 
-	#addReverse(depLayer: Exclude<Layer, "app">, depName: string, consumerKey: string): void {
+	#addReverse(depLayer: Exclude<Layer, "app">, depName: string, consumerKey: string, optional: boolean): void {
 		for (const variant of new Set([depName, this.#basename(depName)])) {
 			const k = this.#key(depLayer, variant);
-			let set = this.#reverse.get(k);
-			if (!set) this.#reverse.set(k, (set = new Set()));
-			set.add(consumerKey);
+			let consumers = this.#reverse.get(k);
+			if (!consumers) this.#reverse.set(k, (consumers = new Map()));
+			// required wins: una arista es opcional sólo si nunca se declaró como requerida.
+			const prev = consumers.get(consumerKey);
+			consumers.set(consumerKey, prev === undefined ? optional : prev && optional);
 		}
 	}
 
@@ -109,21 +115,33 @@ export class DependencyGraph {
 
 		const deps = new Set<string>();
 		for (const depLayer of ["provider", "utility", "service"] as const) {
-			const list: Array<{ name?: string }> = config[LAYER_FIELD[depLayer]] ?? [];
+			const list: Array<{ name?: string; optional?: boolean }> = config[LAYER_FIELD[depLayer]] ?? [];
 			for (const dep of list) {
 				if (!dep?.name) continue;
 				deps.add(this.#key(depLayer, dep.name));
-				this.#addReverse(depLayer, dep.name, consumerKey);
+				this.#addReverse(depLayer, dep.name, consumerKey, !!dep.optional);
 			}
 		}
 		this.#forward.set(consumerKey, deps);
 	}
 
-	/** Consumidores DIRECTOS de un módulo, separados por capa. Resuelve por nombre+basename. */
-	directDependents(layer: Exclude<Layer, "app">, name: string): { apps: string[]; services: string[] } {
+	/**
+	 * Consumidores DIRECTOS de un módulo, separados por capa. Resuelve por nombre+basename.
+	 * Con `includeOptional: false` se excluyen los consumidores cuya dependencia sobre este
+	 * módulo es opcional (no deben cascadearse al detenerlo).
+	 */
+	directDependents(
+		layer: Exclude<Layer, "app">,
+		name: string,
+		opts: { includeOptional?: boolean } = {}
+	): { apps: string[]; services: string[] } {
+		const includeOptional = opts.includeOptional ?? true;
 		const consumers = new Set<string>();
 		for (const variant of new Set([name, this.#basename(name)])) {
-			for (const c of this.#reverse.get(this.#key(layer, variant)) ?? []) consumers.add(c);
+			for (const [consumerKey, optional] of this.#reverse.get(this.#key(layer, variant)) ?? []) {
+				if (!includeOptional && optional) continue;
+				consumers.add(consumerKey);
+			}
 		}
 		const apps: string[] = [];
 		const services: string[] = [];
