@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { resolveWithinRoot } from "./lib/safe-path.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 // `resolve` (y no un replace de "/scripts") para que funcione también con paths Windows.
@@ -107,7 +108,7 @@ function buildExportRegistry(srcDir) {
 // ─── Main generator ───
 
 function generate(libPath) {
-	const absLib = resolve(ROOT, libPath);
+	const absLib = resolveWithinRoot(libPath, ROOT);
 	const dtsPath = resolve(absLib, "src/components.d.ts");
 
 	if (!existsSync(dtsPath)) {
@@ -463,8 +464,13 @@ const ALL_LIBS = [
 
 const arg = process.argv[2];
 
-if (arg === "--all") {
-	for (const lib of ALL_LIBS) generate(lib);
-} else {
-	generate(arg || ALL_LIBS[0]);
+try {
+	if (arg === "--all") {
+		for (const lib of ALL_LIBS) generate(lib);
+	} else {
+		generate(arg || ALL_LIBS[0]);
+	}
+} catch (err) {
+	console.error(`Error: ${err.message}`);
+	process.exit(1);
 }

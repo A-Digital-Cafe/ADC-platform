@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveModuleDir } from './lib/safe-path.mjs';
 
 const name = process.argv[2];
 if (!name) {
@@ -10,7 +11,13 @@ if (!name) {
 const toPascalCase = (str) =>
 	str.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
 
-const dir = path.resolve(process.cwd(), 'src/providers', name);
+let dir;
+try {
+	dir = resolveModuleDir(name, path.resolve(process.cwd(), 'src/providers'));
+} catch (err) {
+	console.error(`Error: ${err.message}`);
+	process.exit(1);
+}
 
 if (fs.existsSync(dir)) {
 	console.error(`Error: Directory ${dir} already exists.`);

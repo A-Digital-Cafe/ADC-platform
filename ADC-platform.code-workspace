@@ -1,0 +1,54 @@
+{
+	// Workspace multi-root: cada carpeta es un repo git independiente y puede
+	// bindearse a un proyecto de Sonar distinto. El binding por carpeta vive en
+	// <carpeta>/.vscode/settings.json (sonarlint.connectedMode.project); aquí solo
+	// van los ajustes COMPARTIDOS por todas las carpetas.
+	"folders": [
+		{ "name": "🏠 ADC-platform (root)", "path": "." },
+		{ "name": "🔒 private", "path": "private" },
+		{ "name": "📦 adc-drive", "path": "presets/adc-drive" },
+		{ "name": "📦 adc-email-backend", "path": "presets/adc-email-backend" },
+		{ "name": "📦 adc-email-frontend", "path": "presets/adc-email-frontend" },
+		{ "name": "📦 adc-image-editor", "path": "presets/adc-image-editor" },
+		{ "name": "📦 adc-modules-manager", "path": "presets/adc-modules-manager" },
+		{ "name": "📦 community-content", "path": "presets/community-content" },
+		{ "name": "📦 my-account", "path": "presets/my-account" },
+		{ "name": "📦 org-requests", "path": "presets/org-requests" },
+		{ "name": "📦 project-management", "path": "presets/project-management" },
+		{ "name": "📦 SEO", "path": "presets/SEO" },
+		{ "name": "📦 status", "path": "presets/status" },
+	],
+	"settings": {
+		"files.watcherExclude": {
+			"**/node_modules/**": true,
+			"**/.git/**": true,
+			"**/.next/**": true,
+			"**/dist/**": true,
+			"**/build/**": true,
+			"**/out/**": true,
+			"**/temp/**": true,
+		},
+		"search.useIgnoreFiles": false,
+		"search.exclude": {
+			"**/node_modules": true,
+			"**/.next": true,
+			"**/dist": true,
+			"**/build": true,
+			"**/out": true,
+			"**/temp": true,
+			"**/.git": true,
+			"**/.env": true,
+		},
+		"js/ts.tsserver.maxMemory": 4096,
+		"js/ts.tsserver.experimental.enableProjectDiagnostics": false,
+		"js/ts.tsserver.watchOptions": {
+			"watchFile": "useFsEvents",
+			"watchDirectory": "useFsEvents",
+		},
+		"js/ts.experimental.useTsgo": true,
+		"sonarlint.analyzerProperties": {
+			"sonar.javascript.node.maxspace": "4096",
+		},
+		"typescript.native-preview.tsdk": "node_modules/@typescript/native-preview",
+	},
+}
