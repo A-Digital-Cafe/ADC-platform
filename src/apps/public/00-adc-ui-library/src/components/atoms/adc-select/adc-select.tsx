@@ -87,7 +87,7 @@ export class AdcSelect {
 					</svg>
 				</button>
 				{this.isOpen && (
-					<div class="absolute z-50 mt-1 bg-background border border-text/15 rounded-xxl shadow-cozy max-h-60 overflow-auto w-full">
+					<div class="fixed w-fit z-50 mt-1 bg-background border border-text/15 rounded-xxl shadow-cozy max-h-60 overflow-auto">
 						{this.parsedOptions.map((option) => (
 							<button
 								type="button"

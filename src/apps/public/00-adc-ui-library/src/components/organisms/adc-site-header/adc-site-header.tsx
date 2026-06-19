@@ -1,4 +1,4 @@
-import { Component, Prop, Element } from "@stencil/core";
+import { Component, Prop, Element, Host } from "@stencil/core";
 import type { AccessMenuItem } from "../../molecules/adc-access-button/adc-access-button.js";
 import { isPrivateHost } from "../../../utils/url.js";
 const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");
@@ -45,27 +45,32 @@ export class AdcSiteHeader {
 
 	render() {
 		return (
-			<header class="flex items-center justify-between gap-6 px-8 py-6 shadow-cozy bg-header text-theader font-bold rounded-b-xxl z-50">
-				<a href={this.homeHref} aria-label="Inicio" class="ml-2">
-					{this.logoSrc && (
-						<img src={this.logoSrc} alt={this.logoAlt} height="39" width="39" style={{ minWidth: "39px" }} class="rounded-full" />
-					)}
-				</a>
+			<Host>
+				<header class="flex items-center justify-between gap-6 px-8 py-6 shadow-cozy bg-header text-theader font-bold rounded-b-xxl z-50">
+					<a href={this.homeHref} aria-label="Inicio" class="ml-2">
+						{this.logoSrc && (
+							<img src={this.logoSrc} alt={this.logoAlt} height="39" width="39" style={{ minWidth: "39px" }} class="rounded-full" />
+						)}
+					</a>
 
-				<nav class="flex flex-wrap items-center gap-4" style={{ minHeight: "48px" }} aria-label="Menu">
-					<slot></slot>
+					<nav class="flex flex-wrap items-center gap-4" style={{ minHeight: "48px" }} aria-label="Menu">
+						<slot></slot>
 
-					<adc-apps-menu></adc-apps-menu>
+						<adc-apps-menu></adc-apps-menu>
 
-					{this.showAccessButton && (
-						<adc-access-button
-							auth-url={this.authUrl}
-							api-base-url={this.apiBaseUrl}
-							menuItems={this.userMenuItems}
-						></adc-access-button>
-					)}
-				</nav>
-			</header>
+						{this.showAccessButton && (
+							<adc-access-button
+								auth-url={this.authUrl}
+								api-base-url={this.apiBaseUrl}
+								menuItems={this.userMenuItems}
+							></adc-access-button>
+						)}
+					</nav>
+				</header>
+
+				{/* Avisos de mantenimiento/anuncios, justo debajo del header (1 fetch/página, compartido). */}
+				<adc-banner-host api-base-url={this.apiBaseUrl}></adc-banner-host>
+			</Host>
 		);
 	}
 }

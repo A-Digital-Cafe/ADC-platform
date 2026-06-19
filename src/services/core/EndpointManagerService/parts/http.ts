@@ -202,6 +202,11 @@ export function createHttpWrapper(
 			if (result === undefined || result === null) {
 				reply.status(204).send();
 			} else {
+				const cache = endpoint.options?.cache;
+				if (cache && endpoint.method === "GET") {
+					const swr = cache.staleWhileRevalidate ? `, stale-while-revalidate=${cache.staleWhileRevalidate}` : "";
+					reply.header("Cache-Control", `${cache.scope ?? "public"}, max-age=${cache.maxAge}${swr}`);
+				}
 				reply.status(200).send(result);
 			}
 		} catch (error: any) {

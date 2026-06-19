@@ -150,7 +150,7 @@
         --c-warn: oklch(0.2 0.04 90);
         --c-success: oklch(0.2 0.04 155);
         --c-info: oklch(0.2 0.04 245);
-        --c-danger: oklch(0.2 0.04 15);
+        --c-danger: oklch(0.2 0.07 15);
 
         --c-twarn: oklch(0.85 0.06 95);
         --c-tsuccess: oklch(0.85 0.06 155);

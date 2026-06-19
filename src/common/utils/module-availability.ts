@@ -1,8 +1,13 @@
 /**
- * Cliente de disponibilidad de módulos. Consulta el endpoint público
- * `GET /api/modules/availability` (expuesto por el preset `adc-modules-manager`)
- * para que shells/launchers muestren un placeholder de "no disponible" en vez de
- * cargar una app deshabilitada. Degrada a "todo disponible" ante cualquier fallo.
+ * Cliente de estado de plataforma (mantenimiento + banners). Prefiere el indicador
+ * inyectado por el kernel en prod (`window.__ADC_PLATFORM__`, CERO fetch); si no está
+ * (dev), lo pide UNA vez a `GET /api/modules/platform` (cacheable) y lo cachea en
+ * `window`, compartido con `adc-banner-host`. Degrada a "todo disponible" ante fallos.
+ *
+ * Contrato de window (espejo en la UI library / inyector del preset):
+ *   - `window.__ADC_PLATFORM__`         estado ya resuelto (lo setea el inyector o el fetch).
+ *   - `window.__ADC_PLATFORM_PROMISE__` fetch en vuelo, compartido (evita N pedidos por página).
+ *   - `window.__ADC_APP__`              nombre base de la app actual (para filtrar banners).
  *
  * Framework-agnóstico (sólo `fetch`): usable desde cualquier app (React/Vue/etc).
  */
@@ -19,6 +24,31 @@ export interface AvailabilityResponse {
 	disabled: Record<string, AppAvailability>;
 }
 
+interface PlatformBanner {
+	bannerId: string;
+	scope: "app" | "global";
+	appName?: string | null;
+	message: string;
+	type: "warn" | "danger" | "success";
+	from?: string | null;
+	until?: string | null;
+}
+
+export interface PlatformState {
+	disabled: Record<string, AppAvailability>;
+	banners: PlatformBanner[];
+}
+
+interface PlatformWindow {
+	__ADC_PLATFORM__?: PlatformState;
+	__ADC_PLATFORM_PROMISE__?: Promise<PlatformState>;
+	__ADC_APP__?: string;
+}
+
+function platformWindow(): PlatformWindow {
+	return globalThis as unknown as PlatformWindow;
+}
+
 /** Mensajes predefinidos (espejo de MAINTENANCE_MESSAGES en el core). */
 export const MAINTENANCE_MESSAGES: Record<string, string> = {
 	unavailable: "Esta aplicación no está disponible temporalmente.",
@@ -32,28 +62,41 @@ export function maintenanceMessage(messageKey?: string): string {
 	return MAINTENANCE_MESSAGES[messageKey] ?? MAINTENANCE_MESSAGES.unavailable;
 }
 
-const EMPTY: AvailabilityResponse = { disabled: {} };
-let cache: Promise<AvailabilityResponse> | null = null;
+const EMPTY_PLATFORM: PlatformState = { disabled: {}, banners: [] };
 
 /**
  * Base del gateway del kernel. En dev las apps corren en su propio puerto rspack y
- * sólo proxean `/api/i18n` al kernel, así que la disponibilidad se pide al kernel
- * (:3000) de forma absoluta (el CORS de dev permite localhost). En prod es relativo
- * (misma origin que sirve el gateway).
+ * sólo proxean `/api/i18n` al kernel, así que el estado se pide al kernel (:3000) de
+ * forma absoluta (el CORS de dev permite localhost). En prod es relativo (misma origin).
  */
 function kernelApiBase(): string {
 	return IS_DEV ? getDevUrl(3000) : "";
 }
 
-/** Obtiene (y cachea) el estado de disponibilidad. `force` re-consulta. */
+/**
+ * Estado de plataforma: lee el global inyectado por el kernel (prod, 0 fetch) o lo pide
+ * UNA vez (dev), cacheándolo en `window` para compartirlo con `adc-banner-host`. `force`
+ * re-consulta sin cache (usado al volver de mantenimiento).
+ */
+export function loadPlatformState(force = false): Promise<PlatformState> {
+	const win = platformWindow();
+	if (!force && win.__ADC_PLATFORM__) return Promise.resolve(win.__ADC_PLATFORM__);
+	if (!force && win.__ADC_PLATFORM_PROMISE__) return win.__ADC_PLATFORM_PROMISE__;
+	const p = fetch(`${kernelApiBase()}/api/modules/platform`, { credentials: "include" })
+		.then((r) => (r.ok ? (r.json() as Promise<PlatformState>) : EMPTY_PLATFORM))
+		.then((d) => {
+			const state: PlatformState = { disabled: d?.disabled ?? {}, banners: d?.banners ?? [] };
+			win.__ADC_PLATFORM__ = state;
+			return state;
+		})
+		.catch(() => EMPTY_PLATFORM);
+	win.__ADC_PLATFORM_PROMISE__ = p;
+	return p;
+}
+
+/** Compat: estado de disponibilidad (apps deshabilitadas) derivado del estado de plataforma. */
 export function fetchModuleAvailability(force = false): Promise<AvailabilityResponse> {
-	if (!cache || force) {
-		cache = fetch(`${kernelApiBase()}/api/modules/availability`, { credentials: "include" })
-			.then((r) => (r.ok ? (r.json() as Promise<AvailabilityResponse>) : EMPTY))
-			.then((data) => ({ disabled: data?.disabled ?? {} }))
-			.catch(() => EMPTY);
-	}
-	return cache;
+	return loadPlatformState(force).then((s) => ({ disabled: s.disabled }));
 }
 
 /** Devuelve la info de mantenimiento si la app (por nombre base) está deshabilitada. */
@@ -74,6 +117,8 @@ const ERROR_APP_PROD_HOST = "error.adigitalcafe.com";
  * (subdominio `error`). Si no está deshabilitada, devuelve `false` (montar normal).
  */
 export async function redirectIfUnderMaintenance(appBaseName: string): Promise<boolean> {
+	// Publica la app actual para que `adc-banner-host` filtre los banners de app.
+	platformWindow().__ADC_APP__ = appBaseName;
 	const info = await isAppUnavailable(appBaseName);
 	if (!info) return false;
 	const params = new URLSearchParams({ app: appBaseName });

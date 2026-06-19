@@ -57,6 +57,11 @@ interface EndpointOptions {
 	description?: string;
 	/** Marca el endpoint como obsoleto (`deprecated`) en el doc OpenAPI. */
 	deprecated?: boolean;
+	/**
+	 * Cabeceras de cache para respuestas GET 200 (las absorben CDN/navegador).
+	 * Sólo se aplica a método GET; ignorado en mutativos.
+	 */
+	cache?: { maxAge: number; staleWhileRevalidate?: number; scope?: "public" | "private" };
 	/** Skip automatic idempotency check for this endpoint (default: false). */
 	skipIdempotency?: boolean;
 	/** Skip cookie-auth CSRF validation for this endpoint (default: false). */
