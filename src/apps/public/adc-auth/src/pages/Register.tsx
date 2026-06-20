@@ -11,6 +11,27 @@ import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
 const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,32}$/;
 
+/** Puntúa la fuerza de la contraseña: 0 = vacía, 1 = débil, 2 = media, 3 = fuerte. */
+function passwordStrength(password: string): 0 | 1 | 2 | 3 {
+	if (!password) return 0;
+	let score = 0;
+	if (password.length >= 8) score++;
+	if (password.length >= 12) score++;
+	if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+	if (/\d/.test(password)) score++;
+	if (/[^a-zA-Z0-9]/.test(password)) score++;
+	if (score <= 2) return 1;
+	if (score === 3) return 2;
+	return 3;
+}
+
+/** Estilos + clave i18n por nivel de fuerza (1..3); 0 reutiliza el nivel débil. */
+const STRENGTH_META: Record<1 | 2 | 3, { bar: string; text: string; labelKey: string }> = {
+	1: { bar: "bg-danger", text: "text-danger", labelKey: "register.passwordWeak" },
+	2: { bar: "bg-warn", text: "text-warn", labelKey: "register.passwordMedium" },
+	3: { bar: "bg-success", text: "text-success", labelKey: "register.passwordStrong" },
+};
+
 /** Errores específicos de formulario registro (se muestran inline como callout) */
 const REGISTER_SPECIFIC_ERROR_KEYS = [
 	{ key: "PASSWORDS_MISMATCH", severity: "error" },
@@ -107,6 +128,13 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 	const getOAuthUrl = (provider: string): string => {
 		return `${API_BASE}/api/auth/login/${provider}?returnUrl=${encodeURIComponent(sanitizeReturnUrl(returnUrl))}`;
 	};
+
+	const strength = passwordStrength(password);
+	const strengthMeta = STRENGTH_META[strength === 0 ? 1 : strength];
+	const strengthColor = strengthMeta.bar;
+	const strengthTextColor = strengthMeta.text;
+	const strengthLabel = t(strengthMeta.labelKey);
+
 	// Skeleton mientras cargan las traducciones
 	if (!ready) {
 		return (
@@ -135,14 +163,14 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							inputId="username"
 							type="text"
 							value={username}
+							required
+							autocomplete="username"
 							placeholder={t("register.usernamePlaceholder") || "tu_usuario"}
+							hint={usernameStatus === "checking" ? t("register.usernameChecking") : undefined}
+							success={usernameStatus === "available" ? t("register.usernameAvailable") : undefined}
+							error={usernameStatus === "unavailable" ? t("register.usernameUnavailable") : undefined}
 							onInput={(e) => setUsername((e.target as HTMLInputElement).value)}
 						/>
-						{usernameStatus === "checking" && <p className="text-sm text-muted">Verificando...</p>}
-
-						{usernameStatus === "available" && <p className="text-sm text-green-500">Nombre de usuario disponible</p>}
-
-						{usernameStatus === "unavailable" && <p className="text-sm text-red-500">Este nombre de usuario ya está en uso</p>}
 					</div>
 
 					<div>
@@ -153,6 +181,8 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							inputId="email"
 							type="email"
 							value={email}
+							required
+							autocomplete="email"
 							placeholder="tu@email.com"
 							onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
 						/>
@@ -166,9 +196,27 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							inputId="password"
 							type="password"
 							value={password}
+							required
+							autocomplete="new-password"
 							placeholder="••••••••"
+							error={password.length > 0 && password.length < 8 ? t("register.passwordTooShort") : undefined}
 							onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
 						/>
+						{password.length >= 8 && strength > 0 && (
+							<div className="mt-2" aria-live="polite">
+								<div className="flex gap-1" aria-hidden="true">
+									{[1, 2, 3].map((level) => (
+										<span
+											key={level}
+											className={`h-1 flex-1 rounded-full ${level <= strength ? strengthColor : "bg-text/15"}`}
+										/>
+									))}
+								</div>
+								<p className="mt-1 text-[11px] text-muted">
+									{t("register.passwordStrengthLabel")}: <span className={strengthTextColor}>{strengthLabel}</span>
+								</p>
+							</div>
+						)}
 					</div>
 
 					<div>
@@ -179,7 +227,10 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							inputId="confirmPassword"
 							type="password"
 							value={confirmPassword}
+							required
+							autocomplete="new-password"
 							placeholder="••••••••"
+							error={confirmPassword.length > 0 && password !== confirmPassword ? t("register.passwordsMismatch") : undefined}
 							onInput={(e) => setConfirmPassword((e.target as HTMLInputElement).value)}
 						/>
 					</div>
@@ -188,7 +239,8 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 						key={loading ? "loading" : "idle"}
 						type="submit"
 						class="w-full flex justify-end mt-8"
-						disabled={loading || usernameStatus === "unavailable"}
+						loading={loading}
+						disabled={usernameStatus === "unavailable"}
 						variant="primary"
 					>
 						{loading ? t("register.submitting") || "Creando cuenta..." : t("register.submit") || "Crear Cuenta"}

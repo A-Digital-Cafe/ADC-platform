@@ -13,6 +13,10 @@ export class AdcSelect {
 	@Prop() value: string = "";
 	@Prop() options: SelectOption[] | string = [];
 	@Prop() placeholder: string = "Seleccione";
+	/** Mensaje de error inline; activa el estado inválido (borde danger + aria-invalid). */
+	@Prop() error?: string;
+	/** Marca el control como inválido sin texto. */
+	@Prop() invalid?: boolean = false;
 
 	/** Normalizes options prop — handles both array and JSON string */
 	private get parsedOptions(): SelectOption[] {
@@ -59,6 +63,7 @@ export class AdcSelect {
 	};
 
 	render() {
+		const isInvalid = this.invalid || !!this.error;
 		return (
 			<div class="relative w-full">
 				{/* Hidden native select — enables React onChange to work */}
@@ -71,9 +76,10 @@ export class AdcSelect {
 				</select>
 				<button
 					type="button"
-					class="w-full px-3 py-2 rounded-xxl border border-text/15 bg-surface text-text text-[12px] font-text flex justify-between items-center"
+					class={`w-full px-3 py-2 rounded-xxl border bg-surface text-text text-[12px] font-text flex justify-between items-center ${isInvalid ? "border-danger" : "border-text/15"}`}
 					aria-haspopup="menu"
 					aria-expanded={this.isOpen ? "true" : "false"}
+					aria-invalid={isInvalid ? "true" : undefined}
 					onClick={this.handleToggle}
 					onKeyDown={this.handleKeyDown}
 				>
@@ -100,6 +106,11 @@ export class AdcSelect {
 							</button>
 						))}
 					</div>
+				)}
+				{this.error && (
+					<span role="alert" class="mt-1 block font-text text-[11px] text-danger">
+						{this.error}
+					</span>
 				)}
 			</div>
 		);

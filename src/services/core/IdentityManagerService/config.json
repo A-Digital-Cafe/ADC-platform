@@ -47,6 +47,7 @@
 	],
 	"private": {
 		"discordGuildId": "${DISCORD_GUILD_ID}",
+		"defaultRegionObjectUri": "${MONGODB_URI:-mongodb://localhost:27017/adc-platform}",
 		"discordRoleMap": {
 			"1402525398788739145": "Discord VIP",
 			"858592931594502166": "Discord Nitro Booster"

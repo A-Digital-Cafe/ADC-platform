@@ -38,8 +38,9 @@ src/services/<layer>/<MyService>/
 }
 ```
 
-- `${VAR}` y `${VAR:-default}` se interpolan desde el `.env` propio del servicio.
+- `${VAR}` y `${VAR:-default}` se interpolan desde el `.env` propio del servicio. La interpolación es de un solo nivel: **no** anidar (`${A:-${B}}` no funciona). Para fallbacks entre vars, declarar cada una como su propia clave en `private` y resolver la prioridad en código (ej. `config.supportTicketsProjectId || config.orgManagementProjectId`).
 - `private` es configuración interna accesible vía `this.config?.private`.
+- **Nunca leer `process.env` en el código del servicio** (DAOs, endpoints, index). Las variables de entorno se declaran en `config.json` (interpoladas en `private` o en `custom` de un provider) y se documentan en el `.env.example` del servicio. Excepción: flags de runtime de la plataforma (`NODE_ENV`, `PROD_PORT`) que maneja `BaseService`/el kernel, no el módulo.
 - Si el servicio debe cargar **antes que las apps**, agregar `"kernelMode": true` (prioridad 1) o un número que define el orden de carga — menor carga antes (ej. `LangManagerService: 10` antes que `IdentityManagerService: 60`).
 
 ## index.ts — contrato base
@@ -147,7 +148,7 @@ private async waitForMongo(): Promise<void> {
 ## Checklist de creación
 
 - [ ] `config.json` declara name, version, providers, utilities y services reales.
-- [ ] Env vars externas documentadas en `.env.example` del servicio.
+- [ ] Env vars vía `config.json` (sin `process.env` en el código) y documentadas en `.env.example` del servicio.
 - [ ] `kernelMode` solo si otros módulos lo necesitan antes de que carguen las apps.
 - [ ] `start()` llama `super.start()` y sigue el orden providers → servicios → models → managers → endpoints.
 - [ ] `@EnableEndpoints` en `start()` y `@DisableEndpoints` en `stop()`.

@@ -113,9 +113,13 @@ const LAYERS: Array<{ id: string; name: string; description: string; items: Item
 			},
 			{
 				title: "Bug Bounty con tickets públicos (id, fecha, hash, estado)",
-				status: "futuro",
-				notes: "Beneficios no monetarios escalonados; reportes hoy por contacto.",
-				links: [{ label: "Contacto", href: "/contact#canales" }],
+				status: "done",
+				notes:
+					"Log público de transparencia en vivo (id, fecha/hora, hash SHA-256 y estado) y recompensas con beneficios temporales escalonados según severidad; reportes por ticket de Seguridad. Política publicada.",
+				links: [
+					{ label: "Log de transparencia", href: "https://status.adigitalcafe.com/status/bounty" },
+					{ label: "Política de seguridad", href: "https://github.com/A-Digital-Cafe/ADC-platform/blob/main/.github/SECURITY.md" },
+				],
 			},
 			{ title: "ISO 9001 (referencia)", status: "futuro", notes: "Gestión de calidad continua." },
 		],
@@ -135,6 +139,13 @@ const STATUS_LABEL: Record<Item["status"], string> = {
 	siguiente: "Próxima fase",
 	futuro: "Futuro",
 };
+
+/** Relativo → enlace SPA interno; adigitalcafe → chip de plataforma; resto → enlace externo. */
+function renderRoadmapLink(href: string, label: string) {
+	if (!/^https?:\/\//i.test(href)) return <a href={href}>{label}</a>;
+	if (/\/\/[^/]*adigitalcafe\.com/i.test(href)) return <adc-platform-link href={href}>{label}</adc-platform-link>;
+	return <adc-external-link href={href}>{label}</adc-external-link>;
+}
 
 export function RoadmapPage() {
 	return (
@@ -169,7 +180,7 @@ export function RoadmapPage() {
 										{item.links.map((link, index) => (
 											<span key={link.href}>
 												{index > 0 ? " · " : ""}
-												<a href={link.href}>{link.label}</a>
+												{renderRoadmapLink(link.href, link.label)}
 											</span>
 										))}
 									</p>

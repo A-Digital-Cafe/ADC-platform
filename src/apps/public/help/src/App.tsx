@@ -11,6 +11,7 @@ import { HriaPage } from "./pages/HriaPage";
 import { AuthorityRequestsPage } from "./pages/AuthorityRequestsPage";
 import { TransparencyPage } from "./pages/TransparencyPage";
 import { ContactPage } from "./pages/ContactPage";
+import { AcknowledgmentsPage } from "./pages/AcknowledgmentsPage";
 import { RoadmapPage } from "./pages/RoadmapPage";
 import { TeamPage } from "./pages/TeamPage";
 import { TutorialsPage } from "./pages/TutorialsPage";
@@ -28,6 +29,7 @@ const HELP_ROUTES = new Set([
 	"/authority-requests",
 	"/transparency",
 	"/contact",
+	"/acknowledgments",
 	"/team",
 	"/roadmap",
 	"/tutorials",
@@ -93,6 +95,8 @@ function renderPage(path: string) {
 			return <TransparencyPage />;
 		case "/contact":
 			return <ContactPage />;
+		case "/acknowledgments":
+			return <AcknowledgmentsPage />;
 		case "/team":
 			return <TeamPage />;
 		case "/roadmap":

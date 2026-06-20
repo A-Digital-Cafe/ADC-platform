@@ -9,6 +9,15 @@
 			"secret": "${CSRF_SECRET}",
 			"ttlSeconds": "${CSRF_TTL_SECONDS}",
 			"secureCookie": "${CSRF_SECURE_COOKIE}"
+		},
+		"apiDocs": {
+			"enabled": "${API_DOCS_ENABLED}"
+		},
+		"rateLimit": {
+			"enabled": "${ENDPOINT_RATE_LIMIT_ENABLED:-true}",
+			"readMax": "${ENDPOINT_RATE_LIMIT_READ_MAX:-600}",
+			"mutationMax": "${ENDPOINT_RATE_LIMIT_MUTATION_MAX:-120}",
+			"windowMs": "${ENDPOINT_RATE_LIMIT_WINDOW_MS:-60000}"
 		}
 	},
 	"providers": [

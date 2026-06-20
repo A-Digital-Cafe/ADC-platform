@@ -108,7 +108,12 @@ export default function PageShell({ title, subtitle, standards, declaration, las
 				</adc-callout>
 			)}
 
-			<section className="prose prose-neutral mt-6 space-y-4 contain-content">{children}</section>
+			{/* prose-neutral fijaba grises de Tailwind (pensados para fondo claro) que quedaban
+			    ilegibles sobre el tema oscuro. Enlazamos las variables de prose a los tokens del
+			    tema (--c-text/--c-muted/--c-accent) para que el contraste funcione en claro y oscuro. */}
+			<section className="prose mt-6 space-y-4 contain-content text-text [--tw-prose-body:var(--c-text)] [--tw-prose-headings:var(--c-text)] [--tw-prose-bold:var(--c-text)] [--tw-prose-quotes:var(--c-text)] [--tw-prose-code:var(--c-text)] [--tw-prose-links:var(--c-accent)] [--tw-prose-counters:var(--c-muted)] [--tw-prose-bullets:var(--c-muted)] [--tw-prose-hr:var(--c-muted)]">
+				{children}
+			</section>
 
 			<footer className="mt-10 text-sm opacity-70">
 				<p>

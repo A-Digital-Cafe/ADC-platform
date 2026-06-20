@@ -13,6 +13,7 @@ import { buildOpenApiDocument } from "./parts/openapi.js";
 import { JobManager } from "./parts/JobManager.ts";
 import { registerCsrfEndpoint } from "./parts/csrf.js";
 import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
+import { resolveRateLimitConfig, type RateLimitConfig, type ResolvedRateLimits } from "./parts/rate-limit.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 
 // Re-exportar decoradores para uso externo
@@ -47,6 +48,7 @@ export default class EndpointManagerService extends BaseService {
 	readonly #registry = new EndpointRegistry(this.logger);
 	#jobManager: JobManager | null = null;
 	#csrfConfig: CsrfRuntimeConfig | null = null;
+	#rateLimits: ResolvedRateLimits | null = null;
 	/** Owners marcados como no disponibles (503). Mapea nombre→mensaje. */
 	readonly #unavailableOwners = new Map<string, string>();
 
@@ -58,6 +60,7 @@ export default class EndpointManagerService extends BaseService {
 		this.#httpProvider = this.getMyProvider<IHostBasedHttpProvider>("fastify-server");
 		this.#operationsService = this.getMyService<OperationsService>("OperationsService");
 		this.#csrfConfig = resolveCsrfConfig(this.config.csrf as CsrfOptions | undefined);
+		this.#rateLimits = resolveRateLimitConfig(this.config.rateLimit as RateLimitConfig | undefined);
 
 		const rabbitmq = this.getMyProvider<RabbitMQProvider>("queue/rabbitmq");
 		const redis = this.getMyProvider<RedisProvider>("queue/redis");
@@ -80,8 +83,9 @@ export default class EndpointManagerService extends BaseService {
 		}
 
 		// Swagger UI (U-01): habilitado en dev por defecto; en producción requiere opt-in explícito.
+		const apiDocsEnabled = (this.config.apiDocs as { enabled?: string } | undefined)?.enabled;
 		const docsEnabled =
-			process.env.API_DOCS_ENABLED === "true" || (process.env.NODE_ENV !== "production" && process.env.API_DOCS_ENABLED !== "false");
+			apiDocsEnabled === "true" || (process.env.NODE_ENV !== "production" && apiDocsEnabled !== "false");
 		if (docsEnabled && this.#httpProvider?.registerApiDocs) {
 			try {
 				await this.#httpProvider.registerApiDocs(() => buildOpenApiDocument(this.#registry.getAllFull()));
@@ -140,6 +144,7 @@ export default class EndpointManagerService extends BaseService {
 			this.#operationsService!,
 			this.logger,
 			this.#csrfConfig ?? resolveCsrfConfig(this.config.csrf as CsrfOptions | undefined),
+			this.#rateLimits ?? resolveRateLimitConfig(this.config.rateLimit as RateLimitConfig | undefined),
 			this.getMyProvider<RabbitMQProvider>("queue/rabbitmq"),
 			this.getMyProvider<RedisProvider>("queue/redis"),
 			() => this.#checkOwnerUnavailable(config.ownerName)

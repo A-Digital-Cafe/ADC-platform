@@ -18,6 +18,7 @@ const STATIC_CONTENT_TYPES: Record<string, string> = {
 	".css": "text/css",
 	".js": "application/javascript",
 	".json": "application/json",
+	".txt": "text/plain; charset=utf-8",
 	".webmanifest": "application/manifest+json",
 };
 

@@ -69,11 +69,6 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 		setFilteredGroups(groups.filter((g) => g.name.toLowerCase().includes(q) || g.description?.toLowerCase().includes(q)));
 	};
 
-	const getRoleName = (roleId: string) => {
-		const role = allRoles.find((r) => r.id === roleId);
-		return role?.name || roleId;
-	};
-
 	const assignableRoles = React.useMemo(() => {
 		if (!orgId) return allRoles;
 		return allRoles.filter((role) => role.orgId === orgId || formRoleIds.includes(role.id));
@@ -150,11 +145,21 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 					{g.roleIds.length === 0 ? (
 						<span className="text-muted text-xs">{t("groups.noRoles")}</span>
 					) : (
-						g.roleIds.slice(0, 3).map((rid) => (
-							<adc-badge key={rid} color="blue" size="sm">
-								{getRoleName(rid)}
-							</adc-badge>
-						))
+						g.roleIds.slice(0, 3).map((rid) => {
+							const role = allRoles.find((r) => r.id === rid);
+							if (!role) {
+								return (
+									<adc-badge key={rid} color="gray" size="sm" title={t("groups.roleMissingHint", { id: rid })}>
+										{t("groups.roleMissing")}
+									</adc-badge>
+								);
+							}
+							return (
+								<adc-badge key={rid} color="blue" size="sm">
+									{role.name}
+								</adc-badge>
+							);
+						})
 					)}
 					{g.roleIds.length > 3 && (
 						<adc-badge color="gray" size="sm">

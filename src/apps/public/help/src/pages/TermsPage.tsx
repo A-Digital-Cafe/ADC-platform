@@ -125,9 +125,7 @@ export function TermsPage() {
 				<a href="#conductas-prohibidas">conductas prohibidas</a>. El espacio disponible depende de tu plan o del de tu organización.
 				Podemos suspender el acceso a contenido reportado mientras se evalúa una solicitud de retiro: cualquier persona puede reportar
 				contenido mediante un ticket de tipo <strong>“Datos”</strong> en{" "}
-				<a href="https://status.adigitalcafe.com/status/tickets" rel="noreferrer">
-					status.adigitalcafe.com
-				</a>{" "}
+				<adc-platform-link href="https://status.adigitalcafe.com/status/tickets">status.adigitalcafe.com</adc-platform-link>{" "}
 				(ver <a href="/privacy#contenido-de-usuarios-y-solicitudes-de-terceros">política de privacidad</a>).
 			</p>
 

@@ -1,0 +1,19 @@
+# Security policy for Abby's Digital Cafe (ADC Platform)
+# Política de seguridad de Abby's Digital Cafe (ADC Platform)
+#
+# Reportá vulnerabilidades por email o por la página de contacto.
+# Report vulnerabilities by email or via the contact page.
+#
+# También podés abrir un ticket de tipo "Seguridad" en la app de estado,
+# que aplica nuestro flujo de triage y SLA:
+# You can also open a "Security" ticket in the status app, which applies
+# our triage and SLA workflow:
+#   https://status.adigitalcafe.com/status/tickets
+
+Contact: mailto:gpsmurfs@gmail.com
+Contact: https://adigitalcafe.com/contact
+Expires: 2027-06-20T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://adigitalcafe.com/.well-known/security.txt
+Policy: https://github.com/A-Digital-Cafe/ADC-platform/blob/main/.github/SECURITY.md
+Acknowledgments: https://status.adigitalcafe.com/status/bounty

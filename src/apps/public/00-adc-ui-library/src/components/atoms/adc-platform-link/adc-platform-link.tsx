@@ -2,6 +2,34 @@ import { Component, Prop, State, Watch, Element } from "@stencil/core";
 
 import { resolvePlatformLinkInfo, type PlatformLinkInfo } from "../../../../utils/platform-links.js";
 
+interface ADCGlobal {
+	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
+	getLocale?: () => string;
+	loadTranslations?: (namespaces: string[], locale?: string) => Promise<void>;
+}
+
+const I18N_NAMESPACE = "adc-ui-library";
+const adcI18n = globalThis as typeof globalThis & ADCGlobal;
+
+/** Fallbacks por idioma cuando el cliente i18n aún no cargó (solo apps con nombre traducible). */
+const FALLBACK_APP_LABELS: Record<"es" | "en", Record<string, string>> = {
+	es: { community: "Comunidad", projects: "Proyectos", identity: "Identidad", editor: "Editor de imágenes", org: "Organizaciones", status: "Estado", "my-account": "Mi cuenta" },
+	en: {},
+};
+const FALLBACK_DENIED: Record<"es" | "en", string> = { es: "Sin acceso", en: "No access" };
+
+function fallbackLocale(): "es" | "en" {
+	const language = (adcI18n.getLocale?.() || globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "").toLowerCase();
+	return language.startsWith("en") ? "en" : "es";
+}
+
+/** Traduce con fallback: devuelve el valor i18n si existe, si no el provisto. */
+function translate(key: string, fallback: string): string {
+	const translated = adcI18n.t?.(key, null, I18N_NAMESPACE);
+	if (translated && translated !== key) return translated;
+	return fallback;
+}
+
 /**
  * Chip de enlace de plataforma estilo Jira / Google Docs.
  *
@@ -11,8 +39,12 @@ import { resolvePlatformLinkInfo, type PlatformLinkInfo } from "../../../../util
  * entidad destino (artículo, tarea, tablero…). Estados: cargando, ok, sin
  * acceso (`denied`) y fallback.
  *
+ * El texto se puede fijar con el prop `label` o como children (slot); cuando se
+ * provee, tiene prioridad sobre el título resuelto/humanizado. El nombre de la
+ * app (`appLabel`) y los textos de estado se localizan vía i18n (es/en).
+ *
  * Si la URL no resuelve a ningún microfront conocido, se degrada a un enlace
- * normal con el texto provisto en `label`.
+ * normal con el texto provisto.
  */
 @Component({
 	tag: "adc-platform-link",
@@ -21,13 +53,17 @@ import { resolvePlatformLinkInfo, type PlatformLinkInfo } from "../../../../util
 export class AdcPlatformLink {
 	/** URL destino (absoluta o relativa). */
 	@Prop() href!: string;
-	/** Texto del enlace en el documento, usado como fallback. */
+	/** Texto del enlace; si se omite se usan los children. Tiene prioridad sobre el título resuelto. */
 	@Prop() label?: string;
 
 	@Element() hostEl!: HTMLElement;
 
 	@State() info: PlatformLinkInfo | null = null;
 	@State() loading = true;
+	/** Bump para re-render cuando el cliente i18n carga traducciones. */
+	@State() i18nVersion = 0;
+	/** Texto autor-provisto (prop `label` o children), capturado antes del primer render. */
+	@State() authorLabel = "";
 
 	@Watch("href")
 	onHrefChange() {
@@ -35,8 +71,20 @@ export class AdcPlatformLink {
 	}
 
 	componentWillLoad() {
+		// Capturar el texto autor-provisto antes de que el render reemplace los children.
+		this.authorLabel = (this.label || this.hostEl.textContent || "").trim();
+		globalThis.addEventListener("adc:i18n:loaded", this.handleI18nLoaded);
+		void adcI18n.loadTranslations?.([I18N_NAMESPACE]).catch(() => undefined);
 		return this.resolve();
 	}
+
+	disconnectedCallback() {
+		globalThis.removeEventListener("adc:i18n:loaded", this.handleI18nLoaded);
+	}
+
+	private readonly handleI18nLoaded = () => {
+		this.i18nVersion += 1;
+	};
 
 	private async resolve() {
 		this.loading = true;
@@ -48,8 +96,20 @@ export class AdcPlatformLink {
 		this.loading = false;
 	}
 
+	/** Texto a mostrar mientras carga / como fallback de enlace externo. */
 	private get text(): string {
-		return (this.label || "").trim() || this.href;
+		return this.authorLabel || this.href;
+	}
+
+	/** Nombre localizado de la app destino, con fallback por idioma o al label del registro. */
+	private appLabel(info: PlatformLinkInfo): string {
+		const fallback = FALLBACK_APP_LABELS[fallbackLocale()][info.appId] || info.appLabel;
+		return translate(`platformLink.app.${info.appId}`, fallback);
+	}
+
+	/** Título a mostrar: el texto autor-provisto tiene prioridad sobre el resuelto. */
+	private title(info: PlatformLinkInfo): string {
+		return this.authorLabel || info.title;
 	}
 
 	/** Estado "sin acceso": el chip no navega ni propaga el click a routers SPA. */
@@ -96,6 +156,9 @@ export class AdcPlatformLink {
 
 		const info = this.info as PlatformLinkInfo;
 		const denied = info.status === "denied";
+		const deniedText = translate("platformLink.denied", FALLBACK_DENIED[fallbackLocale()]);
+		const appLabel = this.appLabel(info);
+		const title = this.title(info);
 
 		return (
 			<a
@@ -107,8 +170,8 @@ export class AdcPlatformLink {
 				tabindex={denied ? "-1" : undefined}
 				onClick={denied ? this.blockNavigation : undefined}
 				class={`${chipClass} ${denied ? "cursor-not-allowed opacity-70" : "text-text"}`}
-				aria-label={`${info.appLabel}: ${denied ? "Sin acceso" : info.title}`}
-				title={denied ? `${info.appLabel} · Sin acceso` : `${info.appLabel} · ${info.title}`}
+				aria-label={`${appLabel}: ${denied ? deniedText : title}`}
+				title={denied ? `${appLabel} · ${deniedText}` : `${appLabel} · ${title}`}
 			>
 				{denied ? (
 					<span class="adc-platform-link__icon shrink-0" aria-hidden="true">
@@ -117,8 +180,8 @@ export class AdcPlatformLink {
 				) : (
 					this.renderIcon(info.iconTag)
 				)}
-				<span class="adc-platform-link__title truncate font-medium text-text">{denied ? "Sin acceso" : info.title}</span>
-				<span class="adc-platform-link__app shrink-0 text-xs text-muted">{info.appLabel}</span>
+				<span class="adc-platform-link__title truncate font-medium text-text">{denied ? deniedText : title}</span>
+				<span class="adc-platform-link__app shrink-0 text-xs text-muted">{appLabel}</span>
 			</a>
 		);
 	}

@@ -59,6 +59,10 @@
         "sharp": "^0.33.5",
       },
     },
+    "presets/adc-drive/apps/adc-drive": {
+      "name": "@adc-platform/adc-drive",
+      "version": "1.0.0",
+    },
     "presets/adc-drive/services/DriveService": {
       "name": "@adc-platform/drive-service",
       "version": "1.0.0",
@@ -92,6 +96,10 @@
     },
     "presets/adc-image-editor/services/ImageEditorService": {
       "name": "@adc-platform/image-editor",
+      "version": "1.0.0",
+    },
+    "presets/adc-modules-manager/apps/adc-modules-manager": {
+      "name": "@adc-platform/adc-modules-manager",
       "version": "1.0.0",
     },
     "presets/community-content/services/content-service": {
@@ -236,7 +244,11 @@
     "baseline-browser-mapping": "^2.9.19",
   },
   "packages": {
+    "@adc-platform/adc-drive": ["@adc-platform/adc-drive@workspace:presets/adc-drive/apps/adc-drive"],
+
     "@adc-platform/adc-image-editor": ["@adc-platform/adc-image-editor@workspace:presets/adc-image-editor/apps/adc-image-editor"],
+
+    "@adc-platform/adc-modules-manager": ["@adc-platform/adc-modules-manager@workspace:presets/adc-modules-manager/apps/adc-modules-manager"],
 
     "@adc-platform/content-service": ["@adc-platform/content-service@workspace:presets/community-content/services/content-service"],
 

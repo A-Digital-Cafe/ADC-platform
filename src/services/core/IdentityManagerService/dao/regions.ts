@@ -14,6 +14,8 @@ export class RegionManager {
 		private readonly regionModel: Model<any>,
 		private readonly orgModel: Model<any>,
 		private readonly logger: ILogger,
+		/** URI de conexión para la región global default (declarada en config.json). */
+		private readonly defaultObjectUri: string,
 		getAuthVerifier: AuthVerifierGetter = () => null
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "RegionManager", RESOURCE_NAME);
@@ -49,14 +51,12 @@ export class RegionManager {
 		const existing = await this.regionModel.findOne({ path: defaultPath });
 
 		if (!existing) {
-			const defaultUri = process.env.MONGODB_URI || "mongodb://localhost:27017/adc-platform";
-
 			await this.regionModel.create({
 				path: defaultPath,
 				isGlobal: true,
 				isActive: true,
 				metadata: {
-					objectConnectionUri: defaultUri,
+					objectConnectionUri: this.defaultObjectUri,
 				},
 			});
 

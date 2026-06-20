@@ -26,7 +26,14 @@ export default {
 		login: "Sign in",
 		orRegisterWith: "Or sign up with",
 		passwordsMismatch: "Passwords don't match",
-		passwordTooShort: "Password must be at least 8 characters"
+		passwordTooShort: "Password must be at least 8 characters",
+		usernameChecking: "Checking availability…",
+		usernameAvailable: "Username available",
+		usernameUnavailable: "This username is already taken",
+		passwordStrengthLabel: "Password strength",
+		passwordWeak: "Weak",
+		passwordMedium: "Medium",
+		passwordStrong: "Strong"
 	},
 	errors: {
 		// Form-specific errors (shown as inline callout)

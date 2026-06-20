@@ -12,7 +12,7 @@ import type { Readable } from "node:stream";
 import { buffer as streamToBuffer } from "node:stream/consumers";
 import { validateCsrf, type TokenSource } from "./csrf.js";
 import type { CsrfRuntimeConfig } from "./csrf-config.js";
-import { resolveRateLimit } from "./rate-limit.js";
+import { resolveRateLimit, type ResolvedRateLimits } from "./rate-limit.js";
 import { compileEndpointSchemas, validateEndpointInput } from "./schema.js";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -52,6 +52,7 @@ export function createHttpWrapper(
 	operationsService: OperationsService,
 	logger: ILogger,
 	csrfConfig: CsrfRuntimeConfig,
+	rateLimits: ResolvedRateLimits,
 	rabbitmq: RabbitMQProvider | null = null,
 	redis: RedisProvider | null = null,
 	/**
@@ -63,7 +64,7 @@ export function createHttpWrapper(
 ): (req: FastifyRequest<any>, reply: FastifyReply<any>) => Promise<void> {
 	const requiresIdempotency = MUTATIVE_METHODS.has(endpoint.method) && endpoint.options?.skipIdempotency !== true;
 	const shouldEnqueue = MUTATIVE_METHODS.has(endpoint.method) && endpoint.options?.enqueue === true && rabbitmq !== null;
-	const rl = resolveRateLimit(endpoint);
+	const rl = resolveRateLimit(endpoint, rateLimits);
 	const rlTtlSeconds = rl ? Math.max(1, Math.ceil(rl.timeWindow / 1000)) : 0;
 	const rlKeyPrefix = rl ? `rl:${endpoint.method}:${endpoint.url}:` : "";
 	// Schemas TypeBox compilados una sola vez por endpoint (S-11)

@@ -126,3 +126,18 @@ export const DeleteSelfResponse = Type.Object({
 	success: Type.Boolean(),
 	scheduledDeletionInDays: Type.Number(),
 });
+
+/** Body para otorgar un upgrade temporal de tier (recompensa de bug bounty). */
+export const TierGrantBody = Type.Object({
+	tier: Type.Union([Type.Literal("pro"), Type.Literal("plus")], { description: "Tier a otorgar mientras dure el grant" }),
+	days: Type.Integer({ minimum: 1, maximum: 366, description: "Duración del upgrade en días" }),
+	reason: Type.Optional(Type.String({ maxLength: 200, description: "Trazabilidad, ej. bug-bounty:STATUS-123" })),
+});
+
+export const TierGrantResponse = Type.Object({
+	tier: Type.String(),
+	previousTier: Type.String(),
+	grantedAt: Type.String(),
+	expiresAt: Type.String(),
+	reason: Type.Optional(Type.String()),
+});

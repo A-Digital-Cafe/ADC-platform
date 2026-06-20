@@ -59,5 +59,22 @@ export default {
 		team: "Team",
 		help: "Help",
 		status: "Status"
+	},
+	platformLink: {
+		denied: "No access",
+		app: {
+			home: "Abby's Digital Cafe",
+			auth: "Auth",
+			community: "Community",
+			projects: "Projects",
+			identity: "Identity",
+			drive: "Drive",
+			editor: "Image Editor",
+			mail: "Mail",
+			help: "Help",
+			"my-account": "My Account",
+			org: "Organizations",
+			status: "Status"
+		}
 	}
 };

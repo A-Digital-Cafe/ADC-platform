@@ -31,15 +31,28 @@ export function ContactPage() {
 				</li>
 				<li>
 					<strong>Reporte de incidentes éticos o de comunidad:</strong> conductas contrarias a nuestros{" "}
-					<a href="/values#reportes">valores</a>.
+					<adc-platform-link href="/values#reportes">valores</adc-platform-link>.
 				</li>
 				<li>
 					<strong>Solicitudes de autoridades:</strong> canal provisional mientras se cierra la{" "}
-					<a href="/authority-requests">política de respuesta</a>.
+					<adc-platform-link href="/authority-requests">política de respuesta</adc-platform-link>.
 				</li>
 				<li>
-					<strong>Bug bounty informativo:</strong> reportes de seguridad o errores. En esta fase los reportes se gestionan manualmente;
-					el sistema público con tickets, hashes y status está en el <a href="/roadmap#capa-de-transparencia-operaciones">roadmap</a>.
+					<strong>Bug bounty:</strong> reportá vulnerabilidades abriendo un ticket de tipo Seguridad en el{" "}
+					<adc-platform-link href="https://status.adigitalcafe.com/status/tickets" rel="noreferrer">
+						subdominio de estado
+					</adc-platform-link>
+					. Cada reporte entra en el{" "}
+					<adc-platform-link href="https://status.adigitalcafe.com/status/bounty" rel="noreferrer">
+						log público de transparencia
+					</adc-platform-link>{" "}
+					(id, fecha/hora, hash y estado) y, si aceptás crédito, en{" "}
+					<adc-platform-link href="https://status.adigitalcafe.com/status/bounty">agradecimientos</adc-platform-link>. Recompensamos con beneficios temporales según{" "}
+					severidad (ver{" "}
+					<adc-external-link href="https://github.com/A-Digital-Cafe/ADC-platform/blob/main/.github/SECURITY.md">
+						política de seguridad
+					</adc-external-link>
+					).
 				</li>
 				<li>
 					<strong>Consultas generales:</strong> dudas sobre el sitio o la comunidad.

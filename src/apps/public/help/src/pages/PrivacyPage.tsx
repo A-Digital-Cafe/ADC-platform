@@ -137,9 +137,7 @@ export function PrivacyPage() {
 				Si sos un <strong>tercero</strong> y considerás que un archivo compartido (por ejemplo, mediante un enlace público de Drive) afecta
 				tus datos personales o tus derechos, podés solicitar su revisión o retiro creando un ticket de tipo <strong>“Datos”</strong> en la
 				sección <em>Tickets de Soporte</em> de{" "}
-				<a href="https://status.adigitalcafe.com/status/tickets" rel="noreferrer">
-					status.adigitalcafe.com
-				</a>{" "}
+				<adc-platform-link href="https://status.adigitalcafe.com/status/tickets">status.adigitalcafe.com</adc-platform-link>{" "}
 				incluyendo el enlace al contenido y el motivo. Tratamos estas solicitudes en un plazo máximo de <strong>30 días</strong>;
 				mientras se evalúan podemos suspender preventivamente el acceso al contenido reportado. Esto también canaliza solicitudes GDPR de
 				acceso, rectificación o supresión sobre datos tratados por terceros dentro de la plataforma.

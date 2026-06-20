@@ -96,6 +96,7 @@ export default class IdentityManagerService extends BaseService {
 
 	// Timer para limpieza periódica de cuentas con retención vencida.
 	#retentionTimer: ReturnType<typeof setInterval> | null = null;
+	#tierGrantTimer: ReturnType<typeof setInterval> | null = null;
 
 	// MongoDB provider
 	readonly #mongoProvider: MongoProvider;
@@ -153,7 +154,16 @@ export default class IdentityManagerService extends BaseService {
 			this.#discordGuildConfigModel = DiscordGuildConfigModel;
 
 			// Inicializar RegionManager PRIMERO (necesario para OrgManager)
-			this.#regionManager = new RegionManager(RegionModel, OrganizationModel, this.logger, this.#getAuthVerifier);
+			const defaultRegionObjectUri =
+				(this.config?.private as { defaultRegionObjectUri?: string } | undefined)?.defaultRegionObjectUri ||
+				"mongodb://localhost:27017/adc-platform";
+			this.#regionManager = new RegionManager(
+				RegionModel,
+				OrganizationModel,
+				this.logger,
+				defaultRegionObjectUri,
+				this.#getAuthVerifier
+			);
 			await this.#regionManager.initialize();
 
 			// Inicializar managers en orden de dependencia:
@@ -278,6 +288,14 @@ export default class IdentityManagerService extends BaseService {
 			this.#retentionTimer = setInterval(
 				() => this.#runRetentionPurge().catch((err) => this.logger.logWarn(`Retention purge falló: ${err?.message || err}`)),
 				6 * 60 * 60 * 1000
+			);
+
+			// Cron de reversión de grants de tier temporales (bug bounty): revierte
+			// `metadata.accountTier` a `previousTier` cuando `tierGrant.expiresAt <= now`.
+			this.#runTierGrantRevert().catch((err) => this.logger.logWarn(`Tier grant revert inicial falló: ${err?.message || err}`));
+			this.#tierGrantTimer = setInterval(
+				() => this.#runTierGrantRevert().catch((err) => this.logger.logWarn(`Tier grant revert falló: ${err?.message || err}`)),
+				60 * 60 * 1000
 			);
 
 			this.logger.logOk("IdentityManagerService iniciado con soporte multi-tenant y autenticación");
@@ -535,6 +553,11 @@ export default class IdentityManagerService extends BaseService {
 			this.#retentionTimer = null;
 		}
 
+		if (this.#tierGrantTimer) {
+			clearInterval(this.#tierGrantTimer);
+			this.#tierGrantTimer = null;
+		}
+
 		await super.stop(kernelKey);
 		this.#systemManager?.clearSystemUser(kernelKey);
 		this.#authVerifier = null;
@@ -609,6 +632,27 @@ export default class IdentityManagerService extends BaseService {
 	 * el JobManager (cuya cola está pensada para endpoints async). La resiliencia la
 	 * aporta el stepper (Mongo) + la re-ejecución periódica, sin requerir RabbitMQ.
 	 */
+	/**
+	 * Revierte grants de tier temporales vencidos (recompensas de bug bounty).
+	 * Tarea de mantenimiento automática (como la retención): corre en su propio
+	 * timer y a través del manager interno (sin token).
+	 */
+	async #runTierGrantRevert(): Promise<void> {
+		if (!this.#internalUserManager) return;
+		const now = new Date();
+		const due = await this.#internalUserManager.findUsersDueForTierRevert(now);
+		if (due.length === 0) return;
+		this.logger.logInfo(`Tier grants vencidos: ${due.length} a revertir`);
+		for (const { id } of due) {
+			try {
+				await this.#internalUserManager.revertExpiredTierGrant(id, now);
+				this.permissions?.invalidateUser?.(id);
+			} catch (err: any) {
+				this.logger.logWarn(`Revertir tier grant falló para ${id} (se reintentará): ${err?.message || err}`);
+			}
+		}
+	}
+
 	async #runRetentionPurge(): Promise<void> {
 		if (!this.#internalUserManager) return;
 		const due = await this.#internalUserManager.findUsersDueForDeletion();

@@ -553,4 +553,31 @@ export class UserEndpoints {
 		await UserEndpoints.identity.users.requestSelfDeletion(ctx.user.id, reason, 30, ctx.token!);
 		return { success: true, scheduledDeletionInDays: 30 };
 	}
+
+	// ────────────────────────────────────────────────────────────────────────
+	// Bug bounty — upgrade temporal de tier (recompensa)
+	// ────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Otorga un upgrade temporal de tier a un usuario (recompensa de bug bounty).
+	 * Solo admin/Security Manager (permiso UPDATE sobre usuarios). El cron de
+	 * IdentityManagerService revierte el grant al expirar.
+	 */
+	@RegisterEndpoint({
+		method: "POST",
+		url: "/api/identity/users/:userId/tier-grant",
+		permissions: [P.IDENTITY.USERS.UPDATE],
+		options: {
+			tag: "IdentityManagerService/Users",
+			summary: "Otorga un upgrade temporal de tier (bug bounty)",
+			description: "Setea un tier de pago (plus/pro) por N días; un cron lo revierte al expirar. Solo admin/Security Manager.",
+			schema: { params: US.UserIdParams, body: US.TierGrantBody, response: { 200: US.TierGrantResponse } },
+		},
+	})
+	static async grantTier(ctx: EndpointCtx<{ userId: string }, { tier: "pro" | "plus"; days: number; reason?: string }>) {
+		const { tier, days, reason } = ctx.data || ({} as { tier: "pro" | "plus"; days: number; reason?: string });
+		const grant = await UserEndpoints.identity.users.grantTemporaryTier(ctx.params.userId, tier, days, reason, ctx.token!);
+		UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
+		return grant;
+	}
 }

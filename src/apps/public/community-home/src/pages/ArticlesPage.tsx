@@ -73,8 +73,10 @@ export function ArticlesPage() {
 	let articlesComponent: React.ReactNode;
 	if (loading)
 		articlesComponent = (
-			<div className="text-center py-8">
-				<p>Cargando artículos...</p>
+			<div className="mt-4 grid gap-x-4 gap-y-16 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+				{["s1", "s2", "s3", "s4", "s5", "s6"].map((k) => (
+					<adc-skeleton key={k} variant="rectangular" height="220px" />
+				))}
 			</div>
 		);
 	else if (articles.length == 0)

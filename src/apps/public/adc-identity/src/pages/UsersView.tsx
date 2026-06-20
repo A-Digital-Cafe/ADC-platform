@@ -7,6 +7,7 @@ import { Scope, canWrite, canUpdate, canDelete } from "../utils/permissions.ts";
 import { DataTable, type Column } from "../components/DataTable.tsx";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
+import { toast } from "@ui-library/utils/toast";
 import { RowActions } from "../components/RowActions.tsx";
 import { BanUserModal, UserFormModal } from "../components/UserModals/index.ts";
 import { ClientUser } from "@common/types/identity/User.ts";
@@ -130,18 +131,6 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		setFilteredUsers(users.filter((u) => u.username.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)));
 	};
 
-	const getRoleName = (roleId: string) => {
-		const role = roles.find((r) => r.id === roleId);
-		return role?.name || t("errors.ROLE_NOT_FOUND");
-	};
-
-	/** Determina si un rol es global o de org para mostrar badge */
-	const getRoleScope = (roleId: string): "global" | "org" | null => {
-		const role = roles.find((r) => r.id === roleId);
-		if (!role) return null;
-		return role.orgId ? "org" : "global";
-	};
-
 	const getVisibleRoleIds = (user: ClientUser): string[] => {
 		if (!orgId) return user.roleIds;
 		const membership = user.orgMemberships?.find((item) => item.orgId === orgId);
@@ -212,6 +201,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 			const result = await identityApi.updateUser(editingUser.id, payload, isScopedOrgView ? orgId : undefined);
 			if (result.success) {
 				setModalOpen(false);
+				toast.success(t("common.updated"));
 				loadData();
 			}
 		} else {
@@ -223,6 +213,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 			});
 			if (result.success) {
 				setModalOpen(false);
+				toast.success(t("common.created"));
 				loadData();
 			}
 		}
@@ -235,6 +226,7 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		const result = await identityApi.deleteUser(deleteConfirm.id, isScopedOrgView ? orgId : undefined);
 		if (result.success) {
 			setDeleteConfirm(null);
+			toast.success(t("common.deleted"));
 			loadData();
 		}
 	};
@@ -260,10 +252,17 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 			render: (u) => (
 				<div className="flex flex-wrap gap-1">
 					{getVisibleRoleIds(u).map((rid) => {
-						const scope = getRoleScope(rid);
+						const role = roles.find((r) => r.id === rid);
+						if (!role) {
+							return (
+								<adc-badge key={rid} color="gray" size="sm" title={t("users.roleMissingHint", { id: rid })}>
+									{t("users.roleMissing")}
+								</adc-badge>
+							);
+						}
 						return (
-							<adc-badge key={rid} color={scope === "org" ? "indigo" : "blue"} size="sm">
-								{getRoleName(rid)}
+							<adc-badge key={rid} color={role.orgId ? "indigo" : "blue"} size="sm">
+								{role.name}
 							</adc-badge>
 						);
 					})}

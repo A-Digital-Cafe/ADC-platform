@@ -71,22 +71,22 @@ export function HomePage() {
 			<div className="pointer-events-none absolute inset-0 opacity-40 bg-background" />
 			<div className="relative mx-auto max-w-7xl">
 				{/* HERO */}
-				<div className="flex min-h-[45vh] flex-col items-center justify-center text-center">
-					<h1 className="max-w-4xl text-7xl! font-semibold tracking-tight text-text md:text-7xl">
+				<div className="flex min-h-[30vh] flex-col items-center justify-center pt-10 text-center">
+					<h1 className="max-w-4xl text-6xl! font-semibold tracking-tight text-text md:text-7xl">
 						Bienvenido a
 						<br />
 						<span className="text-accent/70">Abby's Digital Cafe</span>
 					</h1>
 
-					<p className="mt-8 max-w-2xl text-lg leading-relaxed text-text/80 md:text-xl">
+					<p className="mt-6 max-w-2xl text-lg leading-relaxed text-text/80 md:text-xl">
 						Un ecosistema de herramientas colaborativas y de código abierto para aprender, construir y crecer juntos.
 					</p>
 
-					<div className="mt-16 flex w-full items-center justify-center">
+					<div className="mt-10 flex w-full items-center justify-center">
 						<div className="flex w-full max-w-3xl items-center">
 							<div className="h-px flex-1 bg-accent/80" />
 
-							<div className="mx-2 flex h-30 w-30 items-center justify-center text-accent/80 rounded-full">
+							<div className="mx-2 flex h-20 w-20 items-center justify-center text-accent/80 rounded-full">
 								<CafeDividerIcon />
 							</div>
 
@@ -97,7 +97,7 @@ export function HomePage() {
 
 				{/* APPS */}
 				<div id="applications" className="pb-20">
-					<div className="mb-12 text-center">
+					<div className="mb-8 text-center">
 						<h2 className="mb-3 text-4xl font-bold text-heading">Nuestras aplicaciones</h2>
 
 						<p className="text-lg text-text">Explora las herramientas diseñadas para nuestra comunidad.</p>

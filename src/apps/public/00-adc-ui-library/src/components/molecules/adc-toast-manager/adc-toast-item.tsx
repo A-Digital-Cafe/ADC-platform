@@ -23,6 +23,12 @@ export function renderToastItem(toast: DisplayedToast, onDismiss: (id: number) =
 		>
 			<span>{toast.message}</span>
 
+			{toast.count > 1 && (
+				<span class="shrink-0 rounded-full bg-black/15 px-2 py-0.5 text-sm font-bold tabular-nums" aria-label={`×${toast.count}`}>
+					×{toast.count}
+				</span>
+			)}
+
 			<button
 				class="ml-auto opacity-80 hover:opacity-100 transition-opacity text-xl font-bold"
 				onClick={() => onDismiss(toast.id)}

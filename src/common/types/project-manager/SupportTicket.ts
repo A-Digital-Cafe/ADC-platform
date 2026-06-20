@@ -8,7 +8,22 @@ export interface CreateSupportTicketInput {
 	title: string;
 	email: string;
 	description: string;
+	/**
+	 * Bug bounty (solo relevante para `type === "security"`):
+	 * el reporter acepta agradecimiento público (su descripción y handle se
+	 * publican en el log de transparencia al resolverse). Default: false.
+	 */
+	wantsCredit?: boolean;
+	/** Handle/nombre para los agradecimientos públicos (si `wantsCredit`). */
+	creditName?: string;
+	/** Preferencia de recompensa del reporter (el admin la considera al otorgar). */
+	rewardPreference?: "plus" | "pro";
 }
+
+/** Límites de los campos opcionales de bug bounty. */
+export const BUG_BOUNTY_FIELD_CONSTRAINTS = {
+	creditName: { max: 80 },
+} as const;
 
 export interface SupportTicketIssueResponse {
 	ticketId: string;
@@ -23,6 +38,8 @@ export interface SupportTicketCaller {
 
 export interface SupportTicketConfig {
 	supportTicketsProjectId?: string;
+	/** Proyecto compartido de org-management; fallback cuando no hay uno específico. */
+	orgManagementProjectId?: string;
 }
 
 /** Límites de validación para support tickets

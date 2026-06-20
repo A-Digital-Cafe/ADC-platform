@@ -77,9 +77,13 @@ export function ArticlePage({ slug }: { readonly slug: string }) {
 
 	if (loading) {
 		return (
-			<div style={{ padding: "2rem" }}>
-				<div className="text-center py-8">
-					<p>Cargando artículo...</p>
+			<div style={{ padding: "2rem" }} aria-busy="true">
+				<div className="space-y-4">
+					<adc-skeleton variant="rectangular" height="32px" width="40%" />
+					<adc-skeleton variant="rectangular" height="220px" />
+					<adc-skeleton variant="text" />
+					<adc-skeleton variant="text" />
+					<adc-skeleton variant="text" width="80%" />
 				</div>
 			</div>
 		);
@@ -89,7 +93,9 @@ export function ArticlePage({ slug }: { readonly slug: string }) {
 		return (
 			<div style={{ padding: "2rem" }}>
 				<div className="text-center py-8">
-					<p className="text-red-600">{error || "Artículo no encontrado"}</p>
+					<p className="text-danger" role="alert">
+						{error || "Artículo no encontrado"}
+					</p>
 					<button
 						type="button"
 						onClick={() => router.navigate("/articles")}

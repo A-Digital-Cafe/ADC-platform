@@ -34,3 +34,13 @@ export function generateRandomCredentials(): { username: string; password: strin
 export function shortId(): string {
 	return crypto.randomBytes(6).toString("hex");
 }
+
+/**
+ * SHA-256 (hex) de una cadena UTF-8. Usado para el log público de transparencia
+ * del bug bounty: el hash se publica al crear el ticket y la descripción se revela
+ * al resolverse; cualquiera puede recomputar `sha256Hex(descripción)` y verificar
+ * que coincide con el hash original (prueba de no-manipulación).
+ */
+export function sha256Hex(input: string): string {
+	return crypto.createHash("sha256").update(input, "utf8").digest("hex");
+}

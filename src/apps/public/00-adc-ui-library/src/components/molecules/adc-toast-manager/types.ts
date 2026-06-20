@@ -13,5 +13,6 @@ export interface ADCToastEvent {
 
 export interface DisplayedToast extends ADCToastEvent {
 	id: number;
+	count: number;
 	timeout?: ReturnType<typeof setTimeout>;
 }

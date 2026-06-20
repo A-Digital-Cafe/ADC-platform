@@ -14,6 +14,8 @@ export class AdcButton {
 	@Prop() ariaLabel?: string;
 	/** Label text - when provided, takes precedence over slot content for dynamic updates */
 	@Prop() label?: string;
+	/** Muestra un spinner y deshabilita el botón mientras una acción está en curso. */
+	@Prop() loading?: boolean;
 
 	@Event() adcClick!: EventEmitter<MouseEvent>;
 
@@ -37,8 +39,23 @@ export class AdcButton {
 	}
 
 	private readonly handleClick = (event: MouseEvent) => {
+		if (this.loading) return;
 		this.adcClick.emit(event);
 	};
+
+	private renderSpinner() {
+		return (
+			<svg
+				class="animate-spin h-4 w-4 inline-block align-[-2px] mr-2"
+				viewBox="0 0 24 24"
+				fill="none"
+				aria-hidden="true"
+			>
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+				<path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
+			</svg>
+		);
+	}
 
 	private readonly baseClass =
 		"rounded-3xl shadow-cozy font-heading cursor-pointer hover:brightness-105 inline-block text-center font-semibold touch-manipulation";
@@ -55,8 +72,10 @@ export class AdcButton {
 	}
 
 	render() {
-		const content = this.label ? this.label : <slot></slot>;
-		const className = this.getClass();
+		const label = this.label ? this.label : <slot></slot>;
+		const content = this.loading ? [this.renderSpinner(), label] : label;
+		const className = `${this.getClass()}${this.loading ? " cursor-wait opacity-80" : ""}`;
+		const isDisabled = this.disabled || this.loading;
 
 		if (this.href) {
 			return (
@@ -66,8 +85,9 @@ export class AdcButton {
 					rel="noopener noreferrer"
 					class={className}
 					aria-label={this.ariaLabel}
-					aria-disabled={this.disabled}
-					onClick={this.disabled ? undefined : this.handleClick}
+					aria-disabled={isDisabled}
+					aria-busy={this.loading ? "true" : undefined}
+					onClick={isDisabled ? undefined : this.handleClick}
 				>
 					{content}
 				</a>
@@ -75,7 +95,14 @@ export class AdcButton {
 		}
 
 		return (
-			<button type={this.type} class={className} aria-label={this.ariaLabel} disabled={this.disabled} onClick={this.handleClick}>
+			<button
+				type={this.type}
+				class={className}
+				aria-label={this.ariaLabel}
+				aria-busy={this.loading ? "true" : undefined}
+				disabled={isDisabled}
+				onClick={this.handleClick}
+			>
 				{content}
 			</button>
 		);

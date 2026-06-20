@@ -29,6 +29,8 @@ export class AdcToastManager {
 	@State() toasts: DisplayedToast[] = [];
 
 	private toastIdCounter = 0;
+	/** Tope de toasts visibles a la vez: evita que una cascada de errores tape la UI. */
+	private static readonly MAX_TOASTS = 4;
 	private readonly boundHandleToast = this.handleToast.bind(this);
 	private readonly boundHandleClear = this.handleClear.bind(this);
 
@@ -52,11 +54,32 @@ export class AdcToastManager {
 		const toastData = event.detail;
 		if (!toastData?.message) return;
 
+		const variant = toastData.variant || "info";
+
+		// De-dup: un toast idéntico (mismo key/mensaje + variante) ya visible suma al
+		// contador y reinicia su timeout, en vez de apilar una cascada de duplicados.
+		const existing = this.toasts.find(
+			(t) => t.variant === variant && (toastData.key ? t.key === toastData.key : t.message === toastData.message),
+		);
+		if (existing) {
+			if (existing.timeout) clearTimeout(existing.timeout);
+			const duration = toastData.duration ?? existing.duration ?? 3000;
+			const refreshed: DisplayedToast = {
+				...existing,
+				count: existing.count + 1,
+				message: toastData.message,
+				timeout: duration > 0 ? setTimeout(() => this.dismissToast(existing.id), duration) : undefined,
+			};
+			this.toasts = this.toasts.map((t) => (t.id === existing.id ? refreshed : t));
+			return;
+		}
+
 		const toastEntry: DisplayedToast = {
 			...toastData,
-			variant: toastData.variant || "info",
+			variant,
 			duration: toastData.duration ?? 3000,
 			id: ++this.toastIdCounter,
+			count: 1,
 		};
 
 		const duration = toastEntry.duration ?? 3000;
@@ -65,7 +88,15 @@ export class AdcToastManager {
 			toastEntry.timeout = setTimeout(() => this.dismissToast(toastEntry.id), duration);
 		}
 
-		this.toasts = [toastEntry, ...this.toasts];
+		// Tope de stack: descarta el más antiguo si se supera el máximo.
+		const next = [toastEntry, ...this.toasts];
+		if (next.length > AdcToastManager.MAX_TOASTS) {
+			const dropped = next.slice(AdcToastManager.MAX_TOASTS);
+			dropped.forEach((t) => t.timeout && clearTimeout(t.timeout));
+			this.toasts = next.slice(0, AdcToastManager.MAX_TOASTS);
+		} else {
+			this.toasts = next;
+		}
 	}
 
 	private dismissToast(id: number) {

@@ -26,7 +26,14 @@ export default {
 		login: "Inicia sesión",
 		orRegisterWith: "O regístrate con",
 		passwordsMismatch: "Las contraseñas no coinciden",
-		passwordTooShort: "La contraseña debe tener al menos 8 caracteres"
+		passwordTooShort: "La contraseña debe tener al menos 8 caracteres",
+		usernameChecking: "Verificando disponibilidad…",
+		usernameAvailable: "Nombre de usuario disponible",
+		usernameUnavailable: "Este nombre de usuario ya está en uso",
+		passwordStrengthLabel: "Seguridad de la contraseña",
+		passwordWeak: "Débil",
+		passwordMedium: "Media",
+		passwordStrong: "Fuerte"
 	},
 	errors: {
 		// Errores específicos de formulario (se muestran como callout inline)

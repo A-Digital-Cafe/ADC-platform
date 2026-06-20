@@ -7,6 +7,7 @@ import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permission
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
 import { escapeRegex } from "@common/utils/escape.ts";
+import { type AccountTier, type TierGrant, isTierGrantActive } from "@common/types/tiers.ts";
 
 export type UserAuthenticationResult = Partial<User> | { id: string; isActive: boolean } | { id: string; wrongPassword: boolean } | null;
 
@@ -367,6 +368,79 @@ export class UserManager {
 		const updated = await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: new Date() }, { new: true });
 		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
 		return updated.toObject?.() || updated;
+	}
+
+	/**
+	 * Otorga (o renueva) un upgrade temporal de tier — recompensa de bug bounty u
+	 * otro beneficio acotado. Setea `metadata.accountTier = tier` y guarda el grant
+	 * en `metadata.tierGrant`; el cron de reversión lo revierte a `previousTier` al
+	 * expirar. Requiere permiso UPDATE sobre usuarios (admin/Security Manager).
+	 *
+	 * Si ya hay un grant vigente, preserva su `previousTier` original (para no
+	 * "congelar" un tier otorgado como base al revertir).
+	 */
+	async grantTemporaryTier(
+		userId: string,
+		tier: AccountTier,
+		days: number,
+		reason: string | undefined,
+		token?: string
+	): Promise<TierGrant> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
+
+		if (!Number.isFinite(days) || days <= 0) throw new Error("`days` debe ser un entero positivo");
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
+		const meta = (current.toObject?.() || current).metadata || {};
+
+		const existing = meta.tierGrant as TierGrant | undefined;
+		const previousTier: AccountTier =
+			existing && isTierGrantActive(existing) ? existing.previousTier : ((meta.accountTier as AccountTier) ?? "free");
+
+		const now = new Date();
+		const grant: TierGrant = {
+			tier,
+			previousTier,
+			grantedAt: now.toISOString(),
+			expiresAt: new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString(),
+			reason,
+		};
+
+		const nextMeta = { ...meta, accountTier: tier, tierGrant: grant };
+		await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: now });
+		this.logger.logInfo(`Tier grant: ${userId} → ${tier} por ${days}d (${reason ?? "sin motivo"})`);
+		return grant;
+	}
+
+	/**
+	 * Devuelve usuarios con un grant de tier vencido (`metadata.tierGrant.expiresAt <= now`).
+	 * Lo consume el cron de reversión vía el manager interno (sin token).
+	 */
+	async findUsersDueForTierRevert(now: Date = new Date(), token?: string): Promise<Array<{ id: string }>> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const docs = await this.userModel
+			.find({ "metadata.tierGrant.expiresAt": { $lte: now.toISOString() } }, { id: 1, _id: 0 })
+			.lean();
+		return docs.map((d: any) => ({ id: d.id }));
+	}
+
+	/**
+	 * Revierte un grant de tier vencido: restaura `accountTier = previousTier` y
+	 * elimina `metadata.tierGrant`. Idempotente (si no hay grant vencido, no-op).
+	 */
+	async revertExpiredTierGrant(userId: string, now: Date = new Date(), token?: string): Promise<void> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) return;
+		const meta = (current.toObject?.() || current).metadata || {};
+		const grant = meta.tierGrant as TierGrant | undefined;
+		if (!grant || isTierGrantActive(grant, now)) return;
+
+		const nextMeta = { ...meta, accountTier: grant.previousTier };
+		delete (nextMeta as Record<string, unknown>).tierGrant;
+		await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: new Date() });
+		this.logger.logInfo(`Tier grant revertido: ${userId} → ${grant.previousTier}`);
 	}
 
 	/**

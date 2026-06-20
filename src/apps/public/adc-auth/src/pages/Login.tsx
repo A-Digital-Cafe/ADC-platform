@@ -147,6 +147,8 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 							inputId="username"
 							type="text"
 							value={username}
+							required
+							autocomplete="username"
 							placeholder="tu@email.com"
 							onInput={(e) => setUsername((e.target as HTMLInputElement).value)}
 						/>
@@ -160,6 +162,8 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 							inputId="password"
 							type="password"
 							value={password}
+							required
+							autocomplete="current-password"
 							placeholder="••••••••"
 							onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
 						/>
@@ -169,7 +173,7 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 						key={loading ? "loading" : "idle"}
 						type="submit"
 						class="w-full flex justify-end mt-8"
-						disabled={loading}
+						loading={loading}
 						variant="primary"
 					>
 						{loading ? t("login.submitting") : t("login.submit")}
