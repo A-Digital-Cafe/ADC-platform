@@ -7,7 +7,7 @@ export class AdcButton {
 	@Element() el!: HTMLElement;
 
 	@Prop() type: "button" | "submit" | "reset" = "button";
-	@Prop() variant: "primary" | "accent" | "accent-outlined" | "danger" = "primary";
+	@Prop() variant: "primary" | "accent" | "accent-outlined" | "danger" | "danger-outlined" = "primary";
 	@Prop() size: "normal" | "small" = "normal";
 	@Prop() disabled?: boolean;
 	@Prop() href?: string;
@@ -45,12 +45,7 @@ export class AdcButton {
 
 	private renderSpinner() {
 		return (
-			<svg
-				class="animate-spin h-4 w-4 inline-block align-[-2px] mr-2"
-				viewBox="0 0 24 24"
-				fill="none"
-				aria-hidden="true"
-			>
+			<svg class="animate-spin h-4 w-4 inline-block align-[-2px] mr-2" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
 				<path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
 			</svg>
@@ -68,6 +63,7 @@ export class AdcButton {
 		if (this.variant === "accent") variantClass = "border-2 border-transparent bg-accent text-tprimary";
 		else if (this.variant === "danger") variantClass = "border-2 border-transparent bg-danger text-tdanger";
 		else if (this.variant === "accent-outlined") variantClass = "border-2 border-accent/50 bg-transparent text-accent hover:bg-accent/10";
+		else if (this.variant === "danger-outlined") variantClass = "border-2 border-danger bg-danger/70 text-tdanger hover:bg-danger/80";
 		return `${this.baseClass} ${sizeClass} ${variantClass}`;
 	}
 
