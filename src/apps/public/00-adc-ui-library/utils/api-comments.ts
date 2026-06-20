@@ -3,7 +3,10 @@ import type { Comment, CommentDraft, CommentLabel, CommentsPage } from "@common/
 import type { AdcFetchResult } from "./adc-fetch.js";
 
 type AdcApi = {
-	get: <T>(path: string, opts?: { params?: Record<string, string | number | boolean | undefined | null> }) => Promise<AdcFetchResult<T>>;
+	get: <T>(
+		path: string,
+		opts?: { params?: Record<string, string | number | boolean | undefined | null>; silent?: boolean }
+	) => Promise<AdcFetchResult<T>>;
 	post: <T>(path: string, opts?: { body?: unknown; idempotencyKey?: string; idempotencyData?: unknown }) => Promise<AdcFetchResult<T>>;
 	put: <T>(path: string, opts?: { body?: unknown; idempotencyKey?: string; idempotencyData?: unknown }) => Promise<AdcFetchResult<T>>;
 	delete: <T>(
@@ -35,6 +38,8 @@ export interface DraftKey {
 export interface ListCommentsOpts extends DraftKey {
 	cursor?: string | null;
 	limit?: number;
+	/** Suprime el toast de error (el caller maneja el fallo inline, p.ej. 403). */
+	silent?: boolean;
 }
 
 function listParams(opts: ListCommentsOpts): Record<string, string | number> {
@@ -52,6 +57,17 @@ function draftParams(opts: DraftKey): Record<string, string> {
 	return p;
 }
 
+/** Construye las opciones de un GET, omitiendo `params`/`silent` vacíos. */
+function getOpts(
+	params: Record<string, string | number>,
+	silent?: boolean
+): { params?: Record<string, string | number>; silent?: boolean } | undefined {
+	const opts: { params?: Record<string, string | number>; silent?: boolean } = {};
+	if (Object.keys(params).length) opts.params = params;
+	if (silent) opts.silent = true;
+	return Object.keys(opts).length ? opts : undefined;
+}
+
 /**
  * Construye la API de comentarios anclada a un recurso. `prefix` debe ser el
  * path completo al recurso (sin trailing slash). Ejemplo:
@@ -61,10 +77,7 @@ function draftParams(opts: DraftKey): Record<string, string> {
 export function createCommentsApi(api: AdcApi, prefix: string, _draftScope?: string) {
 	const url = (suffix: string) => `${prefix}/comments${suffix}`;
 	return {
-		list: (opts: ListCommentsOpts = {}) => {
-			const params = listParams(opts);
-			return api.get<CommentsPage>(url(""), Object.keys(params).length ? { params } : undefined);
-		},
+		list: (opts: ListCommentsOpts = {}) => api.get<CommentsPage>(url(""), getOpts(listParams(opts), opts.silent)),
 		thread: (rootId: string, opts: { cursor?: string | null; limit?: number } = {}) => {
 			const params: Record<string, string | number> = {};
 			if (opts.cursor) params.cursor = opts.cursor;
@@ -84,10 +97,8 @@ export function createCommentsApi(api: AdcApi, prefix: string, _draftScope?: str
 			api.delete<Comment>(url(`/${commentId}/reactions/${encodeURIComponent(emoji)}`), {
 				idempotencyKey: `${commentId}:unreact:${encodeURIComponent(emoji)}`,
 			}),
-		getDraft: (opts: DraftKey = {}) => {
-			const params = draftParams(opts);
-			return api.get<{ draft: CommentDraft | null }>(url("/draft"), Object.keys(params).length ? { params } : undefined);
-		},
+		getDraft: (opts: DraftKey & { silent?: boolean } = {}) =>
+			api.get<{ draft: CommentDraft | null }>(url("/draft"), getOpts(draftParams(opts), opts.silent)),
 		saveDraft: (data: DraftInput) => api.put<CommentDraft>(url("/draft"), { body: data }),
 		deleteDraft: (opts: DraftKey = {}) => {
 			const params = draftParams(opts);

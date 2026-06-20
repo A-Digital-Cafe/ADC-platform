@@ -41,6 +41,9 @@ export class AdcCommentsSection {
 	@Prop() initialDraftAttachmentIds: string[] = [];
 	@Prop() maxDepth: number = 3;
 	@Prop() emptyMessage: string = "Aún no hay comentarios.";
+	/** El usuario no tiene permiso para leer los comentarios (p.ej. la request devolvió 403). */
+	@Prop() accessDenied: boolean = false;
+	@Prop() accessDeniedMessage: string = "No tienes permisos para leer comentarios.";
 
 	@State() replyingTo: string | null = null;
 	@State() editingId: string | null = null;
@@ -126,7 +129,7 @@ export class AdcCommentsSection {
 	}
 
 	private renderForm() {
-		if (!this.session.authenticated || !this.session.canComment) return null;
+		if (this.accessDenied || !this.session.authenticated || !this.session.canComment) return null;
 		return (
 			<adc-blocks-form
 				submitting={this.submitting}
@@ -221,7 +224,9 @@ export class AdcCommentsSection {
 	render() {
 		let content: JSX.Element | null;
 
-		if (this.loading) {
+		if (this.accessDenied) {
+			content = <p class="text-muted text-center">{this.accessDeniedMessage}</p>;
+		} else if (this.loading) {
 			content = <p class="text-muted text-center">Cargando comentarios...</p>;
 		} else if (this.comments.length === 0) {
 			content = <p class="text-muted text-center">{this.emptyMessage}</p>;
