@@ -7,18 +7,13 @@ import "@ui-library";
 import "@ui-library/styles";
 import "./styles/tailwind.css";
 
-async function bootstrap() {
-	if (await redirectIfUnderMaintenance("help")) return;
-
+if (!(await redirectIfUnderMaintenance("help"))) {
 	const container = document.getElementById("root");
 	if (container) {
-		const root = createRoot(container);
-		root.render(
+		createRoot(container).render(
 			<React.StrictMode>
 				<App />
 			</React.StrictMode>
 		);
 	}
 }
-
-void bootstrap();
