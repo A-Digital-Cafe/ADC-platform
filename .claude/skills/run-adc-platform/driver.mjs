@@ -30,6 +30,15 @@ const SHOTS = process.env.ADC_SHOTS || "/tmp/adc-shots";
 const BASE = process.env.ADC_BASE || "http://localhost:3000";
 const DBG_PORT = Number(process.env.ADC_CDP_PORT || 9333);
 
+// Dev test users seeded by IdentityManagerService in NODE_ENV=development
+// (see src/services/core/IdentityManagerService/defaults/devUsers.ts — keep in
+// sync). `orgId` is the dev org's stable id (== slug) so the org admin logs in
+// straight into its org context without an org-selection round-trip.
+const DEV_USERS = {
+	admin: { username: "devadmin", password: "devadmin123" },
+	orgadmin: { username: "devorgadmin", password: "devorgadmin123", orgId: "dev-org" },
+};
+
 // Gateway + per-app dev ports (docs/guides/ports.md). Kept here so `smoke`
 // stays a single source of truth for "is the platform up".
 const PORTS = {
@@ -171,11 +180,56 @@ async function waitForSelector(cdp, sel, timeoutMs = 15000) {
 	throw new Error(`timeout waiting for selector ${sel}`);
 }
 
+// ---- login --------------------------------------------------------------
+// Resolve a login spec: a preset key (admin | orgadmin) or a custom
+// "username::password[::orgId]" string.
+function resolveCreds(who) {
+	if (!who) throw new Error("login: missing user (admin | orgadmin | 'user::pass[::orgId]')");
+	if (DEV_USERS[who]) return DEV_USERS[who];
+	const [username, password, orgId] = who.split("::");
+	if (!username || !password) throw new Error(`login: unknown preset "${who}" and not a 'user::pass[::orgId]' string`);
+	return { username, password, ...(orgId ? { orgId } : {}) };
+}
+
+// Authenticate inside the page by POSTing to the kernel's /api/auth/login from a
+// loaded localhost origin: in dev CORS allows credentialed requests from any
+// localhost port, CSRF is off, and the auth cookies are scoped to domain
+// "localhost" (so they apply across every app port, same-site). If the user
+// belongs to orgs and no orgId was given, auto-pick the first option.
+async function loginInPage(cdp, creds) {
+	const body = { username: creds.username, password: creds.password, ...(creds.orgId ? { orgId: creds.orgId } : {}) };
+	const res = await cdp.eval(`(async () => {
+		const url = ${JSON.stringify(BASE)} + '/api/auth/login';
+		const post = (b) => fetch(url, { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) })
+			.then(r => r.json().then(j => ({ status: r.status, json: j })).catch(() => ({ status: r.status, json: null })));
+		let r = await post(${JSON.stringify(body)});
+		if (r.json && r.json.requiresOrgSelection && r.json.orgOptions && r.json.orgOptions.length) {
+			r = await post({ ...${JSON.stringify(body)}, orgId: r.json.orgOptions[0].orgId });
+		}
+		return r;
+	})()`);
+	if (!res || res.status >= 400 || !res.json?.success || res.json?.requiresOrgSelection) {
+		throw new Error(`login failed for ${creds.username}: ${JSON.stringify(res)}`);
+	}
+	const u = res.json.user || {};
+	const orgSuffix = u.orgSlug ? ` @${u.orgSlug}` : "";
+	console.log(`login -> ${u.username || creds.username}${orgSuffix} (ok)`);
+	return res.json;
+}
+
+// Open a localhost origin and authenticate, so subsequent navigations are logged in.
+async function loginSession(cdp, who) {
+	await cdp.send("Page.navigate", { url: BASE });
+	await sleep(1500);
+	return loginInPage(cdp, resolveCreds(who));
+}
+
 async function drive(url, name, opts) {
 	const chrome = launchChrome();
 	let cdp;
 	try {
 		cdp = await connectCDP();
+		if (opts.login) await loginSession(cdp, opts.login);
 		await cdp.send("Page.navigate", { url });
 		// give the SPA a beat; rspack first-compile routes are slow on first hit
 		await sleep(1500);
@@ -277,12 +331,13 @@ async function stop() {
 
 // ---- arg parsing --------------------------------------------------------
 function parseDrive(argv) {
-	const opts = { wait: null, actions: [], settle: 800 };
+	const opts = { wait: null, actions: [], settle: 800, login: null };
 	const rest = [];
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === "--wait") opts.wait = argv[++i];
 		else if (a === "--settle") opts.settle = Number(argv[++i]);
+		else if (a === "--login") opts.login = argv[++i];
 		else if (a === "--click") opts.actions.push({ kind: "click", sel: argv[++i] });
 		else if (a === "--eval") opts.actions.push({ kind: "eval", expr: argv[++i] });
 		else if (a === "--type") {
@@ -293,16 +348,41 @@ function parseDrive(argv) {
 	return { opts, rest };
 }
 
+// ---- login command ------------------------------------------------------
+// Authenticate as a dev user and screenshot the target route as that user.
+async function login(who, url, name) {
+	const chrome = launchChrome();
+	let cdp;
+	try {
+		cdp = await connectCDP();
+		await loginSession(cdp, who);
+		await cdp.send("Page.navigate", { url });
+		await sleep(1500);
+		const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
+		const out = `${SHOTS}/${name}.png`;
+		await Bun_or_node_writeFile(out, Buffer.from(data, "base64"));
+		console.log(`screenshot -> ${out}`);
+		const title = await cdp.eval("document.title");
+		console.log(`title -> ${JSON.stringify(title)}`);
+	} finally {
+		try { cdp?.ws.close(); } catch {}
+		chrome.kill("SIGKILL");
+	}
+}
+
 const [cmd, ...args] = process.argv.slice(2);
 try {
 	if (cmd === "smoke") await smoke();
 	else if (cmd === "stop") await stop();
 	else if (cmd === "shot") await shot(args[0] || BASE, args[1] || "shot");
-	else if (cmd === "drive") {
+	else if (cmd === "login") {
+		const { rest } = parseDrive(args);
+		await login(rest[0], rest[1] || BASE, rest[2] || "login");
+	} else if (cmd === "drive") {
 		const { opts, rest } = parseDrive(args);
 		await drive(rest[0] || BASE, rest[1] || "drive", opts);
 	} else {
-		console.log("usage: node driver.mjs <smoke | shot <url> [name] | drive <url> [name] [--wait sel --click sel --type 'sel::text' --eval expr --settle ms]>");
+		console.log("usage: node driver.mjs <smoke | shot <url> [name] | login <admin|orgadmin|'user::pass[::orgId]'> [url] [name] | drive <url> [name] [--login who --wait sel --click sel --type 'sel::text' --eval expr --settle ms]>");
 		process.exit(2);
 	}
 } catch (e) {

@@ -6,6 +6,7 @@ import { userSchema, groupSchema, roleSchema, organizationSchema, regionSchema, 
 import type { DiscordGuildConfig } from "./domain/index.js";
 import type { User, Role, Group, Organization, RegionInfo } from "@common/types/identity/index.d.ts";
 import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManager, RegionManager, OrgManager } from "./dao/index.js";
+import { seedDevUsers } from "./dao/devSeeder.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type SessionManagerService from "../../security/SessionManagerService/index.js";
 import type ModerationService from "../../security/ModerationService/index.js";
@@ -220,6 +221,23 @@ export default class IdentityManagerService extends BaseService {
 
 			// Crear el AuthVerifier ahora que tenemos todos los componentes
 			this.#authVerifier = this.createAuthVerifier();
+
+			// Dev: sembrar usuarios de prueba (Admin global, Admin de org, …) con roles
+			// concretos. Idempotente y declarativo (ver defaults/devUsers.ts).
+			if (process.env.NODE_ENV === "development") {
+				try {
+					await seedDevUsers({
+						userModel: UserModel,
+						roleModel: RoleModel,
+						orgModel: OrganizationModel,
+						roles: this.#roleManager,
+						logger: this.logger,
+					});
+					this.#permissionManager.invalidateAll();
+				} catch (err: any) {
+					this.logger.logWarn(`[DevSeed] No se pudieron sembrar usuarios de dev: ${err?.message || err}`);
+				}
+			}
 
 			// Wire AttachmentsManager para avatares (opcional: si falta S3, los
 			// endpoints de subida devolverán 503 hasta que esté disponible).

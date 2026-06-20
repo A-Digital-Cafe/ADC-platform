@@ -69,12 +69,35 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ log
   --wait "button" --click "button" --settle 1500 --eval "document.title"
 ```
 
+**Logged-in testing.** In dev the kernel seeds two test users (idempotent, every
+boot): a **global admin** (`devadmin`) and an **org admin** (`devorgadmin`, in
+org `dev-org`). Log in as them to exercise authenticated UI — the driver POSTs
+to `/api/auth/login` from inside the page and the auth cookie (domain
+`localhost`) then applies across every app port:
+
+```bash
+# screenshot an app as the global admin:
+node .claude/skills/run-adc-platform/driver.mjs login admin http://localhost:3014/ identity-as-admin
+
+# or authenticate first, then drive/interact in the same session:
+node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ home-authed \
+  --login orgadmin --wait "body" --settle 1500
+```
+
+Presets: `admin` (global) · `orgadmin` (org `dev-org`). Custom users seeded via
+`DEV_USERS` (below) work too with `'username::password[::orgId]'`.
+
 | command | what it does |
 |---|---|
 | `smoke` | curl gateway + all 17 app ports (status < 500 = OK), screenshot home/auth/community-home; exits non-zero on any problem |
 | `shot <url> [name]` | one-shot headless screenshot → `/tmp/adc-shots/<name>.png` |
-| `drive <url> [name]` | CDP session; `--wait "sel"`, `--click "sel"`, `--type "sel::text"`, `--eval "jsExpr"`, `--settle ms`. Ends in a screenshot + prints `document.title` and any page exceptions |
+| `login <who> [url] [name]` | log in as a dev user (`admin` \| `orgadmin` \| `'user::pass[::orgId]'`), navigate to `url`, screenshot. Dev only |
+| `drive <url> [name]` | CDP session; `--login who` (authenticate first), `--wait "sel"`, `--click "sel"`, `--type "sel::text"`, `--eval "jsExpr"`, `--settle ms`. Ends in a screenshot + prints `document.title` and any page exceptions |
 | `stop` | kill kernel + all rspack dev servers, free ports 3000–3034 (leaves Docker S3 on :9000/:9001) |
+
+> Dev test users live in `src/services/core/IdentityManagerService/defaults/devUsers.ts`
+> (`DEV_USERS`). Add an entry there to seed another user with specific roles; mirror
+> the credentials in `driver.mjs`'s `DEV_USERS` map to get a login preset.
 
 Key dev ports: gateway `3000` · adc-home `3024` · adc-auth `3012` ·
 community-home `3010` · adc-identity `3014` · adc-drive `3032` ·
