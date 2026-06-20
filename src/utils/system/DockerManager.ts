@@ -194,23 +194,27 @@ export class DockerManager {
 				return;
 			}
 
-			this.#logger.logInfo(`Cargando ${folders.length} contenedor(es) común(es)...`);
+			this.#logger.logInfo(`Cargando ${folders.length} contenedor(es) común(es) en paralelo...`);
 
-			for (const folder of folders) {
-				const folderPath = path.join(dockerDir, folder.name);
-				const composePath = path.join(folderPath, "docker-compose.yml");
+			// Los contenedores comunes son independientes entre sí, por lo que se arrancan en
+			// paralelo. allSettled (no all) preserva que el fallo de uno no aborte a los demás.
+			await Promise.allSettled(
+				folders.map(async (folder) => {
+					const folderPath = path.join(dockerDir, folder.name);
+					const composePath = path.join(folderPath, "docker-compose.yml");
 
-				try {
-					await fs.stat(composePath);
-					await this.runDockerCompose(folderPath, folder.name, "common");
-				} catch (error: any) {
-					if (error.code === "ENOENT") {
-						this.#logger.logDebug(`No hay docker-compose.yml en ${folder.name}`);
-					} else {
-						this.#logger.logWarn(`Error cargando contenedor común ${folder.name}: ${error.message}`);
+					try {
+						await fs.stat(composePath);
+						await this.runDockerCompose(folderPath, folder.name, "common");
+					} catch (error: any) {
+						if (error.code === "ENOENT") {
+							this.#logger.logDebug(`[${folder.name}] No hay docker-compose.yml`);
+						} else {
+							this.#logger.logWarn(`[${folder.name}] Error cargando contenedor común: ${error.message}`);
+						}
 					}
-				}
-			}
+				}),
+			);
 		} catch (error: any) {
 			if (error.code === "ENOENT") {
 				this.#logger.logDebug(`Directorio de docker común no existe: ${dockerDir}`);
