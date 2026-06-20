@@ -1,7 +1,20 @@
-import type { SupportTicketType } from "./CommonTicketColumns.ts";
-export { TICKET_TYPE_LABELS, TICKET_TYPE_CATEGORIES } from "./CommonTicketColumns.ts";
+/**
+ * Tipo de ticket de soporte que un usuario puede abrir:
+ * reclamos, sugerencias, reportes de seguridad (bug bounty) y
+ * solicitudes de datos (GDPR / takedown de terceros).
+ *
+ * Contrato F/B: lo consumen el frontend de `status` (formulario) y el backend
+ * del PM (creación del issue). Por eso vive en `@common`.
+ */
+export type SupportTicketType = "complaint" | "suggestion" | "security" | "data";
 
-export type { SupportTicketType };
+/** Label visible por tipo de ticket (usado por el form de `status` y el backend). */
+export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
+	complaint: "RECLAMO",
+	suggestion: "SUGERENCIA",
+	security: "SEGURIDAD",
+	data: "DATOS",
+};
 
 export interface CreateSupportTicketInput {
 	type: SupportTicketType;

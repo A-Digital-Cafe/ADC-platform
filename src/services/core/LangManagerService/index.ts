@@ -59,8 +59,10 @@ export default class LangManagerService extends BaseService implements ILangMana
 						const rawContent = await fs.readFile(filePath, "utf-8");
 						content = JSON.parse(rawContent);
 					} else {
-						// Para archivos .js, los importamos dinámicamente
-						const fileUrl = `file://${filePath}`;
+						// Para archivos .js, los importamos dinámicamente. El query `?v=` evita
+						// el cache de módulos ESM: tras un git pull + recarga, sin esto se
+						// re-registraría el contenido viejo (igual que AppReloader con el index).
+						const fileUrl = `file://${filePath}?v=${Date.now()}`;
 						const module = await import(fileUrl);
 						content = module.default || module;
 					}

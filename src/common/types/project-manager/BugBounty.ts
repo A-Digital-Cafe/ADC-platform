@@ -62,14 +62,31 @@ export type RewardPreference = "plus" | "pro";
 export type BugBountyPublicStatus = "received" | "triaging" | "in_progress" | "resolved" | "rejected";
 
 /**
- * Mapea (heurística) el nombre/clave de columna del PM a un estado público.
- * Fallback: `triaging`. Se aplica sobre `columnKey`/nombre en minúsculas.
+ * Estado público por **clave canónica** de columna del tablero de tickets.
+ * Es la fuente de verdad: las columnas que el servicio reconcilia
+ * (ver `TICKETS_BOARD_COLUMNS`) tienen estas keys estables.
  */
-export function deriveBugBountyStatus(columnKeyOrName: string | undefined): BugBountyPublicStatus {
-	const c = (columnKeyOrName ?? "").toLowerCase();
-	if (/(resolv|solucion|done|fixed|closed|cerrad|hecho)/.test(c)) return "resolved";
-	if (/(reject|rechaz|declin|wontfix|invalid|duplicad|spam)/.test(c)) return "rejected";
-	if (/(progress|proceso|doing|review|revis|fixing|wip)/.test(c)) return "in_progress";
+export const BUG_BOUNTY_COLUMN_STATUS: Record<string, BugBountyPublicStatus> = {
+	security: "received",
+	triaging: "triaging",
+	in_progress: "in_progress",
+	done: "resolved",
+	rejected: "rejected",
+};
+
+/**
+ * Deriva el estado público de un reporte a partir de la columna en la que está.
+ * Primero usa el mapa explícito por `columnKey` (canónico); si la columna es
+ * custom (un admin la agregó a mano), cae a una heurística por nombre.
+ * Fallback final: `triaging`.
+ */
+export function deriveBugBountyStatus(columnKey: string | undefined, columnName?: string): BugBountyPublicStatus {
+	const key = (columnKey ?? "").toLowerCase();
+	if (key in BUG_BOUNTY_COLUMN_STATUS) return BUG_BOUNTY_COLUMN_STATUS[key];
+	const c = (columnName ?? columnKey ?? "").toLowerCase();
+	if (/(resolv|resuelt|solucion|done|fixed|closed|cerrad|hecho)/.test(c)) return "resolved";
+	if (/(reject|rechaz|descart|declin|wontfix|invalid|duplicad|spam)/.test(c)) return "rejected";
+	if (/(progress|progres|proceso|doing|review|revis|fixing|wip)/.test(c)) return "in_progress";
 	if (/(triag|backlog|new|nuevo|pending|pendiente|recib)/.test(c)) return "received";
 	return "triaging";
 }

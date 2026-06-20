@@ -121,7 +121,7 @@ export class ModuleOrchestrator {
 	async reconcile(): Promise<void> {
 		for (const entry of this.#d.disabledRegistry.list()) {
 			if (entry.type === "app") continue;
-			const stillLoaded = this.#d.registry.getModuleNames(entry.type as ModuleType).includes(entry.name);
+			const stillLoaded = this.#d.registry.getModuleNames(entry.type).includes(entry.name);
 			if (!stillLoaded) continue;
 			this.#d.logger.logWarn(`[orchestrator] Reconciliando: deteniendo ${entry.type} '${entry.name}' (debe estar inactivo).`);
 			await this.#stopNode({ type: entry.type, name: entry.name }, entry.messageKey);
@@ -151,7 +151,7 @@ export class ModuleOrchestrator {
 
 	/** Re-habilita un módulo y su grupo de cascada (root primero, luego dependientes). */
 	async enable(type: OrchestratorLayer, name: string): Promise<string[]> {
-		// Grupo de cascada: el target + todo lo que cayó por su culpa.
+		// Grupo de cascada: el target + lo que cayó por su culpa.
 		const group = this.#d.disabledRegistry
 			.list()
 			.filter((e) => e.cascadeRoot === name || (e.type === type && e.name === name));
@@ -162,8 +162,12 @@ export class ModuleOrchestrator {
 		];
 		const affected: string[] = [];
 		for (const entry of ordered) {
-			this.#d.disabledRegistry.remove(entry.type, entry.name);
+			// Recargar ANTES de sacar el gate: mientras `#startNode` recompila la app, el
+			// disabled-set la mantiene en mantenimiento (el cliente sigue redirigido y no
+			// ve el bundle viejo). Recién al terminar el rebuild se levanta el gate. El
+			// reload no consulta el disabled-set, así que seguir gateado no lo bloquea.
 			await this.#startNode({ type: entry.type, name: entry.name });
+			this.#d.disabledRegistry.remove(entry.type, entry.name);
 			affected.push(`${entry.type}:${entry.name}`);
 		}
 		// Re-conectar a los dependientes OPCIONALES que siguieron corriendo (no se
@@ -355,7 +359,7 @@ export class ModuleOrchestrator {
 	): Promise<{ apps: string[]; services: string[] }> {
 		if (type === "app") return { apps: [], services: [] };
 		const graph = await this.#ensureGraph();
-		const { apps: appBaseNames, services: serviceNames } = graph.directDependents(type as ModuleType, name, { includeOptional });
+		const { apps: appBaseNames, services: serviceNames } = graph.directDependents(type, name, { includeOptional });
 
 		const running = this.#d.appLoader.instanceNames;
 		const apps = new Set<string>();
@@ -388,7 +392,7 @@ export class ModuleOrchestrator {
 				await this.#unloadAllAliases("service", node.name);
 				await this.#releaseExclusiveDeps(node.name);
 			} else {
-				await this.#unloadAllAliases(node.type as ModuleType, node.name);
+				await this.#unloadAllAliases(node.type, node.name);
 			}
 			logger.logOk(`[orchestrator] detenido ${node.type}:${node.name}`);
 		} catch (e) {
@@ -445,16 +449,24 @@ export class ModuleOrchestrator {
 		const { kernelKey, dependencyReloader, logger } = this.#d;
 		try {
 			if (node.type === "app") {
-				// La app nunca se descargó (sigue servida): re-habilitarla = sacarla del
-				// disabled-set (ya hecho por enable()). El gate cliente dejará de redirigir
-				// a mantenimiento en la próxima carga. No hay nada que recargar acá.
-				logger.logOk(`[orchestrator] app ${node.name} re-habilitada (sale de mantenimiento).`);
+				// Re-habilitar recarga la app desde disco (rebuild + re-registro de UI/i18n),
+				// así un git pull intermedio se refleja al encenderla. Las ui-libraries se
+				// RECOMPILAN en su lugar (recargarlas como app rompería consumidores), igual
+				// que en reloadFromDisk. El disabled-set ya fue limpiado por enable().
+				if (await this.#isLibraryApp(node.name)) {
+					await this.rebuildLibrary(node.name).catch((e) => logger.logError(`[orchestrator] rebuild library ${node.name}: ${e}`));
+				} else {
+					await this.#d.appLoader
+						.reloadAppByInstanceName(node.name)
+						.catch((e) => logger.logError(`[orchestrator] reload app ${node.name}: ${e}`));
+				}
+				logger.logOk(`[orchestrator] app ${node.name} recargada y re-habilitada (sale de mantenimiento).`);
 				return;
 			}
 			if (node.type === "service") {
 				this.#endpointController()?.setOwnerUnavailable(kernelKey, node.name, false);
 			}
-			await dependencyReloader.reloadByName(node.type as ModuleType, node.name);
+			await dependencyReloader.reloadByName(node.type, node.name);
 			logger.logOk(`[orchestrator] re-habilitado ${node.type}:${node.name}`);
 		} catch (e) {
 			logger.logError(`[orchestrator] error re-habilitando ${node.type}:${node.name}: ${e}`);
