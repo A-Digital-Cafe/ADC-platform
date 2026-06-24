@@ -13,6 +13,8 @@ const TABLE_CELL_MAX = 400;
 const MAX_LIST_ITEMS = 100;
 const MAX_TABLE_ROWS = 200;
 const MAX_TABLE_COLS = 20;
+const MAX_MENTIONS = 20;
+const MENTION_ID_MAX = 64;
 
 const TEXT_ALIGNS: readonly TextAlign[] = ["left", "center", "right"];
 const TEXT_MARKS: ReadonlySet<TextMark> = new Set(["bold", "italic", "code"]);
@@ -36,6 +38,14 @@ function pickEnum<T extends string>(value: unknown, allowed: readonly T[], fallb
 	return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
+/** IDs de usuarios mencionados: array de strings acotado y deduplicado, o `undefined`. */
+function sanitizeMentions(raw: unknown): string[] | undefined {
+	if (!Array.isArray(raw)) return undefined;
+	const ids = raw.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= MENTION_ID_MAX);
+	const unique = Array.from(new Set(ids)).slice(0, MAX_MENTIONS);
+	return unique.length ? unique : undefined;
+}
+
 function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 	if (!raw || typeof raw !== "object") return null;
 	const r = raw as Record<string, unknown>;
@@ -48,6 +58,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				text: clampString(r.text, HEADING_MAX),
 				align: pickEnum(r.align, TEXT_ALIGNS),
 				id: typeof r.id === "string" ? clampString(r.id, 80) : undefined,
+				mentions: sanitizeMentions(r.mentions),
 			};
 		}
 		case "paragraph": {
@@ -57,6 +68,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				text: clampString(r.text, TEXT_MAX),
 				align: pickEnum(r.align, TEXT_ALIGNS),
 				marks: marks?.length ? marks : undefined,
+				mentions: sanitizeMentions(r.mentions),
 			};
 		}
 		case "checkbox": {
@@ -67,6 +79,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				text: clampString(r.text, TEXT_MAX),
 				align: pickEnum(r.align, TEXT_ALIGNS),
 				marks: marks?.length ? marks : undefined,
+				mentions: sanitizeMentions(r.mentions),
 			};
 		}
 		case "list": {
@@ -95,6 +108,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				tone: pickEnum(r.tone, CALLOUT_TONES, "info") as CalloutTone,
 				role: pickEnum(r.role, CALLOUT_ROLES),
 				text: clampString(r.text, TEXT_MAX),
+				mentions: sanitizeMentions(r.mentions),
 			};
 		}
 		case "quote": {
@@ -107,6 +121,7 @@ function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 				url: safeUrl,
 				rel: rel?.length ? rel : undefined,
 				ariaLabel: typeof r.ariaLabel === "string" ? clampString(r.ariaLabel, 200) : undefined,
+				mentions: sanitizeMentions(r.mentions),
 			};
 		}
 		case "table": {

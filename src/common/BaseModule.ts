@@ -2,6 +2,8 @@ import { IModule, IModuleConfig } from "../interfaces/modules/IModule.js";
 import { ILogger } from "../interfaces/utils/ILogger.js";
 import { Logger } from "../utils/logger/Logger.js";
 import { Kernel } from "../kernel.js";
+import { emitNotification } from "./utils/notifications/emit.js";
+import type { NotifyInput } from "./types/notifications/Notification.js";
 
 /**
  * Clase base abstracta para módulos que necesitan acceso al Kernel.
@@ -100,5 +102,24 @@ export abstract class BaseModule implements IModule {
 			throw new Error(`Service ${name} no está configurado en ${this.name}`);
 		}
 		return this.#kernel.registry.getService<S>(name, serviceConfig.custom);
+	}
+
+	/**
+	 * Emite una notificación a un usuario de forma desacoplada y tolerante a fallos
+	 * (cola durable RabbitMQ → entrega directa → best-effort). **Nunca lanza**: si el
+	 * subsistema de notificaciones está caído o en mantenimiento, el módulo productor
+	 * sigue funcionando y la notificación se entrega cuando el servicio vuelve.
+	 *
+	 * No requiere declarar `NotificationService` ni `queue/rabbitmq` como dependencia:
+	 * resuelve lo que haya disponible en el kernel en tiempo de ejecución.
+	 */
+	protected async emitNotification(input: NotifyInput): Promise<void> {
+		try {
+			const ok = await emitNotification(this.#kernel, input);
+			if (!ok) this.logger.logDebug(`Notificación descartada (subsistema no disponible): topic=${input.topic}`);
+		} catch (e) {
+			// Defensa extra: emitNotification ya es no-throw, pero nunca propagamos.
+			this.logger.logWarn(`emitNotification falló (ignorado): ${(e as Error).message}`);
+		}
 	}
 }

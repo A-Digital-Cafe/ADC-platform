@@ -15,14 +15,16 @@ export type LinkRel = "nofollow" | "noopener" | "noreferrer" | "ugc" | "sponsore
 
 type AttachmentKind = "image" | "file";
 
+// `mentions`: IDs de usuarios mencionados (`@usuario`) en el texto del bloque. Lo
+// rellena el editor (adc-blocks) y alimenta las notificaciones de mención.
 export type Block =
-	| { type: "heading"; level: 2 | 3 | 4 | 5 | 6; text: string; align?: TextAlign; id?: string }
-	| { type: "paragraph"; text: string; align?: TextAlign; marks?: TextMark[] }
-	| { type: "checkbox"; checked: boolean; text: string; align?: TextAlign; marks?: TextMark[] }
+	| { type: "heading"; level: 2 | 3 | 4 | 5 | 6; text: string; align?: TextAlign; id?: string; mentions?: string[] }
+	| { type: "paragraph"; text: string; align?: TextAlign; marks?: TextMark[]; mentions?: string[] }
+	| { type: "checkbox"; checked: boolean; text: string; align?: TextAlign; marks?: TextMark[]; mentions?: string[] }
 	| { type: "list"; ordered?: boolean; items: string[]; start?: number; ariaLabel?: string }
 	| { type: "code"; language: string; content: string; ariaLabel?: string }
-	| { type: "callout"; tone: CalloutTone; text: string; role?: CalloutRole }
-	| { type: "quote"; text: string; url?: string; rel?: LinkRel[]; ariaLabel?: string }
+	| { type: "callout"; tone: CalloutTone; text: string; role?: CalloutRole; mentions?: string[] }
+	| { type: "quote"; text: string; url?: string; rel?: LinkRel[]; ariaLabel?: string; mentions?: string[] }
 	| { type: "table"; header: string[]; rows: string[][]; columnAlign?: TextAlign[]; caption?: string; rowHeaders?: boolean }
 	| {
 			type: "attachment";

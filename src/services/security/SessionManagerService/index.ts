@@ -200,6 +200,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 				defaultRedirectUrl: this.#defaultRedirectUrl,
 				logger: this.logger,
 				moderation: this.#moderation,
+				onLoginSuccess: (userId: string, ip: string) => void this.checkAndNotifyNewLoginIp(userId, ip),
 			},
 			(username: string, password: string) => this.#validatePlatformCredentials(username, password)
 		);
@@ -350,6 +351,36 @@ export default class SessionManagerService extends BaseService implements ISessi
 		return req.cookies?.[ACCESS_COOKIE_NAME] || null;
 	}
 
+	/**
+	 * Detecta un inicio de sesión desde una **IP no vista antes** (set de IPs conocidas
+	 * en Redis) y notifica al usuario (`security.new_login`, inApp + email). NO notifica
+	 * en el primer login conocido (set vacío) para no avisar al registrarse/primera vez.
+	 * Best-effort: si no hay Redis o falla, no rompe el login.
+	 */
+	async checkAndNotifyNewLoginIp(userId: string, ip: string): Promise<void> {
+		if (!this.#redis || !userId || !ip) return;
+		const key = `notif:knownips:${userId}`;
+		try {
+			const known = await this.#redis.smembers(key);
+			if (known.includes(ip)) return;
+			await this.#redis.sadd(key, ip);
+			await this.#redis.expire(key, 180 * 24 * 60 * 60); // 180 días
+			if (known.length === 0) return; // primer login: registrar la IP sin avisar
+			await this.emitNotification({
+				userId,
+				topic: "security.new_login",
+				title: "Nuevo inicio de sesión",
+				body: `Se detectó un inicio de sesión desde una IP diferente (${ip}). Si no fuiste vos, cambiá tu contraseña.`,
+				channels: ["inApp", "email"],
+				linkApp: "my-account",
+				link: "/settings/privacy-security",
+				data: { ip },
+			});
+		} catch (e) {
+			this.logger.logWarn(`Chequeo de nuevo inicio de sesión falló para ${userId}: ${(e as Error).message}`);
+		}
+	}
+
 	#getProviderConfig(provider: string): OAuthProviderConfig | null {
 		const cfg = this.#customConfig;
 		const baseUrl = cfg.baseUrl || "http://localhost:3000";
@@ -415,8 +446,9 @@ export default class SessionManagerService extends BaseService implements ISessi
 	}
 
 	async #validatePlatformCredentials(username: string, password: string) {
-		if (!this.#identityService) return null;
-		return this.#identityService.users.authenticate(username, password);
+		// `authenticate` es primitiva pre-auth: sólo en la superficie `_internal(kernelKey)`.
+		if (!this.#internalIdentity) return null;
+		return this.#internalIdentity.users.authenticate(username, password);
 	}
 
 	@DisableEndpoints()

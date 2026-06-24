@@ -7,6 +7,7 @@ import type { DiscordGuildConfig } from "./domain/index.js";
 import type { User, Role, Group, Organization, RegionInfo } from "@common/types/identity/index.d.ts";
 import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManager, RegionManager, OrgManager } from "./dao/index.js";
 import { seedDevUsers } from "./dao/devSeeder.js";
+import { NotifyManager } from "./notify.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type SessionManagerService from "../../security/SessionManagerService/index.js";
 import type ModerationService from "../../security/ModerationService/index.js";
@@ -57,6 +58,14 @@ interface UserDataPurger {
  * Los managers aceptan un parámetro `token` opcional en cada método.
  * Si se proporciona, se verifican los permisos del usuario antes de ejecutar.
  */
+/**
+ * Vista **pública** del UserManager: excluye las primitivas de credenciales pre-auth
+ * (`authenticate`, `verifyUserPassword`), que no deben estar en la superficie que se
+ * pasa libremente entre módulos (oráculo de password). Quedan accesibles sólo vía
+ * `_internal(kernelKey)` para la infraestructura de auth (SessionManager, login).
+ */
+export type PublicUserManager = Omit<UserManager, "authenticate" | "verifyUserPassword">;
+
 export default class IdentityManagerService extends BaseService {
 	public readonly name = "IdentityManagerService";
 
@@ -68,6 +77,7 @@ export default class IdentityManagerService extends BaseService {
 	#regionManager: RegionManager | null = null;
 	#orgManager: OrgManager | null = null;
 	#permissionManager: PermissionManager | null = null;
+	#notifyManager: NotifyManager = new NotifyManager((input) => this.emitNotification(input));
 
 	// Managers internos (sin auth) para uso de servicios de infraestructura (SessionManagerService)
 	#internalUserManager: UserManager | null = null;
@@ -275,7 +285,7 @@ export default class IdentityManagerService extends BaseService {
 			}
 
 			// Inicializar endpoint managers
-			UserEndpoints.init(this);
+			UserEndpoints.init(this, kernelKey);
 			RoleEndpoints.init(this);
 			GroupEndpoints.init(this);
 			OrgEndpoints.init(this);
@@ -361,6 +371,7 @@ export default class IdentityManagerService extends BaseService {
 		avatarAttachments: AttachmentsManager | null;
 		discordGuildId: string | undefined;
 		getDiscordRoleMap: (guildId: string) => Promise<Record<string, string> | null>;
+		getUserIdsByRoleName: (roleName: string) => Promise<string[]>;
 	} {
 		if (kernelKey !== this.#kernelKey) throw new Error("Acceso denegado: kernelKey inválido");
 		const configPrivate = (this.config?.private || {}) as { discordGuildId?: string; discordRoleMap?: Record<string, string> };
@@ -372,6 +383,16 @@ export default class IdentityManagerService extends BaseService {
 			roles: this.#internalRoleManager!,
 			avatarAttachments: this.#avatarAttachmentsManager,
 			discordGuildId: configPrivate.discordGuildId,
+			/**
+			 * IDs de usuarios con un **rol global** por nombre (ej. `SystemRole.ADMIN`).
+			 * Usa los managers internos sin auth; por eso vive tras el gate `kernelKey`
+			 * (no es una API pública: enumeraría destinatarios privilegiados sin token).
+			 */
+			getUserIdsByRoleName: async (roleName: string): Promise<string[]> => {
+				const role = await this.#internalRoleManager?.getRoleByName(roleName).catch(() => null);
+				if (!role?.id) return [];
+				return (await this.#internalUserManager?.getUsersByRole(role.id)) ?? [];
+			},
 			/**
 			 * Obtiene el mapeo Discord Role ID → nombre de rol de plataforma para un guild.
 			 * Primero busca en DB (para guilds custom/por org), fallback a config.json default.
@@ -399,9 +420,20 @@ export default class IdentityManagerService extends BaseService {
 	// Getters para acceso a managers globales
 	// ─────────────────────────────────────────────────────────────────────────────
 
-	get users(): UserManager {
+	get users(): PublicUserManager {
 		if (!this.#userManager) throw new Error("UserManager not initialized");
 		return this.#userManager;
+	}
+
+	/**
+	 * Notificaciones de dominio de identidad/seguridad (ej. cambio de contraseña).
+	 * Gateado con `@OnlyKernel()`: el caller debe presentar la `kernelKey`, de modo
+	 * que un módulo no confiable cargado en un kernel comprometido no pueda emitir
+	 * avisos de seguridad spoofeados (p.ej. "tu contraseña cambió") a usuarios arbitrarios.
+	 */
+	@OnlyKernel()
+	notifications(_kernelKey: symbol): NotifyManager {
+		return this.#notifyManager;
 	}
 
 	get roles(): RoleManager {

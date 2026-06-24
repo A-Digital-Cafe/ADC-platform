@@ -2,10 +2,10 @@
 set -e
 
 # Renderiza valores dependientes del entorno en la config de Haraka.
-echo "${HARAKA_ME:-mail.tudominio.com}" > /app/config/me
+echo "${HARAKA_ME:-mail.adigitalcafe.com}" > /app/config/me
 
 # host_list: el dominio raíz y su forma con punto inicial para subdominios.
-ROOT="${MAIL_ROOT_DOMAIN:-tudominio.com}"
+ROOT="${MAIL_ROOT_DOMAIN:-adigitalcafe.com}"
 {
 	echo "${ROOT}"
 	echo ".${ROOT}"

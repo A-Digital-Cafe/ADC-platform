@@ -38,6 +38,8 @@ interface AuthEndpointsDeps {
 	defaultRedirectUrl: string;
 	logger: { logError: (msg: string) => void; logWarn: (msg: string) => void };
 	moderation: ModerationLookupService | null;
+	/** Hook tras un login exitoso: detecta dispositivo/IP nuevo y notifica (best-effort). */
+	onLoginSuccess?: (userId: string, ip: string) => void;
 }
 
 interface RegisterBody {
@@ -97,6 +99,8 @@ export class AuthEndpoints {
 
 			// Registrar IP de login exitoso (3h) para alimentar la ban-list anti-evasión
 			await recordLoginAttemptIp(AuthEndpoints.deps.moderation, fullUser.id, ipAddress, AuthEndpoints.deps.logger);
+			// Detección de dispositivo/IP nuevo → notificación de seguridad (fire-and-forget).
+			AuthEndpoints.deps.onLoginSuccess?.(fullUser.id, ipAddress);
 
 			// Si el usuario tiene organizaciones y no se especificó orgId (undefined = no ha elegido),
 			// retornar la lista de orgs para que el frontend muestre el selector.

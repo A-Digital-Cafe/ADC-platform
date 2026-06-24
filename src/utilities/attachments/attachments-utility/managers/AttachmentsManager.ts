@@ -82,6 +82,12 @@ export interface AttachmentsManagerOptions {
 	encryption?: { keyStore: UserKeyStore };
 	/** Logger opcional para avisos de cuota (fail-open). */
 	logger?: { logWarn(msg: string): void };
+	/**
+	 * Hook best-effort que se dispara cuando un usuario alcanza su límite de cuota
+	 * (antes de lanzar `ATTACHMENT_QUOTA_EXCEEDED`). Lo usa, p. ej., Drive para
+	 * notificar "te quedaste sin espacio". No debe lanzar.
+	 */
+	onQuotaExceeded?: (userId: string, appId: string) => void;
 }
 
 export interface PresignUploadInput {
@@ -130,6 +136,7 @@ export class AttachmentsManager {
 	readonly #allowedMimes: ReadonlySet<string> | null;
 	readonly #presignTtl: number;
 	readonly #quota?: AttachmentsQuotaOptions;
+	readonly #onQuotaExceeded?: (userId: string, appId: string) => void;
 	readonly #encryption?: { keyStore: UserKeyStore };
 	readonly #logger?: { logWarn(msg: string): void };
 	// Pública para que `@OnlyKernel()` pueda leerla vía `this.kernelKey`.
@@ -146,6 +153,7 @@ export class AttachmentsManager {
 		this.#allowedMimes = opts.allowedMimeTypes === null ? null : new Set(opts.allowedMimeTypes ?? ATTACHMENT_DEFAULT_ALLOWED_MIMES);
 		this.#presignTtl = opts.presignTtl ?? opts.s3Provider.getDefaultPresignTtl();
 		this.#quota = opts.quota;
+		this.#onQuotaExceeded = opts.onQuotaExceeded;
 		this.#encryption = opts.encryption;
 		this.#logger = opts.logger;
 		this.setKernelKey(opts.kernelKey);
@@ -213,6 +221,7 @@ export class AttachmentsManager {
 			if (!tracker) return;
 			const result = await tracker.checkAllowance({ userId: ctx.userId, orgId: ctx.orgId ?? null }, this.#quota.appId, sizeBytes);
 			if (!result.allowed) {
+				this.#notifyQuotaExceeded(ctx.userId);
 				throw new AttachmentError(413, "ATTACHMENT_QUOTA_EXCEEDED", "Cuota de almacenamiento agotada", {
 					usedTotal: result.usedTotal,
 					effectiveLimit: result.effectiveLimit,
@@ -221,6 +230,16 @@ export class AttachmentsManager {
 		} catch (e) {
 			if (e instanceof AttachmentError) throw e;
 			this.#logger?.logWarn(`Attachments(${this.#quota.appId}): tracker de cuota no disponible (${(e as Error).message}); se permite`);
+		}
+	}
+
+	/** Dispara el hook de "cuota alcanzada" (best-effort, nunca lanza). */
+	#notifyQuotaExceeded(userId: string): void {
+		if (!this.#onQuotaExceeded || !userId) return;
+		try {
+			this.#onQuotaExceeded(userId, this.#quota?.appId ?? "");
+		} catch {
+			/* best-effort: nunca rompe el flujo de subida */
 		}
 	}
 
@@ -323,6 +342,7 @@ export class AttachmentsManager {
 				// el GC de pending limpiará el objeto si este delete falla
 			}
 			await this.#model.deleteOne({ _id: attachmentId });
+			this.#notifyQuotaExceeded(ctx.userId);
 			throw new AttachmentError(413, "ATTACHMENT_QUOTA_EXCEEDED", "Cuota de almacenamiento agotada");
 		}
 

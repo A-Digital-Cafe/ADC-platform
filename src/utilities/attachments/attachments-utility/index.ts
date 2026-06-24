@@ -1,32 +1,11 @@
 import type { Connection } from "mongoose";
 import { BaseUtility } from "../../BaseUtility.js";
 import { getOrCreateAttachmentModel } from "./schemas/attachment.schema.js";
-import {
-	AttachmentsManager,
-	type AttachmentsManagerOptions,
-	type AttachmentsQuotaOptions,
-	type AttachmentPermissionChecker,
-	type AttachmentPermissionContext,
-	type AttachmentAction,
-	type S3Like,
-	type SubPathContext,
-	type PresignUploadInput,
-	type PresignUploadResult,
-} from "./managers/AttachmentsManager.js";
-import { UserKeyStore, resolveStorageMasterKey, createObjectCipher, createObjectDecipher } from "./crypto/userKeys.js";
+import { AttachmentsManager, type AttachmentsManagerOptions } from "./managers/AttachmentsManager.js";
+import { UserKeyStore, resolveStorageMasterKey } from "./crypto/userKeys.js";
 
-export type {
-	AttachmentsManagerOptions,
-	AttachmentsQuotaOptions,
-	AttachmentPermissionChecker,
-	AttachmentPermissionContext,
-	AttachmentAction,
-	S3Like,
-	SubPathContext,
-	PresignUploadInput,
-	PresignUploadResult,
-};
-export { AttachmentsManager, UserKeyStore, resolveStorageMasterKey, createObjectCipher, createObjectDecipher };
+export type { AttachmentsManagerOptions };
+export { AttachmentsManager, UserKeyStore, resolveStorageMasterKey };
 
 export interface CreateAttachmentsManagerOptions extends Omit<AttachmentsManagerOptions, "model"> {
 	mongoConnection: Connection;
@@ -59,6 +38,7 @@ export default class AttachmentsUtility extends BaseUtility {
 			quota: opts.quota,
 			encryption: opts.encryption,
 			logger: opts.logger,
+			onQuotaExceeded: opts.onQuotaExceeded,
 		});
 	}
 
@@ -75,3 +55,16 @@ export default class AttachmentsUtility extends BaseUtility {
 		});
 	}
 }
+
+export {
+	type AttachmentsQuotaOptions,
+	type AttachmentPermissionChecker,
+	type AttachmentPermissionContext,
+	type AttachmentAction,
+	type S3Like,
+	type SubPathContext,
+	type PresignUploadInput,
+	type PresignUploadResult,
+} from "./managers/AttachmentsManager.js";
+
+export { createObjectCipher, createObjectDecipher } from "./crypto/userKeys.js";

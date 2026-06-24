@@ -44,6 +44,14 @@ export interface PlatformApp {
 	 */
 	resolverExpose?: string;
 	/**
+	 * Clave del módulo expuesto en `federationExposes` que default-exporta un panel
+	 * de **configuración de cuenta** (ej. preferencias de notificación de la app),
+	 * consumido por el host `my-account` vía Module Federation (`./AccountSettings`).
+	 * Si está ausente, la app no aporta panel; si la app está offline, su panel
+	 * simplemente no se muestra (la carga remota degrada sin romper el resto).
+	 */
+	settingsExpose?: string;
+	/**
 	 * Hostname de producción del `remoteEntry.js` (ej: `community.adigitalcafe.com`).
 	 * Por defecto se deriva como `{subdomain}.adigitalcafe.com`.
 	 */
@@ -140,11 +148,20 @@ const DEFAULT_APPS: PlatformApp[] = [
 		resolverExpose: "./platformLinkResolver",
 	},
 	{ id: "identity", label: "Identity", devPort: 3014, subdomain: "identity", iconTag: "adc-icon-app-identity", remoteName: "adc_identity" },
-	{ id: "drive", label: "Drive", devPort: 3032, subdomain: "drive", iconTag: "adc-icon-app-drive" },
+	{
+		id: "drive",
+		label: "Drive",
+		devPort: 3032,
+		subdomain: "drive",
+		iconTag: "adc-icon-app-drive",
+		remoteName: "adc_drive",
+		settingsExpose: "./AccountSettings",
+	},
 	{ id: "editor", label: "Image Editor", devPort: 3034, subdomain: "editor" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
 	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
 	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
+	{ id: "notifications", label: "Notificaciones", devPort: 3036, subdomain: "notifications" },
 	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org", iconTag: "adc-icon-app-org" },
 	{ id: "status", label: "Status", devPort: 3020, subdomain: "status", iconTag: "adc-icon-app-status" },
 ];
@@ -167,6 +184,30 @@ function getRegistry(): PlatformLinkRegistry {
 /** Lista las apps de plataforma conocidas. */
 export function getPlatformApps(): PlatformApp[] {
 	return Array.from(getRegistry().apps.values());
+}
+
+/**
+ * Resuelve una ruta dentro de una app de plataforma a una URL **absoluta válida en
+ * el entorno actual**: en desarrollo usa el `devPort` (`http://localhost:3018/...`),
+ * en producción el subdominio (`https://projects.adigitalcafe.com/...`). Pensado para
+ * los enlaces de notificaciones (se guardan como `appId` + `path`, no como URL fija).
+ * Devuelve `null` si el `appId` no es una app conocida (el caller cae al fallback).
+ */
+export function resolvePlatformPath(appId: string, path: string): string | null {
+	const app = getRegistry().apps.get(appId);
+	if (!app) return null;
+	const pathStr = path.startsWith("/") ? path : `/${path}`;
+	const suffix = path ? pathStr : "";
+	return `${getPlatformAppOrigin(app)}${suffix}`;
+}
+
+/**
+ * Apps que exponen un panel federado de configuración de cuenta
+ * (`settingsExpose` + `remoteName`). El host `my-account` itera esta lista y
+ * carga el panel de cada una bajo demanda; las que estén offline se omiten.
+ */
+export function getAccountSettingsApps(): PlatformApp[] {
+	return getPlatformApps().filter((a) => !!a.settingsExpose && !!a.remoteName);
 }
 
 /** Limpia la caché de resoluciones (ej: tras cambiar de sesión/permisos). */

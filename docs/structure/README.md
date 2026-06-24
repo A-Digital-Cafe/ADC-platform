@@ -16,6 +16,8 @@ Estos documentos son el **prompt base** para crear o editar módulos (por humano
 | Tarea                                                   | Documento                                              |
 | ------------------------------------------------------- | ------------------------------------------------------ |
 | Crear/editar una app empresarial completa (front+back)  | [enterprise-apps.md](enterprise-apps.md)               |
+| Índice práctico de servicios (crear y editar/feature)   | [services/README.md](services/README.md)               |
+| Editar/extender un servicio o agregar un feature        | [services/README.md](services/README.md)               |
 | Crear/modificar entidades persistidas                   | [services/models.md](services/models.md)               |
 | Crear/modificar lógica de negocio o permisos            | [services/daos.md](services/daos.md)                   |
 | Crear/modificar rutas HTTP                              | [services/endpoints.md](services/endpoints.md)         |

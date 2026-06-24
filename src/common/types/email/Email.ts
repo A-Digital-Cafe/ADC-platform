@@ -90,7 +90,7 @@ export interface MailAccount {
 	 * Por defecto `"org"` (compatibilidad con cuentas existentes).
 	 */
 	scope?: "user" | "org";
-	/** Dirección completa: `usuario@<orgSlug>.tudominio.com`. */
+	/** Dirección completa: `usuario@<orgSlug>.adigitalcafe.com`. */
 	address: string;
 	displayName: string;
 	/** Contador incremental de almacenamiento usado (bytes). */

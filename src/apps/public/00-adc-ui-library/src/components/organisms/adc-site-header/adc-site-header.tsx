@@ -58,6 +58,9 @@ export class AdcSiteHeader {
 
 						<adc-apps-menu></adc-apps-menu>
 
+						{/* Campana de notificaciones: se auto-oculta si el backend (preset adc-notifications) no responde. */}
+						<adc-notification-bell></adc-notification-bell>
+
 						{this.showAccessButton && (
 							<adc-access-button
 								auth-url={this.authUrl}

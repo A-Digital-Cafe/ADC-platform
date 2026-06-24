@@ -5,13 +5,13 @@ services:
       dockerfile: Dockerfile
     container_name: adc-haraka-core
     ports:
-      - "25:25"     # SMTP entrante
-      - "587:587"   # Submission (envío autenticado desde email-service)
+      - "25:25" # SMTP entrante
+      - "587:587" # Submission (envío autenticado desde email-service)
     environment:
       # Hostname público del MTA (debe coincidir con el registro A y el PTR)
-      HARAKA_ME: ${MAIL_HOSTNAME:-mail.tudominio.com}
+      HARAKA_ME: ${MAIL_HOSTNAME:-mail.adigitalcafe.com}
       # Dominio raíz de correo; se aceptan subdominios *.<MAIL_ROOT_DOMAIN>
-      MAIL_ROOT_DOMAIN: ${MAIL_ROOT_DOMAIN:-tudominio.com}
+      MAIL_ROOT_DOMAIN: ${MAIL_ROOT_DOMAIN:-adigitalcafe.com}
       # Webhook del email-service para entregar correo entrante
       INBOUND_WEBHOOK_URL: ${MAIL_INBOUND_WEBHOOK_URL:-http://host.docker.internal:3000/api/email/inbound}
       INBOUND_WEBHOOK_SECRET: ${MAIL_INBOUND_WEBHOOK_SECRET:-change-me}

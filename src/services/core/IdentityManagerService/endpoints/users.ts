@@ -165,9 +165,11 @@ function sanitizeUserForContext(user: NonNullable<Awaited<ReturnType<IdentityMan
  */
 export class UserEndpoints {
 	private static identity: IdentityManagerService;
+	private static kernelKey: symbol;
 
-	static init(identity: IdentityManagerService): void {
+	static init(identity: IdentityManagerService, kernelKey: symbol): void {
 		UserEndpoints.identity ??= identity;
+		UserEndpoints.kernelKey ??= kernelKey;
 	}
 
 	@RegisterEndpoint({
@@ -386,13 +388,19 @@ export class UserEndpoints {
 			throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		}
 
-		const isValid = await UserEndpoints.identity.users.verifyUserPassword(user.id, currentPassword);
+		// Primitiva pre-auth: vía la superficie privilegiada `_internal(kernelKey)`,
+		// no por el getter público `users` (que ya no la expone).
+		const isValid = await UserEndpoints.identity
+			._internal(UserEndpoints.kernelKey)
+			.users.verifyUserPassword(user.id, currentPassword);
 
 		if (!isValid) {
 			throw new AuthError(401, "INVALID_PASSWORD", "Contraseña actual incorrecta");
 		}
 
 		await UserEndpoints.identity.users.updatePassword(user.id, newPassword, ctx.token!);
+		// Aviso de seguridad (fire-and-forget).
+		void UserEndpoints.identity.notifications(UserEndpoints.kernelKey).passwordChanged(user.id);
 
 		return { success: true };
 	}

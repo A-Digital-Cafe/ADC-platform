@@ -724,6 +724,23 @@ export class UserManager {
 	}
 
 	/**
+	 * IDs de usuarios que tienen el `roleId` (global) asignado directamente. `limit`
+	 * acota el fan-out. Autorización READ sobre USERS (patrón dual-mode, como el resto
+	 * del manager): el manager interno (`getAuthVerifier=()=>null`) hace short-circuit
+	 * para los resolutores de infraestructura; el público exige token+permiso, cerrando
+	 * la enumeración de usuarios por rol desde la superficie pública.
+	 */
+	async getUsersByRole(roleId: string, limit = 200, token?: string): Promise<string[]> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		if (!roleId) return [];
+		const docs = await this.userModel
+			.find({ roleIds: roleId, isActive: { $ne: false } }, { id: 1, _id: 0 })
+			.limit(limit)
+			.lean<{ id: string }[]>();
+		return docs.map((d) => d.id).filter(Boolean);
+	}
+
+	/**
 	 * Remueve un roleId de TODOS los usuarios (roleIds directos + orgMemberships).
 	 * Usado por RoleManager al eliminar un rol.
 	 */
