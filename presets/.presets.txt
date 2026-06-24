@@ -23,3 +23,4 @@ adc-email-frontend https://github.com/A-Digital-Cafe/adc-email-frontend.git main
 adc-drive https://github.com/A-Digital-Cafe/adc-drive.git main
 adc-image-editor https://github.com/A-Digital-Cafe/adc-image-editor.git main
 adc-modules-manager https://github.com/A-Digital-Cafe/adc-modules-manager.git main
+adc-notifications https://github.com/A-Digital-Cafe/adc-notifications.git main

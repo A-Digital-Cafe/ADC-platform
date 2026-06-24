@@ -13,6 +13,7 @@
 		{ "name": "📦 adc-modules-manager", "path": "presets/adc-modules-manager" },
 		{ "name": "📦 community-content", "path": "presets/community-content" },
 		{ "name": "📦 my-account", "path": "presets/my-account" },
+		{ "name": "📦 adc-notifications", "path": "presets/adc-notifications" },
 		{ "name": "📦 org-requests", "path": "presets/org-requests" },
 		{ "name": "📦 project-management", "path": "presets/project-management" },
 		{ "name": "📦 SEO", "path": "presets/SEO" },
