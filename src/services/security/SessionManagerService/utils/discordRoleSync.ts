@@ -1,8 +1,8 @@
 import type { User } from "@common/types/identity/User.js";
-import type IdentityManagerService from "../../../core/IdentityManagerService/index.js";
+import type { IdentityInternalWithDiscord } from "../../../core/IdentityManagerService/internal.js";
 import type { DiscordOAuthProvider } from "../domain/oauth/discord.js";
 
-type InternalIdentity = ReturnType<IdentityManagerService["_internal"]>;
+type InternalIdentity = IdentityInternalWithDiscord;
 type RoleManager = InternalIdentity["roles"];
 
 interface DiscordRoleSyncOptions {

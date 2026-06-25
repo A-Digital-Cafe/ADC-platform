@@ -30,7 +30,7 @@ export class AppLoader {
 		private readonly isShuttingDown: () => boolean
 	) {
 		this.#kernelKey = kernelKey;
-		this.#lifecycle = new AppLifecycle({ registry, tracker: this.#tracker, logger, kernelKey, isShuttingDown });
+		this.#lifecycle = new AppLifecycle({ kernel, registry, tracker: this.#tracker, logger, kernelKey, isShuttingDown });
 		this.#reloader = new AppReloader({ kernel, tracker: this.#tracker, lifecycle: this.#lifecycle, logger });
 	}
 

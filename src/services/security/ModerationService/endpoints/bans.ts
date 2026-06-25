@@ -4,6 +4,7 @@ import { IdentityError } from "@common/types/custom-errors/IdentityError.ts";
 import { P } from "@common/types/Permissions.ts";
 import type ModerationService from "../index.js";
 import type { ModerationInternalApi } from "../index.js";
+import type { Capability } from "@common/security/Capability.ts";
 import { parseBanRequest } from "./banValidation.js";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
 import * as BS from "./schemas/bans.js";
@@ -30,15 +31,15 @@ interface UnbanBody {
  */
 export class BanEndpoints {
 	static #service: ModerationService;
-	static #kernelKey: symbol;
+	static #cap: Capability;
 
-	static init(service: ModerationService, kernelKey: symbol): void {
+	static init(service: ModerationService, cap: Capability): void {
 		this.#service ??= service;
-		this.#kernelKey ??= kernelKey;
+		this.#cap ??= cap;
 	}
 
 	private static api(): ModerationInternalApi {
-		return this.#service._internal(this.#kernelKey);
+		return this.#service._internal(this.#cap);
 	}
 
 	private static assertGlobalAdmin(ctx: EndpointCtx): void {

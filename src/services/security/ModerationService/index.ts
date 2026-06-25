@@ -1,10 +1,12 @@
 import { BaseService } from "../../BaseService.js";
 import type MongoProvider from "../../../providers/object/mongo/index.js";
 import type RedisProvider from "../../../providers/queue/redis/index.js";
-import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 import type { Kernel } from "../../../kernel.js";
 import type { BanRecord, BanInput, BanLookupResult } from "@common/types/identity/Moderation.js";
 import type { User } from "@common/types/identity/User.js";
+import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
+import type { IModerationService } from "@common/types/identity/IModerationService.ts";
 
 import { banSchema } from "./domain/ban.js";
 import { BanRepository } from "./dao/BanRepository.js";
@@ -41,15 +43,14 @@ export interface ModerationInternalApi {
  * Superficie pública: solo `start`/`stop`/`name`. Toda la lógica (lookups hot-path,
  * mutaciones internas y operaciones admin) se expone únicamente vía `_internal(kernelKey)`.
  */
-export default class ModerationService extends BaseService {
+export default class ModerationService extends BaseService implements IModerationService {
 	public readonly name = "ModerationService";
 
 	readonly #mongoProvider: MongoProvider;
 	#repo: BanRepository | null = null;
 	#authedRepo: BanRepository | null = null;
-	#identityService: IdentityManagerService | null = null;
+	#identityService: IIdentityManagerService | null = null;
 	#sync: DiscordSyncRunner | null = null;
-	#kernelKey: symbol | null = null;
 
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
@@ -59,7 +60,6 @@ export default class ModerationService extends BaseService {
 	@EnableEndpoints({ managers: () => [BanEndpoints] })
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
-		this.#kernelKey = kernelKey;
 		await this.#waitConnected(this.#mongoProvider);
 
 		const BanModel = this.#mongoProvider.createModel<BanRecord>("Ban", banSchema);
@@ -69,19 +69,19 @@ export default class ModerationService extends BaseService {
 		this.#repo = new BanRepository(BanModel, redis, this.logger);
 		await this.#repo.warmupRedisCache();
 
-		this.#identityService = this.#tryGet<IdentityManagerService>("service", "IdentityManagerService");
+		this.#identityService = this.#tryGet<IIdentityManagerService>("service", "IdentityManagerService");
 		this.#authedRepo = this.#identityService
 			? new BanRepository(BanModel, redis, this.logger, () => this.#identityService!.createAuthVerifier())
 			: this.#repo;
 
 		const pengubot = this.#tryGet<MongoProvider>("provider", "pengubot@object/mongo");
 		if (pengubot && this.#identityService) {
-			this.#sync = new DiscordSyncRunner(this.#repo, (u, a) => this.#banPlatformUser(u, a), this.#identityService, kernelKey, this.logger);
+			this.#sync = new DiscordSyncRunner(this.#repo, (u, a) => this.#banPlatformUser(u, a), this.#identityService, this.getCapability(), this.logger);
 			const cfg = (this.config?.private as ModerationPrivateConfig | undefined)?.discord;
 			await this.#sync.start(pengubot, { enabled: cfg?.syncEnabled, intervalMs: cfg?.syncIntervalMs });
 		}
 
-		BanEndpoints.init(this, kernelKey);
+		BanEndpoints.init(this, this.getCapability());
 		this.logger.logOk(`${this.name} iniciado`);
 	}
 
@@ -95,8 +95,8 @@ export default class ModerationService extends BaseService {
 	 * Acceso privilegiado para servicios de infraestructura (kernel-only).
 	 * Cualquier consumidor externo debe pasar el `kernelKey` recibido en su propio `start()`.
 	 */
-	_internal(kernelKey: symbol): ModerationInternalApi {
-		if (kernelKey !== this.#kernelKey) throw new Error("Acceso denegado: kernelKey inválido");
+	_internal(token: CapabilityToken): ModerationInternalApi {
+		assertScope(token, Scope.ModerationInternal);
 		const repo = this.#requireRepo();
 		const authed = this.#authedRepo ?? repo;
 		return {

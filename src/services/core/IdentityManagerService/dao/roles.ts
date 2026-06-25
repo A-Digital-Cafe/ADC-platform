@@ -8,19 +8,19 @@ import type { Permission, Role } from "@common/types/identity/index.ts";
 import { PREDEFINED_ROLES, ORG_PREDEFINED_ROLES } from "../defaults/systemRoles.ts";
 import type { UserManager } from "./users.js";
 import type { GroupManager } from "./groups.js";
-import type OperationsService from "../../../core/OperationsService/index.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type { Step } from "../../../core/OperationsService/types.ts";
 
 export class RoleManager {
 	readonly #permissionChecker: PermissionChecker;
-	readonly #operations: OperationsService;
+	readonly #operations: IOperationsService;
 
 	constructor(
 		private readonly roleModel: Model<any>,
 		private readonly userManager: UserManager,
 		private readonly groupManager: GroupManager,
 		private readonly logger: ILogger,
-		operations: OperationsService,
+		operations: IOperationsService,
 		getAuthVerifier: AuthVerifierGetter = () => null
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "RoleManager", RESOURCE_NAME);

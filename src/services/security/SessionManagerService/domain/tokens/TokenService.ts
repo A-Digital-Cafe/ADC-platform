@@ -1,4 +1,4 @@
-import type { TokenVerificationResult, IJWTProviderMultiKey, TokenPayload } from "../../../../../providers/security/jwt/types.d.ts";
+import type { TokenVerificationResult, IJWTProviderMultiKey, TokenPayload } from "@interfaces/modules/providers/IJWT.js";
 import type { AuthenticatedUser, SessionData } from "../../types.js";
 import type { KeyStore } from "../keys/KeyStore.js";
 import type { RefreshTokenRepository, StoredRefreshToken } from "./RefreshTokenRepository.js";

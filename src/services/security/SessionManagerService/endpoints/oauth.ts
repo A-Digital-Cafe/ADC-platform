@@ -3,7 +3,8 @@ import type { GeoIPValidator } from "../domain/security/GeoIPValidator.js";
 import type { SessionManager } from "../domain/session/manager.js";
 import type { OAuthProviderRegistry } from "../domain/oauth/index.js";
 import type { DiscordOAuthProvider } from "../domain/oauth/discord.js";
-import type IdentityManagerService from "../../../core/IdentityManagerService/index.js";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
+import type { IdentityInternalWithDiscord } from "../../../core/IdentityManagerService/internal.js";
 import type RedisProvider from "../../../../providers/queue/redis/index.js";
 import {
 	RegisterEndpoint,
@@ -61,8 +62,8 @@ interface OAuthEndpointsDeps {
 	geoValidator: GeoIPValidator;
 	sessionManager: SessionManager;
 	oauthRegistry: OAuthProviderRegistry;
-	identityService: IdentityManagerService | null;
-	internalIdentity: ReturnType<IdentityManagerService["_internal"]> | null;
+	identityService: IIdentityManagerService | null;
+	internalIdentity: IdentityInternalWithDiscord | null;
 	redis: RedisProvider | null;
 	cookieDomain: string;
 	defaultRedirectUrl: string;

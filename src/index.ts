@@ -5,6 +5,9 @@ import killAllChildProcesses from "./utils/system/KillChildProcesses.ts";
 
 async function main() {
 	const kernel = new Kernel();
+	// Secreto de arranque: sólo este bootstrap puede iniciar/detener el kernel.
+	// Nunca se entrega a los módulos (a diferencia de las capabilities).
+	const bootToken = Symbol("kernel-boot");
 
 	// --- Manejador de señales para cierre ordenado ---
 	let isShuttingDown = false;
@@ -42,7 +45,7 @@ async function main() {
 
 		try {
 			Logger.info("Deteniendo el kernel...");
-			await kernel.stop();
+			await kernel.stop(bootToken);
 			Logger.ok("Kernel detenido correctamente.");
 
 			Logger.info("Ejecutando limpieza forzosa final...");
@@ -112,7 +115,7 @@ async function main() {
 	});
 
 	// Ahora sí iniciar el kernel (las señales ya están registradas)
-	await kernel.start();
+	await kernel.start(bootToken);
 
 	Logger.ok("---------------------------------------");
 	Logger.ok("Kernel en funcionamiento.");

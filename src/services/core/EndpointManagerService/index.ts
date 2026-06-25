@@ -3,7 +3,7 @@ import type { IHostBasedHttpProvider } from "../../../interfaces/modules/provide
 import { type HttpMethod, type EndpointConfig, type EndpointHandler } from "./types.js";
 import { setPermissionValidator } from "./decorators.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
-import OperationsService from "../OperationsService/index.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type RabbitMQProvider from "../../../providers/queue/rabbitmq/index.ts";
 import type RedisProvider from "../../../providers/queue/redis/index.ts";
 import { EndpointRegistry } from "./parts/EndpointRegistry.js";
@@ -44,7 +44,7 @@ export default class EndpointManagerService extends BaseService {
 	#httpProvider: IHostBasedHttpProvider | null = null;
 	// SessionManager se carga con lazy-load pattern en #getSessionManager()
 	#sessionManager: ISessionVerifier | null = null;
-	#operationsService: OperationsService | null = null;
+	#operationsService: IOperationsService | null = null;
 	readonly #registry = new EndpointRegistry(this.logger);
 	#jobManager: JobManager | null = null;
 	#csrfConfig: CsrfRuntimeConfig | null = null;
@@ -58,7 +58,7 @@ export default class EndpointManagerService extends BaseService {
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 		this.#httpProvider = this.getMyProvider<IHostBasedHttpProvider>("fastify-server");
-		this.#operationsService = this.getMyService<OperationsService>("OperationsService");
+		this.#operationsService = this.getMyService<IOperationsService>("OperationsService");
 		this.#csrfConfig = resolveCsrfConfig(this.config.csrf as CsrfOptions | undefined);
 		this.#rateLimits = resolveRateLimitConfig(this.config.rateLimit as RateLimitConfig | undefined);
 

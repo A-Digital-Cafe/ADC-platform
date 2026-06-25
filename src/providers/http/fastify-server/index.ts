@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
+import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
 import type { IHostBasedHttpProvider, HostOptions, HttpHandler } from "../../../interfaces/modules/providers/IHttpServer.js";
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
@@ -442,9 +443,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		return types[ext] || "application/octet-stream";
 	}
 
-	/** Obtener la instancia raw de Fastify (solo Kernel/servicios con kernelKey). */
-	@OnlyKernel()
-	getApp(_kernelKey: symbol): FastifyInstance<any> {
+	/** Obtener la instancia raw de Fastify. Requiere capability con scope `http:raw`. */
+	getApp(token: Capability): FastifyInstance<any> {
+		assertScope(token, Scope.HttpRaw);
 		return this.app;
 	}
 

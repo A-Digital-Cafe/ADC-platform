@@ -1,8 +1,8 @@
 import { BaseApp } from "../../BaseApp.js";
-import type IdentityManagerService from "../../../services/core/IdentityManagerService/index.js";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.js";
 import type { Role, User } from "@common/types/identity/index.js";
-import type SessionManagerService from "../../../services/security/SessionManagerService/index.js";
+import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
 import { Logger } from "../../../utils/logger/Logger.js";
 import { IdentityScopes } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
@@ -15,14 +15,14 @@ interface IdentityTestData {
 }
 
 /**
- * App que prueba IdentityManagerService con MongoDB y autenticación.
+ * App que prueba IIdentityManagerService con MongoDB y autenticación.
  * Prueba el flujo completo: login, tokens, permisos y operaciones autenticadas.
  *
  * Usa el usuario SYSTEM para operaciones privilegiadas.
  */
 export default class UserProfileApp extends BaseApp {
-	private identityManager!: IdentityManagerService;
-	private sessionManager!: SessionManagerService;
+	private identityManager!: IIdentityManagerService;
+	private sessionManager!: ISessionManagerService;
 	#systemUser: User | null = null;
 	#kernelKey!: symbol;
 	#systemToken: string | null = null;
@@ -35,8 +35,8 @@ export default class UserProfileApp extends BaseApp {
 	async start(kernelKey: symbol) {
 		await super.start(kernelKey);
 		this.#kernelKey = kernelKey;
-		this.identityManager = this.getMyService<IdentityManagerService>("IdentityManagerService");
-		this.sessionManager = this.getMyService<SessionManagerService>("SessionManagerService");
+		this.identityManager = this.getMyService<IIdentityManagerService>("IdentityManagerService");
+		this.sessionManager = this.getMyService<ISessionManagerService>("SessionManagerService");
 		this.#systemUser = await this.identityManager.system.getSystemUser(kernelKey);
 	}
 

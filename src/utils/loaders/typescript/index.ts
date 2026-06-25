@@ -58,7 +58,15 @@ export default class TypeScriptLoader implements IModuleLoader {
 		// Service recibe argumentos distintos (kernel + config), por lo que lo instanciamos diferente
 		const serviceInstance = new ServiceClass(kernel, config);
 		try {
-			serviceInstance.setKernelKey(this.#kernelKey);
+			// Privilegios declarados en el config.json del servicio (para los scopes de su businessCap).
+			let declared: string[] | undefined;
+			try {
+				const raw = JSON.parse(await fs.readFile(path.join(modulePath, "config.json"), "utf-8"));
+				if (Array.isArray(raw.privileges)) declared = raw.privileges;
+			} catch {
+				/* sin config.json o sin privileges */
+			}
+			kernel.provisionModule(this.#kernelKey, serviceInstance, { name: serviceInstance.name, kind: "service", path: modulePath, declared });
 			await serviceInstance.start(this.#kernelKey);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando service ${serviceInstance.name}: ${error.message}`);

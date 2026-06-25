@@ -11,6 +11,7 @@
  */
 
 import type { UIModuleConfig } from "../../../interfaces/modules/IUIModule.js";
+import type { Capability } from "../../security/Capability.js";
 
 // ============ Sitemap ============
 
@@ -179,7 +180,7 @@ export interface RegisterLlmsOptions {
  * que el contrato público dependa del módulo concreto del provider.
  */
 export interface ISeoFastifyProvider {
-	getApp(kernelKey: symbol): { addHook(name: "onSend", handler: (...args: any[]) => any): void };
+	getApp(token: Capability): { addHook(name: "onSend", handler: (...args: any[]) => any): void };
 	registerHostRoute(host: string, method: string, path: string, handler: (...args: any[]) => any): void;
 }
 

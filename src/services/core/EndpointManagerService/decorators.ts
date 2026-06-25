@@ -367,7 +367,7 @@ function getEndpointManagerService(instance: any): any {
 	try {
 		if (typeof instance.getMyService === "function") return instance.getMyService("EndpointManagerService");
 
-		if (instance.kernel?.registry) return instance.kernel.registry.getService("EndpointManagerService");
+		if (instance.kernel?.getReadonlyRegistry) return instance.kernel.getReadonlyRegistry().getService("EndpointManagerService");
 
 		if (instance.config?.services) {
 			const hasEndpointManager = instance.config.services.some((s: any) => s.name === "EndpointManagerService");

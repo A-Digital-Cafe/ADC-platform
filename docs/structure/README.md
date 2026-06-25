@@ -23,6 +23,7 @@ Estos documentos son el **prompt base** para crear o editar módulos (por humano
 | Crear/modificar rutas HTTP                              | [services/endpoints.md](services/endpoints.md)         |
 | Armar/editar el `index.ts` y `config.json` del servicio | [services/service-shell.md](services/service-shell.md) |
 | Crear/editar una app UI (micro-frontend)                | [apps/frontend.md](apps/frontend.md)                   |
+| Acceder a otro módulo o a una superficie privilegiada   | [kernel-access.md](kernel-access.md)                   |
 | Crear, extraer o instalar un preset (repos git)         | [../multirepo.md](../multirepo.md)                     |
 
 ## Convenciones globales

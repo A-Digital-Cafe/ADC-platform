@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { TokenVerificationResult as JWTTokenVerificationResult } from "../../../providers/security/jwt/types.d.ts";
+import type { TokenVerificationResult as JWTTokenVerificationResult } from "@interfaces/modules/providers/IJWT.js";
 import type { BanLookupResult } from "@common/types/identity/Moderation.js";
 
 /**

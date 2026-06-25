@@ -13,27 +13,16 @@ export interface IService extends IModule, ILifecycle {}
  * Maneja la inyección del Kernel y la carga de módulos desde config.json.
  */
 export abstract class BaseService extends BaseModule implements IService {
-	private kernelKey?: symbol;
 	private isInitialized = false; // Flag para prevenir múltiples inicializaciones
 	/** Nombre único del service */
 	abstract readonly name: string;
-
-	readonly #kernel: Kernel;
 
 	constructor(
 		kernel: Kernel,
 		protected readonly options?: IModuleConfig
 	) {
 		super(kernel, options);
-		this.#kernel = kernel;
 	}
-
-	public readonly setKernelKey = (key: symbol): void => {
-		if (this.kernelKey) {
-			throw new Error("Kernel key ya está establecida");
-		}
-		this.kernelKey = key;
-	};
 
 	/**
 	 * Lógica de inicialización del service
@@ -46,6 +35,10 @@ export abstract class BaseService extends BaseModule implements IService {
 			return;
 		}
 
+		// Acceso privilegiado (carga + registro de sub‑dependencias) vía la infraCap contenida.
+		const registry = this.getMutableRegistry();
+		const moduleLoader = this.getModuleLoader();
+
 		// Si ModuleLoader pasó el path real, usarlo; si no, calcular manualmente
 		const serviceDir = this.options?.__modulePath || this.getServiceDir();
 		const modulesConfigPath = path.join(serviceDir, "config.json");
@@ -55,13 +48,13 @@ export abstract class BaseService extends BaseModule implements IService {
 
 		try {
 			// Cargar variables de entorno del servicio usando ModuleLoader
-			const serviceEnvVars = await Kernel.moduleLoader.loadEnvFile(envPath);
+			const serviceEnvVars = await moduleLoader.loadEnvFile(envPath);
 
 			let baseConfig: Partial<IModuleConfig> = {};
 			try {
 				const configContent = await fs.readFile(modulesConfigPath, "utf-8");
 				const rawConfig = JSON.parse(configContent);
-				baseConfig = Kernel.moduleLoader.interpolateEnvVars(rawConfig, serviceEnvVars);
+				baseConfig = moduleLoader.interpolateEnvVars(rawConfig, serviceEnvVars);
 			} catch (e: any) {
 				this.logger.logDebug(`No se pudo leer config.json: ${e.message}`);
 			}
@@ -79,16 +72,16 @@ export abstract class BaseService extends BaseModule implements IService {
 					// Cargar estos providers con las variables de entorno del servicio
 					for (const providerConfig of baseConfig.providers) {
 						try {
-							const provider = await Kernel.moduleLoader.loadProvider(providerConfig, serviceEnvVars);
-							this.#kernel.registry.registerProvider(provider.name, provider, providerConfig);
+							const provider = await moduleLoader.loadProvider(providerConfig, serviceEnvVars);
+							registry.registerProvider(provider.name, provider, providerConfig);
 
 							// También registrar por el nombre del módulo/configuración
 							if (providerConfig.name !== provider.name) {
-								this.#kernel.registry.registerProvider(providerConfig.name, provider, providerConfig);
+								registry.registerProvider(providerConfig.name, provider, providerConfig);
 							}
 
 							// Agregar como dependencia de la app actual
-							this.#kernel.registry.addModuleDependency("provider", providerConfig.name, providerConfig.custom);
+							registry.addModuleDependency("provider", providerConfig.name, providerConfig.custom);
 						} catch (error) {
 							const message = `Error cargando provider ${providerConfig.name}`;
 							// failOnError puede venir del config.json del servicio
@@ -107,13 +100,13 @@ export abstract class BaseService extends BaseModule implements IService {
 			if (utilitiesToLoad && Array.isArray(utilitiesToLoad)) {
 				for (const utilityConfig of utilitiesToLoad) {
 					try {
-						const utility = await Kernel.moduleLoader.loadUtility(utilityConfig);
-						this.#kernel.registry.registerUtility(utility.name, utility, utilityConfig, null);
+						const utility = await moduleLoader.loadUtility(utilityConfig);
+						registry.registerUtility(utility.name, utility, utilityConfig, null);
 
 						// Si el nombre contiene "/", también registrar con el nombre base como alias
 						if (utilityConfig.name.includes("/")) {
 							const baseName = utilityConfig.name.split("/").pop()!;
-							this.#kernel.registry.registerUtility(baseName, utility, utilityConfig, null);
+							registry.registerUtility(baseName, utility, utilityConfig, null);
 						}
 					} catch (error: any) {
 						const message = `Error cargando utility ${utilityConfig.name}: ${error.message}`;

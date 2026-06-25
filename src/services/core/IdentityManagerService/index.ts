@@ -9,26 +9,29 @@ import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManage
 import { seedDevUsers } from "./dao/devSeeder.js";
 import { NotifyManager } from "./notify.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
-import type SessionManagerService from "../../security/SessionManagerService/index.js";
-import type ModerationService from "../../security/ModerationService/index.js";
-import type OperationsService from "../OperationsService/index.ts";
+import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
+import type { IModerationService } from "@common/types/identity/IModerationService.js";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type { Step } from "../OperationsService/index.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
-import { UserEndpoints } from "./endpoints/users.js";
-import { RoleEndpoints } from "./endpoints/roles.js";
-import { GroupEndpoints } from "./endpoints/groups.js";
-import { OrgEndpoints } from "./endpoints/organizations.js";
-import { RegionEndpoints } from "./endpoints/regions.js";
-import { StatsEndpoints } from "./endpoints/stats.js";
-import { AvatarEndpoints } from "./endpoints/avatar.js";
+import { UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints } from "./endpoints/index.js";
 import type AttachmentsUtility from "../../../utilities/attachments/attachments-utility/index.js";
 import type { AttachmentsManager } from "../../../utilities/attachments/attachments-utility/index.js";
+import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
+import {
+	buildInternalApi,
+	buildDiscordApi,
+	type IdentityInternalApi,
+	type IdentityAvatarApi,
+	type IdentityDiscordApi,
+} from "./internal.js";
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
 import type { QuotaTrackerGetter } from "@common/types/storage/quota.ts";
 import { createQuotaTrackerGetter } from "../../data/StorageQuotaService/index.js";
+import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.js";
 
 /**
  * Servicio opcional capaz de purgar datos privados de un usuario tras la
@@ -64,9 +67,10 @@ interface UserDataPurger {
  * pasa libremente entre módulos (oráculo de password). Quedan accesibles sólo vía
  * `_internal(kernelKey)` para la infraestructura de auth (SessionManager, login).
  */
-export type PublicUserManager = Omit<UserManager, "authenticate" | "verifyUserPassword">;
+import type { IIdentityManagerService, PublicUserManager } from "@common/types/identity/IIdentityManagerService.ts";
+export type { PublicUserManager };
 
-export default class IdentityManagerService extends BaseService {
+export default class IdentityManagerService extends BaseService implements IIdentityManagerService {
 	public readonly name = "IdentityManagerService";
 
 	// Managers globales
@@ -77,9 +81,9 @@ export default class IdentityManagerService extends BaseService {
 	#regionManager: RegionManager | null = null;
 	#orgManager: OrgManager | null = null;
 	#permissionManager: PermissionManager | null = null;
-	#notifyManager: NotifyManager = new NotifyManager((input) => this.emitNotification(input));
+	readonly #notifyManager: NotifyManager = new NotifyManager((input) => this.emitNotification(input));
 
-	// Managers internos (sin auth) para uso de servicios de infraestructura (SessionManagerService)
+	// Managers internos (sin auth) para uso de servicios de infraestructura (ISessionManagerService)
 	#internalUserManager: UserManager | null = null;
 	#internalOrgManager: OrgManager | null = null;
 	#internalRoleManager: RoleManager | null = null;
@@ -93,11 +97,11 @@ export default class IdentityManagerService extends BaseService {
 	// Kernel key para operaciones privilegiadas
 	#kernelKey: symbol | null = null;
 
-	// SessionManagerService (lazy-loaded singleton)
-	#sessionManager: SessionManagerService | null = null;
+	// ISessionManagerService (lazy-loaded singleton)
+	#sessionManager: ISessionManagerService | null = null;
 
-	// ModerationService (lazy, opcional) — usado por endpoints ban/unban.
-	#moderationService: ModerationService | null = null;
+	// IModerationService (lazy, opcional) — usado por endpoints ban/unban.
+	#moderationService: IModerationService | null = null;
 	#moderationLookupAttempted = false;
 
 	// Servicios de datos privados del usuario (lazy, opcionales) — purga en cascada
@@ -111,8 +115,8 @@ export default class IdentityManagerService extends BaseService {
 	// MongoDB provider
 	readonly #mongoProvider: MongoProvider;
 
-	// OperationsService for stepper support in cascade DAOs
-	readonly #operationsService: OperationsService;
+	// IOperationsService for stepper support in cascade DAOs
+	readonly #operationsService: IOperationsService;
 
 	// Cache de conexiones por organización
 	readonly #orgConnectionCache: Map<string, { connection: Connection; managers: OrgScopedManagers }> = new Map();
@@ -122,9 +126,11 @@ export default class IdentityManagerService extends BaseService {
 
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
-		this.#getQuotaTracker = createQuotaTrackerGetter(kernel);
+		// Excepción de ciclo: Identity NO puede declarar StorageQuotaService (StorageQuota
+		// depende de Identity), así que resuelve por nombre fijo vía el reader del kernel.
+		this.#getQuotaTracker = createQuotaTrackerGetter(() => kernel.getReadonlyRegistry().getService<IStorageQuotaService>("StorageQuotaService"));
 		this.#mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
-		this.#operationsService = kernel.registry.getService<OperationsService>("OperationsService");
+		this.#operationsService = this.getMyService<IOperationsService>("OperationsService");
 	}
 
 	/**
@@ -200,7 +206,7 @@ export default class IdentityManagerService extends BaseService {
 			);
 			this.#systemManager = new SystemManager(UserModel, RoleModel, GroupModel, this.logger, kernelKey);
 
-			// Managers internos (sin auth verifier) para servicios de infraestructura (SessionManagerService)
+			// Managers internos (sin auth verifier) para servicios de infraestructura (ISessionManagerService)
 			// Usan () => null como AuthVerifierGetter, por lo que requirePermission no aplica
 			const noAuth: () => null = () => null;
 			this.#internalUserManager = new UserManager(UserModel, this.logger, noAuth);
@@ -285,7 +291,7 @@ export default class IdentityManagerService extends BaseService {
 			}
 
 			// Inicializar endpoint managers
-			UserEndpoints.init(this, kernelKey);
+			UserEndpoints.init(this, this.getCapability());
 			RoleEndpoints.init(this);
 			GroupEndpoints.init(this);
 			OrgEndpoints.init(this);
@@ -316,16 +322,16 @@ export default class IdentityManagerService extends BaseService {
 	}
 
 	/**
-	 * Crea el AuthVerifier que usa SessionManagerService y PermissionManager.
+	 * Crea el AuthVerifier que usa ISessionManagerService y PermissionManager.
 	 * Usado internamente y disponible para otros servicios que necesiten delegar auth.
 	 */
 	createAuthVerifier(): IAuthVerifier {
 		return {
 			verifyToken: async (token: string) => {
-				// Lazy-load singleton pattern para SessionManagerService Opcional
+				// Lazy-load singleton pattern para ISessionManagerService Opcional
 				if (!this.#sessionManager)
 					try {
-						this.#sessionManager = this.getMyService<SessionManagerService>("SessionManagerService");
+						this.#sessionManager = this.getMyService<ISessionManagerService>("SessionManagerService");
 					} catch {
 						return { valid: false, error: "SessionManagerService no disponible" };
 					}
@@ -355,65 +361,28 @@ export default class IdentityManagerService extends BaseService {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
-	// Acceso interno para servicios de infraestructura (requiere kernelKey)
+	// Acceso interno para infraestructura, **separado por scope** (least‑privilege).
+	// Implementación en `./internal.ts` para no inflar este shell. Durante la transición
+	// `assertScope` acepta también la master key (`this.#kernelKey`); el flip la retira.
 	// ─────────────────────────────────────────────────────────────────────────────
 
-	/**
-	 * Acceso privilegiado a managers SIN verificación de auth.
-	 * Solo para servicios de infraestructura (SessionManagerService) que operan
-	 * en contextos pre-autenticación (login, registro, OAuth).
-	 * @param kernelKey Clave del kernel para verificar acceso privilegiado
-	 */
-	_internal(kernelKey: symbol): {
-		users: UserManager;
-		organizations: OrgManager;
-		roles: RoleManager;
-		avatarAttachments: AttachmentsManager | null;
-		discordGuildId: string | undefined;
-		getDiscordRoleMap: (guildId: string) => Promise<Record<string, string> | null>;
-		getUserIdsByRoleName: (roleName: string) => Promise<string[]>;
-	} {
-		if (kernelKey !== this.#kernelKey) throw new Error("Acceso denegado: kernelKey inválido");
-		const configPrivate = (this.config?.private || {}) as { discordGuildId?: string; discordRoleMap?: Record<string, string> };
-		const discordGuildConfigModel = this.#discordGuildConfigModel;
+	/** Managers de users/orgs/roles SIN auth (pre‑auth: login/registro/OAuth). Scope `identity:internal`. */
+	_internal(token: CapabilityToken): IdentityInternalApi {
+		assertScope(token, Scope.IdentityInternal);
+		return buildInternalApi(this.#internalUserManager!, this.#internalOrgManager!, this.#internalRoleManager!);
+	}
 
-		return {
-			users: this.#internalUserManager!,
-			organizations: this.#internalOrgManager!,
-			roles: this.#internalRoleManager!,
-			avatarAttachments: this.#avatarAttachmentsManager,
-			discordGuildId: configPrivate.discordGuildId,
-			/**
-			 * IDs de usuarios con un **rol global** por nombre (ej. `SystemRole.ADMIN`).
-			 * Usa los managers internos sin auth; por eso vive tras el gate `kernelKey`
-			 * (no es una API pública: enumeraría destinatarios privilegiados sin token).
-			 */
-			getUserIdsByRoleName: async (roleName: string): Promise<string[]> => {
-				const role = await this.#internalRoleManager?.getRoleByName(roleName).catch(() => null);
-				if (!role?.id) return [];
-				return (await this.#internalUserManager?.getUsersByRole(role.id)) ?? [];
-			},
-			/**
-			 * Obtiene el mapeo Discord Role ID → nombre de rol de plataforma para un guild.
-			 * Primero busca en DB (para guilds custom/por org), fallback a config.json default.
-			 */
-			getDiscordRoleMap: async (guildId: string): Promise<Record<string, string> | null> => {
-				// 1. Buscar config en DB para este guild
-				if (discordGuildConfigModel) {
-					try {
-						const doc = await discordGuildConfigModel.findOne({ guildId });
-						if (doc) return (doc.toObject?.() || doc).roleMap;
-					} catch {
-						/* fallback to config */
-					}
-				}
-				// 2. Fallback: si coincide con el guild default de config.json
-				if (guildId === configPrivate.discordGuildId && configPrivate.discordRoleMap) {
-					return configPrivate.discordRoleMap;
-				}
-				return null;
-			},
-		};
+	/** Manager de attachments de avatares. Scope `identity:avatar`. */
+	_internalAvatar(token: CapabilityToken): IdentityAvatarApi {
+		assertScope(token, Scope.IdentityAvatar);
+		return { avatarAttachments: this.#avatarAttachmentsManager };
+	}
+
+	/** Mapeo de roles Discord (DB por guild con fallback a config). Scope `identity:discord`. */
+	_internalDiscord(token: CapabilityToken): IdentityDiscordApi {
+		assertScope(token, Scope.IdentityDiscord);
+		const configPrivate = (this.config?.private || {}) as { discordGuildId?: string; discordRoleMap?: Record<string, string> };
+		return buildDiscordApi(this.#discordGuildConfigModel, configPrivate);
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -427,12 +396,11 @@ export default class IdentityManagerService extends BaseService {
 
 	/**
 	 * Notificaciones de dominio de identidad/seguridad (ej. cambio de contraseña).
-	 * Gateado con `@OnlyKernel()`: el caller debe presentar la `kernelKey`, de modo
-	 * que un módulo no confiable cargado en un kernel comprometido no pueda emitir
-	 * avisos de seguridad spoofeados (p.ej. "tu contraseña cambió") a usuarios arbitrarios.
+	 * Requiere capability con scope `identity:internal`: un módulo sin ese scope no puede
+	 * emitir avisos de seguridad spoofeados (p.ej. "tu contraseña cambió") a usuarios arbitrarios.
 	 */
-	@OnlyKernel()
-	notifications(_kernelKey: symbol): NotifyManager {
+	notifications(token: CapabilityToken): NotifyManager {
+		assertScope(token, Scope.IdentityInternal);
 		return this.#notifyManager;
 	}
 
@@ -598,11 +566,11 @@ export default class IdentityManagerService extends BaseService {
 	}
 
 	/**
-	 * Lookup perezoso (y cacheado) de ModerationService.
+	 * Lookup perezoso (y cacheado) de IModerationService.
 	 * Usado por endpoints ban/unban para alimentar la ban-list sin
-	 * acoplar la inicialización (ModerationService arranca DESPUÉS).
+	 * acoplar la inicialización (IModerationService arranca DESPUÉS).
 	 */
-	tryGetModerationService(): ModerationService | null {
+	tryGetModerationService(): IModerationService | null {
 		if (this.#moderationService) return this.#moderationService;
 		if (this.#moderationLookupAttempted) return null;
 		this.#moderationLookupAttempted = true;
@@ -653,7 +621,7 @@ export default class IdentityManagerService extends BaseService {
 	/**
 	 * Purga usuarios con `metadata.scheduledDeletionAt <= now`.
 	 *
-	 * Cada usuario se procesa como un pipeline reanudable vía `OperationsService.stepper`
+	 * Cada usuario se procesa como un pipeline reanudable vía `IOperationsService.stepper`
 	 * (estado en MongoDB, TTL 48h). Si el proceso cae a mitad de la cascada, en el
 	 * siguiente tick del timer el usuario sigue "due" (aún no borrado) y el stepper
 	 * salta los pasos ya completados, reanudando los siguientes. El borrado del
@@ -721,7 +689,7 @@ export default class IdentityManagerService extends BaseService {
 				try {
 					const moderation = this.tryGetModerationService();
 					if (moderation && this.#kernelKey)
-						await moderation._internal(this.#kernelKey).unbanByUserIdInternal(userId, "auto-retention-purge");
+						await moderation._internal(this.getCapability()).unbanByUserIdInternal(userId, "auto-retention-purge");
 				} catch (e: any) {
 					this.logger.logWarn(`Retention purge: limpieza moderación de ${userId}: ${e?.message || e}`);
 				}

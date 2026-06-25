@@ -1,10 +1,12 @@
 import type MongoProvider from "@providers/object/mongo/index.js";
 import { BaseService } from "@services/BaseService.js";
 import { EnableEndpoints, DisableEndpoints } from "@services/core/EndpointManagerService/index.js";
-import type IdentityManagerService from "@services/core/IdentityManagerService/index.js";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 import { OnlyKernel } from "@adc/utils/decorators/OnlyKernel.ts";
+import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
 import { Kernel } from "@kernel";
 import type { QuotaTracker, QuotaTrackerGetter, StorageLimitOverride } from "@common/types/storage/quota.ts";
+import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.ts";
 import { StorageError } from "@common/types/custom-errors/StorageError.ts";
 import { storageUsageSchema, type StorageUsageDoc } from "./domain/usage.ts";
 import { storageLimitOverrideSchema } from "./domain/limitOverride.ts";
@@ -13,11 +15,18 @@ import { LimitsManager } from "./dao/LimitsManager.ts";
 import { UsageEndpoints } from "./endpoints/usage.ts";
 import { LimitsEndpoints } from "./endpoints/limits.ts";
 
+/**
+ * Resolver perezoso de StorageQuotaService. El consumer lo provee resolviendo su
+ * **dependencia declarada** (`this.tryGetMyService("StorageQuotaService")`), de modo
+ * que estos helpers no necesitan acceso crudo al kernel.
+ */
+export type QuotaResolver = () => IStorageQuotaService | undefined;
+
 /** Getter lazy del tracker para consumers: null si el servicio no está cargado. */
-export function createQuotaTrackerGetter(kernel: Kernel): QuotaTrackerGetter {
+export function createQuotaTrackerGetter(resolveQuota: QuotaResolver): QuotaTrackerGetter {
 	return () => {
 		try {
-			return kernel.registry.getService<StorageQuotaService>("StorageQuotaService").tracker;
+			return resolveQuota()?.tracker ?? null;
 		} catch {
 			return null;
 		}
@@ -25,9 +34,11 @@ export function createQuotaTrackerGetter(kernel: Kernel): QuotaTrackerGetter {
 }
 
 /** Registra una app consumidora si el servicio está disponible; false si no lo está. */
-export function registerStorageApp(kernel: Kernel, kernelKey: symbol, app: RegisteredApp): boolean {
+export function registerStorageApp(resolveQuota: QuotaResolver, token: Capability, app: RegisteredApp): boolean {
 	try {
-		kernel.registry.getService<StorageQuotaService>("StorageQuotaService").registerApp(kernelKey, app);
+		const quota = resolveQuota();
+		if (!quota) return false;
+		quota.registerApp(token, app);
 		return true;
 	} catch {
 		return false;
@@ -41,21 +52,19 @@ export function registerStorageApp(kernel: Kernel, kernelKey: symbol, app: Regis
  * Las apps consumidoras se registran con `registerApp(kernelKey, ...)` y los
  * AttachmentsManager reportan vía el `tracker` (checkAllowance/commit/release).
  */
-export default class StorageQuotaService extends BaseService {
+export default class StorageQuotaService extends BaseService implements IStorageQuotaService {
 	public readonly name = "StorageQuotaService";
 
 	#quotaManager: QuotaManager | null = null;
 	#limitsManager: LimitsManager | null = null;
-	#identity: IdentityManagerService | null = null;
-	#internalIdentity: ReturnType<IdentityManagerService["_internal"]> | null = null;
+	#identity: IIdentityManagerService | null = null;
+	#internalIdentity: ReturnType<IIdentityManagerService["_internal"]> | null = null;
 	#reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
 	private mongoProvider!: MongoProvider;
-	readonly #kernelRef: Kernel;
 
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
-		this.#kernelRef = kernel;
 	}
 
 	@EnableEndpoints({ managers: () => [UsageEndpoints, LimitsEndpoints] })
@@ -65,8 +74,8 @@ export default class StorageQuotaService extends BaseService {
 		this.mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
 		await this.waitForMongo();
 
-		this.#identity = this.#kernelRef.registry.getService<IdentityManagerService>("IdentityManagerService");
-		this.#internalIdentity = this.#identity._internal(kernelKey);
+		this.#identity = this.getMyService<IIdentityManagerService>("IdentityManagerService");
+		this.#internalIdentity = this.#identity._internal(this.getCapability());
 		const internal = this.#internalIdentity;
 
 		const UsageModel = this.mongoProvider.createModel<StorageUsageDoc>("storage_usage", storageUsageSchema);
@@ -87,7 +96,8 @@ export default class StorageQuotaService extends BaseService {
 		LimitsEndpoints.init(this, kernelKey);
 
 		// Identity (kernelMode menor) ya arrancó: registrar la app de avatares aquí.
-		const avatarAttachments = internal.avatarAttachments;
+		// Superficie de avatar separada por scope (`identity:avatar`).
+		const avatarAttachments = this.#identity._internalAvatar(this.getCapability()).avatarAttachments;
 		if (avatarAttachments) {
 			this.#quotaManager.registerApp({
 				appId: "avatars",
@@ -126,9 +136,9 @@ export default class StorageQuotaService extends BaseService {
 		return this.#limitsManager;
 	}
 
-	/** Registra una app consumidora (la llaman otros services en su `start()`). */
-	@OnlyKernel()
-	registerApp(_kernelKey: symbol, app: RegisteredApp): void {
+	/** Registra una app consumidora (la llaman otros services en su `start()`). Scope `storage:register`. */
+	registerApp(token: Capability, app: RegisteredApp): void {
+		assertScope(token, Scope.StorageRegister);
 		this.quota.registerApp(app);
 	}
 

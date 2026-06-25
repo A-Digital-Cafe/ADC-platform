@@ -5,6 +5,12 @@
 		"moduleResolution": "bundler",
 		"jsx": "react-jsx",
 		"paths": {
+			"@adc/utils/*": ["./../../../utils/*"],
+			"@services/*": ["./../../../services/*"],
+			"@providers/*": ["./../../../providers/*"],
+			"@utilities/*": ["./../../../utilities/*"],
+			"@interfaces/*": ["./../../../interfaces/*"],
+			"@common/*": ["./../../../common/*"],
 			"@ui-library/*": ["./../00-web-ui-library/src/*"]
 		}
 	},

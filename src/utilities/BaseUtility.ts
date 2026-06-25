@@ -11,18 +11,10 @@ export type IUtility = IModule;
  */
 export abstract class BaseUtility extends BaseModule implements IUtility {
 	abstract readonly name: string;
-	private kernelKey?: symbol;
 
 	constructor(kernel: Kernel, config?: IModuleConfig) {
 		super(kernel, config);
 	}
-
-	public readonly setKernelKey = (key: symbol): void => {
-		if (this.kernelKey) {
-			throw new Error("Kernel key ya está establecida");
-		}
-		this.kernelKey = key;
-	};
 
 	@OnlyKernel()
 	public async start(_kernelKey: symbol): Promise<void> {

@@ -1,9 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { BaseService } from "../../BaseService.js";
-import type IdentityManagerService from "../../core/IdentityManagerService/index.js";
-import type { IJWTProviderMultiKey } from "../../../providers/security/jwt/types.d.ts";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
+import type { IdentityInternalWithDiscord } from "../../core/IdentityManagerService/internal.js";
+import type { IJWTProviderMultiKey } from "@interfaces/modules/providers/IJWT.js";
 import type RedisProvider from "../../../providers/queue/redis/index.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
+import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.ts";
 import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
 export type { AuthenticatedUser, TokenVerificationResult } from "./types.js";
 
@@ -50,12 +52,12 @@ const PERMISSION_FINGERPRINT_TTL_SECONDS = 60;
  * - Bloqueo automático por intentos sospechosos
  * - Redis para estado distribuido (opcional)
  */
-export default class SessionManagerService extends BaseService implements ISessionVerifier {
+export default class SessionManagerService extends BaseService implements ISessionVerifier, ISessionManagerService {
 	public readonly name = "SessionManagerService";
 
 	// Providers externos
-	#identityService: IdentityManagerService | null = null;
-	#internalIdentity: ReturnType<IdentityManagerService["_internal"]> | null = null;
+	#identityService: IIdentityManagerService | null = null;
+	#internalIdentity: IdentityInternalWithDiscord | null = null;
 	#jwtProvider: IJWTProviderMultiKey | null = null;
 	#redis: RedisProvider | null = null;
 	#moderation: ModerationLookupService | null = null;
@@ -92,9 +94,14 @@ export default class SessionManagerService extends BaseService implements ISessi
 		this.#kernelKey ??= kernelKey;
 
 		this.#jwtProvider ??= this.getMyProvider<IJWTProviderMultiKey>("security/jwt");
-		this.#identityService ??= this.getMyService<IdentityManagerService>("IdentityManagerService");
+		this.#identityService ??= this.getMyService<IIdentityManagerService>("IdentityManagerService");
 		if (this.#identityService) {
-			this.#internalIdentity ??= this.#identityService._internal(kernelKey);
+			// SessionManager necesita la superficie combinada (users/roles para auth + discord
+			// para el sync de roles): declara `identity:internal` e `identity:discord`.
+			this.#internalIdentity ??= {
+				...this.#identityService._internal(this.getCapability()),
+				...this.#identityService._internalDiscord(this.getCapability()),
+			};
 		}
 
 		// Redis es opcional - funciona con fallback en memoria
@@ -181,7 +188,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 		try {
 			if (!this.#moderation) {
 				const mod = this.getMyService<import("../ModerationService/index.js").default>("ModerationService");
-				this.#moderation = mod._internal(this.#kernelKey!);
+				this.#moderation = mod._internal(this.getCapability());
 			}
 		} catch {
 			this.#moderation = null;

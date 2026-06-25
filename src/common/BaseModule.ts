@@ -2,6 +2,11 @@ import { IModule, IModuleConfig } from "../interfaces/modules/IModule.js";
 import { ILogger } from "../interfaces/utils/ILogger.js";
 import { Logger } from "../utils/logger/Logger.js";
 import { Kernel } from "../kernel.js";
+import { bindKernelKey } from "../utils/decorators/OnlyKernel.ts";
+import type { ReadonlyModuleRegistry } from "../utils/registry/ReadonlyModuleRegistry.ts";
+import type { ModuleRegistry } from "../utils/registry/ModuleRegistry.ts";
+import type { ModuleLoader } from "../utils/loaders/ModuleLoader.ts";
+import type { Capability } from "./security/Capability.ts";
 import { emitNotification } from "./utils/notifications/emit.js";
 import type { NotifyInput } from "./types/notifications/Notification.js";
 
@@ -18,14 +23,112 @@ export abstract class BaseModule implements IModule {
 
 	protected readonly logger: ILogger = Logger.getLogger(this.constructor.name);
 	protected config: IModuleConfig;
-	readonly #kernel: Kernel;
+
+	/**
+	 * Handle **sólo‑lectura** del registry. Se captura en el constructor (no en
+	 * `setKernelKey`) porque algunos módulos resuelven dependencias en su propio
+	 * constructor, antes de recibir su token.
+	 *
+	 * Opcional: las **utilities** se construyen con `(config)` en vez de `(kernel)`
+	 * (ver `TypeScriptLoader.loadUtility`) y no usan el registry —reciben sus
+	 * dependencias por argumentos—, así que ahí queda `undefined`.
+	 */
+	readonly #readonlyRegistry?: ReadonlyModuleRegistry;
+
+	/** Referencia al kernel real (sólo si el módulo se construyó con uno; ver nota arriba). */
+	readonly #kernelRef?: Kernel;
+
+	/** Capability de negocio del módulo (scopes acotados), para reenviar a superficies privilegiadas. */
+	#businessCap?: Capability;
+
+	/**
+	 * Capability de infraestructura (registrar/cargar sub‑dependencias). **Contenida**:
+	 * vive en este campo privado de BaseModule, inaccesible para las subclases y para
+	 * código inyectado (que no tiene `this`), y sólo la usan `getMutableRegistry`/
+	 * `getModuleLoader` de aquí.
+	 */
+	#infraCap?: Capability | symbol;
 
 	constructor(kernel: Kernel, config?: IModuleConfig) {
-		this.#kernel = kernel;
+		// Las utilities se construyen con `(config)` en vez de `(kernel)`: sólo guardamos
+		// la referencia/handles si realmente recibimos un Kernel.
+		const maybeKernel = typeof (kernel as Kernel | undefined)?.getReadonlyRegistry === "function" ? kernel : undefined;
+		this.#kernelRef = maybeKernel;
+		this.#readonlyRegistry = maybeKernel?.getReadonlyRegistry();
 		this.config = {
 			name: "unknown",
 			...config,
 		};
+	}
+
+	/**
+	 * Recibe el token de autorización del kernel (kernelKey o, tras la migración, la
+	 * capability del módulo) y lo asocia a la instancia para que `@OnlyKernel` lo valide
+	 * sin que sea legible como propiedad por nombre.
+	 *
+	 * Único para Apps/Services/Utilities (todas extienden BaseModule). Providers tienen
+	 * el suyo propio (no acceden al registry).
+	 */
+	public readonly setKernelKey = (token: symbol): void => {
+		bindKernelKey(this, token);
+	};
+
+	/** El kernel (`provisionModule`) inyecta la businessCap del módulo. Idempotente. */
+	public setCapability(cap: Capability): void {
+		if (this.#businessCap) throw new Error("Capability ya establecida");
+		this.#businessCap = cap;
+	}
+
+	/** El kernel (`provisionModule`) inyecta la infraCap. Idempotente. */
+	public setInfraToken(token: Capability | symbol): void {
+		if (this.#infraCap) throw new Error("Infra capability ya establecida");
+		this.#infraCap = token;
+	}
+
+	/**
+	 * Handle sólo‑lectura del registry para uso **interno** de BaseModule. NO se expone
+	 * a las subclases: la lógica de negocio sólo resuelve dependencias **declaradas** en
+	 * `config.json` vía `getMyService`/`getMyProvider`/`getMyUtility`.
+	 */
+	#requireRegistry(): ReadonlyModuleRegistry {
+		if (!this.#readonlyRegistry) {
+			throw new Error(`Registry no disponible en ${this.name} (módulo construido sin Kernel)`);
+		}
+		return this.#readonlyRegistry;
+	}
+
+	/**
+	 * Resuelve un service de **plataforma** por nombre fijo (infra de clase base; hoy
+	 * sólo `UIFederationService`, para que `BaseApp` registre su módulo UI). NO es para
+	 * resolver dependencias de negocio (usá `getMyService`); sus métodos privilegiados
+	 * siguen gateados por scope.
+	 */
+	protected getUiFederationService<S>(): S {
+		return this.#requireRegistry().getService<S>("UIFederationService");
+	}
+
+	/**
+	 * businessCap del módulo, para **reenviar** a superficies que validan scope
+	 * (p.ej. `identity._internal(cap)`). Acotada por la política de su tier.
+	 */
+	protected getCapability(): Capability {
+		if (!this.#businessCap) throw new Error(`Capability no disponible en ${this.name} (módulo no provisionado)`);
+		return this.#businessCap;
+	}
+
+	/**
+	 * Registry **mutable** para registrar las sub‑dependencias declaradas del módulo.
+	 * Usa la infraCap contenida; la subclase puede invocarlo pero no extraer la infraCap.
+	 */
+	protected getMutableRegistry(): ModuleRegistry {
+		if (!this.#kernelRef || !this.#infraCap) throw new Error(`Infra no disponible en ${this.name} (módulo no provisionado)`);
+		return this.#kernelRef.getMutableRegistry(this.#infraCap);
+	}
+
+	/** Loader para cargar las sub‑dependencias declaradas del módulo. Usa la infraCap contenida. */
+	protected getModuleLoader(): ModuleLoader {
+		if (!this.#infraCap) throw new Error(`Infra no disponible en ${this.name} (módulo no provisionado)`);
+		return Kernel.getModuleLoader(this.#infraCap);
 	}
 
 	/**
@@ -73,7 +176,7 @@ export abstract class BaseModule implements IModule {
 		if (!providerConfig) {
 			throw new Error(`Provider ${name} no está configurado en ${this.name}`);
 		}
-		return this.#kernel.registry.getProvider<P>(name, providerConfig.custom);
+		return this.#requireRegistry().getProvider<P>(name, providerConfig.custom);
 	}
 
 	/**
@@ -87,7 +190,7 @@ export abstract class BaseModule implements IModule {
 		if (!utilityConfig) {
 			throw new Error(`Utility ${name} no está configurada en ${this.name}`);
 		}
-		return this.#kernel.registry.getUtility<U>(name, utilityConfig.custom);
+		return this.#requireRegistry().getUtility<U>(name, utilityConfig.custom);
 	}
 
 	/**
@@ -101,7 +204,20 @@ export abstract class BaseModule implements IModule {
 		if (!serviceConfig) {
 			throw new Error(`Service ${name} no está configurado en ${this.name}`);
 		}
-		return this.#kernel.registry.getService<S>(name, serviceConfig.custom);
+		return this.#requireRegistry().getService<S>(name, serviceConfig.custom);
+	}
+
+	/**
+	 * Igual que {@link getMyService} pero **tolerante**: devuelve `undefined` si el service
+	 * declarado aún no está cargado (o no está declarado). Para dependencias **opcionales**
+	 * declaradas en `config.json` (p.ej. integraciones que pueden no estar presentes).
+	 */
+	protected tryGetMyService<S>(name: string, config?: IModuleConfig): S | undefined {
+		try {
+			return this.getMyService<S>(name, config);
+		} catch {
+			return undefined;
+		}
 	}
 
 	/**
@@ -115,7 +231,7 @@ export abstract class BaseModule implements IModule {
 	 */
 	protected async emitNotification(input: NotifyInput): Promise<void> {
 		try {
-			const ok = await emitNotification(this.#kernel, input);
+			const ok = await emitNotification(this.#requireRegistry(), input);
 			if (!ok) this.logger.logDebug(`Notificación descartada (subsistema no disponible): topic=${input.topic}`);
 		} catch (e) {
 			// Defensa extra: emitNotification ya es no-throw, pero nunca propagamos.

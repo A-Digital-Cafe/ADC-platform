@@ -1,6 +1,7 @@
 {
 	"kernelMode": 65,
 	"name": "StorageQuotaService",
+	"privileges": ["identity:internal", "identity:avatar"],
 	"version": "1.0.0",
 	"failOnError": false,
 	"providers": [

@@ -8,12 +8,13 @@ import { stepperSchema } from "./domain/stepperSchema.js";
 import { executeSaga } from "./helpers/executeSaga.js";
 import { CircuitBreaker } from "./parts/CircuitBreaker.ts";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.ts";
 
 export type { Step, SagaStep, StepFunction, StepperResult } from "./types.js";
 export { CircuitBreaker, CircuitState, type CircuitBreakerConfig } from "./parts/CircuitBreaker.ts";
 
 export const HTTP_CHECK_TTL_SECONDS = 120; // 2min
-export default class OperationsService extends BaseService {
+export default class OperationsService extends BaseService implements IOperationsService {
 	public readonly name = "OperationsService";
 
 	/** Per-operation circuit breaker - used by consumers only */

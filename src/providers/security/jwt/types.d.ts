@@ -1,25 +1,11 @@
 /**
- * Payload del JWT de sesión
- * Extiende Record para ser compatible con jose.JWTPayload
+ * El contrato del provider (payload, resultado, interfaces) vive en `@interfaces`
+ * para no acoplar a los consumidores a este provider. Acá se re-exporta + la
+ * config específica del provider.
  */
-export interface TokenPayload extends Record<string, unknown> {
-	/** ID del usuario en la DB */
-	userId: string;
-	/** Permisos en formato [resource].[scope].action */
-	permissions: string[];
-	/** ID del dispositivo (para vincular con refresh token) */
-	deviceId?: string;
-	/** Metadatos adicionales (org, etc) */
-	metadata?: Record<string, unknown>;
-	/** Timestamp de creación del token */
-	iat?: number;
-	/** Timestamp de expiración del token */
-	exp?: number;
-}
+export type { TokenPayload, TokenVerificationResult, IJWTProvider, IJWTProviderMultiKey } from "@interfaces/modules/providers/IJWT.js";
 
-/**
- * Opciones de configuración del JWT
- */
+/** Opciones de configuración del JWT (específicas de este provider) */
 export interface JWTProviderConfig {
 	/** Secreto para firmar JWTs (mínimo 32 caracteres) */
 	secret: string;
@@ -33,32 +19,4 @@ export interface JWTProviderConfig {
 	issuer?: string;
 	/** Audience del token */
 	audience?: string;
-}
-
-// Resultado de verificación de token
-export interface TokenVerificationResult {
-	valid: boolean;
-	payload?: TokenPayload;
-	error?: string;
-}
-
-// Interface del JWT Provider (básica)
-export interface IJWTProvider {
-	// Crea un JWT cifrado con el payload proporcionado
-	encrypt(payload: TokenPayload): Promise<string>;
-
-	// Descifra y verifica un JWT
-	decrypt(token: string): Promise<TokenVerificationResult>;
-
-	// Verifica si un token es válido sin descifrar el payload completo
-	verify(token: string): Promise<boolean>;
-}
-
-//Interface extendida del JWT Provider con soporte multi-key
-export interface IJWTProviderMultiKey extends IJWTProvider {
-	// Crea un JWT cifrado con una clave específica
-	encryptWithKey(payload: TokenPayload, key: Uint8Array, expiresIn: string): Promise<string>;
-
-	//Descifra un JWT con una clave específica
-	decryptWithKey(token: string, key: Uint8Array): Promise<TokenVerificationResult>;
 }

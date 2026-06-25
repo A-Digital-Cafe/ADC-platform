@@ -3,7 +3,7 @@ import { UncommonResponse, type RegisteredEndpoint, type EndpointCtx, type Authe
 import ADCCustomError from "@common/types/ADCCustomError.js";
 import { IdempotencyError } from "@common/types/custom-errors/IdempotencyError.ts";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
-import type OperationsService from "../../OperationsService/index.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts";
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.d.ts";
@@ -49,7 +49,7 @@ function extractToken(req: FastifyRequest<any>, getSessionManager: () => ISessio
 export function createHttpWrapper(
 	endpoint: RegisteredEndpoint,
 	getSessionManager: () => ISessionVerifier | null,
-	operationsService: OperationsService,
+	operationsService: IOperationsService,
 	logger: ILogger,
 	csrfConfig: CsrfRuntimeConfig,
 	rateLimits: ResolvedRateLimits,

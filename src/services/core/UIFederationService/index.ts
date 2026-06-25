@@ -17,8 +17,10 @@ import { updateImportMap } from "./utils/server/import-map-updater.js";
 import { setupImportMapEndpoints } from "./utils/server/endpoints.js";
 import { computeStats, refreshAllImportMaps, unregisterUIModule, type UIStats } from "./utils/server/service-operations.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
+import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
+import type { IUIFederationService } from "@common/types/ui/IUIFederationService.ts";
 
-export default class UIFederationService extends BaseService {
+export default class UIFederationService extends BaseService implements IUIFederationService {
 	public readonly name = "UIFederationService";
 
 	readonly #registry = new ModuleRegistry();
@@ -109,10 +111,8 @@ export default class UIFederationService extends BaseService {
 		}
 	}
 
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
-	@OnlyKernel()
-	async registerUIModule(_kernelKey: symbol, name: string, appDir: string, uiConfig: UIModuleConfig): Promise<void> {
+	async registerUIModule(token: Capability, name: string, appDir: string, uiConfig: UIModuleConfig): Promise<void> {
+		assertScope(token, Scope.UiRegister);
 		const namespace = uiConfig.uiNamespace || DEFAULT_NAMESPACE;
 		const framework = uiConfig.framework || "astro";
 
@@ -138,10 +138,8 @@ export default class UIFederationService extends BaseService {
 		await runRegisterFlow(module, this.#ctx());
 	}
 
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
-	@OnlyKernel()
-	unregisterUIModule(_kernelKey: symbol, name: string, namespace?: string): Promise<void> {
+	unregisterUIModule(token: Capability, name: string, namespace?: string): Promise<void> {
+		assertScope(token, Scope.UiRegister);
 		return unregisterUIModule(name, this.#ctx(), namespace);
 	}
 

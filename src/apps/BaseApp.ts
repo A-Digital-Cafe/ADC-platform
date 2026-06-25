@@ -3,7 +3,7 @@ import type { IApp } from "../interfaces/modules/IApp.js";
 import { Kernel } from "../kernel.js";
 import type { IModuleConfig } from "../interfaces/modules/IModule.js";
 import type { UIModuleConfig } from "../interfaces/modules/IUIModule.js";
-import UIFederationService from "../services/core/UIFederationService/index.ts";
+import type { IUIFederationService } from "@common/types/ui/IUIFederationService.js";
 import { BaseModule } from "../common/BaseModule.js";
 import { OnlyKernel } from "../utils/decorators/OnlyKernel.ts";
 import { mergeAppConfigs, readBaseConfig } from "../core/apps/AppConfigMerger.js";
@@ -11,12 +11,11 @@ import { mergeAppConfigs, readBaseConfig } from "../core/apps/AppConfigMerger.js
 /**
  * Clase base abstracta para todas las Apps.
  * Maneja la inyección del Kernel y la carga de módulos desde archivos de configuración.
- * Soporta apps UI que se registran automáticamente en UIFederationService.
+ * Soporta apps UI que se registran automáticamente en IUIFederationService.
  */
 export abstract class BaseApp extends BaseModule implements IApp {
 	protected readonly appDir: string;
 	private uiModuleRegistered = false;
-	private kernelKey?: symbol;
 	readonly #kernel: Kernel;
 
 	constructor(
@@ -39,13 +38,6 @@ export abstract class BaseApp extends BaseModule implements IApp {
 		}
 	}
 
-	public readonly setKernelKey = (key: symbol): void => {
-		if (this.kernelKey) {
-			throw new Error("Kernel key ya está establecida");
-		}
-		this.kernelKey = key;
-	};
-
 	/**
 	 * Lógica de inicialización.
 	 */
@@ -56,7 +48,7 @@ export abstract class BaseApp extends BaseModule implements IApp {
 		if (!this.config?.uiModule) return; // No es una app UI
 
 		try {
-			const uiFederationService = this.#kernel.registry.getService<UIFederationService>("UIFederationService");
+			const uiFederationService = this.getUiFederationService<IUIFederationService>();
 			const uiConfig: UIModuleConfig = this.config.uiModule;
 
 			// Si el nombre de la app es "web-ui-library", el nombre del módulo UI debería ser "ui-library"
@@ -66,7 +58,7 @@ export abstract class BaseApp extends BaseModule implements IApp {
 			uiConfig.name = cleanModuleName;
 
 			this.logger.logInfo(`Registrando módulo UI: ${cleanModuleName}`);
-			await uiFederationService.registerUIModule(_kernelKey, cleanModuleName, this.appDir, uiConfig);
+			await uiFederationService.registerUIModule(this.getCapability(), cleanModuleName, this.appDir, uiConfig);
 			this.uiModuleRegistered = true;
 
 			this.logger.logOk(`Módulo UI ${cleanModuleName} registrado exitosamente`);
@@ -87,8 +79,8 @@ export abstract class BaseApp extends BaseModule implements IApp {
 		this.logger.logDebug(`Deteniendo app ${this.name}`);
 		if (this.uiModuleRegistered && this.config?.uiModule) {
 			try {
-				const uiFederation = this.#kernel.registry.getService<UIFederationService>("UIFederationService");
-				await uiFederation.unregisterUIModule(_kernelKey, this.config.uiModule.name);
+				const uiFederation = this.getUiFederationService<IUIFederationService>();
+				await uiFederation.unregisterUIModule(this.getCapability(), this.config.uiModule.name);
 			} catch (err) {
 				this.logger.logDebug("No se pudo desregistrar módulo UI", err);
 			}
@@ -103,12 +95,16 @@ export abstract class BaseApp extends BaseModule implements IApp {
 		Object.freeze(this.config); // Freezes config from modifications
 	}
 
-	/** Carga los módulos de la app después de combinar las configuraciones. */
+	/**
+	 * Carga los módulos de la app después de combinar las configuraciones. Es operación
+	 * privilegiada (instancia código, registra módulos): usa la infraCap contenida.
+	 * El kernel debe haber provisionado la app (`provisionModule`) antes de llamarla.
+	 */
 	public async loadModulesFromConfig(): Promise<void> {
 		try {
 			await this.#mergeModuleConfigs();
 			if (this.config) {
-				await Kernel.moduleLoader.loadAllModulesFromDefinition(this.config, this.#kernel);
+				await this.getModuleLoader().loadAllModulesFromDefinition(this.config, this.#kernel);
 			}
 		} catch (error) {
 			this.logger.logError(`Error procesando la configuración de módulos: ${error}`);

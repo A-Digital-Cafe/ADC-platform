@@ -4,6 +4,16 @@ import * as path from "node:path";
 import { Logger } from "./utils/logger/Logger.js";
 import { ModuleLoader } from "./utils/loaders/ModuleLoader.js";
 import { ModuleRegistry, type ModuleType } from "./utils/registry/ModuleRegistry.js";
+import { ReadonlyModuleRegistry } from "./utils/registry/ReadonlyModuleRegistry.ts";
+import { Scope, assertScope, CapabilityIssuer, type Capability, type CapabilityToken } from "./common/security/Capability.ts";
+import { policyScopes, INFRA_CAP_SCOPES, type ModuleKind } from "./core/security/capabilityPolicy.ts";
+
+/** Superficie que el kernel usa para inyectar capabilities en un módulo recién construido. */
+interface ProvisionableModule {
+	setKernelKey(key: symbol): void;
+	setCapability?(cap: Capability): void;
+	setInfraToken?(token: Capability | symbol): void;
+}
 import { ILogger } from "./interfaces/utils/ILogger.js";
 import { DockerManager } from "./utils/system/DockerManager.ts";
 import { AppLoader } from "./core/apps/AppLoader.js";
@@ -18,16 +28,21 @@ import { ModuleOrchestrator } from "./core/orchestration/ModuleOrchestrator.js";
 
 export class Kernel {
 	static readonly #kernelKey: symbol = Symbol(crypto.randomUUID());
+	/** Emisor de capabilities por módulo. Privado: ningún módulo puede mintear ni ampliarse scopes. */
+	readonly #issuer = new CapabilityIssuer();
+	/** Secreto de arranque: lo posee sólo el bootstrap (`index.ts`), nunca un módulo. */
+	#bootToken?: symbol;
 	#isStartingUp = true;
 	#isShuttingDown = false;
 	readonly #logger: ILogger = Logger.getLogger("Kernel");
 
-	public readonly registry = new ModuleRegistry(Kernel.#kernelKey);
+	readonly #registry = new ModuleRegistry(Kernel.#kernelKey);
+	readonly #readonlyRegistry = new ReadonlyModuleRegistry(this.#registry);
 	readonly #dockerManager = new DockerManager();
 
 	#statusInterval: NodeJS.Timeout | null = null;
 
-	public static readonly moduleLoader = new ModuleLoader(Kernel.#kernelKey);
+	static readonly #moduleLoader = new ModuleLoader(Kernel.#kernelKey);
 
 	readonly #isDevelopment = process.env.NODE_ENV === "development";
 	readonly #basePath = path.resolve(process.cwd(), "src");
@@ -57,21 +72,21 @@ export class Kernel {
 
 	constructor() {
 		const isShuttingDown = () => this.#isShuttingDown;
-		this.#appLoader = new AppLoader(this, this.registry, this.#dockerManager, this.#logger, Kernel.#kernelKey, isShuttingDown);
-		this.#registrar = new ModuleRegistrar(this, this.registry, Kernel.moduleLoader, this.#logger, isShuttingDown);
+		this.#appLoader = new AppLoader(this, this.#registry, this.#dockerManager, this.#logger, Kernel.#kernelKey, isShuttingDown);
+		this.#registrar = new ModuleRegistrar(this, this.#registry, Kernel.#moduleLoader, this.#logger, isShuttingDown);
 		this.#kernelServiceLoader = new KernelServiceLoader(
 			this,
-			this.registry,
-			Kernel.moduleLoader,
+			this.#registry,
+			Kernel.#moduleLoader,
 			this.#dockerManager,
 			this.#logger,
 			Kernel.#kernelKey,
 			isShuttingDown,
 			this.#disabledRegistry
 		);
-		this.#dependencyReloader = new DependencyReloader(this.registry, this.#registrar, this.#appLoader, this.#logger, Kernel.#kernelKey);
+		this.#dependencyReloader = new DependencyReloader(this.#registry, this.#registrar, this.#appLoader, this.#logger, Kernel.#kernelKey);
 		this.#orchestrator = new ModuleOrchestrator({
-			registry: this.registry,
+			registry: this.#registry,
 			appLoader: this.#appLoader,
 			registrar: this.#registrar,
 			dependencyReloader: this.#dependencyReloader,
@@ -88,15 +103,69 @@ export class Kernel {
 	 * privilegiado (p.ej. el preset `adc-modules-manager`, que captura la kernelKey en
 	 * su `start()`) puede obtenerlo. No expone el símbolo.
 	 */
-	public getOrchestrator(kernelKey: symbol): ModuleOrchestrator {
-		if (kernelKey !== Kernel.#kernelKey) {
-			this.#logger.logError("getOrchestrator: kernelKey inválido. Llamada rechazada.");
-			throw new Error("Invalid kernelKey");
-		}
+	public getOrchestrator(token: CapabilityToken): ModuleOrchestrator {
+		assertScope(token, Scope.Orchestrator, Kernel.#kernelKey);
 		return this.#orchestrator;
 	}
 
-	public async start(): Promise<void> {
+	/**
+	 * Vista **sólo‑lectura** del registry para resolver services/providers por nombre.
+	 * Sin gating por capability a propósito: la lógica de negocio de los módulos la
+	 * necesita desde su constructor (antes de recibir su token), y la frontera de
+	 * seguridad está en *mutar* (`getMutableRegistry`), *cargar* (`getModuleLoader`),
+	 * *orquestar* (`getOrchestrator`) y las superficies `_internal` —no en resolver.
+	 * La instancia mutable del registry sigue siendo privada.
+	 */
+	public getReadonlyRegistry(): ReadonlyModuleRegistry {
+		return this.#readonlyRegistry;
+	}
+
+	/**
+	 * Registry **mutable** (registrar/descargar módulos). Requiere `RegistryWrite`:
+	 * sólo la capability de infraestructura de los loaders/clases base (durante la
+	 * transición, la master key). Nunca se entrega a la lógica de negocio.
+	 */
+	public getMutableRegistry(cap: CapabilityToken): ModuleRegistry {
+		assertScope(cap, Scope.RegistryWrite, Kernel.#kernelKey);
+		return this.#registry;
+	}
+
+	/**
+	 * Loader de módulos (cargar/instanciar código, leer `.env`). Requiere `ModuleLoader`:
+	 * sólo la capability de infraestructura (durante la transición, la master key).
+	 */
+	public static getModuleLoader(cap: CapabilityToken): ModuleLoader {
+		assertScope(cap, Scope.ModuleLoader, Kernel.#kernelKey);
+		return Kernel.#moduleLoader;
+	}
+
+	/**
+	 * Provisiona un módulo recién construido por un loader: mintea su **businessCap**
+	 * (scopes según política de su tier + privilegios declarados) y su **infraCap**
+	 * (registrar/cargar sub‑dependencias), y se las inyecta. Gateado por la master key:
+	 * sólo los loaders del kernel lo invocan. Un módulo no puede auto‑provisionarse con
+	 * más scopes: no conoce su `path`/`kind` reales ni la master key, y los setters son
+	 * idempotentes.
+	 */
+	public provisionModule(masterToken: symbol, instance: ProvisionableModule, opts: { name: string; kind: ModuleKind; path: string; declared?: string[] }): void {
+		if (masterToken !== Kernel.#kernelKey) {
+			this.#logger.logError("provisionModule: token inválido. Llamada rechazada.");
+			throw new Error("Invalid kernelKey");
+		}
+		// Liga la kernelKey para `@OnlyKernel` (transición) y mintea/inyecta las capabilities.
+		instance.setKernelKey(masterToken);
+		const businessCap = this.#issuer.mint(opts.name, opts.kind, policyScopes(opts));
+		const infraCap = this.#issuer.mint(opts.name, "infra", INFRA_CAP_SCOPES);
+		instance.setCapability?.(businessCap);
+		instance.setInfraToken?.(infraCap);
+	}
+
+	public async start(bootToken: symbol): Promise<void> {
+		if (this.#bootToken) {
+			this.#logger.logError("start: el kernel ya fue iniciado. Llamada rechazada.");
+			throw new Error("Kernel ya iniciado");
+		}
+		this.#bootToken = bootToken;
 		this.#logger.logInfo("Iniciando...");
 		this.#logger.logInfo(`Modo: ${this.#isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}`);
 		this.#logger.logDebug(`Base path: ${this.#basePath}`);
@@ -105,7 +174,7 @@ export class Kernel {
 		if (this.#presetTopics.length > 0) {
 			this.#logger.logInfo(`Presets detectados: ${this.#presetTopics.join(", ")}`);
 		}
-		Kernel.moduleLoader.setPresetTopics(this.#presetTopics);
+		Kernel.#moduleLoader.setPresetTopics(this.#presetTopics);
 
 		await this.#dockerManager.loadCommonDockerCompose(path.resolve(this.#basePath, "common", "docker"));
 		await this.#kernelServiceLoader.loadAll([this.#servicesPath, ...this.#presetLayerPaths("services")]);
@@ -152,7 +221,7 @@ export class Kernel {
 
 	#startWatchers(): void {
 		const isStartingUp = () => this.#isStartingUp;
-		const unload = (type: ModuleType) => (p: string) => this.registry.unloadModule(type, Kernel.#kernelKey, p);
+		const unload = (type: ModuleType) => (p: string) => this.#registry.unloadModule(type, Kernel.#kernelKey, p);
 		const onChange = (type: ModuleType) => (p: string) => this.#dependencyReloader.handleFileChange(type, p);
 
 		const providerPaths = [this.#providersPath, ...this.#presetLayerPaths("providers")];
@@ -202,7 +271,7 @@ export class Kernel {
 
 		new ConfigWatcher({
 			logger: this.#logger,
-			registry: this.registry,
+			registry: this.#registry,
 			appConfigFilePaths: this.#appLoader.appConfigFilePaths,
 			removeConfigPath: (cfg) => this.#appLoader.removeConfigPath(cfg),
 			appsPath: this.#appsPath,
@@ -215,7 +284,7 @@ export class Kernel {
 
 	async #refreshUiImportMaps(): Promise<void> {
 		try {
-			const uiFederation = this.registry.getService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
+			const uiFederation = this.#registry.getService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
 			if (uiFederation) await uiFederation.refreshAllImportMaps(Kernel.#kernelKey);
 			else this.#logger.logWarn("UIFederationService no encontrado");
 		} catch (error: any) {
@@ -232,28 +301,15 @@ export class Kernel {
 
 	#scheduleStatusInterval(): void {
 		this.#statusInterval = setInterval(() => {
-			const stats = this.registry.getModuleStats();
+			const stats = this.#registry.getModuleStats();
 			this.#logger.logInfo(`Providers: ${stats.providers} - Utilities: ${stats.utilities} - Services: ${stats.services}`);
 			const kernelState = {
-				...this.registry.getStateSnapshot(),
+				...this.#registry.getStateSnapshot(),
 				appFiles: Object.fromEntries(this.#appLoader.appFilePaths),
 				appConfigFiles: Object.fromEntries(this.#appLoader.appConfigFilePaths),
 			};
 			this.#logger.logDebug("Kernel State Dump:", JSON.stringify(kernelState, null, 2));
 		}, 30000);
-	}
-
-	public async loadModuleOfType(
-		type: ModuleType,
-		moduleName: string,
-		versionRange: string = "latest",
-		language: string = "typescript"
-	): Promise<void> {
-		try {
-			await this.#registrar.register(type, { name: moduleName, version: versionRange, language });
-		} catch (error) {
-			this.#logger.logError(`Error cargando ${type} '${moduleName}': ${error}`);
-		}
 	}
 
 	/**
@@ -275,13 +331,17 @@ export class Kernel {
 		await this.#dependencyReloader.reloadByName(type, name, version, language);
 	}
 
-	public async stop(): Promise<void> {
+	public async stop(bootToken: symbol): Promise<void> {
+		if (bootToken !== this.#bootToken) {
+			this.#logger.logError("stop: bootToken inválido. Llamada rechazada.");
+			throw new Error("Invalid bootToken");
+		}
 		this.#isShuttingDown = true;
 		this.#logger.logInfo("\nIniciando cierre ordenado...");
 		if (this.#statusInterval) clearInterval(this.#statusInterval);
 		await shutdownKernel({
 			logger: this.#logger,
-			registry: this.registry,
+			registry: this.#registry,
 			dockerManager: this.#dockerManager,
 			kernelKey: Kernel.#kernelKey,
 		});

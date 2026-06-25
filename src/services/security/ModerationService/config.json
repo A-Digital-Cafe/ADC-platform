@@ -1,6 +1,7 @@
 {
 	"kernelMode": 65,
 	"name": "ModerationService",
+	"privileges": ["identity:internal", "moderation:internal"],
 	"version": "1.0.0",
 	"failOnError": true,
 	"providers": [

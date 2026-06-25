@@ -168,6 +168,7 @@ export class ModuleLoader {
 	 * @param kernel - La instancia del kernel.
 	 */
 	async loadAllModulesFromDefinition(modulesConfig: IModuleConfig, kernel: Kernel): Promise<void> {
+		const registry = kernel.getMutableRegistry(this.#kernelKey);
 		try {
 			// Cargar providers globales (NO se registran como dependencias de la app)
 			// Solo se registran como dependencias cuando un servicio los usa
@@ -184,7 +185,7 @@ export class ModuleLoader {
 					}
 
 					// Verificar si el provider ya existe antes de cargarlo
-					if (kernel.registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)) {
+					if (registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)) {
 						Logger.debug(`[ModuleLoader] Provider global ${interpolatedProviderConfig.name} ya existe, saltando`);
 						continue;
 					}
@@ -192,11 +193,11 @@ export class ModuleLoader {
 						const provider = await this.loadProvider(interpolatedProviderConfig);
 						// Pasar null como appName para que NO se registre como dependencia de la app actual
 						// Registrar por el nombre de la clase del provider
-						kernel.registry.registerProvider(provider.name, provider, interpolatedProviderConfig, null);
+						registry.registerProvider(provider.name, provider, interpolatedProviderConfig, null);
 
 						// También registrar por el nombre del módulo/configuración para que sea encontrable
 						if (interpolatedProviderConfig.name !== provider.name) {
-							kernel.registry.registerProvider(interpolatedProviderConfig.name, provider, interpolatedProviderConfig, null);
+							registry.registerProvider(interpolatedProviderConfig.name, provider, interpolatedProviderConfig, null);
 						}
 					} catch (error) {
 						const message = `Error cargando provider ${providerConfig.name}`;
@@ -216,12 +217,12 @@ export class ModuleLoader {
 					try {
 						const utility = await this.loadUtility(utilityConfig);
 						// Pasar null como appName para que NO se registre como dependencia de la app actual
-						kernel.registry.registerUtility(utility.name, utility, utilityConfig, null);
+						registry.registerUtility(utility.name, utility, utilityConfig, null);
 
 						// Si el nombre contiene "/", también registrar con el nombre base como alias
 						if (utilityConfig.name.includes("/")) {
 							const baseName = utilityConfig.name.split("/").pop()!;
-							kernel.registry.registerUtility(baseName, utility, utilityConfig, null);
+							registry.registerUtility(baseName, utility, utilityConfig, null);
 						}
 					} catch (error) {
 						const message = `Error cargando utility ${utilityConfig.name}`;
@@ -301,18 +302,18 @@ export class ModuleLoader {
 						};
 
 						// VERIFICAR si el servicio ya existe antes de cargarlo
-						if (kernel.registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
+						if (registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
 							Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya existe, reutilizando instancia`);
 							// Solo agregar la dependencia a la app actual (el kernel lo maneja internamente)
-							kernel.registry.addModuleDependency("service", serviceConfig.name, serviceUniqueConfig);
+							registry.addModuleDependency("service", serviceConfig.name, serviceUniqueConfig);
 							continue; // Saltar al siguiente servicio
 						}
 
 						// Reutilizar instancia kernel-mode (registrada con su propio uniqueKey) si existe
-						const existingKeys = kernel.registry.getUniqueKeysByName("service", serviceConfig.name);
+						const existingKeys = registry.getUniqueKeysByName("service", serviceConfig.name);
 						if (existingKeys.length > 0) {
 							Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya cargado (kernel-mode u otro), reutilizando`);
-							kernel.registry.addModuleDependency("service", serviceConfig.name);
+							registry.addModuleDependency("service", serviceConfig.name);
 							continue;
 						}
 
@@ -338,10 +339,10 @@ export class ModuleLoader {
 
 									// Verificar si el provider ya existe
 									if (
-										kernel.registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)
+										registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)
 									) {
 										Logger.debug(`[ModuleLoader] Provider ${interpolatedProviderConfig.name} ya existe, reutilizando`);
-										kernel.registry.addModuleDependency(
+										registry.addModuleDependency(
 											"provider",
 											interpolatedProviderConfig.name,
 											interpolatedProviderConfig.config
@@ -351,11 +352,11 @@ export class ModuleLoader {
 									try {
 										// Pasar las variables del servicio al cargar el provider
 										const provider = await this.loadProvider(interpolatedProviderConfig, serviceEnvVars);
-										kernel.registry.registerProvider(provider.name, provider, interpolatedProviderConfig);
+										registry.registerProvider(provider.name, provider, interpolatedProviderConfig);
 
 										// También registrar por el nombre del módulo/configuración
 										if (interpolatedProviderConfig.name !== provider.name) {
-											kernel.registry.registerProvider(
+											registry.registerProvider(
 												interpolatedProviderConfig.name,
 												provider,
 												interpolatedProviderConfig
@@ -382,13 +383,13 @@ export class ModuleLoader {
 								} else {
 									try {
 										const utility = await this.loadUtility(utilityConfig);
-										kernel.registry.registerUtility(utility.name, utility, utilityConfig);
+										registry.registerUtility(utility.name, utility, utilityConfig);
 
 										// Si el nombre contiene "/", también registrar con el nombre base como alias
 										if (utilityConfig.name.includes("/")) {
 											const baseName = utilityConfig.name.split("/").pop()!;
 											Logger.debug(`[ModuleLoader] Registrando alias '${baseName}' para utility '${utilityConfig.name}'`);
-											kernel.registry.registerUtility(baseName, utility, utilityConfig);
+											registry.registerUtility(baseName, utility, utilityConfig);
 										}
 									} catch (error) {
 										const message = `Error cargando utility ${utilityConfig.name} del servicio ${serviceConfig.name}`;
@@ -412,7 +413,7 @@ export class ModuleLoader {
 								// Agregar el provider como dependencia de la app actual
 								// Esto incrementa el reference count y lo añade a appModuleDependencies
 								// addModuleDependency también maneja automáticamente los aliases (type)
-								kernel.registry.addModuleDependency(
+								registry.addModuleDependency(
 									"provider",
 									interpolatedProviderConfig.name,
 									interpolatedProviderConfig.config
@@ -427,7 +428,7 @@ export class ModuleLoader {
 							language: serviceConfig.language,
 							config: serviceUniqueConfig,
 						};
-						kernel.registry.registerService(service.name, service, registrationConfig);
+						registry.registerService(service.name, service, registrationConfig);
 					} catch (error) {
 						const message = `Error cargando service ${serviceConfig.name}`;
 						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
@@ -600,6 +601,7 @@ export class ModuleLoader {
 		kernel: Kernel,
 		kernelKey: symbol
 	): Promise<{ instance: BaseService; config: IModuleConfig }> {
+		const registry = kernel.getMutableRegistry(kernelKey);
 		const serviceDir = path.dirname(servicePath);
 		const serviceName = path.basename(serviceDir);
 
@@ -617,14 +619,14 @@ export class ModuleLoader {
 					continue;
 				}
 
-				if (kernel.registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
+				if (registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
 					Logger.debug(`[ModuleLoader] Provider ${providerConfig.name} ya existe`);
 					continue;
 				}
 				const provider = await this.loadProvider(providerConfig, serviceEnvVars);
-				kernel.registry.registerProvider(provider.name, provider, providerConfig, null);
+				registry.registerProvider(provider.name, provider, providerConfig, null);
 				if (providerConfig.name !== provider.name) {
-					kernel.registry.registerProvider(providerConfig.name, provider, providerConfig, null);
+					registry.registerProvider(providerConfig.name, provider, providerConfig, null);
 				}
 			}
 		}
@@ -642,9 +644,15 @@ export class ModuleLoader {
 			...serviceConfig.private, // Config privado que no afecta uniqueKey
 			providers: serviceConfig.providers || [],
 			utilities: serviceConfig.utilities || [],
+			services: serviceConfig.services || [],
 			__modulePath: serviceDir,
 		});
-		instance.setKernelKey(kernelKey);
+		kernel.provisionModule(kernelKey, instance, {
+			name: serviceName,
+			kind: "service",
+			path: serviceDir,
+			declared: Array.isArray(serviceConfig.privileges) ? serviceConfig.privileges : undefined,
+		});
 		await instance.start(kernelKey);
 
 		const registrationConfig: IModuleConfig = {

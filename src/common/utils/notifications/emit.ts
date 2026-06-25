@@ -1,4 +1,4 @@
-import type { Kernel } from "../../../kernel.js";
+import type { ReadonlyModuleRegistry } from "../../../utils/registry/ReadonlyModuleRegistry.ts";
 import type { NotifyInput } from "../../types/notifications/Notification.js";
 import type { INotificationService } from "../../types/notifications/INotificationService.js";
 
@@ -30,10 +30,10 @@ interface BrokerProvider {
  *
  * @returns `true` si se encoló o entregó; `false` si se descartó (best-effort).
  */
-export async function emitNotification(kernel: Kernel, input: NotifyInput): Promise<boolean> {
+export async function emitNotification(registry: ReadonlyModuleRegistry, input: NotifyInput): Promise<boolean> {
 	// 1. Cola durable (preferida): independiente de que el servicio esté vivo.
 	try {
-		const broker = kernel.registry.getProvider<BrokerProvider>("queue/rabbitmq");
+		const broker = registry.getProvider<BrokerProvider>("queue/rabbitmq");
 		if (broker?.connection) {
 			await broker.publish(NOTIFY_SERVICE, NOTIFY_OPERATION, input as unknown as Record<string, unknown>);
 			return true;
@@ -44,8 +44,8 @@ export async function emitNotification(kernel: Kernel, input: NotifyInput): Prom
 
 	// 2. Entrega directa si el servicio está cargado.
 	try {
-		if (kernel.registry.hasModule("service", NOTIFY_SERVICE)) {
-			const service = kernel.registry.getService<INotificationService>(NOTIFY_SERVICE);
+		if (registry.hasModule("service", NOTIFY_SERVICE)) {
+			const service = registry.getService<INotificationService>(NOTIFY_SERVICE);
 			await service.notify(input);
 			return true;
 		}

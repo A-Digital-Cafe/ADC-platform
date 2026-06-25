@@ -1,3 +1,10 @@
+/**
+ * Contrato compartido del message queue: vive en `@interfaces` para que los
+ * consumidores (p.ej. EndpointManagerService) no dependan de los internos de
+ * este provider. Acá sólo se re-exporta + la config específica del provider.
+ */
+export type { OperationMessage, TopologyOptions, ConsumerOptions } from "@interfaces/modules/providers/IMessageQueue.js";
+
 /** Configuration for the RabbitMQ provider */
 export interface RabbitMQProviderConfig {
 	url?: string;
@@ -6,27 +13,4 @@ export interface RabbitMQProviderConfig {
 	maxRetries?: number;
 	/** Delay per retry level in ms - forms exponential backoff via dedicated TTL queues */
 	retryDelaysMs?: number[];
-}
-
-/** Options when declaring topology for a specific operation */
-export interface TopologyOptions {
-	prefetch?: number;
-	concurrency?: number;
-	maxRetries?: number;
-	retryDelaysMs?: number[];
-}
-
-/** Options when creating a consumer for an operation */
-export interface ConsumerOptions {
-	prefetch?: number;
-	concurrency?: number;
-	/** Max time (ms) the handler may run before being considered failed */
-	jobTimeoutMs?: number;
-}
-
-/** Inbound message delivered to the operation consumer handler */
-export interface OperationMessage {
-	body: Record<string, unknown>;
-	headers: Record<string, string>;
-	routingKey: string;
 }

@@ -2,11 +2,13 @@ import * as path from "node:path";
 import type { IApp } from "../../interfaces/modules/IApp.js";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
+import type { Kernel } from "../../kernel.js";
 import type { AppInstanceTracker } from "./AppInstanceTracker.js";
 
 const RETRY_RUN_MS = 30_000;
 
 export interface AppLifecycleDeps {
+	kernel: Kernel;
 	registry: ModuleRegistry;
 	tracker: AppInstanceTracker;
 	logger: ILogger;
@@ -22,7 +24,7 @@ export class AppLifecycle {
 	}
 
 	initializeAndRunApp = async (app: IApp, filePath: string, instanceName: string, configPath?: string): Promise<void> => {
-		const { logger, registry, tracker, kernelKey, isShuttingDown } = this.deps;
+		const { kernel, logger, registry, tracker, kernelKey, isShuttingDown } = this.deps;
 		if (isShuttingDown()) {
 			logger.logDebug(`Cierre en progreso, no se inicializa app: ${instanceName}`);
 			return;
@@ -33,8 +35,10 @@ export class AppLifecycle {
 
 		registry.setLoadingContext(instanceName);
 		try {
+			// Provisionar (liga la kernelKey + mintea/inyecta businessCap e infraCap) ANTES
+			// de cargar: loadModulesFromConfig usa la infraCap contenida; start valida la kernelKey.
+			kernel.provisionModule(kernelKey, app, { name: instanceName, kind: "app", path: filePath });
 			await app.loadModulesFromConfig();
-			app.setKernelKey(kernelKey);
 			await app.start?.(kernelKey);
 		} finally {
 			registry.setLoadingContext(null);

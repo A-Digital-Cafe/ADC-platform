@@ -9,7 +9,7 @@ import type { RoleManager } from "./roles.js";
 import type { GroupManager } from "./groups.js";
 import type { UserManager } from "./users.js";
 import type { Organization } from "@common/types/identity/Organization.ts";
-import type OperationsService from "../../../core/OperationsService/index.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type { Step } from "../../../core/OperationsService/types.ts";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
 
@@ -19,7 +19,7 @@ function isDuplicateKeyError(error: unknown): error is { code: number } {
 
 export class OrgManager {
 	readonly #permissionChecker: PermissionChecker;
-	readonly #operations: OperationsService;
+	readonly #operations: IOperationsService;
 	readonly #getAuthVerifier: AuthVerifierGetter;
 
 	constructor(
@@ -29,7 +29,7 @@ export class OrgManager {
 		private readonly userManager: UserManager,
 		private readonly regionManager: RegionManager,
 		private readonly logger: ILogger,
-		operations: OperationsService,
+		operations: IOperationsService,
 		getAuthVerifier: AuthVerifierGetter = () => null
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "OrgManager", RESOURCE_NAME);

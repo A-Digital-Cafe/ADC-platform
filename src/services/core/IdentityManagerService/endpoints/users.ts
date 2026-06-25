@@ -3,6 +3,7 @@ import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.js";
 import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
+import type { Capability } from "@common/security/Capability.ts";
 import * as US from "./schemas/users.js";
 import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
 
@@ -165,11 +166,12 @@ function sanitizeUserForContext(user: NonNullable<Awaited<ReturnType<IdentityMan
  */
 export class UserEndpoints {
 	private static identity: IdentityManagerService;
-	private static kernelKey: symbol;
+	/** Capability del servicio (Identity) para invocar sus superficies gateadas por scope. */
+	private static cap: Capability;
 
-	static init(identity: IdentityManagerService, kernelKey: symbol): void {
+	static init(identity: IdentityManagerService, cap: Capability): void {
 		UserEndpoints.identity ??= identity;
-		UserEndpoints.kernelKey ??= kernelKey;
+		UserEndpoints.cap ??= cap;
 	}
 
 	@RegisterEndpoint({
@@ -391,7 +393,7 @@ export class UserEndpoints {
 		// Primitiva pre-auth: vía la superficie privilegiada `_internal(kernelKey)`,
 		// no por el getter público `users` (que ya no la expone).
 		const isValid = await UserEndpoints.identity
-			._internal(UserEndpoints.kernelKey)
+			._internal(UserEndpoints.cap)
 			.users.verifyUserPassword(user.id, currentPassword);
 
 		if (!isValid) {
@@ -400,7 +402,7 @@ export class UserEndpoints {
 
 		await UserEndpoints.identity.users.updatePassword(user.id, newPassword, ctx.token!);
 		// Aviso de seguridad (fire-and-forget).
-		void UserEndpoints.identity.notifications(UserEndpoints.kernelKey).passwordChanged(user.id);
+		void UserEndpoints.identity.notifications(UserEndpoints.cap).passwordChanged(user.id);
 
 		return { success: true };
 	}

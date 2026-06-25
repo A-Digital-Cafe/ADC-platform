@@ -1,9 +1,10 @@
 import type MongoProvider from "../../../../providers/object/mongo/index.js";
-import type IdentityManagerService from "../../../core/IdentityManagerService/index.js";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import type { BanRepository } from "../dao/BanRepository.js";
 import type { User } from "@common/types/identity/User.js";
 import type { BanRecord, BanInput } from "@common/types/identity/Moderation.js";
+import type { Capability } from "@common/security/Capability.ts";
 import { PengubotModlogsAdapter } from "../adapters/PengubotModlogsAdapter.js";
 
 export interface DiscordSyncOptions {
@@ -22,8 +23,8 @@ export class DiscordSyncRunner {
 	constructor(
 		private readonly repo: BanRepository,
 		private readonly banPlatformUser: (user: User, args: Omit<BanInput, "emails" | "extraIpHashes" | "lastLoginAt">) => Promise<BanRecord>,
-		private readonly identity: IdentityManagerService,
-		private readonly kernelKey: symbol,
+		private readonly identity: IIdentityManagerService,
+		private readonly cap: Capability,
 		private readonly logger: ILogger
 	) {}
 
@@ -66,7 +67,7 @@ export class DiscordSyncRunner {
 
 	async run(): Promise<void> {
 		if (!this.#adapter) return;
-		const internal = this.identity._internal(this.kernelKey);
+		const internal = this.identity._internal(this.cap);
 
 		let added = 0;
 		for (const log of await this.#adapter.listActiveBans()) {

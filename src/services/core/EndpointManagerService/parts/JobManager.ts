@@ -1,10 +1,10 @@
 import type { IHostBasedHttpProvider } from "../../../../interfaces/modules/providers/IHttpServer.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
-import type OperationsService from "../../OperationsService/index.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts";
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
-import type { OperationMessage } from "../../../../providers/queue/rabbitmq/types.ts";
+import type { OperationMessage } from "@interfaces/modules/providers/IMessageQueue.js";
 import type { Consumer } from "rabbitmq-client";
 import { CircuitOpenError } from "@common/types/custom-errors/CircuitOpenError.ts";
 import { createHash } from "node:crypto";
@@ -26,7 +26,7 @@ interface QueueOptions {
 interface JobManagerDeps {
 	logger: ILogger;
 	getSessionManager: () => ISessionVerifier | null;
-	operationsService: OperationsService;
+	operationsService: IOperationsService;
 	rabbitmq: RabbitMQProvider | null;
 	redis: RedisProvider | null;
 	httpProvider: IHostBasedHttpProvider | null;
@@ -89,7 +89,7 @@ export class JobManager {
 		serviceName: string,
 		methodName: string,
 		endpoint: ConsumerEndpoint,
-		operationsService: OperationsService,
+		operationsService: IOperationsService,
 		queueOpts?: QueueOptions
 	): Promise<void> {
 		const rabbitmq = this.#rabbitmq!;

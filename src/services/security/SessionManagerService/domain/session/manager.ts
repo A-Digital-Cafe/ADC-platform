@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { SessionData, AuthenticatedUser, SessionCookieConfig, TokenVerificationResult } from "../../types.js";
-import type { IJWTProvider, TokenPayload } from "../../../../../providers/security/jwt/types.d.ts";
+import type { IJWTProvider, TokenPayload } from "@interfaces/modules/providers/IJWT.js";
 
 /**
  * Configuración del gestor de sesión

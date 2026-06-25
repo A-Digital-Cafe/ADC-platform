@@ -30,6 +30,14 @@ export interface IModuleConfig {
 	failOnError?: boolean;
 
 	/**
+	 * Privilegios extra solicitados por el módulo, además de los defaults de su tier.
+	 * Son valores del enum `Scope` (`@common/security/Capability`) como strings (vienen
+	 * de `config.json`); se validan en runtime y NUNCA conceden scopes de infraestructura
+	 * (`registry:write`, `module:loader`). Ej.: `["orchestrator","http:raw"]`.
+	 */
+	privileges?: string[];
+
+	/**
 	 * Permite propiedades adicionales.
 	 * Ej: metadatos internos (__modulePath) o propiedades específicas de configuración.
 	 */

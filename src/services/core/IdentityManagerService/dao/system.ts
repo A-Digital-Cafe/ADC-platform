@@ -3,9 +3,8 @@ import type { User } from "@common/types/identity/User.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId, hashPassword, generateRandomCredentials } from "@common/utils/crypto.ts";
 import { SystemRole } from "../defaults/systemRoles.ts";
-import { OnlyKernel } from "../../../../utils/decorators/OnlyKernel.ts";
+import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
 
-/* tslint:disable:no-unused-variable */
 export class SystemManager {
 	#systemUser: User | null = null;
 	#systemCredentials: { username: string; password: string } | null = null;
@@ -15,9 +14,12 @@ export class SystemManager {
 		private readonly roleModel: Model<any>,
 		private readonly groupModel: Model<any>,
 		private readonly logger: ILogger,
-		// @ts-expect-error unused
-		private readonly kernelKey: symbol
-	) {}
+		kernelKey: symbol
+	) {
+		// El token de `@OnlyKernel` se guarda en el WeakMap del decorador (no como
+		// propiedad legible por nombre), no en un campo de la instancia.
+		bindKernelKey(this, kernelKey);
+	}
 
 	async initializeSystemUser(): Promise<void> {
 		try {

@@ -1,6 +1,6 @@
 import { BaseApp } from "../../BaseApp.js";
 import type { IHttpServerProvider } from "../../../interfaces/modules/providers/IHttpServer.js";
-import IdentityManagerService from "../../../services/core/IdentityManagerService/index.ts";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 
 /**
  * App Home - Página principal del dashboard
@@ -19,7 +19,7 @@ export default class WebHomeApp extends BaseApp {
 
 			httpProvider.registerRoute("GET", "/api/dashboard/stats", async (_req: any, res: any) => {
 				try {
-					const identityService = this.getMyService<IdentityManagerService>("IdentityManagerService");
+					const identityService = this.getMyService<IIdentityManagerService>("IdentityManagerService");
 					const stats = await identityService.getStats();
 
 					res.json({

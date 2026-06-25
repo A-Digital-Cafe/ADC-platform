@@ -3,7 +3,7 @@ import type { TokenService } from "../domain/tokens/TokenService.js";
 import type { RefreshTokenRepository } from "../domain/tokens/RefreshTokenRepository.js";
 import type { LoginAttemptTracker } from "../domain/security/LoginAttemptTracker.js";
 import type { GeoIPValidator } from "../domain/security/GeoIPValidator.js";
-import type IdentityManagerService from "../../../core/IdentityManagerService/index.js";
+import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 import {
 	RegisterEndpoint,
 	UncommonResponse,
@@ -32,8 +32,8 @@ interface AuthEndpointsDeps {
 	refreshTokenRepo: RefreshTokenRepository;
 	loginTracker: LoginAttemptTracker;
 	geoValidator: GeoIPValidator;
-	identityService: IdentityManagerService | null;
-	internalIdentity: ReturnType<IdentityManagerService["_internal"]> | null;
+	identityService: IIdentityManagerService | null;
+	internalIdentity: ReturnType<IIdentityManagerService["_internal"]> | null;
 	cookieDomain: string;
 	defaultRedirectUrl: string;
 	logger: { logError: (msg: string) => void; logWarn: (msg: string) => void };
@@ -251,7 +251,7 @@ export class AuthEndpoints {
 		const orgSlug = result.session.user.orgId ? await AuthEndpoints.resolveOrgSlug(result.session.user.orgId) : undefined;
 
 		// Enriquecer sesión con datos frescos de identity (avatar, perms bitfield, flags admin, groupIds).
-		// Se hace best-effort: si IdentityManagerService no está disponible, se devuelven defaults vacíos
+		// Se hace best-effort: si IIdentityManagerService no está disponible, se devuelven defaults vacíos
 		// y la sesión sigue siendo válida (no se rompe la autenticación).
 		const sessionExtras = await AuthEndpoints.buildSessionExtras(result.session.user.id, result.session.user.orgId);
 		const freshAvatar = sessionExtras.hasFreshUser ? sessionExtras.avatar : result.session.user.avatar;
@@ -704,7 +704,7 @@ export class AuthEndpoints {
 
 	/**
 	 * Construye los campos extra del payload de sesión (`avatar`, `perms`, `isAdmin`, `isOrgAdmin`, `groupIds`)
-	 * consultando IdentityManagerService. Si no está disponible o falla la lectura, devuelve defaults
+	 * consultando IIdentityManagerService. Si no está disponible o falla la lectura, devuelve defaults
 	 * vacíos para no romper la respuesta de /session.
 	 */
 	private static async buildSessionExtras(

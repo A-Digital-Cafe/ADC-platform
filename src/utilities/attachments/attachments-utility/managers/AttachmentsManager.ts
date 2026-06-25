@@ -6,7 +6,7 @@ import type { Attachment, AttachmentDTO } from "../../../../common/types/attachm
 import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from "../../../../common/types/attachments/Attachment.js";
 import type { AttachmentDoc } from "../schemas/attachment.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
-import { OnlyKernel } from "../../../../utils/decorators/OnlyKernel.ts";
+import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
 import type { QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
 import { ENCRYPTION_SCHEME, createObjectCipher, createObjectDecipher, type UserKeyStore } from "../crypto/userKeys.js";
 
@@ -139,8 +139,6 @@ export class AttachmentsManager {
 	readonly #onQuotaExceeded?: (userId: string, appId: string) => void;
 	readonly #encryption?: { keyStore: UserKeyStore };
 	readonly #logger?: { logWarn(msg: string): void };
-	// Pública para que `@OnlyKernel()` pueda leerla vía `this.kernelKey`.
-	private kernelKey?: symbol;
 
 	constructor(opts: AttachmentsManagerOptions) {
 		this.#model = opts.model;
@@ -156,14 +154,9 @@ export class AttachmentsManager {
 		this.#onQuotaExceeded = opts.onQuotaExceeded;
 		this.#encryption = opts.encryption;
 		this.#logger = opts.logger;
-		this.setKernelKey(opts.kernelKey);
-	}
-
-	private setKernelKey(key: symbol): void {
-		if (this.kernelKey) {
-			throw new Error("Kernel key ya está establecida");
-		}
-		this.kernelKey = key;
+		// El token de `@OnlyKernel` se guarda en el WeakMap del decorador (no como
+		// propiedad legible por nombre `this.kernelKey`).
+		bindKernelKey(this, opts.kernelKey);
 	}
 
 	get bucket(): string {
