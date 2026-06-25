@@ -23,6 +23,7 @@
 
 import { spawn } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const CHROME = process.env.CHROME_BIN || "google-chrome";
@@ -329,6 +330,79 @@ async function stop() {
 	else console.log("stop: all dev ports free (S3 on :9000/:9001 left intact)");
 }
 
+// ---- boot-check ---------------------------------------------------------
+// Boot the kernel DIRECTLY (`bun src/index.ts`, not `bun run dev`) and stream a
+// filtered view of startup: which kernel-mode services start, the ready marker,
+// the dev self-test, and ANY capability/scope failure. One foreground call — no
+// temp logs, no detached background (both get reaped in sandboxed shells, and
+// the `bun run dev` wrapper exits without output there). Frees the ports on exit.
+// PASS = ready marker reached with zero capability/scope failures.
+const ANSI = /\x1b\[[0-9;]*m/g;
+const CAP_FAIL = /CapabilityError|MISSING_SCOPE|acceso denegado|falta capability|no autorizado a|kernel key no establecida/i;
+
+function repoRoot() {
+	// driver.mjs lives at <root>/.claude/skills/run-adc-platform/driver.mjs
+	return fileURLToPath(new URL("../../../", import.meta.url));
+}
+
+async function bootCheck(seconds) {
+	const budgetMs = Math.max(30, Number(seconds) || 100) * 1000;
+	const cwd = repoRoot();
+	console.log(`== boot-check == cwd=${cwd} budget=${budgetMs / 1000}s`);
+	const child = spawn("bun", ["src/index.ts"], {
+		cwd,
+		detached: true, // own process group so we can kill the whole tree (docker/rspack children)
+		env: { ...process.env, NODE_ENV: "development", ENABLE_TESTS: "true" },
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+
+	const services = [];
+	const failures = [];
+	let ready = false;
+	let selftest = false;
+	let buf = "";
+	let resolveDone;
+	const done = new Promise((r) => (resolveDone = r));
+	let drain = null;
+
+	const handleLine = (raw) => {
+		const line = raw.replace(ANSI, "").trimEnd();
+		if (CAP_FAIL.test(line)) { failures.push(line); console.log(`  ✗ CAP-FAIL  ${line.trim()}`); resolveDone(); return; }
+		const m = line.match(/Servicio kernel cargado:\s*(\S+)/);
+		if (m) { services.push(m[1]); console.log(`  svc  ${m[1]}`); return; }
+		if (/Kernel en funcionamiento/.test(line)) {
+			ready = true; console.log("  ✓ ready (Kernel en funcionamiento)");
+			if (!drain) drain = setTimeout(resolveDone, 8000); // grace for self-test / late errors
+			return;
+		}
+		if (/PRUEBAS COMPLETADAS/.test(line)) { selftest = true; console.log("  ✓ self-test PRUEBAS COMPLETADAS"); }
+	};
+	const onChunk = (c) => {
+		buf += c.toString();
+		let nl;
+		while ((nl = buf.indexOf("\n")) >= 0) { handleLine(buf.slice(0, nl)); buf = buf.slice(nl + 1); }
+	};
+	child.stdout.on("data", onChunk);
+	child.stderr.on("data", onChunk);
+	child.on("exit", () => resolveDone());
+	const budget = setTimeout(resolveDone, budgetMs);
+
+	await done;
+	clearTimeout(budget);
+	if (drain) clearTimeout(drain);
+	try { process.kill(-child.pid, "SIGKILL"); } catch {}
+	await stop();
+
+	const pass = ready && failures.length === 0;
+	console.log("\n== boot-check summary ==");
+	console.log(`  kernel services started : ${services.length}`);
+	console.log(`  ready marker            : ${ready ? "yes" : "NO"}`);
+	console.log(`  dev self-test           : ${selftest ? "PRUEBAS COMPLETADAS" : "not seen"}`);
+	console.log(`  capability/scope errors : ${failures.length}`);
+	console.log(pass ? "\nboot-check: PASS" : "\nboot-check: FAIL");
+	process.exit(pass ? 0 : 1);
+}
+
 // ---- arg parsing --------------------------------------------------------
 function parseDrive(argv) {
 	const opts = { wait: null, actions: [], settle: 800, login: null };
@@ -373,6 +447,7 @@ async function login(who, url, name) {
 const [cmd, ...args] = process.argv.slice(2);
 try {
 	if (cmd === "smoke") await smoke();
+	else if (cmd === "boot-check") await bootCheck(args[0]);
 	else if (cmd === "stop") await stop();
 	else if (cmd === "shot") await shot(args[0] || BASE, args[1] || "shot");
 	else if (cmd === "login") {
@@ -382,7 +457,7 @@ try {
 		const { opts, rest } = parseDrive(args);
 		await drive(rest[0] || BASE, rest[1] || "drive", opts);
 	} else {
-		console.log("usage: node driver.mjs <smoke | shot <url> [name] | login <admin|orgadmin|'user::pass[::orgId]'> [url] [name] | drive <url> [name] [--login who --wait sel --click sel --type 'sel::text' --eval expr --settle ms]>");
+		console.log("usage: node driver.mjs <boot-check [seconds] | smoke | shot <url> [name] | login <admin|orgadmin|'user::pass[::orgId]'> [url] [name] | drive <url> [name] [--login who --wait sel --click sel --type 'sel::text' --eval expr --settle ms]>");
 		process.exit(2);
 	}
 } catch (e) {

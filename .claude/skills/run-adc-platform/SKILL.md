@@ -43,6 +43,23 @@ required; `.env` already exists with sane dev defaults.
 
 ## Run (agent path)
 
+**0. Just need a yes/no "does the kernel boot cleanly?"** Use `boot-check` — one
+self-contained foreground call, no background process and no temp logs (both get
+reaped in sandboxed shells, and the `bun run dev` wrapper there exits with no
+output). It boots `bun src/index.ts` directly, streams a filtered view (each
+kernel-mode service start, the ready marker, the dev self-test, and any
+capability/scope failure), frees the ports, and exits 0=PASS / 1=FAIL:
+
+```bash
+node .claude/skills/run-adc-platform/driver.mjs boot-check        # ~100s budget
+node .claude/skills/run-adc-platform/driver.mjs boot-check 60     # custom budget (s)
+```
+
+PASS = ready marker reached with zero `CapabilityError`/scope failures. It does
+**not** start the rspack UI servers or screenshot anything — for that, boot it
+for real (below) and use `smoke`/`login`/`drive`. Run `boot-check` from a single
+Bash call with a tool timeout > budget (e.g. budget 90 → timeout ~130s).
+
 **1. Launch the kernel in the background and wait for the ready marker.** Clean
 boot takes ~65s (UIFederation binds :3000 early, then ~14 rspack dev servers
 compile):
@@ -89,6 +106,7 @@ Presets: `admin` (global) · `orgadmin` (org `dev-org`). Custom users seeded via
 
 | command | what it does |
 |---|---|
+| `boot-check [seconds]` | boot `bun src/index.ts` directly (not `bun run dev`), stream kernel-mode service starts + ready marker + self-test + any capability/scope failure, free ports; exit 0=PASS / 1=FAIL. Self-contained — no background/temp logs. Default budget ~100s |
 | `smoke` | curl gateway + all 17 app ports (status < 500 = OK), screenshot home/auth/community-home; exits non-zero on any problem |
 | `shot <url> [name]` | one-shot headless screenshot → `/tmp/adc-shots/<name>.png` |
 | `login <who> [url] [name]` | log in as a dev user (`admin` \| `orgadmin` \| `'user::pass[::orgId]'`), navigate to `url`, screenshot. Dev only |
@@ -118,13 +136,15 @@ run the driver's `stop` afterward. Useless headless, hence the agent path above.
 
 ## Test
 
-There is no standalone unit-test runner. In dev mode (`ENABLE_TESTS=true`, set
-by `bun run dev`) several modules self-test on boot — e.g. `user-profile-mongo`
-logs `=============== PRUEBAS COMPLETADAS ===============` after exercising the
-identity/permissions flow against Mongo. Watch `/tmp/adc-dev.log` for those.
-Static checks: `bun run typecheck` (note: **exits 1 by baseline** due to knip
-unused-export reporting — read the output, don't treat exit code as failure)
-and `bun run lint` (zero-warnings, src only).
+There is no standalone unit-test runner. In dev mode (`ENABLE_TESTS=true`, set by
+`bun run dev`) several modules self-test on boot — e.g. `user-profile-mongo` logs
+`=============== PRUEBAS COMPLETADAS ===============` after exercising the
+identity/permissions flow against Mongo. The fastest way to assert "boots clean +
+self-test passed + no capability/scope errors" is `driver.mjs boot-check` (above),
+which surfaces exactly those lines and exits 0/1. Static checks: `bun run
+typecheck` (note: **exits 1 by baseline** due to knip unused-export reporting —
+read the output, don't treat exit code as failure) and `bun run lint`
+(zero-warnings, src only).
 
 ## Gotchas
 
