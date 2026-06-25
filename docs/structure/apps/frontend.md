@@ -62,7 +62,7 @@ src/apps/public/adc-<feature>/        # o presets/<preset>/apps/adc-<feature>/
 
 Reglas:
 
-- `devPort` único (revisar [../../guides/ports.md](../../guides/ports.md) y los `config.json` existentes).
+- `devPort` único (revisar [../../guides/ports.md](../../guides/ports.md) y los `config.json` existentes). **Tras crear la app, registrá su puerto en [../../guides/ports.md](../../guides/ports.md).**
 - `hosting` define los subdominios de producción; en dev cada app usa su `devPort`.
 - `serviceWorker: true` solo en apps layout: cascadea automáticamente a sus hijas.
 - Si la app expone `federationExposes` consumidos cross-app (ej. el resolver de platform links), extender la CSP con los orígenes cross-app (`script-src`/`connect-src`: `http://localhost:* https://*.adigitalcafe.com`).
@@ -250,6 +250,7 @@ registry de `platform-links` (la app debe estar en `DEFAULT_APPS`) y los renderi
 ## Checklist de creación
 
 - [ ] `config.json` con `uiModule` completo: namespace, `isHost`, `uiDependencies`, `devPort` único, `hosting`.
+- [ ] Puerto registrado en [../../guides/ports.md](../../guides/ports.md).
 - [ ] `main.tsx` respeta el orden de imports y no envuelve `<App />` en componentes Stencil.
 - [ ] `<adc-layout>` es raíz estable dentro de `App.tsx`.
 - [ ] `i18n/{es,en}.js` creados; solo claves de dominio propias (las genéricas vienen de la UI library).

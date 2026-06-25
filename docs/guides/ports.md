@@ -16,3 +16,5 @@ public/adc-org-requests 3028
 public/adc-email-frontend 3030
 public/adc-drive 3032
 public/adc-image-editor 3034
+public/adc-notifications 3036
+public/adc-modules-manager 3038
