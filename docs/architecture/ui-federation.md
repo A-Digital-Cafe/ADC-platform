@@ -103,7 +103,7 @@ Formatos de hosting:
 | Producción (test) | `bun run start:prodtests` | Fastify  | Builds compiladas, host-based routing, puerto 3000  |
 | Producción        | `bun run start`           | Fastify  | Builds compiladas, host-based routing, puerto 80    |
 
-Los puertos de dev por app están en [../guides/ports.md](../guides/ports.md).
+Los puertos de dev por app están en [../guides/ports.csv](../guides/ports.csv).
 
 **Versiones Mobile:** se distinguen con prefijos o subdominios dedicados:
 

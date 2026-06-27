@@ -115,7 +115,7 @@ const REGISTRY_KEY = Symbol.for("adc.platform-links.registry");
 const PROD_BASE_DOMAIN = "adigitalcafe.com";
 
 /**
- * Apps conocidas por defecto (sincronizado con los `config.json` / `docs/guides/ports.md`).
+ * Apps conocidas por defecto (sincronizado con los `config.json` / `docs/guides/ports.csv`).
  * `remoteName` = `name` del `config.json` con `-` → `_`. `resolverExpose` solo en
  * apps cuyo `config.json` declara el resolver en `federationExposes`.
  */

@@ -37,6 +37,9 @@ export class AdcContextMenu {
 	@Prop() x: number = 0;
 	@Prop() y: number = 0;
 	@Prop() items: ContextMenuItem[] = [];
+	/** Centra el panel en el viewport e ignora `x`/`y`. Útil en mobile/touch, donde
+	 * anclar al punto del long-press deja el menú fuera del área visible. */
+	@Prop() center: boolean = false;
 
 	/** Visibilidad efectiva (derivada de `open` y de los gestos de cierre internos). */
 	@State() visible: boolean = false;
@@ -169,8 +172,11 @@ export class AdcContextMenu {
 		if (!panel) return;
 		const m = AdcContextMenu.MARGIN;
 		const { offsetWidth, offsetHeight } = panel;
-		const left = Math.max(m, Math.min(this.x, window.innerWidth - offsetWidth - m));
-		const top = Math.max(m, Math.min(this.y, window.innerHeight - offsetHeight - m));
+		// En modo `center` ancla al centro del viewport; si no, al punto (x,y) clampeado.
+		const targetX = this.center ? (window.innerWidth - offsetWidth) / 2 : this.x;
+		const targetY = this.center ? (window.innerHeight - offsetHeight) / 2 : this.y;
+		const left = Math.max(m, Math.min(targetX, window.innerWidth - offsetWidth - m));
+		const top = Math.max(m, Math.min(targetY, window.innerHeight - offsetHeight - m));
 		panel.style.left = `${left}px`;
 		panel.style.top = `${top}px`;
 		// Si no hay lugar a la derecha para un submenú (~12rem), abrirlo hacia la izquierda.

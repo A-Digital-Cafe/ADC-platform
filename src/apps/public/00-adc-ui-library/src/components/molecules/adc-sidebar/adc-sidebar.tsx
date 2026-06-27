@@ -32,11 +32,15 @@ export class AdcSidebar {
 	};
 
 	render() {
-		const sidebarClass = this.collapsed ? "w-32 lg:w-max lg:min-w-74" : "w-max min-w-74";
+		// Mobile (<lg): drawer off-canvas — oculto al colapsar, overlay al expandir.
+		// Desktop (lg+): siempre visible (rail/expandido), idéntico al comportamiento previo.
+		const sidebarClass = this.collapsed
+			? "w-32 lg:w-max lg:min-w-74 -translate-x-full lg:translate-x-0"
+			: "w-[85vw] max-w-80 lg:w-max lg:min-w-74 lg:max-w-none translate-x-0";
 
 		return (
 			<aside
-				class={`z-20 fixed left-0 px-2 pt-5 pr-6 bg-background text-primary transition-[width] duration-300 shadow-[0_5px_20px_rgba(0,0,0,0.15)] overflow-hidden ${sidebarClass}`}
+				class={`z-20 fixed left-0 px-2 pt-5 pr-6 bg-background text-primary transition-transform lg:transition-[width] duration-300 shadow-[0_5px_20px_rgba(0,0,0,0.15)] overflow-hidden ${sidebarClass}`}
 				style={{
 					top: "var(--header-offset)",
 					height: "calc(100vh - var(--header-offset))",

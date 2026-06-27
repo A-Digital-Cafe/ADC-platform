@@ -15,6 +15,14 @@ interface Microapp {
 
 const MICROAPPS: Microapp[] = [
 	{
+		id: "drive",
+		name: "Drive",
+		description: "Guardá, organizá y compartí tus archivos en la nube de la comunidad.",
+		iconColor: "text-accentpurple",
+		href: getUrl(3032, "drive.adigitalcafe.com"),
+		icon: <adc-icon-app-drive size="2rem" />,
+	},
+	{
 		id: "community",
 		name: "Community Home",
 		description: "Descubre rutas de aprendizaje, contenidos y actividades para crecer junto con la comunidad.",
@@ -69,10 +77,10 @@ export function HomePage() {
 		<section className="relative overflow-hidden">
 			{/* background glow */}
 			<div className="pointer-events-none absolute inset-0 opacity-40 bg-background" />
-			<div className="relative mx-auto max-w-7xl">
+			<div className="relative mx-auto max-w-7xl px-4 sm:px-6">
 				{/* HERO */}
 				<div className="flex min-h-[30vh] flex-col items-center justify-center pt-10 text-center">
-					<h1 className="max-w-4xl text-6xl! font-semibold tracking-tight text-text md:text-7xl">
+					<h1 className="max-w-4xl text-3xl! sm:text-5xl! md:text-6xl! lg:text-7xl! font-semibold tracking-tight text-text">
 						Bienvenido a
 						<br />
 						<span className="text-accent/70">Abby's Digital Cafe</span>

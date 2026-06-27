@@ -43,7 +43,15 @@ export class AdcLayout {
 		const apiBaseUrl = this.apiBaseUrl ?? resolveApiBaseUrl();
 
 		return (
-			<div class="flex flex-col min-h-screen bg-background text-text" style={{ paddingBottom: "var(--consent-h, 0px)" }}>
+			<div
+				class="flex flex-col min-h-screen bg-background text-text"
+				style={{
+					paddingTop: "env(safe-area-inset-top, 0px)",
+					paddingLeft: "env(safe-area-inset-left, 0px)",
+					paddingRight: "env(safe-area-inset-right, 0px)",
+					paddingBottom: "calc(var(--consent-h, 0px) + env(safe-area-inset-bottom, 0px))",
+				}}
+			>
 				<adc-custom-error variant="toast" global handle-unhandled />
 				<adc-toast-manager />
 
@@ -58,7 +66,7 @@ export class AdcLayout {
 					<slot name="header" />
 				</adc-site-header>
 
-				<main class={`flex-1 justify-center ${this.fullWidth ? "w-full" : "w-max min-w-7xl mx-auto"}`}>
+				<main class={`flex-1 justify-center ${this.fullWidth ? "w-full" : "w-full xl:w-max xl:min-w-7xl xl:mx-auto"}`}>
 					<slot />
 				</main>
 

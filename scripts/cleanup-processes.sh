@@ -36,9 +36,18 @@ echo "Buscando kernel ADC..."
 pkill -9 -f "bun src/index.ts" 2>/dev/null && echo "✓ Kernel ADC terminado" || echo "✗ No se encontró kernel ADC"
 
 # Red de seguridad: liberar los puertos de dev por si algo siguió escuchando
-# (3000 API + subdominios UI vía devPort).
+# (3000 API + subdominios UI vía devPort). La lista se lee de docs/guides/ports.csv
+# (fuente única, columnas: port,app,notes) para mantenerse al día cuando se agregan
+# apps. Fallback a un set mínimo si el CSV no está disponible.
 echo "Liberando puertos de dev..."
-for port in 3000 3012 3016 3020 3032 3036; do
+ports_csv="$(dirname "$0")/../docs/guides/ports.csv"
+if [[ -f "$ports_csv" ]]; then
+    dev_ports=$(tail -n +2 "$ports_csv" | cut -d',' -f1 | grep -E '^[0-9]+$')
+else
+    echo "⚠ ports.csv no encontrado, usando lista mínima"
+    dev_ports="3000 3012 3016 3020 3032 3036"
+fi
+for port in $dev_ports; do
     fuser -k -9 "${port}/tcp" 2>/dev/null && echo "✓ Puerto ${port} liberado" || true
 done
 

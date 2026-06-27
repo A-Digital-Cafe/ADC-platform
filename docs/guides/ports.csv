@@ -1,0 +1,22 @@
+port,app,notes
+3000,gateway,API gateway — redirige a la app por defecto
+3001,test/users-management,
+3002,test/home,sirve bajo sub-path (404 en /)
+3003,test/config,
+3006,test/home-mobile,
+3010,public/community-home,
+3012,public/adc-auth,
+3014,public/adc-identity,
+3016,public/my-account,
+3018,public/adc-project-manager,
+3020,public/status,
+3022,public/help,
+3024,public/adc-home,
+3026,public/adc-error,
+3028,public/adc-org-requests,
+3030,public/adc-email-frontend,
+3032,public/adc-drive,
+3034,public/adc-image-editor,
+3036,public/adc-notifications,
+3038,public/adc-modules-manager,
+3040,public/adc-image-editor-mobile,

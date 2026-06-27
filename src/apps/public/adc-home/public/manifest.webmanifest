@@ -1,0 +1,21 @@
+{
+	"id": "/",
+	"name": "Abby's Digital Cafe",
+	"short_name": "ADC Cafe",
+	"description": "Tu acceso a todas las apps de Abby's Digital Cafe.",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"lang": "es",
+	"dir": "ltr",
+	"theme_color": "#ffffff",
+	"background_color": "#ffffff",
+	"categories": ["productivity"],
+	"icons": [
+		{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+		{ "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+		{ "src": "/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+		{ "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+	]
+}

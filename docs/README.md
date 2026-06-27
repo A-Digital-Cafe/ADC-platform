@@ -21,4 +21,4 @@ README enruta por categoría, no re-lista cada archivo).
 - **[multirepo.md](multirepo.md)** — Presets: instalación, creación, extracción y convenciones.
 - **[guides/](guides/)** — Guías operativas puntuales:
   [discord-oauth](guides/discord-oauth.md), [email-dns-setup](guides/email-dns-setup.md),
-  [ports](guides/ports.md).
+  [ports](guides/ports.csv).

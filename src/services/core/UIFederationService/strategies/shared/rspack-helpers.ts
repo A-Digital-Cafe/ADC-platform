@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import type { IBuildContext } from "../types.js";
 import { normalizeForConfig, getCommonPublicDir } from "../../utils/fs/path-resolver.js";
+import { buildResponsiveRedirectScript } from "../../utils/codegen/html-templates.js";
 
 /**
  * Construye la configuración de `shared` para ModuleFederationPlugin.
@@ -54,17 +55,28 @@ ${exposesEntries}
 }
 
 /**
- * Lee el `index.html` del módulo e inyecta `<script src="/adc-i18n.js"></script>`
- * antes de `</head>` (vía `templateContent`).
+ * Configura el template HTML del `HtmlRspackPlugin` para un host. Lee el
+ * `index.html` del módulo e inyecta antes de `</head>` los scripts que apliquen:
+ * el loader de i18n (si `i18n`) y el auto-redirect responsive (si `responsive`).
+ * Si no hay nada que inyectar, usa `template: './index.html'` sin transformar.
  */
-export function getI18nTemplate(context: IBuildContext): string {
+export function getHostTemplateConfig(context: IBuildContext): string {
+	const { uiConfig } = context.module;
+	const injections: string[] = [];
+	if (uiConfig.i18n) injections.push(`<script src="/adc-i18n.js"></script>`);
+	const redirect = buildResponsiveRedirectScript(uiConfig.responsive);
+	if (redirect) injections.push(redirect);
+
+	if (injections.length === 0) return `\n            template: './index.html',`;
+
 	const indexHtmlPath = normalizeForConfig(path.join(context.module.appDir, "index.html"));
-	return String.raw`
+	const headBlock = `    ${injections.join("\n    ")}\n  </head>`;
+	return `
             scriptLoading: 'blocking',
             inject: 'body',
             templateContent: () => {
                 const html = fs.readFileSync('${indexHtmlPath}', 'utf-8');
-                return html.replace('</head>', '    <script src="/adc-i18n.js"></script>\n  </head>');
+                return html.replace('</head>', ${JSON.stringify(headBlock)});
             },`;
 }
 

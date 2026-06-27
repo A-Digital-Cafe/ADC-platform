@@ -190,7 +190,7 @@ export class AdcNotificationBell {
 				</button>
 
 				{this.open && (
-					<div class="absolute right-0 top-full mt-2 w-80 max-h-112 overflow-hidden rounded-xl bg-surface text-tsurface shadow-cozy ring-1 ring-black/5 z-50 flex flex-col">
+					<div class="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] max-h-112 overflow-hidden rounded-xl bg-surface text-tsurface shadow-cozy ring-1 ring-black/5 z-50 flex flex-col">
 						<div class="flex items-center justify-between px-4 py-2.5 border-b border-black/10">
 							<span class="font-bold text-sm">Notificaciones</span>
 							{this.unread > 0 && (

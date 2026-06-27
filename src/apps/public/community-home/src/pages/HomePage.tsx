@@ -11,7 +11,7 @@ const DESCRIPTION =
 
 export function HomePage() {
 	return (
-		<div>
+		<div className="px-4 sm:px-6">
 			<section
 				id="home"
 				className="flex flex-col items-center text-center max-w-6xl mx-auto"

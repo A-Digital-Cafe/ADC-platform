@@ -32,6 +32,29 @@ interface UIModuleSecurityConfig {
 	production?: UIModuleSecurityHeaders;
 }
 
+/** Coordenadas de una app contraparte (la "otra" variante responsive). */
+interface UIResponsiveCounterpart {
+	/** `devPort` de la contraparte (para resolver su origen en dev/LAN). */
+	devPort: number;
+	/** Subdominio de producción de la contraparte (ej: `m-editor`, `editor`). */
+	subdomain: string;
+}
+
+/**
+ * Declara que este host tiene una variante responsive aparte (típicamente una
+ * app desktop y otra mobile, cada una con su propio host). UIFederationService
+ * inyecta en el `<head>` un redirect que, antes de cargar el bundle, manda al
+ * usuario a la `counterpart` cuando el dispositivo no coincide con `variant`
+ * (heurística UA-CH/UA + viewport). El usuario puede fijar la elección con
+ * `?view=desktop|mobile` (persistido); `?via=auto` evita loops (máx. 1 salto).
+ */
+interface UIResponsiveConfig {
+	/** Rol de ESTE host: a qué clase de dispositivo sirve. */
+	variant: "desktop" | "mobile";
+	/** La otra variante, a la que se redirige cuando el dispositivo no coincide. */
+	counterpart: UIResponsiveCounterpart;
+}
+
 /**
  * Configuración de un módulo UI en config.json
  *
@@ -84,6 +107,8 @@ export interface UIModuleConfig {
 	 * la app llame a `seoService.registerPageMeta(...)`.
 	 */
 	enableSEO?: boolean;
+	/** Variante responsive (desktop/mobile) y su contraparte para auto-redirect. */
+	responsive?: UIResponsiveConfig;
 }
 
 /**

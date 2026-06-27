@@ -439,6 +439,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			".ttf": "font/ttf",
 			".eot": "application/vnd.ms-fontobject",
 			".map": "application/json",
+			".webmanifest": "application/manifest+json",
+			".webp": "image/webp",
+			".avif": "image/avif",
 		};
 		return types[ext] || "application/octet-stream";
 	}

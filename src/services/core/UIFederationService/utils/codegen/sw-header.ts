@@ -42,6 +42,12 @@ export function buildSwLifecycle(namespace: string): string {
 self.addEventListener('install', (event) => {
 	console.log('[SW ${namespace}] Instalando...');
 	self.skipWaiting(); // Forzar activación inmediata
+	// Precachear el shell para fallback offline (solo producción; en dev HMR sirve desde memoria)
+	if (!IS_DEVELOPMENT) {
+		event.waitUntil(
+			caches.open(RUNTIME_CACHE).then((cache) => cache.addAll(CACHE_URLS)).catch(() => {})
+		);
+	}
 });
 
 self.addEventListener('activate', (event) => {

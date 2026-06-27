@@ -1,0 +1,21 @@
+{
+	"id": "/",
+	"name": "Ayuda · ADC",
+	"short_name": "Ayuda",
+	"description": "Documentación, legal y ayuda de Abby's Digital Cafe.",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"lang": "es",
+	"dir": "ltr",
+	"theme_color": "#1a202c",
+	"background_color": "#ffffff",
+	"categories": ["utilities", "education"],
+	"icons": [
+		{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+		{ "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+		{ "src": "/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+		{ "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+	]
+}

@@ -39,6 +39,12 @@ self.addEventListener('fetch', (event) => {
 		return;
 	}
 
+	// Navegación (documento/deep-link/refresh): network-first con fallback al shell cacheado (offline)
+	if (request.mode === 'navigate') {
+		event.respondWith(networkFirstWithFallback(request, RUNTIME_CACHE));
+		return;
+	}
+
 	// NO cachear imágenes
 	const isImage = url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|webp|avif)$/);
 	if (isImage) {
@@ -100,6 +106,27 @@ async function networkFirst(request, cacheName) {
 	} catch (error) {
 		const cachedResponse = await cache.match(request);
 		return cachedResponse || Response.error();
+	}
+}
+
+async function networkFirstWithFallback(request, cacheName) {
+	const cache = await caches.open(cacheName);
+
+	try {
+		const networkResponse = await fetch(request);
+		if (networkResponse && networkResponse.status === 200) {
+			cache.put(request, networkResponse.clone());
+		}
+		return networkResponse;
+	} catch (error) {
+		const cached = await cache.match(request);
+		if (cached) return cached;
+		const shell = await cache.match('/');
+		if (shell) return shell;
+		return new Response(
+			'<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin conexión</title></head><body style="margin:0;display:grid;place-items:center;min-height:100vh;font-family:system-ui,sans-serif;color:#1a202c;background:#fff"><div style="text-align:center;padding:2rem"><h1 style="font-size:1.25rem;margin:0 0 .5rem">Sin conexión</h1><p style="opacity:.7;margin:0">Reintentá cuando recuperes la conexión.</p></div></body></html>',
+			{ status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+		);
 	}
 }
 

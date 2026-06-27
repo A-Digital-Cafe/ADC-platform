@@ -46,14 +46,14 @@ export class AdcSiteHeader {
 	render() {
 		return (
 			<Host>
-				<header class="flex items-center justify-between gap-6 px-8 py-6 shadow-cozy bg-header text-theader font-bold rounded-b-xxl z-50">
+				<header class="flex items-center justify-between gap-3 px-4 py-4 md:gap-6 md:px-8 md:py-6 shadow-cozy bg-header text-theader font-bold rounded-b-xxl z-50">
 					<a href={this.homeHref} aria-label="Inicio" class="ml-2">
 						{this.logoSrc && (
 							<img src={this.logoSrc} alt={this.logoAlt} height="39" width="39" style={{ minWidth: "39px" }} class="rounded-full" />
 						)}
 					</a>
 
-					<nav class="flex flex-wrap items-center gap-4" style={{ minHeight: "48px" }} aria-label="Menu">
+					<nav class="flex flex-wrap items-center justify-end gap-2 md:gap-4" style={{ minHeight: "48px" }} aria-label="Menu">
 						<slot></slot>
 
 						<adc-apps-menu></adc-apps-menu>

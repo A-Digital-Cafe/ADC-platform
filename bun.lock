@@ -102,6 +102,10 @@
       "name": "@adc-platform/adc-modules-manager",
       "version": "1.0.0",
     },
+    "presets/adc-notifications/services/NotificationService": {
+      "name": "@adc-platform/notification-service",
+      "version": "1.0.0",
+    },
     "presets/community-content/services/content-service": {
       "name": "@adc-platform/content-service",
       "version": "1.0.0",
@@ -269,6 +273,8 @@
     "@adc-platform/json-file-adapter-utility": ["@adc-platform/json-file-adapter-utility@workspace:src/utilities/adapters/json-file-adapter"],
 
     "@adc-platform/json-file-crud-service": ["@adc-platform/json-file-crud-service@workspace:src/services/data/json-file-crud"],
+
+    "@adc-platform/notification-service": ["@adc-platform/notification-service@workspace:presets/adc-notifications/services/NotificationService"],
 
     "@adc-platform/project-manager": ["@adc-platform/project-manager@workspace:presets/project-management/services/ProjectManagerService"],
 

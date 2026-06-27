@@ -18,7 +18,7 @@ export class AdcPageShell {
 	@Prop() headerSpacing: "sm" | "md" = "md";
 
 	render() {
-		const rootClass = `h-full w-full flex flex-col ${this.sidebarOffset ? "pl-25 lg:pl-70" : ""}`.trim();
+		const rootClass = `h-full w-full flex flex-col ${this.sidebarOffset ? "pl-4 lg:pl-70" : ""}`.trim();
 		const headerClass = this.headerSpacing === "sm" ? "mb-4" : "mb-6";
 		const hasHeader = Boolean(this.heading || this.description);
 

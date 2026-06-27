@@ -88,8 +88,8 @@ export class AdcYoutubeFacade {
 		// Renderizar facade (thumbnail clickeable con dimensiones fijas 480x320)
 		return (
 			<div
-				class="relative overflow-hidden cursor-pointer group mx-auto rounded-xxl shadow-cozy bg-gray-100"
-				style={{ width: "480px", height: "320px" }}
+				class="relative overflow-hidden cursor-pointer group mx-auto rounded-xxl shadow-cozy bg-gray-100 w-full max-w-[480px]"
+				style={{ aspectRatio: "3 / 2" }}
 				onClick={this.activate}
 				onKeyPress={this.handleKeyPress}
 				role="button"

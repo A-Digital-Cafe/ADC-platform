@@ -1,7 +1,7 @@
 import { RspackBaseStrategy } from "./base.js";
 import type { IBuildContext } from "../types.js";
 import { buildCssRule } from "../shared/rspack-css-rule.js";
-import { getI18nTemplate } from "../shared/rspack-helpers.js";
+import { getHostTemplateConfig } from "../shared/rspack-helpers.js";
 
 /**
  * Estrategia Rspack para React con Module Federation.
@@ -51,8 +51,7 @@ const { ModuleFederationPlugin } = rspack.container;
 	}
 
 	protected getPlugins(context: IBuildContext, isHost: boolean, usedFrameworks: Set<string>): string {
-		const hasI18n = context.module.uiConfig.i18n;
-		const i18nScript = isHost && hasI18n ? getI18nTemplate(context) : `\n            template: './index.html',`;
+		const templateConfig = isHost ? getHostTemplateConfig(context) : `\n            template: './index.html',`;
 
 		// Vue feature flags solo si algún remote usa Vue
 		const vueFeatureFlags = usedFrameworks.has("vue")
@@ -67,7 +66,7 @@ const { ModuleFederationPlugin } = rspack.container;
 		const htmlPlugin = isHost
 			? `
         new rspack.HtmlRspackPlugin({
-            publicPath: '/',${i18nScript}
+            publicPath: '/',${templateConfig}
         }),`
 			: "";
 
