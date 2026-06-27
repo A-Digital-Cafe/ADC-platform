@@ -46,6 +46,10 @@ apps/private
 !presets/README.md
 
 private/
+
+# CI de seguridad centralizada: repo público propio (A-Digital-Cafe/adc-ci),
+# clonado aparte. No se versiona desde este repo. Ver docs/guides/security-ci.md
+adc-ci/
 **.pyc
 __pycache__
 

@@ -6,6 +6,7 @@
 	"folders": [
 		{ "name": "🏠 ADC-platform (root)", "path": "." },
 		{ "name": "🔒 private", "path": "private" },
+		{ "name": "⚙️ adc-ci", "path": "adc-ci" },
 		{ "name": "📦 adc-drive", "path": "presets/adc-drive" },
 		{ "name": "📦 adc-email-backend", "path": "presets/adc-email-backend" },
 		{ "name": "📦 adc-email-frontend", "path": "presets/adc-email-frontend" },
@@ -20,6 +21,11 @@
 		{ "name": "📦 status", "path": "presets/status" },
 	],
 	"settings": {
+		// Oculta .github/ y .sonarlint/ del árbol de cada carpeta del workspace.
+		"files.exclude": {
+			"**/.github": true,
+			"**/.sonarlint": true
+		},
 		"files.watcherExclude": {
 			"**/node_modules/**": true,
 			"**/.git/**": true,

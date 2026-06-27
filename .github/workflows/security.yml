@@ -1,0 +1,43 @@
+# Caller fino: delega toda la lógica en el reusable workflow centralizado de
+# A-Digital-Cafe/adc-ci. Copiá este archivo tal cual a `.github/workflows/`
+# de cada repo (root + presets). Único punto a mantener: el `@main` de abajo.
+name: Security
+
+on:
+  # PR aprobado por un mantenedor -> corre en contexto del repo base (seguro ante forks).
+  pull_request_review:
+    types: [submitted]
+  # Push a main (directo o merge) -> escanea, salvo que el commit ya se haya
+  # escaneado en su PR (dedup por SHA).
+  push:
+    branches: [main]
+  # Escaneo completo + Scorecard, semanal (lunes 06:00 UTC) -> report-only + email.
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  id-token: write # requerido por OSSF Scorecard
+
+jobs:
+  pr:
+    if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
+    with:
+      mode: pr
+    secrets: inherit
+
+  main:
+    if: ${{ github.event_name == 'push' }}
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
+    with:
+      mode: main
+    secrets: inherit
+
+  weekly:
+    if: ${{ github.event_name == 'schedule' }}
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
+    with:
+      mode: weekly
+      email: true
+    secrets: inherit
