@@ -109,3 +109,15 @@ echo "XYZ https://github.com/A-Digital-Cafe/xyz.git main" >> presets/.presets.tx
 git add presets/.presets.txt
 git commit -m "chore(presets): register XYZ preset"
 ```
+
+### 7. Agregar el badge de Security al README del preset
+
+El caller de CI ya lo genera `init:preset` (o `scripts/distribute-security-ci.sh`); solo
+falta el badge en el `README.md` del preset, apuntando a **su** repo. Pegá esto junto al
+título (reemplazando `xyz` por el nombre real del repo):
+
+```markdown
+[![Security](https://github.com/A-Digital-Cafe/xyz/actions/workflows/security.yml/badge.svg)](https://github.com/A-Digital-Cafe/xyz/actions/workflows/security.yml)
+```
+
+Ver la suite en [guides/security-ci.md](guides/security-ci.md).
