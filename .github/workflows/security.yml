@@ -25,19 +25,25 @@ jobs:
     uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
     with:
       mode: pr
-    secrets: inherit
 
   main:
     if: ${{ github.event_name == 'push' }}
     uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
     with:
       mode: main
-    secrets: inherit
 
+  # Solo el modo weekly manda mail: pasamos únicamente los secrets SMTP requeridos
+  # (no `secrets: inherit`). Si no están definidos en la org, llegan vacíos y el
+  # reusable omite el email.
   weekly:
     if: ${{ github.event_name == 'schedule' }}
     uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
     with:
       mode: weekly
       email: true
-    secrets: inherit
+    secrets:
+      SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SECURITY_REPORT_TO: ${{ secrets.SECURITY_REPORT_TO }}

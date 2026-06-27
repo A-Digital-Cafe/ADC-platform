@@ -43,7 +43,7 @@ ante la duda, escanea).
 
 Un reusable workflow en repo **privado** no puede ser invocado por repos
 **públicos** (los presets públicos romperían). El archivo no contiene secrets:
-se inyectan por `secrets: inherit` desde cada repo en runtime.
+se inyectan en runtime (el caller pasa solo los 5 secrets SMTP en el job weekly).
 
 ## Setup (una sola vez)
 
