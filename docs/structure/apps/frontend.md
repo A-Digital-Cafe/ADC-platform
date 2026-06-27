@@ -220,11 +220,8 @@ Estandarizar los campos con los átomos de la UI library en vez de elementos nat
   al montar), `inputMode` y `pattern`. Usar **`onInput`** (no `onChange`: en un custom element React lo
   mapea al evento `change` nativo, que sólo dispara al perder foco). El ancho/posición va por `className`
   en el host (el `<input>` interno ya es `w-full`); no se le pasan clases de estilo propio.
-- **Quedan nativos a propósito**: file pickers ocultos (`type="file"`); editores especializados (overlays
-  de texto posicionados sobre un canvas, editores monospace de archivos); controles inline densos de un
-  editor donde el estilo de formulario desentona; `<select>` con **opciones deshabilitadas** (`adc-select`
-  no las soporta) o dentro de modales con scroll (su dropdown puede recortarse); y checkboxes que ya
-  replican el estilo del átomo (convertirlos no aporta y arriesga regresiones).
+- Algunos controles **quedan nativos a propósito** (file pickers ocultos, editores sobre canvas,
+  `<select>` con opciones deshabilitadas…) — lista completa en [frontend-native-controls.md](frontend-native-controls.md).
 
 ## Integración con la plataforma
 
@@ -233,114 +230,14 @@ Estandarizar los campos con los átomos de la UI library en vez de elementos nat
 3. Crear el icono `adc-icon-app-<id>` en la UI library y regenerar `react-jsx`.
 4. (Opcional) Exponer `./platformLinkResolver` para chips de enlaces cross-app — ver `docs/structure/enterprise-apps.md`.
 
-## PWA / app instalable (opcional)
+## Extras opcionales / situacionales
 
-**Cuándo:** hacé una app instalable **sólo si tiene sentido como app de pantalla de inicio** (Drive, Mail,
-My Account, Community, el editor…). **No** instalar: la UI library (no es host), páginas transitorias
-(`adc-auth`, `adc-error`), herramientas admin, ni apps que no se usan "sueltas" (p. ej. notificaciones u
-`org-requests`). Cada app instalable es **su propio origen** (subdominio), así que la PWA es **por app**.
+Casos fuera del flujo estándar. **Cargá solo el doc que aplique a tu tarea** (no inflar el contexto con los otros):
 
-**Cómo** — todo estático, sin endpoint (todas las apps comparten el namespace `adc-platform`, así que un
-endpoint por-namespace serviría **un** manifest compartido; por eso cada app trae el suyo):
-
-1. **`public/manifest.webmanifest`** propio: `id`/`start_url`/`scope` `"/"`, `display: "standalone"`,
-   `name`, `short_name`, `theme_color`, `background_color`, `categories`, e `icons` apuntando a
-   `/icons/icon-{192,512}.png` (+ variantes `*-maskable`). Se sirve en `/manifest.webmanifest` porque el
-   `public/` de la app pisa al default común en `/`.
-2. **Tags en el `<head>`** del `index.html`: `<link rel="manifest" href="/manifest.webmanifest">`,
-   `theme-color` (con `media` light/dark), `apple-mobile-web-app-*`, `apple-touch-icon`, y `viewport` con
-   `viewport-fit=cover`.
-3. **Iconos:** el set por defecto (pingüino) vive en `src/common/public/icons/` y se sirve en `/icons/*`
-   para todas. Para identidad propia, dropeá tus PNG en el `public/icons/` de la app (mismos nombres →
-   pisan al default). Patrón actual: pingüino **oscurecido** de fondo + el SVG `adc-icon-app-<id>` de la UI
-   library en el **color representativo** de la app (generación con `sharp`).
-4. **`serviceWorker: true`** en el config: Android exige un SW con `fetch` handler para ofrecer instalar.
-   El SW (con fallback offline) lo genera `UIFederationService`.
-5. El content-type `.webmanifest → application/manifest+json` ya está resuelto en el provider http; el CSP
-   ya permite `manifest-src 'self'`.
-
-Referencia: `src/apps/public/adc-home` (launcher instalable) y `presets/adc-drive` (manifest + `public/icons/`
-propios). Verificar con `add to home screen` real en Android (criterios: manifest con `name`/`icons` 192+512,
-SW con fetch, HTTPS/localhost).
-
-## Variante mobile dedicada · auto-redirect (opcional)
-
-**Cuándo:** sólo si la app necesita un **host aparte** para móvil (otra app con su propio `devPort`/subdominio),
-no un layout responsive dentro del mismo host. Caso real: `presets/adc-image-editor` → `adc-image-editor`
-(desktop, sub `editor`) y `adc-image-editor-mobile` (sub `m-editor`), que reusa la UI desktop vía un remote
-federado (`./MobileEditor`).
-
-**Cómo:** declarás en el `config.json` de **cada** host un bloque `responsive` que apunta a su contraparte;
-no hay script en el `index.html`. `UIFederationService` inyecta el redirect en el `<head>` (antes del bundle)
-a partir de esa config:
-
-```json
-"responsive": {
-	"variant": "desktop",                                   // rol de ESTE host
-	"counterpart": { "devPort": 3040, "subdomain": "m-editor" } // la OTRA variante
-}
-```
-
-- El redirect manda a `counterpart` cuando el dispositivo no coincide con `variant` (heurística: UA-Client-Hints
-  / UA regex + viewport: puntero coarse + pantalla angosta + retrato). El origen destino se resuelve como el
-  resto de la plataforma: en dev/LAN por `devPort`, en prod por `subdomain`.
-- El usuario puede forzar/persistir su elección con `?view=desktop|mobile`; el flag `?via=auto` corta loops
-  (máx. 1 salto). Conserva ruta + query + hash.
-- Es **bidireccional**: el host mobile declara su propio `responsive` (`variant: "mobile"`, counterpart =
-  desktop). Ambos hosts necesitan su `devPort` registrado en [../../guides/ports.csv](../../guides/ports.csv).
-
-Lógica única en `UIFederationService` (`utils/codegen/html-templates.ts` → `buildResponsiveRedirectScript`);
-tipos en `IUIModule.d.ts` (`UIResponsiveConfig`).
-
-## CSS de un componente federado cross-host (Tailwind)
-
-**Las utilidades de Tailwind son por host.** Cada app genera su CSS escaneando **solo** su propio `src` + el
-`src` de sus `uiDependencies` (lo arma `UIFederationService/config-generators/tailwind.ts` con `@source`). La
-federación **en runtime** (`lazyLoadRemoteComponent`) **no** está en `uiDependencies`, así que el host consumidor
-**no escanea** el `src` del remote: cualquier clase usada **solo** en el componente federado no se genera en el
-host que lo renderiza y **falla en silencio** (computa `none`/`auto`). Las clases comunes sobreviven de casualidad
-(también están en el `src`/ui-library del host); las únicas/arbitrarias (`max-h-[72dvh]`, `z-[60]`) no.
-
-Hay dos formas de resolverlo, **según el tamaño del componente**:
-
-**1. Componente acotado (modal/panel) → importar el `tailwind.css` de SU app.** Inyecta (via `style-loader`)
-todas las utilidades de la app en el host que lo monta. Patrón de `adc-drive` `FolderPicker.tsx` (línea 1).
-
-```tsx
-import "../styles/tailwind.css"; // inyecta las utilidades de ESTA app en el host que lo monta
-```
-
-Costo: un bundle CSS extra (decenas de KB, una vez al cargar; utilidades idempotentes) — ligero, sin impacto
-en render. **⚠️ OJO con componentes full-screen:** importar el `tailwind.css` activa **TODAS** las clases del
-componente en el host, incluidas las que **antes estaban dormidas** (no se generaban) y pueden tener valores
-inadecuados. Caso real: `MobileEditorScreen` tenía un `max-h-32` en el toolbar que nunca aplicaba; al importar
-el CSS, `max-h-32` (128px) empezó a recortar el toolbar → parecía que el lienzo se le encimaba. Si vas por el
-import en un layout grande, **auditá** que sus clases den el layout esperado (no asumas que "antes andaba").
-
-**2. Layout full-screen / pocas props críticas → `style` inline.** Inmune a la generación de Tailwind, al
-re-escritura de un linter (`z-[60]`→`z-60`) **y** a activar clases latentes. Es lo que usa el bottom-sheet del
-editor mobile para `zIndex` (gana al overlay), `maxHeight` y `overscrollBehavior`:
-
-```tsx
-<div style={{ zIndex: 60, maxHeight: "72dvh" }} /> // no dependen del CSS por-host
-```
-
-Alternativa de fondo: declarar la app productora en el `uiDependencies` del host (suma su `src` al `@source`),
-pero acopla el boot y tiene el mismo riesgo de activar clases latentes que el import.
-
-## Tutoriales
-
-Cada microfront publica sus tutoriales como estáticos en `public/tutorials/` (sin federación):
-
-```
-public/tutorials/index.json   # { "tutorials": [{ "slug", "title", "description"?, "minutes"? }] }
-public/tutorials/<slug>.md    # markdown breve; el título va en el manifiesto, NO como `#` en el .md
-```
-
-La app **help** los descubre en runtime sondeando `{origen}/tutorials/index.json` de cada app del
-registry de `platform-links` (la app debe estar en `DEFAULT_APPS`) y los renderiza con
-`@ui-library/utils/markdown-blocks` + `adc-blocks-renderer` (subset markdown soportado: ver
-`markdown-blocks` en `utils/README.md`). Una app sin tutoriales simplemente no publica el manifiesto.
+- **¿App instalable como app de inicio?** (Drive, Mail, editor…) → [frontend-pwa.md](frontend-pwa.md) — `manifest.webmanifest` + tags PWA + `serviceWorker: true` + iconos propios.
+- **¿Host aparte para móvil?** (no responsive en el mismo host) → [frontend-mobile-variant.md](frontend-mobile-variant.md) — bloque `responsive` (`variant` + `counterpart`) en ambos hosts.
+- **¿Consumís un componente federado de otra app en runtime y sus estilos Tailwind no aplican?** → [frontend-federated-css.md](frontend-federated-css.md) — las utilidades de Tailwind son por host.
+- **¿La app publica tutoriales para la app help?** → [frontend-tutorials.md](frontend-tutorials.md) — estáticos en `public/tutorials/`.
 
 ## Checklist de creación
 
@@ -351,11 +248,11 @@ registry de `platform-links` (la app debe estar en `DEFAULT_APPS`) y los renderi
 - [ ] `i18n/{es,en}.js` creados; solo claves de dominio propias (las genéricas vienen de la UI library).
 - [ ] Componentes reutilizables agregados a la UI library, no duplicados.
 - [ ] Diálogos/modales con `<adc-modal>` (no `inset-0` + backdrop a mano); sin `window.alert/confirm/prompt`.
-- [ ] Campos con átomos (`adc-input`/`adc-textarea`/`adc-checkbox`/`adc-select`), no `<input>`/`<textarea>`/`<select>` nativos (salvo las excepciones documentadas).
+- [ ] Campos con átomos (`adc-input`/`adc-textarea`/`adc-checkbox`/`adc-select`), no `<input>`/`<textarea>`/`<select>` nativos (salvo las [excepciones documentadas](frontend-native-controls.md)).
 - [ ] Estilos con design tokens del preset (`text-text`/`bg-surface`/`font-heading`/…), no hex ni colores crudos.
 - [ ] App registrada en `adc-home`, `adc-apps-menu` y con icono propio.
 - [ ] `serviceWorker` solo si la app es layout.
-- [ ] (Si instalable) `manifest.webmanifest` + tags PWA en el `<head>` + `serviceWorker: true` + iconos propios en `public/icons/` — ver «PWA / app instalable».
-- [ ] (Si tiene host mobile aparte) bloque `responsive` con su `counterpart` en el `config.json` de ambos hosts — ver «Variante mobile dedicada».
+- [ ] (Si instalable) `manifest.webmanifest` + tags PWA en el `<head>` + `serviceWorker: true` + iconos propios en `public/icons/` — ver [frontend-pwa.md](frontend-pwa.md).
+- [ ] (Si tiene host mobile aparte) bloque `responsive` con su `counterpart` en el `config.json` de ambos hosts — ver [frontend-mobile-variant.md](frontend-mobile-variant.md).
 - [ ] CSP extendida si expone módulos federados cross-app.
 - [ ] `README.md` de la app creado (máx 15 líneas).

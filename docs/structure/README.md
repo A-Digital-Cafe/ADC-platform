@@ -23,6 +23,11 @@ Estos documentos son el **prompt base** para crear o editar módulos (por humano
 | Crear/modificar rutas HTTP                              | [services/endpoints.md](services/endpoints.md)         |
 | Armar/editar el `index.ts` y `config.json` del servicio | [services/service-shell.md](services/service-shell.md) |
 | Crear/editar una app UI (micro-frontend)                | [apps/frontend.md](apps/frontend.md)                   |
+| App UI instalable como PWA                              | [apps/frontend-pwa.md](apps/frontend-pwa.md)           |
+| App UI con host mobile dedicado (auto-redirect)         | [apps/frontend-mobile-variant.md](apps/frontend-mobile-variant.md) |
+| Estilos Tailwind de un componente federado cross-host   | [apps/frontend-federated-css.md](apps/frontend-federated-css.md) |
+| App UI que publica tutoriales (para la app help)        | [apps/frontend-tutorials.md](apps/frontend-tutorials.md) |
+| Cuándo un campo queda nativo en vez de usar el átomo    | [apps/frontend-native-controls.md](apps/frontend-native-controls.md) |
 | Acceder a otro módulo o a una superficie privilegiada   | [kernel-access.md](kernel-access.md)                   |
 | Crear, extraer o instalar un preset (repos git)         | [../multirepo.md](../multirepo.md)                     |
 
