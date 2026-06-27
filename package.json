@@ -48,13 +48,13 @@
 		"@connectrpc/connect-web": "^2.1.1",
 		"@sinclair/typebox": "^0.34.0",
 		"@vitejs/plugin-react": "^5.2.0",
-		"astro": "^6.3.3",
+		"astro": "^6.4.6",
 		"chokidar": "^5.0.0",
 		"dotenv": "^17.4.2",
 		"mongoose": "^7.7.1",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6",
-		"vite": "^7.3.3",
+		"vite": "^7.3.5",
 		"vue": "^3.5.34"
 	},
 	"devDependencies": {
@@ -87,7 +87,13 @@
 		"vue-loader": "^17.4.2"
 	},
 	"overrides": {
-		"baseline-browser-mapping": "^2.9.19"
+		"baseline-browser-mapping": "^2.9.19",
+		"@babel/core": "^7.29.6",
+		"esbuild": "^0.28.1",
+		"js-yaml": "^4.2.0",
+		"postcss": "^8.5.10",
+		"qs": "^6.15.2",
+		"vite": "^7.3.5"
 	},
 	"packageManager": "bun"
 }
