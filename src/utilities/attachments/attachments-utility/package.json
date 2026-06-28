@@ -1,5 +1,7 @@
 {
 	"name": "attachments-utility",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"description": "Utility para gestionar adjuntos S3-compatibles (presign, confirm, descarga, borrado) reutilizable por servicios.",
 	"private": true,

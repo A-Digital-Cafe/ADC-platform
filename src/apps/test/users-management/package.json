@@ -1,9 +1,9 @@
 {
-	"name": "@adc/endpoint-manager-service",
+	"name": "@adc-platform/users-management",
 	"license": "ISC",
 	"author": "abbytec",
 	"version": "1.0.0",
-	"type": "module",
 	"private": true,
+	"type": "module",
 	"dependencies": {}
 }

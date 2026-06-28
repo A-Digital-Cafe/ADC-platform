@@ -1,5 +1,7 @@
 {
 	"name": "storage-quota-service",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"description": "Tracking centralizado de uso de almacenamiento y límites por plan/override",
 	"private": true,

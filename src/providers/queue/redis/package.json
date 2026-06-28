@@ -1,5 +1,7 @@
 {
 	"name": "@adc-platform/redis-provider",
+	"license": "ISC",
+	"author": "abbytec",
 	"type": "module",
 	"private": true
 }

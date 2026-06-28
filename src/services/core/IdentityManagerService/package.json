@@ -1,5 +1,7 @@
 {
 	"name": "identity-manager-service",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"description": "Servicio de gestión de identidades, usuarios, roles y grupos",
 	"private": true,

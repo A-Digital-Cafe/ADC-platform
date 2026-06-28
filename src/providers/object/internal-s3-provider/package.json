@@ -1,5 +1,7 @@
 {
 	"name": "internal-s3-provider",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"description": "Proveedor de almacenamiento de objetos compatible con S3 (minIO/AWS S3) con presigned URLs",
 	"private": true,

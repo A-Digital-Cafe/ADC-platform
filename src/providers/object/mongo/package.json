@@ -1,5 +1,7 @@
 {
 	"name": "mongo-provider",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"description": "Proveedor de conexión a MongoDB con tolerancia a fallos",
 	"private": true,

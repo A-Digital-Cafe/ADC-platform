@@ -1,5 +1,7 @@
 {
 	"name": "@adc-platform/express-server",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"private": true,
 	"type": "module",
@@ -16,4 +18,3 @@
 		"@types/body-parser": "^1.19.5"
 	}
 }
-

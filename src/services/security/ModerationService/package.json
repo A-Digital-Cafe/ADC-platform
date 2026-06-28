@@ -1,5 +1,7 @@
 {
 	"name": "@adc/moderation-service",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"private": true,
 	"description": "Anti-evasion ban list (hash-based) + Discord modlog sync",

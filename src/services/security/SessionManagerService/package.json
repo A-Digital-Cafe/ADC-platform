@@ -1,5 +1,7 @@
 {
 	"name": "@adc/session-manager-service",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"type": "module",
 	"description": "Servicio en modo kernel que gestiona las sesiones de usuario y su autenticación",

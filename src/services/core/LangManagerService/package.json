@@ -1,9 +1,9 @@
 {
-	"name": "@adc/endpoint-manager-service",
+	"name": "@adc-platform/lang-manager-service",
 	"license": "ISC",
 	"author": "abbytec",
 	"version": "1.0.0",
-	"type": "module",
 	"private": true,
+	"type": "module",
 	"dependencies": {}
 }

@@ -1,5 +1,7 @@
 {
 	"name": "@adc-platform/web-ui-library-mobile",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"private": true
 }

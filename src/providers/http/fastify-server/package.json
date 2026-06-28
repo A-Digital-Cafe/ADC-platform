@@ -1,5 +1,7 @@
 {
 	"name": "@adc-platform/fastify-server",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"private": true,
 	"type": "module",

@@ -1,5 +1,7 @@
 {
 	"name": "@adc-platform/execution-manager-service",
+	"license": "ISC",
+	"author": "abbytec",
 	"version": "1.0.0",
 	"type": "module",
 	"private": true,
