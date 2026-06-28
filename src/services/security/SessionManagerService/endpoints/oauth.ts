@@ -14,6 +14,8 @@ import {
 	type ClearCookie,
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { pendingLinkEntryCheck, type PendingLinkData } from "../schemas/pending-link.js";
 import type { AuthenticatedUser, IOAuthProvider, ModerationLookupService, OAuthProviderConfig } from "../types.js";
 import { buildErrorUrl } from "../utils/errorRedirect.js";
 import { recordLoginAttemptIp, redirectIfRequestBanned } from "../utils/moderationGuards.js";
@@ -33,16 +35,6 @@ const RETURN_URL_COOKIE_NAME = "oauth_return_url";
 const PENDING_LINK_COOKIE_NAME = "oauth_pending_link";
 
 const isProd = process.env.NODE_ENV === "production";
-
-/** Datos pendientes para vincular cuenta OAuth con usuario existente */
-interface PendingLinkData {
-	provider: string;
-	providerId: string;
-	providerUsername: string;
-	providerAvatar?: string;
-	email: string;
-	accessToken: string;
-}
 
 /** Max intentos de contraseña por pending link antes de consumirlo */
 const MAX_LINK_ATTEMPTS = 3;
@@ -600,8 +592,7 @@ export class OAuthEndpoints {
 	private static async getPendingLink(token: string): Promise<PendingLinkEntry<PendingLinkData> | null> {
 		if (OAuthEndpoints.deps.redis) {
 			const data = await OAuthEndpoints.deps.redis.get(`${REDIS_PENDING_PREFIX}${token}`);
-			if (!data) return null;
-			return JSON.parse(data) as PendingLinkEntry<PendingLinkData>;
+			return safeParseJson(data, pendingLinkEntryCheck);
 		}
 
 		return OAuthEndpoints.pendingLinks.get(token) || null;

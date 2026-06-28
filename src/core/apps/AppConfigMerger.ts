@@ -1,6 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { IModuleConfig } from "../../interfaces/modules/IModule.js";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 
 /**
  * Fusión de configuraciones de app: `default.json` (base) + config de instancia.
@@ -21,7 +23,7 @@ function mergeModules(base: IModuleConfig[] = [], instance: IModuleConfig[] = []
 export async function readBaseConfig(appDir: string): Promise<Partial<IModuleConfig>> {
 	try {
 		const content = await fs.readFile(path.join(appDir, "default.json"), "utf-8");
-		return JSON.parse(content);
+		return (safeParseJson(content, moduleConfigCheck) as Partial<IModuleConfig> | null) ?? {};
 	} catch {
 		return {};
 	}

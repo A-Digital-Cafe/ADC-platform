@@ -8,6 +8,8 @@ import type { OperationMessage } from "@interfaces/modules/providers/IMessageQue
 import type { Consumer } from "rabbitmq-client";
 import { CircuitOpenError } from "@common/types/custom-errors/CircuitOpenError.ts";
 import { createHash } from "node:crypto";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { jobStatusCheck } from "../schemas/job-status.js";
 import type { EndpointHandler, HttpMethod, JobStatus } from "../types.js";
 
 interface ConsumerEndpoint {
@@ -73,7 +75,11 @@ export class JobManager {
 				return;
 			}
 
-			const job = JSON.parse(raw) as JobStatus;
+			const job = safeParseJson(raw, jobStatusCheck);
+			if (!job) {
+				reply.status(404).send({ error: "JOB_NOT_FOUND", message: "Job not found or expired" });
+				return;
+			}
 			reply.status(200).send(job);
 		});
 
@@ -131,8 +137,8 @@ export class JobManager {
 				if (redis && jobId) {
 					try {
 						const existing = await redis.get(`job:${jobId}`);
-						if (existing) {
-							const parsed = JSON.parse(existing) as JobStatus;
+						const parsed = safeParseJson(existing, jobStatusCheck);
+						if (parsed) {
 							parsed.status = "processing";
 							await redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(parsed));
 						}

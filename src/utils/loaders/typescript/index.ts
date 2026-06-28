@@ -8,6 +8,8 @@ import type { BaseService, IService } from "../../../services/BaseService.ts";
 
 import { Kernel } from "../../../kernel.js";
 import { Logger } from "../../logger/Logger.js";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 
 type Constructor<T> = new (...args: any[]) => T;
 
@@ -61,8 +63,8 @@ export default class TypeScriptLoader implements IModuleLoader {
 			// Privilegios declarados en el config.json del servicio (para los scopes de su businessCap).
 			let declared: string[] | undefined;
 			try {
-				const raw = JSON.parse(await fs.readFile(path.join(modulePath, "config.json"), "utf-8"));
-				if (Array.isArray(raw.privileges)) declared = raw.privileges;
+				const raw = safeParseJson(await fs.readFile(path.join(modulePath, "config.json"), "utf-8"), moduleConfigCheck);
+				if (raw && Array.isArray(raw.privileges)) declared = raw.privileges;
 			} catch {
 				/* sin config.json o sin privileges */
 			}

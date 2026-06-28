@@ -1,3 +1,5 @@
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { userBlockStatusCheck, type UserBlockStatus } from "../../schemas/block-status.js";
 import type RedisProvider from "../../../../../providers/queue/redis/index.js";
 
 /** Prefijos de claves Redis */
@@ -15,16 +17,6 @@ const TTL = {
 	BLOCK_TEMP: 60 * 60, // 1 hora
 	BLOCK_PERM: 30 * 24 * 60 * 60, // 30 días
 } as const;
-
-/**
- * Estado de bloqueo de un usuario
- */
-interface UserBlockStatus {
-	blocked: boolean;
-	blockedUntil: number | null;
-	permanent: boolean;
-	reason: string;
-}
 
 type UpdateBlockStatusCallback = (userId: string, blocked: boolean | number) => Promise<void>;
 type SendAlertEmailCallback = (userId: string, reason: string) => Promise<void>;
@@ -75,9 +67,8 @@ export class LoginAttemptTracker {
 	async isBlocked(userId: string): Promise<UserBlockStatus> {
 		if (this.#redis) {
 			const data = await this.#redis.get(`${REDIS_PREFIX.BLOCK_STATUS}${userId}`);
-			if (!data) return NOT_BLOCKED;
-
-			const status: UserBlockStatus = JSON.parse(data);
+			const status = safeParseJson(data, userBlockStatusCheck);
+			if (!status) return NOT_BLOCKED;
 
 			// Si es temporal y ya pasó
 			if (status.blockedUntil && Date.now() > status.blockedUntil) {

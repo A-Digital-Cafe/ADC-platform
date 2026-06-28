@@ -1,5 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry, ModuleType } from "../../utils/registry/ModuleRegistry.js";
 import type { AppLoader } from "../apps/AppLoader.js";
@@ -519,8 +521,9 @@ export class ModuleOrchestrator {
 		const dir = path.dirname(filePath);
 		for (const file of ["config.json", "default.json"]) {
 			try {
-				const cfg = JSON.parse(await fs.readFile(path.join(dir, file), "utf-8"));
-				if (cfg?.uiModule) return { framework: cfg.uiModule.framework, name: cfg.uiModule.name };
+				const cfg = safeParseJson(await fs.readFile(path.join(dir, file), "utf-8"), moduleConfigCheck);
+				const uiModule = (cfg as { uiModule?: { framework?: string; name?: string } } | null)?.uiModule;
+				if (uiModule) return { framework: uiModule.framework, name: uiModule.name };
 			} catch {
 				/* siguiente */
 			}

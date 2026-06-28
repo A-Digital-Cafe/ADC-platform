@@ -1,6 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { Dirent } from "node:fs";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 
 export interface AppLoadInfo {
 	path: string;
@@ -49,8 +51,9 @@ function fromUiConfig(subDirPath: string, dirName: string, uiModule: UiModuleCon
 async function readAppConfig(subDirPath: string, dirName: string): Promise<AppLoadInfo> {
 	try {
 		const content = await fs.readFile(path.join(subDirPath, "config.json"), "utf-8");
-		const config = JSON.parse(content);
-		if (config.uiModule) return fromUiConfig(subDirPath, dirName, config.uiModule);
+		const config = safeParseJson(content, moduleConfigCheck);
+		const uiModule = (config as { uiModule?: UiModuleConfig } | null)?.uiModule;
+		if (uiModule) return fromUiConfig(subDirPath, dirName, uiModule);
 		return makeAppInfo(subDirPath, dirName);
 	} catch {
 		return makeAppInfo(subDirPath, dirName);

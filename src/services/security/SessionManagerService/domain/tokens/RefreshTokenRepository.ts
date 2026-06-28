@@ -1,5 +1,9 @@
 import { randomBytes } from "node:crypto";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { storedRefreshTokenCheck, type StoredRefreshToken } from "../../schemas/refresh-token.js";
 import type RedisProvider from "../../../../../providers/queue/redis/index.js";
+
+export type { StoredRefreshToken };
 
 /** Prefijos de claves Redis */
 const REDIS_PREFIX = {
@@ -7,21 +11,6 @@ const REDIS_PREFIX = {
 	USER: "refresh:user:",
 	DEVICE: "refresh:device:",
 } as const;
-
-/**
- * Refresh Token almacenado
- */
-export interface StoredRefreshToken {
-	token: string;
-	userId: string;
-	deviceId: string;
-	createdAt: number;
-	expiresAt: number;
-	ipAddress: string;
-	country: string | null;
-	userAgent: string;
-	revoked: boolean;
-}
 
 /**
  * Opciones para crear un refresh token
@@ -129,10 +118,8 @@ export class RefreshTokenRepository {
 	async findByToken(token: string): Promise<StoredRefreshToken | null> {
 		if (this.#redis) {
 			const data = await this.#redis.get(`${REDIS_PREFIX.TOKEN}${token}`);
-			if (!data) return null;
-
-			const stored: StoredRefreshToken = JSON.parse(data);
-			if (stored.revoked || Date.now() > stored.expiresAt) return null;
+			const stored = safeParseJson(data, storedRefreshTokenCheck);
+			if (!stored || stored.revoked || Date.now() > stored.expiresAt) return null;
 			return stored;
 		}
 
@@ -164,9 +151,9 @@ export class RefreshTokenRepository {
 	async revoke(token: string): Promise<boolean> {
 		if (this.#redis) {
 			const data = await this.#redis.get(`${REDIS_PREFIX.TOKEN}${token}`);
-			if (!data) return false;
+			const stored = safeParseJson(data, storedRefreshTokenCheck);
+			if (!stored) return false;
 
-			const stored: StoredRefreshToken = JSON.parse(data);
 			stored.revoked = true;
 
 			await Promise.all([
@@ -241,8 +228,8 @@ export class RefreshTokenRepository {
 
 			const deletePromises = tokens.map(async (token) => {
 				const data = await this.#redis!.get(`${REDIS_PREFIX.TOKEN}${token}`);
-				if (data) {
-					const stored: StoredRefreshToken = JSON.parse(data);
+				const stored = safeParseJson(data, storedRefreshTokenCheck);
+				if (stored) {
 					await this.#redis!.del(`${REDIS_PREFIX.DEVICE}${stored.userId}:${stored.deviceId}`);
 				}
 				await this.#redis!.del(`${REDIS_PREFIX.TOKEN}${token}`);

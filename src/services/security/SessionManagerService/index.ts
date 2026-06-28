@@ -18,6 +18,8 @@ import { GeoIPValidator } from "./domain/security/GeoIPValidator.js";
 import { SessionManager } from "./domain/session/manager.js";
 import { OAuthProviderRegistry, PlatformAuthProvider } from "./domain/oauth/index.js";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { permissionStringsCheck } from "./schemas/permissions.js";
 
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
@@ -282,7 +284,8 @@ export default class SessionManagerService extends BaseService implements ISessi
 		if (this.#redis) {
 			try {
 				const cached = await this.#redis.get(cacheKey);
-				if (cached) return JSON.parse(cached) as string[];
+				const parsed = safeParseJson(cached, permissionStringsCheck);
+				if (parsed) return parsed;
 			} catch {
 				/* cache best-effort */
 			}

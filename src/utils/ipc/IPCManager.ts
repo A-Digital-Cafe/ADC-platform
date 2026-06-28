@@ -4,6 +4,8 @@ import * as net from "node:net";
 import { promises as fs } from "node:fs";
 import crypto from "node:crypto";
 import { Logger } from "../logger/Logger.js";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { ipcMessageCheck } from "@common/schemas/ipc-message.ts";
 
 /**
  * Mensaje de IPC para comunicación entre procesos
@@ -97,7 +99,11 @@ class IPCManager {
 					if (!msgStr.trim()) continue;
 
 					try {
-						const message: IPCMessage = JSON.parse(msgStr);
+						const message = safeParseJson(msgStr, ipcMessageCheck);
+						if (!message) {
+							Logger.error(`[IPCManager] Mensaje IPC inválido descartado`);
+							continue;
+						}
 
 						if (message.type === "request") {
 							try {
@@ -179,7 +185,11 @@ class IPCManager {
 				if (!msgStr.trim()) continue;
 
 				try {
-					const message: IPCMessage = JSON.parse(msgStr);
+					const message = safeParseJson(msgStr, ipcMessageCheck);
+					if (!message) {
+						Logger.error(`[IPCManager] Respuesta IPC inválida descartada`);
+						continue;
+					}
 					const pending = this.pendingRequests.get(message.id);
 
 					if (pending) {
@@ -187,8 +197,9 @@ class IPCManager {
 						if (message.type === "response") {
 							// Deserializar buffers si vienen en formato base64
 							let result = message.result;
-							if (result && typeof result === "object" && result.__type === "Buffer") {
-								result = Buffer.from(result.data, "base64");
+							const maybeBuffer = result as { __type?: string; data?: string } | null;
+							if (maybeBuffer && typeof maybeBuffer === "object" && maybeBuffer.__type === "Buffer") {
+								result = Buffer.from(maybeBuffer.data ?? "", "base64");
 							}
 							pending.resolve(result);
 						} else if (message.type === "error") {

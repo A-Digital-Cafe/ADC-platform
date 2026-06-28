@@ -5,6 +5,8 @@ import { Kernel } from "../kernel.js";
 import { ILifecycle } from "../interfaces/behaviours/ILifecycle.js";
 import { OnlyKernel } from "../utils/decorators/OnlyKernel.ts";
 import { BaseModule } from "../common/BaseModule.js";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 
 export interface IService extends IModule, ILifecycle {}
 
@@ -53,8 +55,8 @@ export abstract class BaseService extends BaseModule implements IService {
 			let baseConfig: Partial<IModuleConfig> = {};
 			try {
 				const configContent = await fs.readFile(modulesConfigPath, "utf-8");
-				const rawConfig = JSON.parse(configContent);
-				baseConfig = moduleLoader.interpolateEnvVars(rawConfig, serviceEnvVars);
+				const rawConfig = safeParseJson(configContent, moduleConfigCheck);
+				if (rawConfig) baseConfig = moduleLoader.interpolateEnvVars(rawConfig, serviceEnvVars);
 			} catch (e: any) {
 				this.logger.logDebug(`No se pudo leer config.json: ${e.message}`);
 			}

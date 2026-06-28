@@ -1,5 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 
 export interface KernelServiceInfo {
 	path: string;
@@ -23,7 +25,8 @@ function getPriority(config: ServiceConfig): number | null {
 async function readConfig(configPath: string): Promise<ServiceConfig | null> {
 	try {
 		await fs.access(configPath);
-		return JSON.parse(await fs.readFile(configPath, "utf-8"));
+		const raw = await fs.readFile(configPath, "utf-8");
+		return safeParseJson(raw, moduleConfigCheck) as ServiceConfig | null;
 	} catch {
 		return null;
 	}

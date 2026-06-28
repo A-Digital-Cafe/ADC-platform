@@ -1,5 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { safeParseJson } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import type { ModuleType } from "../../utils/registry/ModuleRegistry.js";
 
 type Layer = ModuleType | "app";
@@ -100,7 +102,8 @@ export class DependencyGraph {
 	async #readModuleConfig(dir: string): Promise<Record<string, any> | null> {
 		for (const file of ["config.json", "default.json"]) {
 			try {
-				return JSON.parse(await fs.readFile(path.join(dir, file), "utf-8"));
+				const cfg = safeParseJson(await fs.readFile(path.join(dir, file), "utf-8"), moduleConfigCheck);
+				if (cfg) return cfg;
 			} catch {
 				/* siguiente */
 			}

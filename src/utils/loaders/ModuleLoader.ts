@@ -8,6 +8,8 @@ import type { BaseService } from "../../services/BaseService.ts";
 import { Kernel } from "../../kernel.js";
 import { Logger } from "../logger/Logger.js";
 import { VersionResolver } from "../VersionResolver.js";
+import { safeParseJson, parseJsonOrThrow } from "@common/utils/json-schema.ts";
+import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 
 export class ModuleLoader {
 	readonly #basePath = path.resolve(process.cwd(), "src");
@@ -280,8 +282,8 @@ export class ModuleLoader {
 									// resolved.path es el directorio del servicio, no el archivo
 									const configJsonPath = path.join(resolved.path, "config.json");
 									const configContent = await fs.readFile(configJsonPath, "utf-8");
-									const configJson = JSON.parse(configContent);
-									if (configJson.providers && Array.isArray(configJson.providers)) {
+									const configJson = safeParseJson(configContent, moduleConfigCheck);
+									if (configJson?.providers && Array.isArray(configJson.providers)) {
 										finalProviders = configJson.providers;
 									}
 								}
@@ -609,7 +611,7 @@ export class ModuleLoader {
 		const serviceEnvVars = await this.loadEnvFile(envPath);
 
 		const configContent = await fs.readFile(configPath, "utf-8");
-		const rawConfig = JSON.parse(configContent);
+		const rawConfig = parseJsonOrThrow(configContent, moduleConfigCheck, `service config ${configPath}`);
 		const serviceConfig = this.interpolateEnvVars(rawConfig, serviceEnvVars);
 
 		if (serviceConfig.providers && Array.isArray(serviceConfig.providers)) {
