@@ -10,6 +10,7 @@ import { Logger } from "../logger/Logger.js";
 import { VersionResolver } from "../VersionResolver.js";
 import { safeParseJson, parseJsonOrThrow } from "@common/utils/json-schema.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
+import { isInsideAnyBase } from "@common/utils/path-containment.ts";
 
 export class ModuleLoader {
 	readonly #basePath = path.resolve(process.cwd(), "src");
@@ -631,6 +632,13 @@ export class ModuleLoader {
 					registry.registerProvider(providerConfig.name, provider, providerConfig, null);
 				}
 			}
+		}
+
+		// Anti path-traversal: el servicePath viene del walk de FS de las raíces de
+		// servicios; antes de ejecutar su código (import = code execution) se exige
+		// que quede contenido en alguna raíz permitida.
+		if (!isInsideAnyBase(this.#servicesPath, servicePath)) {
+			throw new Error(`[ModuleLoader] servicePath fuera de las raíces de servicios permitidas, carga abortada: ${servicePath}`);
 		}
 
 		const serviceModule = await import(servicePath);

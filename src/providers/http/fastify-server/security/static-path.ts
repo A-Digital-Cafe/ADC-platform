@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { isInsideBase } from "@common/utils/path-containment.ts";
 
 function decodeRequestPath(requestPath: string): string | null {
 	try {
@@ -6,12 +7,6 @@ function decodeRequestPath(requestPath: string): string | null {
 	} catch {
 		return null;
 	}
-}
-
-function isInsideBase(baseDir: string, filePath: string): boolean {
-	const resolvedBase = path.resolve(baseDir);
-	const resolvedFile = path.resolve(filePath);
-	return resolvedFile === resolvedBase || resolvedFile.startsWith(`${resolvedBase}${path.sep}`);
 }
 
 export function resolveSafeStaticPath(baseDir: string, requestPath: string): string | null {

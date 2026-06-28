@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Logger } from "./logger/Logger.js";
+import { isInsideBase, isSafeModuleName } from "@common/utils/path-containment.ts";
 
 export class VersionResolver {
 	static readonly #fileExtension = ".ts";
@@ -140,6 +141,13 @@ export class VersionResolver {
 		versionRange: string = "latest",
 		language: string = "typescript"
 	): Promise<{ path: string; version: string } | null> {
+		// Anti path-traversal: el nombre alimenta `path.join(modulesDir, moduleName)`
+		// y luego un `import()`. Un `name` con `..` escaparía del árbol de módulos.
+		if (!isSafeModuleName(moduleName)) {
+			Logger.warn(`[VersionResolver] Nombre de módulo inválido (rechazado por seguridad): ${JSON.stringify(moduleName)}`);
+			return null;
+		}
+
 		const dirs = Array.isArray(modulesDir) ? modulesDir : [modulesDir];
 		for (let i = 0; i < dirs.length; i++) {
 			const isLast = i === dirs.length - 1;
@@ -201,10 +209,7 @@ export class VersionResolver {
 				const indexFile = path.join(moduleBaseDir, `index${this.#fileExtension}`);
 				try {
 					await fs.stat(indexFile);
-					return {
-						path: moduleBaseDir,
-						version: "1.0.0",
-					};
+					return this.#ensureContained(modulesDir, { path: moduleBaseDir, version: "1.0.0" });
 				} catch {
 					if (!silent) Logger.warn(`[VersionResolver] No se encontró versión compatible de ${moduleName}`);
 					return null;
@@ -221,11 +226,22 @@ export class VersionResolver {
 
 			// Retornar la versión más alta compatible
 			compatible.sort((a, b) => this.compareVersions(b.version, a.version));
-			return { path: compatible[0].path, version: compatible[0].version };
+			return this.#ensureContained(modulesDir, { path: compatible[0].path, version: compatible[0].version });
 		} catch (error) {
 			Logger.error(`[VersionResolver] Error resolviendo ${moduleName}: ${error}`);
 			return null;
 		}
+	}
+
+	/**
+	 * Defensa anti-traversal: garantiza que el path resuelto quede contenido en la
+	 * raíz de módulos. Si por cualquier vía (`..`, symlink, name con `/`) escapara,
+	 * se descarta antes de que llegue a un `import()`.
+	 */
+	static #ensureContained(modulesDir: string, result: { path: string; version: string }): { path: string; version: string } | null {
+		if (isInsideBase(modulesDir, result.path)) return result;
+		Logger.error(`[VersionResolver] Path resuelto fuera de la raíz de módulos (posible traversal), descartado: ${result.path}`);
+		return null;
 	}
 
 	/**
