@@ -85,6 +85,10 @@
         "@types/nodemailer": "^8.0.1",
       },
     },
+    "presets/adc-email-frontend/apps/adc-mail": {
+      "name": "@adc-platform/adc-mail",
+      "version": "1.0.0",
+    },
     "presets/adc-image-editor/apps/adc-image-editor": {
       "name": "@adc-platform/adc-image-editor",
       "version": "1.0.0",
@@ -106,6 +110,14 @@
       "name": "@adc-platform/adc-modules-manager",
       "version": "1.0.0",
     },
+    "presets/adc-modules-manager/services/ModulesManagerService": {
+      "name": "@adc-platform/modules-manager-service",
+      "version": "1.0.0",
+    },
+    "presets/adc-notifications/apps/adc-notifications": {
+      "name": "@adc-platform/adc-notifications",
+      "version": "1.0.0",
+    },
     "presets/adc-notifications/services/NotificationService": {
       "name": "@adc-platform/notification-service",
       "version": "1.0.0",
@@ -114,8 +126,56 @@
       "name": "@adc-platform/content-service",
       "version": "1.0.0",
     },
+    "presets/my-account/apps/my-account": {
+      "name": "@adc-platform/my-account",
+      "version": "1.0.0",
+    },
+    "presets/org-requests/apps/adc-org-requests": {
+      "name": "@adc-platform/adc-org-requests",
+      "version": "1.0.0",
+    },
+    "presets/project-management/apps/adc-project-manager": {
+      "name": "@adc-platform/adc-project-manager",
+      "version": "1.0.0",
+    },
     "presets/project-management/services/ProjectManagerService": {
       "name": "@adc-platform/project-manager",
+      "version": "1.0.0",
+    },
+    "presets/status/apps/adc-status": {
+      "name": "@adc-platform/adc-status",
+      "version": "1.0.0",
+    },
+    "src/apps/public/00-adc-ui-library": {
+      "name": "@adc-platform/adc-ui-library",
+      "version": "1.0.0",
+    },
+    "src/apps/public/adc-auth": {
+      "name": "@adc-platform/adc-auth",
+      "version": "1.0.0",
+    },
+    "src/apps/public/adc-error": {
+      "name": "@adc-platform/adc-error",
+      "version": "1.0.0",
+    },
+    "src/apps/public/adc-home": {
+      "name": "@adc-platform/adc-home",
+      "version": "1.0.0",
+    },
+    "src/apps/public/adc-identity": {
+      "name": "@adc-platform/adc-identity",
+      "version": "1.0.0",
+    },
+    "src/apps/public/community-home": {
+      "name": "@adc-platform/community-home",
+      "version": "1.0.0",
+    },
+    "src/apps/public/help": {
+      "name": "@adc-platform/help",
+      "version": "1.0.0",
+    },
+    "src/apps/test/00-web-ui-library": {
+      "name": "@adc-platform/web-ui-library",
       "version": "1.0.0",
     },
     "src/apps/test/00-web-ui-library-mobile": {
@@ -128,8 +188,28 @@
     "src/apps/test/user-profile-mongo": {
       "name": "@adc-platform/user-profile-mongo",
     },
+    "src/apps/test/users-management": {
+      "name": "@adc-platform/users-management",
+      "version": "1.0.0",
+    },
+    "src/apps/test/web-config": {
+      "name": "@adc-platform/web-config",
+      "version": "1.0.0",
+    },
+    "src/apps/test/web-home": {
+      "name": "@adc-platform/web-home",
+      "version": "1.0.0",
+    },
     "src/apps/test/web-home-mobile": {
       "name": "@adc-platform/web-home-mobile",
+      "version": "1.0.0",
+    },
+    "src/apps/test/web-layout": {
+      "name": "@adc-platform/web-layout",
+      "version": "1.0.0",
+    },
+    "src/apps/test/web-layout-mobile": {
+      "name": "@adc-platform/web-layout-mobile",
       "version": "1.0.0",
     },
     "src/providers/files/file-storage": {
@@ -206,6 +286,10 @@
       "name": "identity-manager-service",
       "version": "1.0.0",
     },
+    "src/services/core/LangManagerService": {
+      "name": "@adc-platform/lang-manager-service",
+      "version": "1.0.0",
+    },
     "src/services/core/LogManagerService": {
       "name": "log-manager-service",
       "version": "1.0.0",
@@ -267,13 +351,35 @@
     "vite": "^7.3.5",
   },
   "packages": {
+    "@adc-platform/adc-auth": ["@adc-platform/adc-auth@workspace:src/apps/public/adc-auth"],
+
     "@adc-platform/adc-drive": ["@adc-platform/adc-drive@workspace:presets/adc-drive/apps/adc-drive"],
+
+    "@adc-platform/adc-error": ["@adc-platform/adc-error@workspace:src/apps/public/adc-error"],
+
+    "@adc-platform/adc-home": ["@adc-platform/adc-home@workspace:src/apps/public/adc-home"],
+
+    "@adc-platform/adc-identity": ["@adc-platform/adc-identity@workspace:src/apps/public/adc-identity"],
 
     "@adc-platform/adc-image-editor": ["@adc-platform/adc-image-editor@workspace:presets/adc-image-editor/apps/adc-image-editor"],
 
     "@adc-platform/adc-image-editor-mobile": ["@adc-platform/adc-image-editor-mobile@workspace:presets/adc-image-editor/apps/adc-image-editor-mobile"],
 
+    "@adc-platform/adc-mail": ["@adc-platform/adc-mail@workspace:presets/adc-email-frontend/apps/adc-mail"],
+
     "@adc-platform/adc-modules-manager": ["@adc-platform/adc-modules-manager@workspace:presets/adc-modules-manager/apps/adc-modules-manager"],
+
+    "@adc-platform/adc-notifications": ["@adc-platform/adc-notifications@workspace:presets/adc-notifications/apps/adc-notifications"],
+
+    "@adc-platform/adc-org-requests": ["@adc-platform/adc-org-requests@workspace:presets/org-requests/apps/adc-org-requests"],
+
+    "@adc-platform/adc-project-manager": ["@adc-platform/adc-project-manager@workspace:presets/project-management/apps/adc-project-manager"],
+
+    "@adc-platform/adc-status": ["@adc-platform/adc-status@workspace:presets/status/apps/adc-status"],
+
+    "@adc-platform/adc-ui-library": ["@adc-platform/adc-ui-library@workspace:src/apps/public/00-adc-ui-library"],
+
+    "@adc-platform/community-home": ["@adc-platform/community-home@workspace:src/apps/public/community-home"],
 
     "@adc-platform/content-service": ["@adc-platform/content-service@workspace:presets/community-content/services/content-service"],
 
@@ -289,11 +395,19 @@
 
     "@adc-platform/file-storage-provider": ["@adc-platform/file-storage-provider@workspace:src/providers/files/file-storage"],
 
+    "@adc-platform/help": ["@adc-platform/help@workspace:src/apps/public/help"],
+
     "@adc-platform/image-editor": ["@adc-platform/image-editor@workspace:presets/adc-image-editor/services/ImageEditorService"],
 
     "@adc-platform/json-file-adapter-utility": ["@adc-platform/json-file-adapter-utility@workspace:src/utilities/adapters/json-file-adapter"],
 
     "@adc-platform/json-file-crud-service": ["@adc-platform/json-file-crud-service@workspace:src/services/data/json-file-crud"],
+
+    "@adc-platform/lang-manager-service": ["@adc-platform/lang-manager-service@workspace:src/services/core/LangManagerService"],
+
+    "@adc-platform/modules-manager-service": ["@adc-platform/modules-manager-service@workspace:presets/adc-modules-manager/services/ModulesManagerService"],
+
+    "@adc-platform/my-account": ["@adc-platform/my-account@workspace:presets/my-account/apps/my-account"],
 
     "@adc-platform/notification-service": ["@adc-platform/notification-service@workspace:presets/adc-notifications/services/NotificationService"],
 
@@ -311,7 +425,19 @@
 
     "@adc-platform/user-profile-mongo": ["@adc-platform/user-profile-mongo@workspace:src/apps/test/user-profile-mongo"],
 
+    "@adc-platform/users-management": ["@adc-platform/users-management@workspace:src/apps/test/users-management"],
+
+    "@adc-platform/web-config": ["@adc-platform/web-config@workspace:src/apps/test/web-config"],
+
+    "@adc-platform/web-home": ["@adc-platform/web-home@workspace:src/apps/test/web-home"],
+
     "@adc-platform/web-home-mobile": ["@adc-platform/web-home-mobile@workspace:src/apps/test/web-home-mobile"],
+
+    "@adc-platform/web-layout": ["@adc-platform/web-layout@workspace:src/apps/test/web-layout"],
+
+    "@adc-platform/web-layout-mobile": ["@adc-platform/web-layout-mobile@workspace:src/apps/test/web-layout-mobile"],
+
+    "@adc-platform/web-ui-library": ["@adc-platform/web-ui-library@workspace:src/apps/test/00-web-ui-library"],
 
     "@adc-platform/web-ui-library-mobile": ["@adc-platform/web-ui-library-mobile@workspace:src/apps/test/00-web-ui-library-mobile"],
 
