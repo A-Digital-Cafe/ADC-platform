@@ -6,7 +6,7 @@ import { userSchema, groupSchema, roleSchema, organizationSchema, regionSchema, 
 import type { DiscordGuildConfig } from "./domain/index.js";
 import type { User, Role, Group, Organization, RegionInfo } from "@common/types/identity/index.d.ts";
 import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManager, RegionManager, OrgManager } from "./dao/index.js";
-import { seedDevUsers } from "./dao/devSeeder.js";
+import { seedDevUsers, purgeDevUsers } from "./dao/devSeeder.js";
 import { NotifyManager } from "./notify.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
@@ -262,6 +262,20 @@ export default class IdentityManagerService extends BaseService implements IIden
 					this.#permissionManager.invalidateAll();
 				} catch (err: any) {
 					this.logger.logWarn(`[DevSeed] No se pudieron sembrar usuarios de dev: ${err?.message || err}`);
+				}
+			} else {
+				// Fuera de development: por precaución, purgar cualquier usuario/org de
+				// dev (credenciales conocidas) que pudiera haber quedado en la BD.
+				try {
+					await purgeDevUsers({
+						userModel: UserModel,
+						roleModel: RoleModel,
+						orgModel: OrganizationModel,
+						logger: this.logger,
+					});
+					this.#permissionManager.invalidateAll();
+				} catch (err: any) {
+					this.logger.logWarn(`[DevSeed] No se pudieron purgar usuarios de dev: ${err?.message || err}`);
 				}
 			}
 

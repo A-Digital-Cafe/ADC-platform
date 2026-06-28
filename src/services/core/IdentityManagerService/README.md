@@ -11,6 +11,6 @@ Servicio en modo kernel (`kernelMode: 60`) para gestión centralizada de identid
 - Avatares vía `internal-s3-provider` + `attachments-utility`
 - Soft-delete de usuarios con cron de purga (`scheduledDeletionAt`)
 - Endpoints REST en `endpoints/` (users, groups, roles, orgs, stats)
-- Dev (`NODE_ENV=development`): siembra usuarios de prueba con roles (Admin global / de org); declarativo e idempotente en `defaults/devUsers.ts` + `dao/devSeeder.ts`
+- Dev (`NODE_ENV=development`): siembra usuarios de prueba con roles (Admin global / de org); declarativo e idempotente en `defaults/devUsers.ts` + `dao/devSeeder.ts`. Fuera de dev se purgan en cada arranque (`purgeDevUsers`) por precaución.
 
 Dependencias y configuración: ver `config.json`.

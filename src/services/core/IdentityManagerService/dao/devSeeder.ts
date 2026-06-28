@@ -11,29 +11,55 @@ interface DevSeederDeps {
 	userModel: Model<User>;
 	roleModel: Model<Role>;
 	orgModel: Model<Organization>;
-	/** RoleManager (interno, sin auth) para crear los roles predefinidos de la org en la BD local. */
+	/** RoleManager interno (sin auth) para crear los roles predefinidos de la org dev. */
 	roles: RoleManager;
 	logger: ILogger;
 }
 
+/** Marca que identifica lo creado por el dev-seed (usuarios y org). */
+const DEV_SEED_MARKER = "dev-seed";
+
+type DevPurgeDeps = Pick<DevSeederDeps, "userModel" | "roleModel" | "orgModel" | "logger">;
+
 /**
- * Siembra usuarios de prueba con roles concretos. **Solo** se invoca en
+ * Purga los artefactos del dev-seed (usuarios, org dev y sus roles). Solo se
+ * invoca FUERA de `development` (ver `IdentityManagerService.start`): si una BD
+ * sembrada en dev llega a producción, estos accesos con credenciales conocidas
+ * se eliminan en cada arranque. Idempotente y acotado a lo marcado
+ * `createdVia: "dev-seed"` (+ roles por `orgId`); nunca toca lo global real.
+ */
+export async function purgeDevUsers(deps: DevPurgeDeps): Promise<void> {
+	const { userModel, roleModel, orgModel, logger } = deps;
+
+	const users = await userModel.deleteMany({ "metadata.createdVia": DEV_SEED_MARKER });
+	const org = await orgModel.deleteMany({ orgId: DEV_ORG_ID, "metadata.createdVia": DEV_SEED_MARKER });
+	// Roles de la org dev (los globales reales tienen orgId null).
+	const roles = await roleModel.deleteMany({ orgId: DEV_ORG_ID });
+
+	const removed = (users.deletedCount ?? 0) + (org.deletedCount ?? 0) + (roles.deletedCount ?? 0);
+	if (removed > 0) {
+		logger.logWarn(
+			`[DevSeed] Purgados artefactos de dev fuera de development: ${users.deletedCount ?? 0} usuario(s), ` +
+				`${org.deletedCount ?? 0} org, ${roles.deletedCount ?? 0} rol(es).`
+		);
+	}
+}
+
+/**
+ * Siembra usuarios de prueba con sus roles. Solo se invoca en
  * `NODE_ENV=development` (ver `IdentityManagerService.start`).
  *
- * Es idempotente: en cada arranque reasegura la organización de desarrollo, sus
- * roles predefinidos y los usuarios declarados en `defaults/devUsers.ts`,
- * reseteando credenciales/roles a lo declarado. Agregar un usuario de dev con
- * roles específicos = agregar una entrada a `DEV_USERS` (no hace falta tocar
- * este archivo).
+ * Idempotente: en cada arranque reasegura la org dev, sus roles predefinidos y
+ * los usuarios de `defaults/devUsers.ts` (reseteando credenciales/roles). Para
+ * sumar un usuario, agregá una entrada a `DEV_USERS`.
  *
- * Nota: el `PermissionManager` resuelve roles y orgs desde los modelos locales,
- * por eso los roles de la org dev se crean en la BD local (con su `orgId`) y la
- * membresía del usuario referencia esos `roleIds`.
+ * Los roles de la org dev se crean en la BD local (con su `orgId`) porque
+ * `PermissionManager` resuelve roles/orgs desde los modelos locales.
  */
 export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 	const { userModel, roleModel, orgModel, roles, logger } = deps;
 
-	// 1. Organización de desarrollo con orgId estable (= slug) para login directo.
+	// 1. Org de desarrollo con orgId estable (= slug) para login directo.
 	await orgModel.updateOne(
 		{ orgId: DEV_ORG_ID },
 		{
@@ -51,7 +77,7 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 		{ upsert: true }
 	);
 
-	// 2. Roles predefinidos de la org en la BD local (donde los resuelve PermissionManager).
+	// 2. Roles predefinidos de la org en la BD local.
 	await roles.initializePredefinedRoles(DEV_ORG_ID);
 
 	// Resuelve roleIds por nombre dentro de un contexto (orgId null = global).
