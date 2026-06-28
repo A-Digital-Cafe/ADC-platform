@@ -9,13 +9,10 @@ on:
   # PR aprobado por un mantenedor -> corre en contexto del repo base (seguro ante forks).
   pull_request_review:
     types: [submitted]
-  # Push a main (directo o merge) -> escanea, salvo que el commit ya se haya
-  # escaneado en su PR (dedup por SHA).
-  push:
-    branches: [main]
-  # Escaneo completo + Scorecard, semanal (lunes 06:00 UTC) -> report-only + email.
+  # Escaneo completo + Scorecard, cada 4 días (06:00 UTC) -> report-only + email.
+  # (No corre en push a main: main se cubre vía el PR aprobado + el escaneo periódico.)
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 */4 * *"
 
 permissions:
   contents: read
@@ -24,22 +21,16 @@ permissions:
 jobs:
   pr:
     if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@494324c61d31ba0d73df6541be9dc618f54a43b4 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@68ee89fe6c31aa59e847f1f2de320d7da4e5e0fa # main
     with:
       mode: pr
-
-  main:
-    if: ${{ github.event_name == 'push' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@494324c61d31ba0d73df6541be9dc618f54a43b4 # main
-    with:
-      mode: main
 
   # Solo el modo weekly manda mail: pasamos únicamente los secrets SMTP requeridos
   # (no `secrets: inherit`). Si no están definidos en la org, llegan vacíos y el
   # reusable omite el email.
-  weekly:
+  scheduled:
     if: ${{ github.event_name == 'schedule' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@494324c61d31ba0d73df6541be9dc618f54a43b4 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@68ee89fe6c31aa59e847f1f2de320d7da4e5e0fa # main
     with:
       mode: weekly
       email: true
