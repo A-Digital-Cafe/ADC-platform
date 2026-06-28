@@ -1,6 +1,8 @@
 # Caller fino: delega toda la lógica en el reusable workflow centralizado de
 # A-Digital-Cafe/adc-ci. Copiá este archivo tal cual a `.github/workflows/`
-# de cada repo (root + presets). Único punto a mantener: el `@main` de abajo.
+# de cada repo (root + presets). El reusable se fija por SHA (Sonar exige full
+# commit SHA): al actualizar adc-ci, re-pinear acá y re-distribuir con
+# scripts/distribute-security-ci.sh. El `# main` del trailer indica la rama.
 name: Security
 
 on:
@@ -22,13 +24,13 @@ permissions:
 jobs:
   pr:
     if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@494324c61d31ba0d73df6541be9dc618f54a43b4 # main
     with:
       mode: pr
 
   main:
     if: ${{ github.event_name == 'push' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@494324c61d31ba0d73df6541be9dc618f54a43b4 # main
     with:
       mode: main
 
@@ -37,7 +39,7 @@ jobs:
   # reusable omite el email.
   weekly:
     if: ${{ github.event_name == 'schedule' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@494324c61d31ba0d73df6541be9dc618f54a43b4 # main
     with:
       mode: weekly
       email: true
