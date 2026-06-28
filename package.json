@@ -104,5 +104,15 @@
 		"rollup": "^4.62.2",
 		"serialize-javascript": "^7.0.6"
 	},
+	"resolutions": {
+		"@fastify/ajv-compiler/ajv": "^8.18.0",
+		"ajv-formats/ajv": "^8.18.0",
+		"ajv-keywords/ajv": "^8.18.0",
+		"fast-json-stringify/ajv": "^8.18.0",
+		"schema-utils/ajv": "^8.18.0",
+		"anymatch/picomatch": "^2.3.2",
+		"@rollup/pluginutils/picomatch": "^4.0.4",
+		"tinyglobby/picomatch": "^4.0.4"
+	},
 	"packageManager": "bun"
 }
