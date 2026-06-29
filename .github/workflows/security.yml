@@ -13,15 +13,32 @@ on:
   # (No corre en push a main: main se cubre vía el PR aprobado + el escaneo periódico.)
   schedule:
     - cron: "0 6 */4 * *"
+  # Disparo manual desde la pestaña Actions ("Run workflow"): corre la suite
+  # on-demand sin esperar al cron ni a un PR aprobado. `email` solo aplica a weekly.
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Modo de escaneo (weekly = suite completa + Scorecard)"
+        type: choice
+        options: [weekly, pr, main]
+        default: weekly
+      email:
+        description: "Enviar email de resumen (solo modo weekly)"
+        type: boolean
+        default: false
 
+# Default restrictivo a nivel workflow; cada job amplía lo justo. El caller solo
+# puede ACOTAR el token del reusable, nunca ampliarlo: por eso los scopes de
+# lectura extra que Scorecard necesita en repos PRIVADOS se conceden acá Y en el
+# job scorecard del reusable.
 permissions:
   contents: read
-  id-token: write # requerido por OSSF Scorecard
 
 jobs:
   pr:
     if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@68ee89fe6c31aa59e847f1f2de320d7da4e5e0fa # main
+    # hereda permissions: contents: read (suficiente para Semgrep/OSV/Trivy)
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@156186a849fe1a490e45440084a358c26bd9c478 # main
     with:
       mode: pr
 
@@ -30,10 +47,40 @@ jobs:
   # reusable omite el email.
   scheduled:
     if: ${{ github.event_name == 'schedule' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@68ee89fe6c31aa59e847f1f2de320d7da4e5e0fa # main
+    permissions:
+      contents: read
+      id-token: write # OSSF Scorecard
+      actions: read # Scorecard: detección de SAST
+      checks: read # Scorecard: detección de SAST
+      issues: read # Scorecard: ListCommits (GraphQL)
+      pull-requests: read # Scorecard: ListCommits (GraphQL)
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@156186a849fe1a490e45440084a358c26bd9c478 # main
     with:
       mode: weekly
       email: true
+    secrets:
+      SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SECURITY_REPORT_TO: ${{ secrets.SECURITY_REPORT_TO }}
+
+  # Disparo manual: corre el modo elegido (default weekly). Concede el set
+  # completo de scopes (cubre Scorecard en weekly); el reusable consume solo lo
+  # que cada job pide.
+  manual:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+      checks: read
+      issues: read
+      pull-requests: read
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@156186a849fe1a490e45440084a358c26bd9c478 # main
+    with:
+      mode: ${{ inputs.mode }}
+      email: ${{ inputs.email }}
     secrets:
       SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
       SMTP_PORT: ${{ secrets.SMTP_PORT }}
