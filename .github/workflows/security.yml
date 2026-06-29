@@ -14,7 +14,8 @@ on:
   schedule:
     - cron: "0 6 */4 * *"
   # Disparo manual desde la pestaña Actions ("Run workflow"): corre la suite
-  # on-demand sin esperar al cron ni a un PR aprobado. `email` solo aplica a weekly.
+  # on-demand. `only` permite correr un solo job (ej. scorecard); `email` solo
+  # aplica a weekly.
   workflow_dispatch:
     inputs:
       mode:
@@ -22,23 +23,35 @@ on:
         type: choice
         options: [weekly, pr, main]
         default: weekly
+      only:
+        description: "Ejecutar solo un job (all = todos los del modo)"
+        type: choice
+        options: [all, semgrep, osv, trivy, scorecard]
+        default: all
       email:
         description: "Enviar email de resumen (solo modo weekly)"
         type: boolean
         default: false
 
-# Default restrictivo a nivel workflow; cada job amplía lo justo. El caller solo
-# puede ACOTAR el token del reusable, nunca ampliarlo: por eso los scopes de
-# lectura extra que Scorecard necesita en repos PRIVADOS se conceden acá Y en el
-# job scorecard del reusable.
+# GitHub valida los permisos del caller contra el MÁXIMO de TODOS los jobs del
+# reusable (ignora los `if`): como el reusable incluye el job `scorecard`, que en
+# repos PRIVADOS necesita actions/checks/issues/pull-requests:read + id-token,
+# TODO job del caller que lo invoque debe conceder ese set. Por eso va a nivel
+# workflow (lo heredan pr/scheduled/manual); el caller solo puede acotar, no
+# ampliar. No sobre-privilegia: cada job del reusable recibe la intersección con
+# lo que realmente pide (semgrep/osv/trivy se quedan en contents:read).
 permissions:
   contents: read
+  id-token: write # OSSF Scorecard
+  actions: read # Scorecard (repos privados)
+  checks: read # Scorecard (repos privados)
+  issues: read # Scorecard (repos privados)
+  pull-requests: read # Scorecard (repos privados)
 
 jobs:
   pr:
     if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
-    # hereda permissions: contents: read (suficiente para Semgrep/OSV/Trivy)
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@156186a849fe1a490e45440084a358c26bd9c478 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@4bacc0439819d4858c92a10e48480d5a80423b54 # main
     with:
       mode: pr
 
@@ -47,14 +60,7 @@ jobs:
   # reusable omite el email.
   scheduled:
     if: ${{ github.event_name == 'schedule' }}
-    permissions:
-      contents: read
-      id-token: write # OSSF Scorecard
-      actions: read # Scorecard: detección de SAST
-      checks: read # Scorecard: detección de SAST
-      issues: read # Scorecard: ListCommits (GraphQL)
-      pull-requests: read # Scorecard: ListCommits (GraphQL)
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@156186a849fe1a490e45440084a358c26bd9c478 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@4bacc0439819d4858c92a10e48480d5a80423b54 # main
     with:
       mode: weekly
       email: true
@@ -65,21 +71,15 @@ jobs:
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       SECURITY_REPORT_TO: ${{ secrets.SECURITY_REPORT_TO }}
 
-  # Disparo manual: corre el modo elegido (default weekly). Concede el set
-  # completo de scopes (cubre Scorecard en weekly); el reusable consume solo lo
-  # que cada job pide.
+  # Disparo manual: corre el modo elegido (default weekly) y, si se indica, un
+  # solo job vía `only` (ej. scorecard). El reusable consume por job solo lo que
+  # pide, así que el cap amplio del caller no eleva privilegios.
   manual:
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    permissions:
-      contents: read
-      id-token: write
-      actions: read
-      checks: read
-      issues: read
-      pull-requests: read
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@156186a849fe1a490e45440084a358c26bd9c478 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@4bacc0439819d4858c92a10e48480d5a80423b54 # main
     with:
       mode: ${{ inputs.mode }}
+      only: ${{ inputs.only }}
       email: ${{ inputs.email }}
     secrets:
       SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
