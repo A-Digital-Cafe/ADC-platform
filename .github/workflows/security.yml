@@ -14,22 +14,17 @@ on:
   schedule:
     - cron: "0 6 */4 * *"
   # Disparo manual desde la pestaña Actions ("Run workflow"): corre la suite
-  # on-demand. `only` permite correr un solo job (ej. scorecard); `email` solo
-  # aplica a weekly.
+  # report-only on-demand. Elegís qué job correr con `only` (ej. solo scorecard)
+  # y, opcionalmente, recibir el resumen por email.
   workflow_dispatch:
     inputs:
-      mode:
-        description: "Modo de escaneo (weekly = suite completa + Scorecard)"
-        type: choice
-        options: [weekly, pr, main]
-        default: weekly
       only:
-        description: "Ejecutar solo un job (all = todos los del modo)"
+        description: "Qué ejecutar"
         type: choice
-        options: [all, semgrep, osv, trivy, scorecard]
+        options: [all, scorecard, semgrep, osv, trivy]
         default: all
       email:
-        description: "Enviar email de resumen (solo modo weekly)"
+        description: "Enviar email de resumen"
         type: boolean
         default: false
 
@@ -51,7 +46,7 @@ permissions:
 jobs:
   pr:
     if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@4bacc0439819d4858c92a10e48480d5a80423b54 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@7c9eeeb8570b498540076c598d8678be5f4a9435 # main
     with:
       mode: pr
 
@@ -60,7 +55,7 @@ jobs:
   # reusable omite el email.
   scheduled:
     if: ${{ github.event_name == 'schedule' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@4bacc0439819d4858c92a10e48480d5a80423b54 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@7c9eeeb8570b498540076c598d8678be5f4a9435 # main
     with:
       mode: weekly
       email: true
@@ -71,14 +66,14 @@ jobs:
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
       SECURITY_REPORT_TO: ${{ secrets.SECURITY_REPORT_TO }}
 
-  # Disparo manual: corre el modo elegido (default weekly) y, si se indica, un
-  # solo job vía `only` (ej. scorecard). El reusable consume por job solo lo que
-  # pide, así que el cap amplio del caller no eleva privilegios.
+  # Disparo manual: report-only (mode weekly, sin gate) corriendo el job elegido
+  # en `only`. El cap amplio de permisos no eleva privilegios (el reusable consume
+  # por job solo lo que pide).
   manual:
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@4bacc0439819d4858c92a10e48480d5a80423b54 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@7c9eeeb8570b498540076c598d8678be5f4a9435 # main
     with:
-      mode: ${{ inputs.mode }}
+      mode: weekly
       only: ${{ inputs.only }}
       email: ${{ inputs.email }}
     secrets:
