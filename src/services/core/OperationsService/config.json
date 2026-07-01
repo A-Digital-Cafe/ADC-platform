@@ -1,5 +1,6 @@
 {
 	"name": "OperationsService",
+	"uiName": "Core",
 	"version": "1.0.0",
 	"kernelMode": 45,
 	"failOnError": true,

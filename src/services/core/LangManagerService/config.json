@@ -1,5 +1,6 @@
 {
 	"kernelMode": 10,
+	"uiName": "Core",
 	"global": true,
 	"custom": {
 		"defaultLocale": "en",

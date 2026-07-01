@@ -3,6 +3,7 @@
 		"enableSEO": true,
 		"name": "help",
 		"uiNamespace": "adc-platform",
+		"uiName": "Ayuda",
 		"framework": "react",
 		"outputDir": "dist-ui",
 		"isHost": true,

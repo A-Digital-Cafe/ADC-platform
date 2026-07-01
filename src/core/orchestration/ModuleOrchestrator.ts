@@ -9,7 +9,14 @@ import type { ModuleRegistrar } from "../modules/ModuleRegistrar.js";
 import type { DependencyReloader } from "../modules/DependencyReloader.js";
 import type { DisabledRegistry } from "./DisabledRegistry.js";
 import { DependencyGraph } from "./DependencyGraph.js";
-import type { DisableOptions, ModuleSnapshotItem, OrchestratorLayer, PersistedStatusItem, ReloadTarget } from "./types.js";
+import type { DisableOptions, FriendlyGroupState, ModuleSnapshotItem, OrchestratorLayer, PersistedStatusItem, ReloadTarget } from "./types.js";
+
+/**
+ * Margen tras el arranque antes de declarar "caído" a un módulo que nunca se vio cargado.
+ * Las apps/services tardan en levantar durante el boot; sin este margen, la detección de
+ * fallos los marcaría a todos como caídos al inicio.
+ */
+const FAILURE_GRACE_MS = 180_000;
 
 /** Controlador de 503 expuesto por EndpointManagerService. */
 interface EndpointUnavailabilityController {
@@ -57,6 +64,10 @@ export class ModuleOrchestrator {
 	readonly #d: Readonly<ModuleOrchestratorDeps>;
 	readonly #graph = new DependencyGraph();
 	#graphBuilt = false;
+	/** Miembros (`type:name`) vistos cargados alguna vez: distingue "se cayó" de "aún arrancando". */
+	readonly #everLoaded = new Set<string>();
+	/** Fin del margen de arranque para la detección de fallos (se fija en la 1ª consulta). */
+	#failureGraceUntil = 0;
 
 	constructor(deps: ModuleOrchestratorDeps) {
 		this.#d = Object.freeze({ ...deps });
@@ -263,7 +274,7 @@ export class ModuleOrchestrator {
 	// ── Snapshot para la UI ──────────────────────────────────────────────────────
 
 	async snapshot(): Promise<ModuleSnapshotItem[]> {
-		await this.#ensureGraph();
+		const graph = await this.#ensureGraph();
 		const items: ModuleSnapshotItem[] = [];
 
 		for (const type of ["service", "provider", "utility"] as ModuleType[]) {
@@ -280,6 +291,7 @@ export class ModuleOrchestrator {
 					unavailable: type === "service" && !!entry,
 					messageKey: entry?.messageKey,
 					cascadeRoot: entry?.cascadeRoot,
+					uiName: graph.uiNameOf(type, name),
 					dependents: await this.#collectDirectDependents(type, name),
 				});
 			}
@@ -298,10 +310,78 @@ export class ModuleOrchestrator {
 				library: await this.#isLibraryApp(name),
 				messageKey: entry?.messageKey,
 				cascadeRoot: entry?.cascadeRoot,
+				uiName: graph.uiNameOf("app", name.split(":")[0]),
 				dependents: { apps: [], services: [] },
 			});
 		}
 		return items;
+	}
+
+	/**
+	 * Disponibilidad agregada por grupo amigable (`uiName`) para la status page pública.
+	 * Combina frente (apps) y back (services); "down" = miembros dados de baja vía
+	 * modules-manager (disabled-set). No expone nombres internos.
+	 */
+	/** Nombre amigable (`uiName`) declarado por una app (por su nombre base), o undefined. */
+	async uiNameForApp(base: string): Promise<string | undefined> {
+		const graph = await this.#ensureGraph();
+		return graph.uiNameOf("app", base);
+	}
+
+	async friendlyAvailability(): Promise<FriendlyGroupState[]> {
+		const graph = await this.#ensureGraph();
+		// Baja manual (disabled-set) vs. FALLO (configurado pero no cargado: no arrancó o se cayó).
+		const disabledAppBases = new Set(Object.keys(this.availabilitySnapshot()));
+		const loadedServices = new Set(this.#d.registry.getModuleNames("service"));
+		// Una app deshabilitada SIGUE en instanceNames (no se descarga, el gate la redirige);
+		// por eso la baja manual se chequea antes que la ausencia (= fallo real).
+		const loadedAppBases = new Set(this.#d.appLoader.instanceNames.map((i) => i.split(":")[0]));
+		// Margen de arranque: durante el boot las apps/services aún no cargaron, así que un
+		// módulo "ausente" sólo cuenta como FALLO si ya se lo vio cargado alguna vez (se cayó)
+		// o si ya pasó el período de gracia (no levantó). Evita un aluvión de falsos positivos.
+		const now = Date.now();
+		if (this.#failureGraceUntil === 0) this.#failureGraceUntil = now + FAILURE_GRACE_MS;
+		const graceOver = now >= this.#failureGraceUntil;
+		const isFailed = (member: string, loaded: boolean): boolean => {
+			if (loaded) {
+				this.#everLoaded.add(member);
+				return false;
+			}
+			return graceOver || this.#everLoaded.has(member);
+		};
+		const out: FriendlyGroupState[] = [];
+		for (const [name, members] of graph.friendlyGroups()) {
+			const hasFront = members.apps.length > 0;
+			const failed: string[] = [];
+			let downFronts = 0;
+			let downBacks = 0;
+			for (const base of members.apps) {
+				if (disabledAppBases.has(base)) downFronts++;
+				else if (isFailed(`app:${base}`, loadedAppBases.has(base))) {
+					downFronts++;
+					failed.push(`app:${base}`);
+				}
+			}
+			for (const svc of members.services) {
+				if (this.#d.disabledRegistry.has("service", svc)) downBacks++;
+				else if (isFailed(`service:${svc}`, loadedServices.has(svc))) {
+					downBacks++;
+					failed.push(`service:${svc}`);
+				}
+			}
+			const down = downFronts + downBacks;
+			// Disponible = queda al menos un frente arriba (o, sin frente, algún back arriba).
+			const available = hasFront ? members.apps.length - downFronts > 0 : members.services.length - downBacks > 0;
+			// Baja MANUAL (deshabilitado) ≠ caída: si no hay fallos reales, es "mantenimiento", no "no disponible".
+			let state: FriendlyGroupState["state"];
+			if (down === 0) state = "ok";
+			else if (failed.length === 0) state = "maintenance";
+			else state = available ? "degraded" : "down";
+			out.push({ name, hasFront, total: members.apps.length + members.services.length, down, failed, state });
+		}
+		// Orden estable: grupos con frente primero, luego alfabético (back-only como "Core" al final).
+		out.sort((a, b) => Number(b.hasFront) - Number(a.hasFront) || a.name.localeCompare(b.name));
+		return out;
 	}
 
 	/**

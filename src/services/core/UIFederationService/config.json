@@ -1,5 +1,6 @@
 {
 	"kernelMode": 100,
+	"uiName": "Core",
 	"global": true,
 	"custom": {
 		"port": 3000,

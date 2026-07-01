@@ -19,6 +19,9 @@ const ModuleConfigSchema = Type.Object(
 	{
 		name: Type.Optional(Type.String()),
 		type: Type.Optional(Type.String()),
+		// Nombre amigable para la status page pública (grupo de disponibilidad). Apps lo
+		// declaran bajo `uiModule.uiName`; services/utilities/providers, en la raíz.
+		uiName: Type.Optional(Type.String()),
 		version: Type.Optional(Type.String()),
 		language: Type.Optional(Type.String()),
 		global: Type.Optional(Type.Boolean()),

@@ -3,6 +3,7 @@
 		"enableSEO": true,
 		"name": "adc-auth",
 		"uiNamespace": "adc-platform",
+		"uiName": "Cuentas",
 		"framework": "react",
 		"outputDir": "dist-ui",
 		"isHost": true,

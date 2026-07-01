@@ -3,6 +3,7 @@
 		"enableSEO": true,
 		"name": "adc-home",
 		"uiNamespace": "adc-platform",
+		"uiName": "Inicio",
 		"framework": "react",
 		"outputDir": "dist-ui",
 		"isHost": true,

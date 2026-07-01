@@ -3,6 +3,7 @@
 		"enableSEO": true,
 		"name": "community-home",
 		"uiNamespace": "adc-platform",
+		"uiName": "Comunidad",
 		"framework": "react",
 		"outputDir": "dist-ui",
 		"isHost": true,

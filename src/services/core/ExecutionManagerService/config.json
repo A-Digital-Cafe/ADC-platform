@@ -1,5 +1,6 @@
 {
 	"global": true,
+	"uiName": "Core",
 	"kernelMode": 20,
 	"failOnError": true,
 	"custom": {

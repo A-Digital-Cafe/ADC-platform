@@ -9,6 +9,13 @@ export interface IModuleConfig {
 	name: string;
 	/** Tipo de módulo (service, provider, utility) */
 	type?: string;
+	/**
+	 * Nombre amigable para la status page pública. Los módulos que comparten `uiName`
+	 * forman un grupo de disponibilidad (frente = apps, back = services). Sin `uiName`
+	 * el módulo es interno y no aparece en la status page. Las apps lo declaran dentro
+	 * de `uiModule`; el resto de capas, en la raíz del config.
+	 */
+	uiName?: string;
 	/** Versión a cargar - puede ser exacta (1.0.0) o con rango (^1.0.0, >=1.0.0) */
 	version?: string;
 	/** Si es `true`, la configuración del módulo se considerará global y estará disponible en submódulos */

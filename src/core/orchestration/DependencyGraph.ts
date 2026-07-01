@@ -11,6 +11,12 @@ interface GraphNode {
 	/** Nombre canónico (campo `name` del config, o basename de la carpeta para apps). */
 	name: string;
 	dir: string;
+	/**
+	 * Nombre amigable (grupo de status público). Apps lo declaran en `uiModule.uiName`,
+	 * el resto de capas en el `uiName` de nivel superior. `undefined` ⇒ módulo interno
+	 * (no se agrupa ni se muestra en la status page).
+	 */
+	uiName?: string;
 }
 
 const LAYER_FIELD: Record<Exclude<Layer, "app">, "providers" | "utilities" | "services"> = {
@@ -114,7 +120,9 @@ export class DependencyGraph {
 	async #addModule(dir: string, layer: Layer, config: Record<string, any>): Promise<void> {
 		const name = (layer === "app" ? undefined : config.name) || path.basename(dir);
 		const consumerKey = this.#key(layer, name);
-		this.#nodes.set(consumerKey, { layer, name, dir });
+		// Apps declaran el nombre amigable bajo `uiModule`; el resto en la raíz del config.
+		const uiName = layer === "app" ? config.uiModule?.uiName : config.uiName;
+		this.#nodes.set(consumerKey, { layer, name, dir, uiName: typeof uiName === "string" && uiName ? uiName : undefined });
 
 		const deps = new Set<string>();
 		for (const depLayer of ["provider", "utility", "service"] as const) {
@@ -155,6 +163,27 @@ export class DependencyGraph {
 			else if (node.layer === "service") services.push(node.name);
 		}
 		return { apps, services };
+	}
+
+	/** Nombre amigable declarado por un módulo (`uiName`), o `undefined` si es interno. */
+	uiNameOf(layer: Layer, name: string): string | undefined {
+		return this.#nodes.get(this.#key(layer, name))?.uiName;
+	}
+
+	/**
+	 * Agrupa apps + services por su `uiName` (grupos de la status page pública). Sólo
+	 * incluye nodos con `uiName` declarado; providers/utilities quedan fuera. Las apps
+	 * aportan al frente; los services, al back.
+	 */
+	friendlyGroups(): Map<string, { apps: string[]; services: string[] }> {
+		const groups = new Map<string, { apps: string[]; services: string[] }>();
+		for (const node of this.#nodes.values()) {
+			if (!node.uiName || (node.layer !== "app" && node.layer !== "service")) continue;
+			let group = groups.get(node.uiName);
+			if (!group) groups.set(node.uiName, (group = { apps: [], services: [] }));
+			(node.layer === "app" ? group.apps : group.services).push(node.name);
+		}
+		return groups;
 	}
 
 	/** Dependencias declaradas por un servicio (para liberar providers exclusivos al detenerlo). */
