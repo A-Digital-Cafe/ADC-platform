@@ -3,7 +3,7 @@ services:
     image: redis:alpine
     container_name: adc-redis-core
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     command: redis-server --appendonly yes
     volumes:
       - adc_redis_core_data:/data

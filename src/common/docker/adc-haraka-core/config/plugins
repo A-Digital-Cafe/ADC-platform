@@ -1,7 +1,9 @@
 # Plugins cargados por Haraka (orden importa).
 # Conexión / saludo
 process_title
-log.syslog
+# log.syslog: removido del core en Haraka 3.2 (hoy es haraka-plugin-syslog) y
+# en el contenedor no hay demonio syslog — los logs salen por stdout (docker logs).
+# log.syslog
 
 # Aceptación de destinatarios: solo dominios en host_list (dominio raíz y *.raíz)
 rcpt_to.in_host_list

@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: adc-haraka-core
     ports:
-      - "25:25" # SMTP entrante
-      - "587:587" # Submission (envío autenticado desde email-service)
+      - "127.0.0.1:25:25" # SMTP entrante
+      - "127.0.0.1:587:587" # Submission (envío autenticado desde email-service)
     environment:
       # Hostname público del MTA (debe coincidir con el registro A y el PTR)
       HARAKA_ME: ${MAIL_HOSTNAME:-mail.adigitalcafe.com}

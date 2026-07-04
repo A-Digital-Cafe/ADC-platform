@@ -5,7 +5,7 @@ services:
     image: mongo:latest
     container_name: adc-layout-mongo
     ports:
-      - "27018:27017"
+      - "127.0.0.1:27018:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
