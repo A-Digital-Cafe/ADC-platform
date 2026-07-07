@@ -47,6 +47,9 @@ const BanRecord = Type.Object({
 	unbanReason: Type.Optional(Type.String()),
 	emailHashCount: Type.Integer(),
 	ipHashCount: Type.Integer(),
+	emailMasks: Type.Array(Type.String({ description: "Email enmascarado (`gp***@g***.com`), no reversible" })),
+	emailHashPrefixes: Type.Array(Type.String({ description: "Prefijo (12 hex) del hash de email, para correlación visual" })),
+	ipHashPrefixes: Type.Array(Type.String({ description: "Prefijo (12 hex) del hash de IP, para correlación visual" })),
 });
 
 export const ListBansResponse = Type.Object({ bans: Type.Array(BanRecord) });

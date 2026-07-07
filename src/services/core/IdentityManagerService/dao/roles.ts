@@ -6,10 +6,27 @@ import { CRUDXAction } from "@common/types/Actions.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import type { Permission, Role } from "@common/types/identity/index.ts";
 import { PREDEFINED_ROLES, ORG_PREDEFINED_ROLES } from "../defaults/systemRoles.ts";
+import { isGlobalOnlyResource } from "@common/types/resources.ts";
 import type { UserManager } from "./users.js";
 import type { GroupManager } from "./groups.js";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type { Step } from "../../../core/OperationsService/types.ts";
+import { forEachPage } from "@common/utils/batch.ts";
+
+/** Máximo duro de un listado de roles (una respuesta sin límite es un DoS accidental). */
+const MAX_LIST_LIMIT = 500;
+
+/**
+ * Un rol de organización no puede portar permisos de recursos `globalOnly`
+ * (security, modules): son de gestión de plataforma y sólo valen en roles globales.
+ */
+function assertNoGlobalOnlyPerms(permissions: Permission[] | undefined, orgId?: string | null): void {
+	if (!orgId || !permissions?.length) return;
+	const offending = permissions.find((p) => isGlobalOnlyResource(p.resource));
+	if (offending) {
+		throw new Error(`GLOBAL_ONLY_RESOURCE: el recurso '${offending.resource}' sólo puede asignarse en roles globales`);
+	}
+}
 
 export class RoleManager {
 	readonly #permissionChecker: PermissionChecker;
@@ -28,47 +45,89 @@ export class RoleManager {
 	}
 
 	/**
-	 * Inicializa roles predefinidos del sistema o de una organización.
-	 * Sin orgId: crea roles globales (PREDEFINED_ROLES).
-	 * Con orgId: crea roles de organización (ORG_PREDEFINED_ROLES, sin SYSTEM).
-	 * No requiere token (es proceso de inicialización).
+	 * Inicializa Y SINCRONIZA roles predefinidos del sistema o de una organización.
+	 * Sin orgId: roles globales (PREDEFINED_ROLES). Con orgId: roles de organización
+	 * (ORG_PREDEFINED_ROLES, sin SYSTEM ni roles global-only).
+	 *
+	 * Si el rol ya existe (`isCustom: false`, no editable vía API), sus
+	 * `permissions`/`description`/`hierarchy` se actualizan cuando difieren de la
+	 * definición en código — así los cambios en systemRoles.ts llegan a bases ya
+	 * seedeadas. Devuelve `true` si hubo cambios (el caller debe invalidar el cache
+	 * de permisos). No requiere token (es proceso de inicialización).
 	 */
-	async initializePredefinedRoles(orgId?: string): Promise<void> {
+	async initializePredefinedRoles(orgId?: string): Promise<boolean> {
 		const roles = orgId ? ORG_PREDEFINED_ROLES : PREDEFINED_ROLES;
 		const scopeLabel = orgId ? ` [org: ${orgId}]` : " [global]";
+		let changed = false;
 
 		for (const roleData of roles) {
 			try {
 				// Chequeo de duplicado incluye orgId para evitar colisiones de nombre entre contextos
 				const filter = orgId ? { name: roleData.name, orgId } : { name: roleData.name, orgId: null };
 
-				const existing = await this.roleModel.findOne(filter);
-				if (!existing) {
+				const existingDoc = await this.roleModel.findOne(filter);
+				if (!existingDoc) {
 					await this.roleModel.create({
 						id: generateId(),
 						name: roleData.name,
 						description: roleData.description,
 						permissions: roleData.permissions,
+						hierarchy: roleData.hierarchy,
 						isCustom: false,
 						orgId: orgId || null,
 						createdAt: new Date(),
 					});
+					changed = true;
+					this.logger.logDebug(`Rol predefinido creado: ${roleData.name}${scopeLabel}`);
+					continue;
 				}
 
-				this.logger.logDebug(`Rol predefinido disponible: ${roleData.name}${scopeLabel}`);
+				const existing: Role = existingDoc.toObject?.() || existingDoc;
+				if (existing.isCustom) continue; // colisión de nombre con un rol custom: no tocar
+
+				if (this.#predefinedRoleOutdated(existing, roleData)) {
+					await this.roleModel.updateOne(filter, {
+						description: roleData.description,
+						permissions: roleData.permissions,
+						hierarchy: roleData.hierarchy,
+					});
+					changed = true;
+					this.logger.logInfo(`Rol predefinido sincronizado con systemRoles.ts: ${roleData.name}${scopeLabel}`);
+				}
 			} catch (error) {
 				this.logger.logError(`Error inicializando rol ${roleData.name}: ${error}`);
 			}
 		}
+
+		return changed;
+	}
+
+	/** True si el doc seedeado difiere de la definición en código (permissions/description/hierarchy). */
+	#predefinedRoleOutdated(existing: Role, def: (typeof PREDEFINED_ROLES)[number]): boolean {
+		if (existing.description !== def.description) return true;
+		if ((existing.hierarchy ?? null) !== (def.hierarchy ?? null)) return true;
+		const byText = (a: string, b: string) => a.localeCompare(b);
+		const current = (existing.permissions || []).map((p) => `${p.resource}|${p.action}|${p.scope}`).sort(byText);
+		const expected = def.permissions.map((p) => `${p.resource}|${p.action}|${p.scope}`).sort(byText);
+		return current.length !== expected.length || current.some((v, i) => v !== expected[i]);
 	}
 
 	/**
 	 * Crea un rol personalizado
 	 * @param token Token de autenticación (requerido para verificar permisos)
 	 * @param orgId Organización a la que pertenece el rol (undefined = global)
+	 * @param hierarchy Orden del rol (default 100); el endpoint valida que sea menor a la del actor
 	 */
-	async createRole(name: string, description: string, permissions?: Permission[], token?: string, orgId?: string): Promise<Role> {
+	async createRole(
+		name: string,
+		description: string,
+		permissions?: Permission[],
+		token?: string,
+		orgId?: string,
+		hierarchy?: number
+	): Promise<Role> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.WRITE, IdentityScopes.ROLES, orgId);
+		assertNoGlobalOnlyPerms(permissions, orgId);
 
 		try {
 			const roleId = generateId();
@@ -77,6 +136,7 @@ export class RoleManager {
 				name,
 				description,
 				permissions: permissions || [],
+				hierarchy: hierarchy ?? 100,
 				isCustom: true,
 				orgId: orgId || null,
 				createdAt: new Date(),
@@ -144,6 +204,11 @@ export class RoleManager {
 	 */
 	async updateRole(roleId: string, updates: Partial<Role>, token?: string): Promise<Role> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.ROLES);
+
+		if (updates.permissions?.length) {
+			const current = await this.roleModel.findOne<Role>({ id: roleId }).lean();
+			assertNoGlobalOnlyPerms(updates.permissions, updates.orgId ?? current?.orgId);
+		}
 
 		try {
 			const updated = await this.roleModel.findOneAndUpdate({ id: roleId }, updates, { new: true });
@@ -213,12 +278,22 @@ export class RoleManager {
 	async deleteAllForOrg(orgId: string, token?: string): Promise<void> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.DELETE, IdentityScopes.ROLES);
 
-		const roles = await this.roleModel.find({ orgId });
-		for (const role of roles) {
-			await this.#cascadeCleanupRole(role.id, token);
-		}
+		// Cascade paginado por cursor: no materializa todos los roles de la org en memoria.
+		const total = await forEachPage<{ id: string }>(
+			(afterId, limit) =>
+				this.roleModel
+					.find(afterId ? { orgId, id: { $gt: afterId } } : { orgId }, { id: 1, _id: 0 })
+					.sort({ id: 1 })
+					.limit(limit)
+					.lean(),
+			async (page) => {
+				for (const role of page) {
+					await this.#cascadeCleanupRole(role.id, token);
+				}
+			}
+		);
 		await this.roleModel.deleteMany({ orgId });
-		this.logger.logDebug(`Todos los roles de org ${orgId} eliminados con cascade (${roles.length})`);
+		this.logger.logDebug(`Todos los roles de org ${orgId} eliminados con cascade (${total})`);
 	}
 
 	/**
@@ -240,7 +315,7 @@ export class RoleManager {
 						],
 					}
 				: { orgId: null }; // Solo roles globales
-			const docs = await this.roleModel.find(filter);
+			const docs = await this.roleModel.find(filter).limit(MAX_LIST_LIMIT);
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error obteniendo roles: ${error}`);
@@ -256,7 +331,7 @@ export class RoleManager {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ROLES);
 
 		try {
-			const docs = await this.roleModel.find({ isCustom: false });
+			const docs = await this.roleModel.find({ isCustom: false }).limit(MAX_LIST_LIMIT);
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error obteniendo roles predefinidos: ${error}`);

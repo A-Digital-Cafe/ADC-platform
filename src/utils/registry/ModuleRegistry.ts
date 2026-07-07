@@ -226,6 +226,16 @@ export class ModuleRegistry {
 		return registry.has(uniqueKey);
 	}
 
+	/**
+	 * true si hay al menos una instancia registrada bajo ese nombre, con o sin config
+	 * (mismo lookup por nombre que usa `getService(name)` sin config). Permite chequear
+	 * disponibilidad sin disparar el log de error de una resolución fallida.
+	 */
+	hasAnyModule(moduleType: ModuleType, name: string): boolean {
+		const keys = this.#getNameMap(moduleType).get(name);
+		return !!keys && keys.length > 0;
+	}
+
 	getApp(name: string): IApp {
 		const instance = this.#appsRegistry.get(name);
 		if (!instance) {

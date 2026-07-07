@@ -2,7 +2,7 @@ import type { Model } from "mongoose";
 import type RedisProvider from "../../../../providers/queue/redis/index.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import type { BanRecord, BanInput, BanLookupResult } from "@common/types/identity/Moderation.js";
-import { hashEmails, hashIp } from "@common/utils/identityHash.ts";
+import { hashEmails, hashIp, maskEmails } from "@common/utils/identityHash.ts";
 import { generateId } from "@common/utils/crypto.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
@@ -17,6 +17,10 @@ const REDIS = {
 } as const;
 
 const LOGIN_IPS_TTL_SECONDS = 3 * 60 * 60;
+
+/** Límites de listado de bans: default razonable + máximo duro (se clampa en el DAO). */
+const DEFAULT_LIST_LIMIT = 200;
+const MAX_LIST_LIMIT = 500;
 
 /**
  * BanRepository — capa de persistencia + cache para el sistema anti-evasión.
@@ -202,6 +206,7 @@ export class BanRepository {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.WRITE, IdentityScopes.USERS);
 
 		const emailHashes = hashEmails(input.emails);
+		const emailMasks = maskEmails(input.emails);
 		const ipHashesFromIps = (input.ips || []).map((ip) => (ip ? hashIp(ip) : null)).filter((h): h is string => !!h);
 		const ipHashes = Array.from(new Set([...ipHashesFromIps, ...(input.extraIpHashes || [])]));
 
@@ -214,6 +219,7 @@ export class BanRepository {
 				existing.expiresAt = input.expiresAt ?? existing.expiresAt;
 				// Merge hashes (sin duplicados)
 				existing.emailHashes = Array.from(new Set([...existing.emailHashes, ...emailHashes]));
+				existing.emailMasks = Array.from(new Set([...(existing.emailMasks || []), ...emailMasks]));
 				existing.ipHashes = Array.from(new Set([...existing.ipHashes, ...ipHashes]));
 				await existing.save();
 				await this.#syncRedisAdd(existing.emailHashes, existing.ipHashes);
@@ -224,6 +230,7 @@ export class BanRepository {
 		const record: BanRecord = {
 			id: generateId(),
 			emailHashes,
+			emailMasks,
 			ipHashes,
 			reason: input.reason || "",
 			lastLoginAt: input.lastLoginAt ?? null,
@@ -236,6 +243,7 @@ export class BanRepository {
 		};
 		await this.model.create(record);
 		await this.#syncRedisAdd(emailHashes, ipHashes);
+		this.logger.logDebug(`[ModerationService] Ban ${record.id} creado (source=${record.source})`);
 		return record;
 	}
 
@@ -266,6 +274,7 @@ export class BanRepository {
 		// Rebuild Redis selectivamente: solo eliminamos los hashes que ya no estén
 		// referenciados por ningún ban activo restante.
 		await this.#syncRedisRemoveIfOrphan([...allEmails], [...allIps]);
+		this.logger.logDebug(`[ModerationService] ${docs.length} ban(s) desactivados (${JSON.stringify(filter)})`);
 		return docs.length;
 	}
 
@@ -277,7 +286,7 @@ export class BanRepository {
 		const docs = await this.model
 			.find(filter)
 			.sort({ bannedAt: -1 })
-			.limit(opts.limit ?? 200)
+			.limit(Math.min(Math.max(opts.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT))
 			.lean();
 		return docs;
 	}

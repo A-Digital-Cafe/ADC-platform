@@ -9,7 +9,9 @@
 		"discordClientId": "${DISCORD_CLIENT_ID}",
 		"discordClientSecret": "${DISCORD_CLIENT_SECRET}",
 		"googleClientId": "${GOOGLE_CLIENT_ID}",
-		"googleClientSecret": "${GOOGLE_CLIENT_SECRET}"
+		"googleClientSecret": "${GOOGLE_CLIENT_SECRET}",
+		"cookieDomain": "${SESSION_COOKIE_DOMAIN:-}",
+		"defaultRedirectUrl": "${SESSION_DEFAULT_REDIRECT_URL:-}"
 	},
 	"providers": [
 		{

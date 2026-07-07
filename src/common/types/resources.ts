@@ -1,3 +1,7 @@
+import { SecurityScopes } from "./security/permissions.js";
+import { ModulesScopes } from "./modules/permissions.js";
+import { EmailScopes } from "./email/permissions.js";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Scope definition
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,17 +22,15 @@ export interface ResourceDef {
 	id: string;
 	/** i18n label key: `resources.{id}` */
 	label: string;
-	/**
-	 * Named scopes (bitfield).
-	 * Resources with `simple: true` ignore scopes and use direct action names.
-	 */
+	/** Named scopes (bitfield). */
 	scopes: ScopeDef[];
 	/**
-	 * Simple permission model: `resource.action` (string match) instead of
-	 * bitfield `resource.scope.action`. When true, scopes are irrelevant —
-	 * only the action names matter.
+	 * Recurso de **plataforma**: sus permisos sólo son efectivos cuando provienen
+	 * de un **rol global** (orgId nulo). `PermissionManager` los descarta de roles
+	 * de organización, permisos directos de usuario, grupos y orgs; la UI de roles
+	 * no los ofrece al editar roles de una organización.
 	 */
-	simple?: boolean;
+	globalOnly?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,17 +89,44 @@ const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
 	{ key: "comments", value: 1 << 9 },
 ];
 
+/** Security scopes — alineados con SecurityScopes en types/security/permissions.ts */
+const SECURITY_SCOPES: ScopeDef[] = [
+	{ key: "sessions", value: SecurityScopes.SESSIONS },
+	{ key: "audit", value: SecurityScopes.AUDIT },
+];
+
+/** Modules scopes — alineados con ModulesScopes en types/modules/permissions.ts */
+const MODULES_SCOPES: ScopeDef[] = [
+	{ key: "runtime", value: ModulesScopes.RUNTIME },
+	{ key: "git", value: ModulesScopes.GIT },
+	{ key: "banners", value: ModulesScopes.BANNERS },
+	{ key: "schedule", value: ModulesScopes.SCHEDULE },
+	{ key: "audit", value: ModulesScopes.AUDIT },
+];
+
+/** Email scopes — alineados con EmailScopes en types/email/permissions.ts (sin el bit SELF, que es modificador) */
+const EMAIL_SCOPES: ScopeDef[] = [
+	{ key: "messages", value: EmailScopes.MESSAGES },
+	{ key: "send", value: EmailScopes.SEND },
+	{ key: "drafts", value: EmailScopes.DRAFTS },
+	{ key: "attachments", value: EmailScopes.ATTACHMENTS },
+	{ key: "accounts", value: EmailScopes.ACCOUNTS },
+	{ key: "settings", value: EmailScopes.SETTINGS },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Resource registry — only resources that have real endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const RESOURCES: ResourceDef[] = [
 	{ id: "identity", label: "resources.identity", scopes: IDENTITY_SCOPES },
-	{ id: "content", label: "resources.content", scopes: [], simple: true },
 	{ id: "storage", label: "resources.storage", scopes: STORAGE_SCOPES },
 	{ id: "drive", label: "resources.drive", scopes: DRIVE_SCOPES },
 	{ id: "community", label: "resources.community", scopes: COMMUNITY_SCOPES },
 	{ id: "project-manager", label: "resources.project-manager", scopes: PROJECT_MANAGER_SCOPES },
+	{ id: "email", label: "resources.email", scopes: EMAIL_SCOPES },
+	{ id: "security", label: "resources.security", scopes: SECURITY_SCOPES, globalOnly: true },
+	{ id: "modules", label: "resources.modules", scopes: MODULES_SCOPES, globalOnly: true },
 ];
 
 /**
@@ -112,4 +141,13 @@ export const RESOURCE_MAP: ReadonlyMap<string, ResourceDef> = new Map(RESOURCES.
  */
 export function getResourceScopes(resourceId: string): ScopeDef[] {
 	return RESOURCE_MAP.get(resourceId)?.scopes ?? [];
+}
+
+/**
+ * True si el recurso es de plataforma (`globalOnly`): sus permisos sólo valen
+ * desde roles globales.
+ * @public
+ */
+export function isGlobalOnlyResource(resourceId: string): boolean {
+	return RESOURCE_MAP.get(resourceId)?.globalOnly === true;
 }

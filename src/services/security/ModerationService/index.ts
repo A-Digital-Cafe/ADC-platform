@@ -8,6 +8,8 @@ import type { User } from "@common/types/identity/User.js";
 import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
 import type { IModerationService } from "@common/types/identity/IModerationService.ts";
 
+import { assertCanManageUser } from "../../core/IdentityManagerService/domain/hierarchy.js";
+import { ModerationError } from "@common/types/custom-errors/ModerationError.ts";
 import { banSchema } from "./domain/ban.js";
 import { BanRepository } from "./dao/BanRepository.js";
 import { DiscordSyncRunner } from "./sync/DiscordSyncRunner.js";
@@ -35,6 +37,8 @@ export interface ModerationInternalApi {
 	unbanUserById(userId: string, reason: string | undefined, token: string): Promise<number>;
 	unbanByExternalId(source: string, externalId: string, reason: string | undefined, token: string): Promise<number>;
 	listBans(opts: { activeOnly?: boolean; limit?: number }, token: string): Promise<BanRecord[]>;
+	/** Guard de jerarquía: el actor no puede moderarse a sí mismo ni a usuarios de jerarquía ≥. */
+	assertCanModerate(actorId: string | undefined, targetUserId: string): Promise<void>;
 }
 
 /**
@@ -76,7 +80,13 @@ export default class ModerationService extends BaseService implements IModeratio
 
 		const pengubot = this.#tryGet<MongoProvider>("provider", "pengubot@object/mongo");
 		if (pengubot && this.#identityService) {
-			this.#sync = new DiscordSyncRunner(this.#repo, (u, a) => this.#banPlatformUser(u, a), this.#identityService, this.getCapability(), this.logger);
+			this.#sync = new DiscordSyncRunner(
+				this.#repo,
+				(u, a) => this.#banPlatformUser(u, a),
+				this.#identityService,
+				this.getCapability(),
+				this.logger
+			);
 			const cfg = (this.config?.private as ModerationPrivateConfig | undefined)?.discord;
 			await this.#sync.start(pengubot, { enabled: cfg?.syncEnabled, intervalMs: cfg?.syncIntervalMs });
 		}
@@ -86,7 +96,8 @@ export default class ModerationService extends BaseService implements IModeratio
 	}
 
 	@DisableEndpoints()
-	async stop(): Promise<void> {
+	async stop(kernelKey: symbol): Promise<void> {
+		await super.stop(kernelKey);
 		await this.#sync?.stop();
 		this.#sync = null;
 	}
@@ -110,7 +121,23 @@ export default class ModerationService extends BaseService implements IModeratio
 			unbanUserById: (userId, reason, token) => this.#unbanUserById(userId, reason, token),
 			unbanByExternalId: (source, externalId, reason, token) => authed.deactivateBans({ source, externalId }, reason, token),
 			listBans: (opts, token) => authed.listBans(opts, token),
+			assertCanModerate: (actorId, targetUserId) => this.#assertCanModerate(actorId, targetUserId),
 		};
+	}
+
+	/** Jerarquía de roles: moderar es gestionar — ni a sí mismo ni a jerarquía igual o superior. */
+	async #assertCanModerate(actorId: string | undefined, targetUserId: string): Promise<void> {
+		if (!this.#identityService) throw new Error("IdentityManagerService no disponible");
+		await assertCanManageUser(this.#identityService.permissions, actorId, targetUserId);
+	}
+
+	/** Alerta `security.alert` al equipo (Admins + Security Managers globales), best-effort. */
+	#notifySecurity(event: { title: string; body: string; data?: Record<string, unknown> }): void {
+		try {
+			void this.#identityService?.notifications(this.getCapability()).securityEvent(event);
+		} catch (err: any) {
+			this.logger.logDebug(`Alerta de seguridad no emitida: ${err?.message || err}`);
+		}
 	}
 
 	// ─── Privados ─────────────────────────────────────────────────────────────
@@ -149,11 +176,17 @@ export default class ModerationService extends BaseService implements IModeratio
 	async #banUserById(userId: string, args: { reason: string; expiresAt?: Date | null }, token: string): Promise<BanRecord> {
 		if (!this.#identityService) throw new Error("IdentityManagerService no disponible");
 		const user = await this.#identityService.users.getUser(userId, token);
-		if (!user) throw new Error("USER_NOT_FOUND");
+		if (!user) throw new ModerationError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 
 		await this.#identityService.users.banUser(userId, { reason: args.reason, expiresAt: args.expiresAt ?? null }, token);
 		try {
-			return await this.#banPlatformUser(user, { reason: args.reason, expiresAt: args.expiresAt, source: "manual" });
+			const record = await this.#banPlatformUser(user, { reason: args.reason, expiresAt: args.expiresAt, source: "manual" });
+			this.#notifySecurity({
+				title: "Usuario baneado",
+				body: `Se aplicó un ban a ${user.username ?? userId}. Motivo: ${args.reason}`,
+				data: { userId, expiresAt: args.expiresAt?.toISOString() ?? null },
+			});
+			return record;
 		} catch (err: any) {
 			this.logger.logWarn(`[banUserById] blocklist falló: ${err?.message || err}`);
 			throw err;
@@ -167,7 +200,14 @@ export default class ModerationService extends BaseService implements IModeratio
 		const authed = this.#authedRepo ?? this.#requireRepo();
 		await this.#identityService.users.unbanUser(userId, token);
 		try {
-			return await authed.deactivateBans({ userId }, reason, token);
+			const removed = await authed.deactivateBans({ userId }, reason, token);
+			const reasonTxt = reason ? ` Motivo: ${reason}` : "";
+			this.#notifySecurity({
+				title: "Ban levantado",
+				body: `Se levantó el ban de ${userId}.${reasonTxt}`,
+				data: { userId },
+			});
+			return removed;
 		} finally {
 			this.#identityService.permissions.invalidateUser(userId);
 		}

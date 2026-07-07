@@ -49,9 +49,7 @@ export function hasPermission(
 /**
  * @public Chequea un permiso bitfield usando una constante de `P` (e.g. `P.COMMUNITY.SOCIAL.WRITE`).
  *
- * Formato de `required`:
- *   - Scoped: `"resource.scope.action"` (e.g. `"community.5.2"`)
- *   - Simple: `"resource.verb"` (e.g. `"content.write"`) — no soportado aquí.
+ * Formato de `required`: `"resource.scope.action"` (e.g. `"community.5.2"`).
  *
  * Pensado para consumidores de `SessionUser.perms` que quieran usar las constantes
  * tipadas de `P` sin convertir manualmente a resource/action/scope.

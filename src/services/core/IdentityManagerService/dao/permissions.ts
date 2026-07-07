@@ -1,12 +1,23 @@
 import type { Model } from "mongoose";
 import { Permission, ResolvedPermission } from "@common/types/identity/Permission.ts";
 import type { User, OrgMembership } from "@common/types/identity/User.ts";
-import type { Role } from "@common/types/identity/Role.ts";
+import { roleHierarchy, type Role } from "@common/types/identity/Role.ts";
 import type { Group } from "@common/types/identity/Group.ts";
 import type { Organization } from "@common/types/identity/Organization.ts";
 import LRUCache from "../../../../utils/performance/LRUCache.ts";
 import { SystemRole } from "../defaults/systemRoles.js";
 import { hasPermission } from "@common/utils/perms.ts";
+import { isGlobalOnlyResource } from "@common/types/resources.ts";
+
+/**
+ * Filtra permisos de recursos `globalOnly` (security, modules): sólo un **rol
+ * global** (orgId nulo) puede portarlos. Se descartan de permisos directos de
+ * usuario, grupos, orgs y roles de organización.
+ */
+function filterGlobalOnly(permissions: Permission[], fromGlobalRole: boolean): Permission[] {
+	if (fromGlobalRole) return permissions;
+	return permissions.filter((p) => !isGlobalOnlyResource(p.resource));
+}
 
 interface PermissionCacheEntry {
 	permissions: ResolvedPermission[];
@@ -155,7 +166,7 @@ export class PermissionManager {
 			const orgDoc = await this.orgModel.findOne({ $or: [{ orgId }, { slug: orgId.toLowerCase() }] });
 			const org = (orgDoc?.toObject?.() as Organization | undefined) ?? orgDoc ?? null;
 			if (org?.permissions?.length) {
-				applyLevel(org.permissions, "org");
+				applyLevel(filterGlobalOnly(org.permissions, false), "org");
 			}
 		}
 
@@ -175,12 +186,13 @@ export class PermissionManager {
 		const groupRolesMap = new Map(groupRoleDocs.map((d) => [((d.toObject?.() as Role) || d).id, (d.toObject?.() as Role) || d]));
 
 		// 4. Group roles (acumulamos todos los roles de todos los grupos)
+		// Sólo un rol GLOBAL adjuntado a un grupo conserva permisos globalOnly.
 		const groupRolePerms: Permission[] = [];
 		for (const group of validGroups) {
 			for (const roleId of group.roleIds || []) {
 				const role = groupRolesMap.get(roleId);
 				if (role) {
-					groupRolePerms.push(...role.permissions);
+					groupRolePerms.push(...filterGlobalOnly(role.permissions, !role.orgId));
 				}
 			}
 		}
@@ -192,7 +204,7 @@ export class PermissionManager {
 		const groupPerms: Permission[] = [];
 		for (const group of validGroups) {
 			if (group.permissions?.length) {
-				groupPerms.push(...group.permissions);
+				groupPerms.push(...filterGlobalOnly(group.permissions, false));
 			}
 		}
 		if (groupPerms.length) {
@@ -212,12 +224,13 @@ export class PermissionManager {
 		const userRolesMap = new Map(userRoleDocs.map((d) => [((d.toObject?.() as Role) || d).id, (d.toObject?.() as Role) || d]));
 
 		// 2b. Roles de orgMembership (si hay orgId)
+		// Los roles de org NUNCA portan permisos globalOnly; SYSTEM/ADMIN son globales.
 		if (orgId && orgMembership) {
 			for (const roleId of orgMembership.roleIds || []) {
 				const role = userRolesMap.get(roleId);
 				if (!role) continue;
 				if (isMembershipRoleInContext(role) || (!role.orgId && (role.name === SystemRole.SYSTEM || role.name === SystemRole.ADMIN)))
-					userRolePerms.push(...role.permissions);
+					userRolePerms.push(...filterGlobalOnly(role.permissions, !role.orgId));
 			}
 		}
 
@@ -225,7 +238,7 @@ export class PermissionManager {
 		for (const roleId of user.roleIds || []) {
 			const role = userRolesMap.get(roleId);
 			if (role && isDirectRoleInContext(role)) {
-				userRolePerms.push(...role.permissions);
+				userRolePerms.push(...filterGlobalOnly(role.permissions, !role.orgId));
 			}
 			// En contexto de org: SYSTEM y ADMIN (roles globales) siempre aplican,
 			// para permitir gestión cross-org. Otros roles globales quedan confinados
@@ -240,8 +253,10 @@ export class PermissionManager {
 
 		// 1. User direct permissions (mayor prioridad)
 		// Sólo aplican en contexto personal — dentro de una org no deben filtrarse.
+		// Los permisos directos de usuario tampoco portan recursos globalOnly:
+		// éstos se delegan únicamente por rol global (auditables en la UI de roles).
 		if (!orgId && user.permissions?.length) {
-			applyLevel(user.permissions, "user");
+			applyLevel(filterGlobalOnly(user.permissions, false), "user");
 		}
 
 		// Convertir a ResolvedPermissions
@@ -259,6 +274,65 @@ export class PermissionManager {
 		}
 
 		return result;
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────────
+	// Jerarquía de roles
+	// ─────────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Jerarquía máxima de un usuario en un contexto (mayor = más autoridad; 0 = sin roles).
+	 * Considera los mismos roles que la resolución de permisos: directos (contexto
+	 * personal), de membresía (contexto org), de grupos del contexto, y SYSTEM/ADMIN
+	 * globales que aplican cross-org.
+	 */
+	async getMaxHierarchy(userId: string, orgId?: string): Promise<number> {
+		const userDoc = await this.userModel.findOne({ id: userId });
+		const user = (userDoc?.toObject?.() as User | undefined) ?? userDoc ?? null;
+		if (!user) return 0;
+
+		const roleIds = new Set<string>(user.roleIds || []);
+		const orgMembership = orgId ? user.orgMemberships?.find((m: OrgMembership) => m.orgId === orgId) : null;
+		for (const rid of orgMembership?.roleIds || []) roleIds.add(rid);
+
+		const groupDocs = await this.groupModel.find({ id: { $in: user.groupIds || [] } });
+		for (const doc of groupDocs) {
+			const group = (doc?.toObject?.() as Group) || doc;
+			const inContext = orgId ? group?.orgId === orgId : !group?.orgId;
+			if (!inContext) continue;
+			for (const rid of group.roleIds || []) roleIds.add(rid);
+		}
+
+		if (roleIds.size === 0) return 0;
+		const roleDocs = await this.roleModel.find({ id: { $in: [...roleIds] } });
+
+		let max = 0;
+		for (const doc of roleDocs) {
+			const role = (doc?.toObject?.() as Role) || doc;
+			if (!role) continue;
+			const isGlobalRole = !role.orgId;
+			const applies = orgId
+				? role.orgId === orgId || (isGlobalRole && (role.name === SystemRole.SYSTEM || role.name === SystemRole.ADMIN))
+				: isGlobalRole;
+			if (!applies) continue;
+			max = Math.max(max, roleHierarchy(role));
+		}
+		return max;
+	}
+
+	/**
+	 * Jerarquía máxima de un conjunto de roles (para validar asignaciones:
+	 * nadie puede asignar/editar roles de jerarquía ≥ a la propia).
+	 */
+	async getRolesMaxHierarchy(roleIds: readonly string[]): Promise<number> {
+		if (!roleIds.length) return 0;
+		const roleDocs = await this.roleModel.find({ id: { $in: [...roleIds] } });
+		let max = 0;
+		for (const doc of roleDocs) {
+			const role = (doc?.toObject?.() as Role) || doc;
+			if (role) max = Math.max(max, roleHierarchy(role));
+		}
+		return max;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────

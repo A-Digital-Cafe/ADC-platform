@@ -7,6 +7,7 @@ import type { DiscordGuildConfig } from "./domain/index.js";
 import type { User, Role, Group, Organization, RegionInfo } from "@common/types/identity/index.d.ts";
 import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManager, RegionManager, OrgManager } from "./dao/index.js";
 import { seedDevUsers, purgeDevUsers } from "./dao/devSeeder.js";
+import { SystemRole } from "./defaults/systemRoles.js";
 import { NotifyManager } from "./notify.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
@@ -30,8 +31,16 @@ import type InternalS3Provider from "../../../providers/object/internal-s3-provi
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
 import type { QuotaTrackerGetter } from "@common/types/storage/quota.ts";
+import { forEachPage } from "@common/utils/batch.ts";
 import { createQuotaTrackerGetter } from "../../data/StorageQuotaService/index.js";
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.js";
+
+/**
+ * Espera antes de la primera corrida del purge de retención: da tiempo a que
+ * carguen los presets con datos privados (Drive, PM, Email), que arrancan
+ * después de Identity. Las corridas siguientes van por el interval de 6h.
+ */
+const INITIAL_RETENTION_PURGE_DELAY_MS = 5 * 60 * 1000;
 
 /**
  * Servicio opcional capaz de purgar datos privados de un usuario tras la
@@ -100,16 +109,14 @@ export default class IdentityManagerService extends BaseService implements IIden
 	// ISessionManagerService (lazy-loaded singleton)
 	#sessionManager: ISessionManagerService | null = null;
 
-	// IModerationService (lazy, opcional) — usado por endpoints ban/unban.
-	#moderationService: IModerationService | null = null;
-	#moderationLookupAttempted = false;
-
-	// Servicios de datos privados del usuario (lazy, opcionales) — purga en cascada
-	// tras vencer la retención. No se acopla a presets concretos.
-	#userDataPurgers: UserDataPurger[] | null = null;
+	// Nota: ModerationService y los purgers de presets se resuelven SIEMPRE en el
+	// momento de uso (lazy, sin cache de instancias): los presets cargan después de
+	// Identity (kernelMode 60) y pueden hot-reloadearse; cachear una instancia acá
+	// dejaría una referencia vieja.
 
 	// Timer para limpieza periódica de cuentas con retención vencida.
 	#retentionTimer: ReturnType<typeof setInterval> | null = null;
+	#initialPurgeTimer: ReturnType<typeof setTimeout> | null = null;
 	#tierGrantTimer: ReturnType<typeof setInterval> | null = null;
 
 	// MongoDB provider
@@ -231,8 +238,11 @@ export default class IdentityManagerService extends BaseService implements IIden
 				noAuth
 			);
 
-			// Inicializar roles predefinidos y usuario SYSTEM en BD local
-			await this.#roleManager.initializePredefinedRoles();
+			// Inicializar roles predefinidos y usuario SYSTEM en BD local.
+			// El sync propaga cambios de systemRoles.ts a la BD (el PermissionManager
+			// se crea después con cache vacío, no hace falta invalidar acá).
+			const rolesSynced = await this.#roleManager.initializePredefinedRoles();
+			if (rolesSynced) this.logger.logOk("Roles predefinidos sincronizados con systemRoles.ts");
 			await this.#systemManager.initializeSystemUser();
 
 			// Inicializar PermissionManager con cache LRU (usa modelos directamente para evitar recursión de auth)
@@ -304,17 +314,35 @@ export default class IdentityManagerService extends BaseService implements IIden
 				);
 			}
 
+			// Destinatarios de alertas de seguridad: Admins + Security Managers GLOBALES
+			// (roles con orgId nulo; el lookup por nombre a secas podría matchear roles de org).
+			this.#notifyManager.setSecurityRecipientsResolver(async () => {
+				const roles = await RoleModel.find({ name: { $in: [SystemRole.ADMIN, SystemRole.SECURITY_MANAGER] }, orgId: null }, { id: 1 }).lean();
+				const roleIds = roles.map((r) => r.id);
+				if (!roleIds.length) return [];
+				const users = await UserModel.find({ roleIds: { $in: roleIds } }, { id: 1 }).limit(200).lean();
+				return users.map((u) => u.id);
+			});
+
 			// Inicializar endpoint managers
 			UserEndpoints.init(this, this.getCapability());
-			RoleEndpoints.init(this);
+			RoleEndpoints.init(this, this.getCapability());
 			GroupEndpoints.init(this);
 			OrgEndpoints.init(this);
 			RegionEndpoints.init(this);
 			StatsEndpoints.init(this);
-			AvatarEndpoints.init(this, UserModel, this.#avatarAttachmentsManager);
+			// Lookup mínimo para el endpoint público de avatar raw, vía el manager
+			// interno (sin auth): los endpoints no tocan models (ver endpoints.md).
+			AvatarEndpoints.init(this, (userId) => this.#internalUserManager!.getAvatarAttachmentId(userId), this.#avatarAttachmentsManager);
 
 			// Cron de retención: purga usuarios con `metadata.scheduledDeletionAt < now`.
-			this.#runRetentionPurge().catch((err) => this.logger.logWarn(`Retention purge inicial falló: ${err?.message || err}`));
+			// La corrida inicial se DIFIERE: Identity carga antes que los presets con datos
+			// privados (Drive, PM, Email); purgar un usuario vencido en pleno boot borraría
+			// su registro sin ejecutar esos purgers (datos huérfanos irrecuperables).
+			this.#initialPurgeTimer = setTimeout(
+				() => this.#runRetentionPurge().catch((err) => this.logger.logWarn(`Retention purge inicial falló: ${err?.message || err}`)),
+				INITIAL_RETENTION_PURGE_DELAY_MS
+			);
 			this.#retentionTimer = setInterval(
 				() => this.#runRetentionPurge().catch((err) => this.logger.logWarn(`Retention purge falló: ${err?.message || err}`)),
 				6 * 60 * 60 * 1000
@@ -546,12 +574,12 @@ export default class IdentityManagerService extends BaseService implements IIden
 
 	async getStats(token?: string): Promise<IdentityStats> {
 		const baseStats = await this.#systemManager!.getStats();
-		const orgs = await this.#orgManager!.getAllOrganizations(token);
+		const totalOrganizations = await this.#orgManager!.countOrganizations(token);
 		const regions = await this.#regionManager!.getAllRegions(token);
 
 		return {
 			...baseStats,
-			totalOrganizations: orgs.length,
+			totalOrganizations,
 			totalRegions: regions.length,
 		};
 	}
@@ -565,6 +593,11 @@ export default class IdentityManagerService extends BaseService implements IIden
 		if (this.#retentionTimer) {
 			clearInterval(this.#retentionTimer);
 			this.#retentionTimer = null;
+		}
+
+		if (this.#initialPurgeTimer) {
+			clearTimeout(this.#initialPurgeTimer);
+			this.#initialPurgeTimer = null;
 		}
 
 		if (this.#tierGrantTimer) {
@@ -585,15 +618,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 	 * acoplar la inicialización (IModerationService arranca DESPUÉS).
 	 */
 	tryGetModerationService(): IModerationService | null {
-		if (this.#moderationService) return this.#moderationService;
-		if (this.#moderationLookupAttempted) return null;
-		this.#moderationLookupAttempted = true;
-		try {
-			this.#moderationService = this.getMyService("ModerationService");
-		} catch {
-			this.#moderationService = null;
-		}
-		return this.#moderationService;
+		// Resolución lazy en cada uso (lookup O(1) en el registry): ModerationService
+		// carga DESPUÉS (kernelMode 65 > 60) y puede recargarse en caliente.
+		return this.tryGetMyService<IModerationService>("ModerationService") ?? null;
 	}
 
 	/**
@@ -602,8 +629,6 @@ export default class IdentityManagerService extends BaseService implements IIden
 	 * cascada. No falla si los presets no están cargados.
 	 */
 	#getUserDataPurgers(): UserDataPurger[] {
-		if (this.#userDataPurgers) return this.#userDataPurgers;
-		const purgers: UserDataPurger[] = [];
 		const kernelKey = this.#kernelKey;
 		if (!kernelKey) return [];
 
@@ -613,22 +638,19 @@ export default class IdentityManagerService extends BaseService implements IIden
 			{ service: "DriveService", method: "purgeUserPrivateData" },
 		];
 
+		// Resolución fresca en cada corrida (cada 6h): barata, y siempre apunta a la
+		// instancia vigente aunque el preset haya cargado tarde o se haya recargado.
+		const purgers: UserDataPurger[] = [];
 		for (const { service, method } of candidates) {
-			try {
-				const instance = this.getMyService<Record<string, unknown>>(service);
-				const fn = instance?.[method];
-				if (typeof fn === "function") {
-					purgers.push({
-						name: service,
-						run: (userId: string) => (fn as (k: symbol, u: string) => Promise<void>).call(instance, kernelKey, userId),
-					});
-				}
-			} catch {
-				/* preset no cargado: se omite */
+			const instance = this.tryGetMyService<Record<string, unknown>>(service);
+			const fn = instance?.[method];
+			if (typeof fn === "function") {
+				purgers.push({
+					name: service,
+					run: (userId: string) => (fn as (k: symbol, u: string) => Promise<void>).call(instance, kernelKey, userId),
+				});
 			}
 		}
-
-		this.#userDataPurgers = purgers;
 		return purgers;
 	}
 
@@ -652,35 +674,43 @@ export default class IdentityManagerService extends BaseService implements IIden
 	 * timer y a través del manager interno (sin token).
 	 */
 	async #runTierGrantRevert(): Promise<void> {
-		if (!this.#internalUserManager) return;
+		const users = this.#internalUserManager;
+		if (!users) return;
 		const now = new Date();
-		const due = await this.#internalUserManager.findUsersDueForTierRevert(now);
-		if (due.length === 0) return;
-		this.logger.logInfo(`Tier grants vencidos: ${due.length} a revertir`);
-		for (const { id } of due) {
-			try {
-				await this.#internalUserManager.revertExpiredTierGrant(id, now);
-				this.permissions?.invalidateUser?.(id);
-			} catch (err: any) {
-				this.logger.logWarn(`Revertir tier grant falló para ${id} (se reintentará): ${err?.message || err}`);
+		const processed = await forEachPage(
+			(afterId, limit) => users.findUsersDueForTierRevertPage(afterId, limit, now),
+			async (page) => {
+				for (const { id } of page) {
+					try {
+						await users.revertExpiredTierGrant(id, now);
+						this.permissions?.invalidateUser?.(id);
+					} catch (err: any) {
+						this.logger.logWarn(`Revertir tier grant falló para ${id} (se reintentará): ${err?.message || err}`);
+					}
+				}
 			}
-		}
+		);
+		if (processed > 0) this.logger.logInfo(`Tier grants vencidos: ${processed} procesados`);
 	}
 
 	async #runRetentionPurge(): Promise<void> {
-		if (!this.#internalUserManager) return;
-		const due = await this.#internalUserManager.findUsersDueForDeletion();
-		if (due.length === 0) return;
-		this.logger.logInfo(`Retention purge: ${due.length} usuarios pendientes de borrado`);
+		const users = this.#internalUserManager;
+		if (!users) return;
 		const purgers = this.#getUserDataPurgers();
-		for (const { id } of due) {
-			try {
-				await this.#purgeUserResumable(id, purgers);
-			} catch (err: any) {
-				// El usuario sigue "due": se reintentará en el próximo tick desde el paso fallido.
-				this.logger.logWarn(`Retention purge falló para ${id} (se reintentará): ${err?.message || err}`);
+		const processed = await forEachPage(
+			(afterId, limit) => users.findUsersDueForDeletionPage(afterId, limit),
+			async (page) => {
+				for (const { id } of page) {
+					try {
+						await this.#purgeUserResumable(id, purgers);
+					} catch (err: any) {
+						// El usuario sigue "due": se reintentará en el próximo tick desde el paso fallido.
+						this.logger.logWarn(`Retention purge falló para ${id} (se reintentará): ${err?.message || err}`);
+					}
+				}
 			}
-		}
+		);
+		if (processed > 0) this.logger.logInfo(`Retention purge: ${processed} usuarios procesados`);
 	}
 
 	/**

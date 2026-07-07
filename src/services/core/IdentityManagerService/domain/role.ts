@@ -15,7 +15,10 @@ export const roleSchema = new Schema<Role>(
 		],
 		isCustom: { type: Boolean, default: false },
 		orgId: { type: String, default: null, index: true },
+		// Orden del rol (mayor = más autoridad); docs previos sin el campo cuentan como 100.
+		hierarchy: { type: Number, default: 100 },
 		createdAt: { type: Date, default: Date.now },
+		updatedAt: { type: Date, default: Date.now },
 	},
 	{ id: false } // Disable Mongoose virtual id getter to avoid conflicts with custom id field
 );

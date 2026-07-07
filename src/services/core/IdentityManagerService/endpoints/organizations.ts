@@ -91,6 +91,7 @@ export class OrgEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/organizations/:orgId/slug",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Organizations",
 			summary: "Resuelve el slug de una organización",

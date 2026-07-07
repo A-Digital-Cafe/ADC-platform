@@ -34,21 +34,20 @@ con `bun run typecheck`/`bun run lint` (lint solo cubre `src/`; un preset se val
 
 ### 1. Dependencia opcional (degradación limpia)
 
-Una capacidad secundaria que puede faltar (cola, attachments, otro servicio) se resuelve
-en `try/catch` y degrada: el servicio arranca igual y solo fallan los endpoints relacionados
-(getter que lanza `503` tipado). Para depender de **otro servicio** opcional, chequeá
-disponibilidad antes de usarlo:
+Una capacidad secundaria que puede faltar (cola, attachments, otro servicio) degrada: el
+servicio arranca igual y solo fallan los endpoints relacionados (getter que lanza `503`
+tipado). Para depender de **otro servicio** opcional, declaralo en `config.json` y resolvelo
+con `tryGetMyService` (devuelve `undefined` si no está cargado, sin lanzar):
 
 ```ts
-if (this.kernel.registry.hasModule("service", "EmailService")) {
-	const email = this.kernel.registry.getService<INotificationEmailSender>("EmailService");
-	if (typeof email.sendSystemEmail === "function") await email.sendSystemEmail(/* … */);
-}
+const email = this.tryGetMyService<INotificationEmailSender>("EmailService");
+if (email && typeof email.sendSystemEmail === "function") await email.sendSystemEmail(/* … */);
 ```
 
 > Declarar la dep como `{ "name": "EmailService", "optional": true }` en `config.json` para
-> que el arranque no falle si el preset no está. Tipar contra una **interfaz de `@common`**,
-> nunca contra la clase concreta del preset.
+> que el arranque no falle si el preset no está — `getMyService`/`tryGetMyService` **solo
+> resuelven dependencias declaradas** (ver [kernel-access.md](../kernel-access.md)). Tipar
+> contra una **interfaz de `@common`**, nunca contra la clase concreta del preset.
 
 ### 2. Endpoint SSE / streaming (long-lived)
 

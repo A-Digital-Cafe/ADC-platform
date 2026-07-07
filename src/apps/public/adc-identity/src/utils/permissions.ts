@@ -27,18 +27,23 @@ const IDENTITY_TABS: IdentityTab[] = [
 	{ id: "groups", label: "groups", requiredScope: IdentityScopes.GROUPS, requiredAction: CRUDXAction.READ },
 	{ id: "organizations", label: "organizations", requiredScope: IdentityScopes.ORGANIZATIONS, requiredAction: CRUDXAction.READ },
 	{ id: "regions", label: "regions", requiredScope: IdentityScopes.REGIONS, requiredAction: CRUDXAction.READ },
+	// Moderación (bans): el backend exige admin global + identity.users UPDATE.
+	{ id: "moderation", label: "moderation", requiredScope: IdentityScopes.USERS, requiredAction: CRUDXAction.UPDATE },
 	{ id: "storage", label: "storage", requiredScope: StorageScopes.LIMITS, requiredAction: CRUDXAction.READ, resource: STORAGE_RESOURCE_NAME },
 ];
 
 const RESOURCE = "identity";
 
+/** Tabs de plataforma: sólo visibles en contexto global (sin org). */
+const GLOBAL_ONLY_TABS = new Set(["organizations", "regions", "moderation"]);
+
 /**
  * Filters tabs based on user's permissions.
- * When orgId is set (org mode), organizations and regions tabs are hidden.
+ * When orgId is set (org mode), platform-level tabs are hidden.
  */
 export function getVisibleTabs(perms: Permission[], orgId?: string): IdentityTab[] {
 	return IDENTITY_TABS.filter((tab) => {
-		if (orgId && (tab.id === "organizations" || tab.id === "regions")) return false;
+		if (orgId && GLOBAL_ONLY_TABS.has(tab.id)) return false;
 		return hasPermission(perms, tab.resource ?? RESOURCE, tab.requiredAction, tab.requiredScope);
 	});
 }

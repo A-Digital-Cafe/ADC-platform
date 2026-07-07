@@ -5,6 +5,7 @@ export const banSchema = new Schema<BanRecord>(
 	{
 		id: { type: String, required: true, unique: true },
 		emailHashes: { type: [String], default: [], index: true },
+		emailMasks: { type: [String], default: [] },
 		ipHashes: { type: [String], default: [], index: true },
 		reason: { type: String, default: "" },
 		lastLoginAt: { type: Date, default: null },

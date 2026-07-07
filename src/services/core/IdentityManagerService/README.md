@@ -1,16 +1,13 @@
 # IdentityManagerService
 
-Servicio en modo kernel (`kernelMode: 60`) para gestión centralizada de identidades: usuarios, roles, grupos y organizaciones.
+Servicio kernel (`kernelMode: 60`) para identidad: usuarios, roles, grupos y organizaciones (multi-tenant vía `forOrg`).
 
-## Características
+- Persistencia MongoDB (`object/mongo`); contraseñas PBKDF2 (100k iteraciones, salt 16 bytes)
+- Permisos granulares recurso/acción/alcance (`PermissionChecker`); recursos `globalOnly` (security, modules) sólo valen desde **roles globales**
+- **Jerarquía de roles** (mayor = más autoridad): nadie gestiona usuarios/roles de jerarquía ≥ a la propia ni a sí mismo (`domain/hierarchy.ts`)
+- Roles predefinidos **sincronizados en boot** desde `defaults/systemRoles.ts` (la matriz rol × permisos vive ahí)
+- `createAuthVerifier()` para validar tokens desde otros servicios; alertas `security.alert` a Admins/Security Managers globales (`notify.ts`)
+- Avatares vía `internal-s3-provider` + `attachments-utility`; soft-delete de usuarios con cron de purga reanudable (stepper + `forEachPage`)
+- Dev: siembra usuarios de prueba (`defaults/devUsers.ts`); fuera de dev se purgan en cada arranque
 
-- Persistencia en MongoDB (provider `object/mongo`), fallback a memoria
-- Contraseñas con PBKDF2 (100k iteraciones, salt 16 bytes)
-- Permisos granulares por recurso/acción/alcance (`PermissionChecker`)
-- `createAuthVerifier()` para validar tokens desde otros servicios
-- Avatares vía `internal-s3-provider` + `attachments-utility`
-- Soft-delete de usuarios con cron de purga (`scheduledDeletionAt`)
-- Endpoints REST en `endpoints/` (users, groups, roles, orgs, stats)
-- Dev (`NODE_ENV=development`): siembra usuarios de prueba con roles (Admin global / de org); declarativo e idempotente en `defaults/devUsers.ts` + `dao/devSeeder.ts`. Fuera de dev se purgan en cada arranque (`purgeDevUsers`) por precaución.
-
-Dependencias y configuración: ver `config.json`.
+Dependencias y configuración: `config.json` (env vars en `.env.example`).

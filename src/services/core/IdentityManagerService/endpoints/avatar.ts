@@ -1,11 +1,8 @@
-import type { Model } from "mongoose";
 import { RegisterEndpoint, type EndpointCtx, UncommonResponse } from "../../EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.js";
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
-import { HttpError } from "@common/types/ADCCustomError.ts";
 import { buildDicebearAvatar } from "@common/utils/avatar.js";
 import type { AttachmentsManager } from "../../../../utilities/attachments/attachments-utility/index.js";
-import type { User } from "@common/types/identity/User.ts";
 import type IdentityManagerService from "../index.js";
 import type { UserAvatarEndpointCtx } from "../permissions/userAvatarAttachments.js";
 import * as AS from "./schemas/avatar.js";
@@ -37,18 +34,22 @@ const AVATAR_RATE_LIMIT = { max: 5, timeWindow: 60_000 };
  */
 export class AvatarEndpoints {
 	private static identity: IdentityManagerService;
-	private static userModel: Model<User> | null = null;
+	private static getAvatarAttachmentId: ((userId: string) => Promise<string | null>) | null = null;
 	private static attachmentsManager: AttachmentsManager | null = null;
 
-	public static init(identity: IdentityManagerService, userModel: Model<User>, attachmentsManager: AttachmentsManager | null): void {
+	public static init(
+		identity: IdentityManagerService,
+		getAvatarAttachmentId: (userId: string) => Promise<string | null>,
+		attachmentsManager: AttachmentsManager | null
+	): void {
 		AvatarEndpoints.identity ??= identity;
-		AvatarEndpoints.userModel ??= userModel;
+		AvatarEndpoints.getAvatarAttachmentId ??= getAvatarAttachmentId;
 		AvatarEndpoints.attachmentsManager ??= attachmentsManager;
 	}
 
 	static #manager(): AttachmentsManager {
 		if (!AvatarEndpoints.attachmentsManager) {
-			throw new HttpError(503, "AVATAR_UPLOAD_UNAVAILABLE", "Subida de avatares no disponible (S3 no configurado)");
+			throw new IdentityError(503, "AVATAR_UPLOAD_UNAVAILABLE", "Subida de avatares no disponible (S3 no configurado)");
 		}
 		return AvatarEndpoints.attachmentsManager;
 	}
@@ -80,6 +81,7 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/me/avatar/options",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Lista opciones de avatar del usuario actual",
@@ -136,6 +138,7 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/identity/users/me/avatar/presign",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Genera URL prefirmada para subir un avatar",
@@ -148,7 +151,7 @@ export class AvatarEndpoints {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
 		const body = ctx.data;
 		if (!body?.fileName || !body?.mimeType || !Number.isFinite(body?.size)) {
-			throw new HttpError(400, "MISSING_FIELDS", "fileName, mimeType y size son requeridos");
+			throw new IdentityError(400, "MISSING_FIELDS", "fileName, mimeType y size son requeridos");
 		}
 		return AvatarEndpoints.#manager().presignUpload(AvatarEndpoints.#ctxFor(userId, userId), {
 			ownerType: "user-avatar",
@@ -166,6 +169,7 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/identity/users/me/avatar/:attachmentId/confirm",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Confirma la subida de un avatar custom",
@@ -212,6 +216,7 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "DELETE",
 		url: "/api/identity/users/me/avatar",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Elimina el avatar custom actual",
@@ -249,6 +254,7 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "PUT",
 		url: "/api/identity/users/me/avatar/select",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Selecciona la fuente de avatar",
@@ -262,7 +268,7 @@ export class AvatarEndpoints {
 		const { userId } = AvatarEndpoints.#requireAuth(ctx);
 		const raw = ctx.data?.source;
 		if (typeof raw !== "string" || !raw) {
-			throw new HttpError(400, "MISSING_FIELDS", "`source` requerido");
+			throw new IdentityError(400, "MISSING_FIELDS", "`source` requerido");
 		}
 
 		const user = await AvatarEndpoints.#getUser(userId, ctx.token);
@@ -273,16 +279,16 @@ export class AvatarEndpoints {
 			// permitido
 		} else if (raw === "custom") {
 			if (!meta.customAvatar?.attachmentId) {
-				throw new HttpError(400, "NO_CUSTOM_AVATAR", "No hay avatar custom subido");
+				throw new IdentityError(400, "NO_CUSTOM_AVATAR", "No hay avatar custom subido");
 			}
 		} else if (raw.startsWith("linked:")) {
 			const provider = raw.slice("linked:".length);
 			const acc = user.linkedAccounts?.find((a) => a.provider === provider && a.status === "linked");
 			if (!acc?.providerAvatar) {
-				throw new HttpError(400, "INVALID_PROVIDER", `No hay avatar para el proveedor ${provider}`);
+				throw new IdentityError(400, "INVALID_PROVIDER", `No hay avatar para el proveedor ${provider}`);
 			}
 		} else {
-			throw new HttpError(400, "INVALID_SOURCE", "Fuente inválida");
+			throw new IdentityError(400, "INVALID_SOURCE", "Fuente inválida");
 		}
 
 		await AvatarEndpoints.identity.users.updateOwnMetadata(userId, { avatarSource: raw }, ctx.token!);
@@ -297,6 +303,7 @@ export class AvatarEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/:userId/avatar/raw",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Redirige al avatar custom de un usuario",
@@ -307,17 +314,13 @@ export class AvatarEndpoints {
 	})
 	static async raw(ctx: EndpointCtx<{ userId: string }>) {
 		const targetUserId = ctx.params.userId;
-		if (!targetUserId) throw new HttpError(400, "MISSING_FIELDS", "userId requerido");
+		if (!targetUserId) throw new IdentityError(400, "MISSING_FIELDS", "userId requerido");
 
 		// Lectura mínima sin permisos: el avatar es público para cualquier usuario que aparezca como autor.
-		const userModel = AvatarEndpoints.userModel;
-		if (!userModel) throw new HttpError(503, "AVATAR_UPLOAD_UNAVAILABLE", "Modelo de usuarios no disponible");
-		const userDoc = await userModel.findOne({ id: targetUserId }).select({ id: 1, metadata: 1 }).lean();
-		if (!userDoc) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
-
-		const meta = ((userDoc as { metadata?: unknown }).metadata ?? {}) as { customAvatar?: { attachmentId?: string } };
-		const attachmentId = meta.customAvatar?.attachmentId;
-		if (!attachmentId) throw new HttpError(404, "AVATAR_NOT_FOUND", "Avatar no encontrado");
+		const getAvatarAttachmentId = AvatarEndpoints.getAvatarAttachmentId;
+		if (!getAvatarAttachmentId) throw new IdentityError(503, "AVATAR_UPLOAD_UNAVAILABLE", "Lookup de avatares no disponible");
+		const attachmentId = await getAvatarAttachmentId(targetUserId);
+		if (!attachmentId) throw new IdentityError(404, "AVATAR_NOT_FOUND", "Avatar no encontrado");
 
 		const callerId = ctx.user?.id ?? "";
 		const { url } = await AvatarEndpoints.#manager().getDownloadUrl(AvatarEndpoints.#ctxFor(callerId, targetUserId), attachmentId, {

@@ -86,6 +86,34 @@ export function hashEmails(emails: ReadonlyArray<string | undefined | null>): st
 	return [...out];
 }
 
+/**
+ * Máscara GDPR-friendly de un email para mostrar en UI de moderación:
+ * conserva la(s) primera(s) letra(s) del local-part y la inicial del dominio + TLD.
+ * `gpsmurfs@gmail.com` → `gp***@g***.com`. No es reversible.
+ */
+function maskEmail(rawEmail: string): string | null {
+	const normalized = normalizeEmail(rawEmail);
+	const atIdx = normalized.lastIndexOf("@");
+	if (atIdx <= 0 || atIdx === normalized.length - 1) return null;
+	const local = normalized.slice(0, atIdx);
+	const domain = normalized.slice(atIdx + 1);
+	const dotIdx = domain.lastIndexOf(".");
+	const tld = dotIdx > 0 ? domain.slice(dotIdx) : "";
+	const localHint = local.slice(0, Math.min(2, local.length));
+	return `${localHint}***@${domain.slice(0, 1)}***${tld}`;
+}
+
+/** Máscaras únicas de una lista de emails (mismo orden de descarte que {@link hashEmails}). */
+export function maskEmails(emails: ReadonlyArray<string | undefined | null>): string[] {
+	const out = new Set<string>();
+	for (const e of emails) {
+		if (!e) continue;
+		const m = maskEmail(e);
+		if (m) out.add(m);
+	}
+	return [...out];
+}
+
 function normalizeIp(rawIp: string): string {
 	if (typeof rawIp !== "string") return "";
 	let ip = rawIp.trim().toLowerCase();

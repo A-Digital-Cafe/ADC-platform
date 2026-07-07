@@ -30,6 +30,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 	const [formName, setFormName] = useState("");
 	const [formDescription, setFormDescription] = useState("");
 	const [formPermissions, setFormPermissions] = useState<Permission[]>([]);
+	const [formHierarchy, setFormHierarchy] = useState(100);
 	const [submitting, setSubmitting] = useState(false);
 
 	const writable = canWrite(perms, Scope.ROLES);
@@ -69,6 +70,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 		setFormName("");
 		setFormDescription("");
 		setFormPermissions([]);
+		setFormHierarchy(100);
 		setModalOpen(true);
 	};
 
@@ -77,6 +79,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 		setFormName(role.name);
 		setFormDescription(role.description);
 		setFormPermissions([...role.permissions]);
+		setFormHierarchy(role.hierarchy ?? 100);
 		setModalOpen(true);
 	};
 
@@ -90,6 +93,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 				name: formName,
 				description: formDescription,
 				permissions: formPermissions,
+				hierarchy: formHierarchy,
 			});
 			if (result.success) {
 				setModalOpen(false);
@@ -101,6 +105,7 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 				description: formDescription,
 				permissions: formPermissions,
 				orgId,
+				hierarchy: formHierarchy,
 			});
 			if (result.success) {
 				setModalOpen(false);
@@ -145,6 +150,11 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 						{t("roles.globalScope")}
 					</adc-badge>
 				),
+		},
+		{
+			key: "hierarchy",
+			label: t("roles.hierarchy"),
+			render: (r) => <span className="text-muted text-xs">{r.hierarchy ?? 100}</span>,
 		},
 		{
 			key: "permissions",
@@ -209,11 +219,22 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 							/>
 						</div>
 						<div>
+							<label className="block text-sm font-medium mb-1 text-text">{t("roles.hierarchy")}</label>
+							<adc-input
+								type="number"
+								value={String(formHierarchy)}
+								placeholder="100"
+								onInput={(e: any) => setFormHierarchy(Number(e.target.value) || 0)}
+							/>
+							<p className="text-xs text-muted mt-1">{t("roles.hierarchyHint")}</p>
+						</div>
+						<div>
 							<label className="block text-sm font-medium mb-1 text-text">{t("permissions.title")}</label>
 							<PermissionEditor
 								permissions={formPermissions}
 								onChange={setFormPermissions}
 								disabled={editingRole ? !editingRole.isCustom : false}
+								orgContext={Boolean(orgId)}
 							/>
 							{editingRole && !editingRole.isCustom && (
 								<p className="text-xs text-muted mt-1">{t("permissions.predefinedReadonly")}</p>

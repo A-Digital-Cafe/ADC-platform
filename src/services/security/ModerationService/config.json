@@ -38,6 +38,11 @@
 	],
 	"services": [
 		{
+			"name": "IdentityManagerService",
+			"version": "latest",
+			"language": "typescript"
+		},
+		{
 			"name": "EndpointManagerService",
 			"version": "latest",
 			"optional": true

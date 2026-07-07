@@ -15,6 +15,10 @@ export type UserAuthenticationResult = Partial<User> | { id: string; isActive: b
 const MAX_PUBLIC_PROFILES = 50;
 /** Límite por defecto de resultados de búsqueda de usuarios. */
 const DEFAULT_SEARCH_LIMIT = 10;
+/** Máximo duro de resultados de búsqueda (se clampa en el DAO, aunque el endpoint valide). */
+const MAX_SEARCH_LIMIT = 50;
+/** Máximo duro de un listado de usuarios (una respuesta sin límite es un DoS accidental). */
+const MAX_LIST_LIMIT = 500;
 
 export class UserManager {
 	readonly #permissionChecker: PermissionChecker;
@@ -414,13 +418,23 @@ export class UserManager {
 	}
 
 	/**
-	 * Devuelve usuarios con un grant de tier vencido (`metadata.tierGrant.expiresAt <= now`).
-	 * Lo consume el cron de reversión vía el manager interno (sin token).
+	 * Página de usuarios con un grant de tier vencido (`metadata.tierGrant.expiresAt <= now`),
+	 * cursor por `id` ascendente (para `forEachPage`). Lo consume el cron de reversión
+	 * vía el manager interno (sin token).
 	 */
-	async findUsersDueForTierRevert(now: Date = new Date(), token?: string): Promise<Array<{ id: string }>> {
+	async findUsersDueForTierRevertPage(
+		afterId: string | null,
+		limit: number,
+		now: Date = new Date(),
+		token?: string
+	): Promise<Array<{ id: string }>> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const filter: Record<string, unknown> = { "metadata.tierGrant.expiresAt": { $lte: now.toISOString() } };
+		if (afterId) filter.id = { $gt: afterId };
 		const docs = await this.userModel
-			.find({ "metadata.tierGrant.expiresAt": { $lte: now.toISOString() } }, { id: 1, _id: 0 })
+			.find(filter, { id: 1, _id: 0 })
+			.sort({ id: 1 })
+			.limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT))
 			.lean();
 		return docs.map((d: any) => ({ id: d.id }));
 	}
@@ -601,15 +615,26 @@ export class UserManager {
 	}
 
 	/**
-	 * Devuelve usuarios cuya retención expiró (`metadata.scheduledDeletionAt < now`).
-	 * Pensado para el cron de retención: se invoca a través del manager interno
-	 * (construido con `getAuthVerifier = () => null`), donde `requirePermission`
-	 * hace short-circuit y permite la operación sin token.
+	 * Página de usuarios cuya retención expiró (`metadata.scheduledDeletionAt < now`),
+	 * cursor por `id` ascendente (para `forEachPage`). Pensado para el cron de retención:
+	 * se invoca a través del manager interno (construido con `getAuthVerifier = () => null`),
+	 * donde `requirePermission` hace short-circuit y permite la operación sin token.
 	 */
-	async findUsersDueForDeletion(now: Date = new Date(), token?: string): Promise<Array<{ id: string }>> {
+	async findUsersDueForDeletionPage(
+		afterId: string | null,
+		limit: number,
+		now: Date = new Date(),
+		token?: string
+	): Promise<Array<{ id: string }>> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
 
-		const docs = await this.userModel.find({ "metadata.scheduledDeletionAt": { $lte: now } }, { id: 1, _id: 0 }).lean();
+		const filter: Record<string, unknown> = { "metadata.scheduledDeletionAt": { $lte: now } };
+		if (afterId) filter.id = { $gt: afterId };
+		const docs = await this.userModel
+			.find(filter, { id: 1, _id: 0 })
+			.sort({ id: 1 })
+			.limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT))
+			.lean();
 		return docs.map((d: any) => ({ id: d.id }));
 	}
 
@@ -618,17 +643,28 @@ export class UserManager {
 	 * @param token Token de autenticación (requerido para verificar permisos)
 	 * @param orgId Si se proporciona, filtra usuarios que pertenecen a esta organización
 	 */
-	async getAllUsers(token?: string, orgId?: string): Promise<User[]> {
+	async getAllUsers(token?: string, orgId?: string, limit: number = MAX_LIST_LIMIT): Promise<User[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS, orgId);
 
 		try {
 			const filter = orgId ? { "orgMemberships.orgId": orgId } : {};
-			const docs = await this.userModel.find(filter);
+			const docs = await this.userModel.find(filter).limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT));
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error obteniendo usuarios: ${error}`);
 			return [];
 		}
+	}
+
+	/**
+	 * IDs de TODOS los usuarios activos (proyección lean, para broadcasts de
+	 * notificaciones). Enumerar destinatarios es sensible: se expone sólo vía la
+	 * superficie `_internal` (managers sin auth) o con permiso de lectura de usuarios.
+	 */
+	async getAllUserIds(token?: string): Promise<string[]> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const docs = await this.userModel.find({ isActive: { $ne: false } }, { id: 1, _id: 0 }).lean();
+		return docs.map((d: any) => d.id).filter(Boolean);
 	}
 
 	/**
@@ -645,12 +681,25 @@ export class UserManager {
 			const regex = new RegExp(escapeRegex(query), "i");
 			const filter: any = { $or: [{ username: regex }, { email: regex }] };
 			if (orgId) filter["orgMemberships.orgId"] = orgId;
-			const docs = await this.userModel.find(filter).limit(limit);
+			const docs = await this.userModel.find(filter).limit(Math.min(Math.max(limit, 1), MAX_SEARCH_LIMIT));
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error buscando usuarios: ${error}`);
 			return [];
 		}
+	}
+
+	/**
+	 * `attachmentId` del avatar custom de un usuario, o `null` si no tiene.
+	 * Dato público (el avatar se sirve sin auth): pensado para el endpoint raw
+	 * vía el manager interno, sin exponer el model a la capa HTTP.
+	 */
+	async getAvatarAttachmentId(userId: string, token?: string): Promise<string | null> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const doc = await this.userModel.findOne({ id: userId }).select({ id: 1, metadata: 1 }).lean();
+		if (!doc) return null;
+		const meta = ((doc as { metadata?: unknown }).metadata ?? {}) as { customAvatar?: { attachmentId?: string } };
+		return meta.customAvatar?.attachmentId ?? null;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────────
@@ -735,7 +784,7 @@ export class UserManager {
 		if (!roleId) return [];
 		const docs = await this.userModel
 			.find({ roleIds: roleId, isActive: { $ne: false } }, { id: 1, _id: 0 })
-			.limit(limit)
+			.limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT))
 			.lean<{ id: string }[]>();
 		return docs.map((d) => d.id).filter(Boolean);
 	}
@@ -791,10 +840,10 @@ export class UserManager {
 	 * Obtiene todos los usuarios que pertenecen a un grupo.
 	 * Usado por GroupManager.getGroupUsers.
 	 */
-	async getUsersByGroup(groupId: string, token?: string): Promise<User[]> {
+	async getUsersByGroup(groupId: string, token?: string, limit: number = MAX_LIST_LIMIT): Promise<User[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
 
-		const docs = await this.userModel.find({ groupIds: groupId });
+		const docs = await this.userModel.find({ groupIds: groupId }).limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT));
 		return docs.map((d: any) => d.toObject?.() || d);
 	}
 

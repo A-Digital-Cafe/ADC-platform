@@ -40,7 +40,7 @@ export const identityApi = {
 	// Roles
 	listRoles: (orgId?: string) => api.get<Role[]>("/roles", orgId ? { params: { orgId } } : undefined),
 	getRole: (roleId: string) => api.get<Role>(`/roles/${assertSafeId(roleId, "roleId")}`),
-	createRole: (data: { name: string; description: string; permissions?: Permission[]; orgId?: string }) =>
+	createRole: (data: { name: string; description: string; permissions?: Permission[]; orgId?: string; hierarchy?: number }) =>
 		api.post<Role>("/roles", { body: data, idempotencyData: data }),
 	updateRole: (roleId: string, data: Partial<Role>) =>
 		api.put<Role>(`/roles/${assertSafeId(roleId, "roleId")}`, { body: data, idempotencyData: { roleId, data } }),

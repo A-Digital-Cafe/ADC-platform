@@ -10,6 +10,11 @@ export interface BanRecord {
 	id: string;
 	/** Hashes de los emails baneados (web + linkedAccounts en el momento del ban) */
 	emailHashes: string[];
+	/**
+	 * Máscaras de los emails baneados (`gp***@g***.com`) para identificación en UI.
+	 * No reversibles; pueden faltar en registros anteriores a su introducción.
+	 */
+	emailMasks?: string[];
 	/** Hashes de IPs usadas en las últimas 3h al momento del ban */
 	ipHashes: string[];
 	/** Razón legible (NO PII; texto del moderador o reason del modlog) */

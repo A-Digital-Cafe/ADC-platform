@@ -33,6 +33,10 @@ export class ReadonlyModuleRegistry {
 		return this.#registry.hasModule(moduleType, name, config);
 	}
 
+	hasAnyModule(moduleType: ModuleType, name: string): boolean {
+		return this.#registry.hasAnyModule(moduleType, name);
+	}
+
 	getApp(name: string): IApp {
 		return this.#registry.getApp(name);
 	}

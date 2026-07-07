@@ -15,14 +15,6 @@ type ScopePermissions<R extends string> = {
 	readonly ALL: `${R}.${number}.${typeof CRUDXAction.ALL}`;
 };
 
-type SimplePermissions<R extends string> = {
-	readonly READ: `${R}.read`;
-	readonly WRITE: `${R}.write`;
-	readonly UPDATE: `${R}.update`;
-	readonly DELETE: `${R}.delete`;
-	readonly EXECUTE: `${R}.execute`;
-};
-
 function buildScopePermissions<R extends string>(resource: R, scope: ScopeDef): ScopePermissions<R> {
 	return {
 		READ: `${resource}.${scope.value}.${CRUDXAction.READ}`,
@@ -35,19 +27,7 @@ function buildScopePermissions<R extends string>(resource: R, scope: ScopeDef): 
 	};
 }
 
-function buildSimplePermissions<R extends string>(resource: R): SimplePermissions<R> {
-	return {
-		READ: `${resource}.read`,
-		WRITE: `${resource}.write`,
-		UPDATE: `${resource}.update`,
-		DELETE: `${resource}.delete`,
-		EXECUTE: `${resource}.execute`,
-	};
-}
-
 function buildResourcePermissions(resource: ResourceDef) {
-	if (resource.simple) return buildSimplePermissions(resource.id);
-
 	const result: Record<string, ScopePermissions<string>> = {};
 	for (const scope of resource.scopes) {
 		result[scope.key.toUpperCase()] = buildScopePermissions(resource.id, scope);
@@ -72,13 +52,9 @@ function buildAllPermissions() {
 /**
  * Typed permission constants generated from RESOURCES and CRUDXAction.
  *
- * Scoped resources (e.g. identity):
+ * Formato: `resource.scopeBits.actionBits`
  *   `P.IDENTITY.USERS.READ`  → `"identity.2.1"`
  *   `P.IDENTITY.ROLES.WRITE` → `"identity.4.2"`
- *
- * Simple resources (e.g. content):
- *   `P.CONTENT.WRITE`  → `"content.write"`
- *   `P.CONTENT.DELETE` → `"content.delete"`
  */
 export const P = buildAllPermissions() as {
 	readonly IDENTITY: {
@@ -115,6 +91,25 @@ export const P = buildAllPermissions() as {
 		readonly STATS: ScopePermissions<"project-manager">;
 		readonly COMMENTS: ScopePermissions<"project-manager">;
 	};
+	readonly EMAIL: {
+		readonly MESSAGES: ScopePermissions<"email">;
+		readonly SEND: ScopePermissions<"email">;
+		readonly DRAFTS: ScopePermissions<"email">;
+		readonly ATTACHMENTS: ScopePermissions<"email">;
+		readonly ACCOUNTS: ScopePermissions<"email">;
+		readonly SETTINGS: ScopePermissions<"email">;
+	};
+	readonly SECURITY: {
+		readonly SESSIONS: ScopePermissions<"security">;
+		readonly AUDIT: ScopePermissions<"security">;
+	};
+	readonly MODULES: {
+		readonly RUNTIME: ScopePermissions<"modules">;
+		readonly GIT: ScopePermissions<"modules">;
+		readonly BANNERS: ScopePermissions<"modules">;
+		readonly SCHEDULE: ScopePermissions<"modules">;
+		readonly AUDIT: ScopePermissions<"modules">;
+	};
 };
 
 /**
@@ -124,7 +119,8 @@ export const P = buildAllPermissions() as {
  * @param required   - A permission constant from `P`, e.g. `P.COMMUNITY.SOCIAL.WRITE`
  *
  * Fast path: exact string match (`includes`).
- * Slow path: bitwise AND on scope & action for same-resource permissions.
+ * Slow path: bitwise AND on scope & action para el mismo recurso o el comodín
+ * (`*.<scope>.<action>`, p.ej. el rol Admin: `*.65535.31`).
  */
 export function hasPermissionString(userPerms: readonly string[], required: string): boolean {
 	if (!userPerms.length) return false;
@@ -134,16 +130,18 @@ export function hasPermissionString(userPerms: readonly string[], required: stri
 	const dot2 = required.indexOf(".", dot1 + 1);
 	if (dot1 === -1 || dot2 === -1) return false;
 
-	const prefix = required.slice(0, dot1 + 1); // "community."
+	const resource = required.slice(0, dot1);
 	const reqScope = Number(required.slice(dot1 + 1, dot2));
 	const reqAction = Number(required.slice(dot2 + 1));
 
 	for (const p of userPerms) {
-		if (!p.startsWith(prefix)) continue;
-		const d1 = prefix.length;
-		const d2 = p.indexOf(".", d1);
+		const d1 = p.indexOf(".");
+		if (d1 === -1) continue;
+		const pResource = p.slice(0, d1);
+		if (pResource !== resource && pResource !== "*") continue;
+		const d2 = p.indexOf(".", d1 + 1);
 		if (d2 === -1) continue;
-		const scope = Number(p.slice(d1, d2));
+		const scope = Number(p.slice(d1 + 1, d2));
 		const action = Number(p.slice(d2 + 1));
 		if ((scope & reqScope) === reqScope && (action & reqAction) === reqAction) return true;
 	}
@@ -182,7 +180,6 @@ function scopeToLabel(resource: ResourceDef, scopeBits: number): string {
  *
  * - Scoped (`identity.8.8`) → `identity:groups (delete)`
  * - Combinado (`identity.10.2`) → `identity:groups+users (write)`
- * - Simple (`content.write`) → `content (write)`
  *
  * Si el permiso no se reconoce, se devuelve tal cual (fallback seguro).
  *
@@ -190,9 +187,6 @@ function scopeToLabel(resource: ResourceDef, scopeBits: number): string {
  */
 export function describePermission(permission: string): string {
 	const parts = permission.split(".");
-
-	// Simple: `resource.action` (acción como nombre directo)
-	if (parts.length === 2) return `${parts[0]} (${parts[1]})`;
 
 	// Scoped: `resource.scopeBits.actionBits`
 	if (parts.length === 3) {

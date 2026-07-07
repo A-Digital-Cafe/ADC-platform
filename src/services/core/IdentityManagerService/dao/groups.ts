@@ -2,10 +2,19 @@ import type { Model } from "mongoose";
 import type { Group, User } from "@common/types/identity/index.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId } from "@common/utils/crypto.ts";
+import { escapeRegex } from "@common/utils/escape.ts";
+import { forEachPage } from "@common/utils/batch.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.js";
 import type { UserManager } from "./users.js";
+
+/** Límite por defecto de resultados de búsqueda de grupos. */
+const DEFAULT_SEARCH_LIMIT = 10;
+/** Máximo duro de resultados de búsqueda (se clampa en el DAO, aunque el endpoint valide). */
+const MAX_SEARCH_LIMIT = 50;
+/** Máximo duro de un listado de grupos (una respuesta sin límite es un DoS accidental). */
+const MAX_LIST_LIMIT = 500;
 
 export class GroupManager {
 	readonly #permissionChecker: PermissionChecker;
@@ -131,12 +140,22 @@ export class GroupManager {
 	async deleteAllForOrg(orgId: string, token?: string): Promise<void> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.DELETE, IdentityScopes.GROUPS);
 
-		const groups = await this.groupModel.find({ orgId });
-		for (const group of groups) {
-			await this.userManager.removeGroupFromAll(group.id, token);
-		}
+		// Cascade paginado por cursor: no materializa todos los grupos de la org en memoria.
+		const total = await forEachPage<{ id: string }>(
+			(afterId, limit) =>
+				this.groupModel
+					.find(afterId ? { orgId, id: { $gt: afterId } } : { orgId }, { id: 1, _id: 0 })
+					.sort({ id: 1 })
+					.limit(limit)
+					.lean(),
+			async (page) => {
+				for (const group of page) {
+					await this.userManager.removeGroupFromAll(group.id, token);
+				}
+			}
+		);
 		await this.groupModel.deleteMany({ orgId });
-		this.logger.logDebug(`Todos los grupos de org ${orgId} eliminados con cascade (${groups.length})`);
+		this.logger.logDebug(`Todos los grupos de org ${orgId} eliminados con cascade (${total})`);
 	}
 
 	/**
@@ -146,12 +165,12 @@ export class GroupManager {
 	 * @param token Token de autenticación (requerido para verificar permisos)
 	 * @param orgId Si se proporciona, retorna solo grupos de esta org
 	 */
-	async getAllGroups(token?: string, orgId?: string): Promise<Group[]> {
+	async getAllGroups(token?: string, orgId?: string, limit: number = MAX_LIST_LIMIT): Promise<Group[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.GROUPS, orgId);
 
 		try {
 			const filter = orgId ? { orgId } : { $or: [{ orgId: null }, { orgId: { $exists: false } }] };
-			const docs = await this.groupModel.find(filter);
+			const docs = await this.groupModel.find(filter).limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT));
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error obteniendo grupos: ${error}`);
@@ -167,16 +186,15 @@ export class GroupManager {
 	 * @param token Token de autenticación
 	 * @param orgId Si se proporciona, restringe a grupos de esa org; si no, sólo globales
 	 */
-	async searchGroups(query: string, limit: number = 10, token?: string, orgId?: string): Promise<Group[]> {
+	async searchGroups(query: string, limit: number = DEFAULT_SEARCH_LIMIT, token?: string, orgId?: string): Promise<Group[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.GROUPS, orgId);
 
 		try {
-			const escapedQuery = query.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-			const regex = new RegExp(escapedQuery, "i");
+			const regex = new RegExp(escapeRegex(query), "i");
 			const filter: any = { $or: [{ name: regex }, { description: regex }] };
 			if (orgId) filter.orgId = orgId;
 			else filter.$and = [{ $or: [{ orgId: null }, { orgId: { $exists: false } }] }];
-			const docs = await this.groupModel.find(filter).limit(limit);
+			const docs = await this.groupModel.find(filter).limit(Math.min(Math.max(limit, 1), MAX_SEARCH_LIMIT));
 			return docs.map((d: any) => d.toObject?.() || d);
 		} catch (error) {
 			this.logger.logError(`Error buscando grupos: ${error}`);

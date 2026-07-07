@@ -211,10 +211,20 @@ export abstract class BaseModule implements IModule {
 	 * Igual que {@link getMyService} pero **tolerante**: devuelve `undefined` si el service
 	 * declarado aún no está cargado (o no está declarado). Para dependencias **opcionales**
 	 * declaradas en `config.json` (p.ej. integraciones que pueden no estar presentes).
+	 *
+	 * Chequea disponibilidad en el registry ANTES de resolver, así una dependencia
+	 * opcional ausente no dispara el log de error de una resolución fallida.
 	 */
 	protected tryGetMyService<S>(name: string, config?: IModuleConfig): S | undefined {
 		try {
-			return this.getMyService<S>(name, config);
+			const serviceConfig = config || this.#findDeclared(this.config?.services, name);
+			if (!serviceConfig) return undefined;
+			const registry = this.#requireRegistry();
+			const loaded = serviceConfig.custom
+				? registry.hasModule("service", name, serviceConfig.custom)
+				: registry.hasAnyModule("service", name);
+			if (!loaded) return undefined;
+			return this.getMyService<S>(name, serviceConfig);
 		} catch {
 			return undefined;
 		}
@@ -228,10 +238,13 @@ export abstract class BaseModule implements IModule {
 	 *
 	 * No requiere declarar `NotificationService` ni `queue/rabbitmq` como dependencia:
 	 * resuelve lo que haya disponible en el kernel en tiempo de ejecución.
+	 *
+	 * Estampa `origin` con el `name` del módulo (ignorando el que venga en `input`):
+	 * `NotificationService` lo usa para autorizar topics reservados (`security.*`).
 	 */
 	protected async emitNotification(input: NotifyInput): Promise<void> {
 		try {
-			const ok = await emitNotification(this.#requireRegistry(), input);
+			const ok = await emitNotification(this.#requireRegistry(), { ...input, origin: this.name });
 			if (!ok) this.logger.logDebug(`Notificación descartada (subsistema no disponible): topic=${input.topic}`);
 		} catch (e) {
 			// Defensa extra: emitNotification ya es no-throw, pero nunca propagamos.

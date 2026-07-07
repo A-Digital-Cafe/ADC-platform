@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { identityApi } from "@ui-library/utils/api-identity";
-import { moderationApi } from "../utils/moderation-api.ts";
+import { sessionsAdminApi } from "../utils/sessions-api.ts";
 import type { Organization, Permission, Role } from "@common/types/identity/index.d.ts";
 import { Scope, canWrite, canUpdate, canDelete } from "../utils/permissions.ts";
+import { hasPermission } from "@common/utils/perms.ts";
+import { CRUDXAction } from "@common/types/Actions";
+import { SecurityScopes, SECURITY_RESOURCE_NAME } from "@common/types/security/permissions.ts";
 import { DataTable, type Column } from "../components/DataTable.tsx";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { toast } from "@ui-library/utils/toast";
-import { RowActions } from "../components/RowActions.tsx";
 import { BanUserModal, UserFormModal } from "../components/UserModals/index.ts";
+import { UnbanModal } from "../components/UnbanModal.tsx";
 import { ClientUser } from "@common/types/identity/User.ts";
+import type { ContextMenuItem } from "@ui-library/utils/react-jsx";
 
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
 const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,32}$/;
@@ -35,6 +39,14 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	const [editingUser, setEditingUser] = useState<ClientUser | null>(null);
 	const [deleteConfirm, setDeleteConfirm] = useState<ClientUser | null>(null);
 	const [banTarget, setBanTarget] = useState<ClientUser | null>(null);
+	const [unbanTarget, setUnbanTarget] = useState<ClientUser | null>(null);
+	// Menú contextual "⋮" por fila (acciones sensibles: ban, sesiones, eliminar)
+	const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number; user: ClientUser | null }>({
+		open: false,
+		x: 0,
+		y: 0,
+		user: null,
+	});
 
 	// Form state
 	const [formUsername, setFormUsername] = useState("");
@@ -51,6 +63,9 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	const writable = canWrite(perms, Scope.USERS);
 	const updatable = canUpdate(perms, Scope.USERS);
 	const deletable = canDelete(perms, Scope.USERS);
+	// Force logout (security.sessions): recurso global-only, sólo en contexto global.
+	const canRevokeSessions = !orgId && hasPermission(perms, SECURITY_RESOURCE_NAME, CRUDXAction.DELETE, SecurityScopes.SESSIONS);
+	const [revokeTarget, setRevokeTarget] = useState<ClientUser | null>(null);
 
 	const checkUsername = async (username: string) => {
 		controllerRef.current?.abort();
@@ -231,13 +246,44 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		}
 	};
 
-	const handleUnban = async (user: ClientUser) => {
+	const handleRevokeSessions = async () => {
+		if (!revokeTarget) return;
 		clearErrors();
-		const result = await moderationApi.unbanUser(user.id);
-		if (result.success) loadData();
+		const result = await sessionsAdminApi.revoke(revokeTarget.id);
+		setRevokeTarget(null);
+		if (result.ok) toast.success(t("users.sessionsRevoked", { count: String(result.revoked) }));
 	};
 
 	const isUserBanned = (user: ClientUser): boolean => !user.isActive && !!user.metadata && !!(user.metadata as any).bannedAt;
+
+	// ── Menú contextual "⋮" (acciones sensibles fuera del alcance de un mis-click) ──
+	const canModerate = !!isAdmin && !orgId && updatable;
+
+	const buildMenuItems = (user: ClientUser): ContextMenuItem[] => [
+		...(canModerate
+			? [
+					isUserBanned(user)
+						? { label: t("users.unban"), action: "unban" }
+						: { label: t("users.ban"), action: "ban", danger: true },
+				]
+			: []),
+		...(canRevokeSessions ? [{ label: t("users.revokeSessions"), action: "revoke-sessions", danger: true }] : []),
+		...(deletable ? [{ label: t("common.delete"), action: "delete", danger: true }] : []),
+	];
+
+	const hasMenuActions = canModerate || canRevokeSessions || deletable;
+
+	const openContextMenu = (user: ClientUser, x: number, y: number) => setContextMenu({ open: true, x, y, user });
+
+	const handleMenuSelect = (action: string) => {
+		const user = contextMenu.user;
+		setContextMenu((m) => ({ ...m, open: false }));
+		if (!user) return;
+		if (action === "ban") setBanTarget(user);
+		else if (action === "unban") setUnbanTarget(user);
+		else if (action === "revoke-sessions") setRevokeTarget(user);
+		else if (action === "delete") setDeleteConfirm(user);
+	};
 
 	const toggleRoleId = (roleId: string) => {
 		setFormRoleIds((prev) => (prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId]));
@@ -322,21 +368,25 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 				keyExtractor={(u) => u.id}
 				emptyMessage={t("users.noUsers")}
 				actions={(user) => (
-					<RowActions
-						item={user}
-						canEdit={updatable}
-						canDelete={deletable}
-						canBan={isAdmin && !orgId && updatable}
-						isBanned={isUserBanned(user)}
-						onEdit={openEditModal}
-						onDelete={setDeleteConfirm}
-						onBan={setBanTarget}
-						onUnban={handleUnban}
-						editLabel={t("common.edit")}
-						deleteLabel={t("common.delete")}
-						banLabel={t("users.ban")}
-						unbanLabel={t("users.unban")}
-					/>
+					<div className="flex items-center gap-1">
+						{updatable && (
+							<adc-button-rounded aria-label={t("common.edit")} onClick={() => openEditModal(user)}>
+								<adc-icon-edit />
+							</adc-button-rounded>
+						)}
+						{hasMenuActions && (
+							<adc-button-rounded
+								aria-label={t("users.moreActions")}
+								title={t("users.moreActions")}
+								onClick={(e: React.MouseEvent) => {
+									e.stopPropagation();
+									openContextMenu(user, e.clientX, e.clientY);
+								}}
+							>
+								<adc-icon-dots-vertical size="1.15rem" />
+							</adc-button-rounded>
+						)}
+					</div>
 				)}
 			/>
 
@@ -381,6 +431,36 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 						setBanTarget(null);
 						loadData();
 					}}
+				/>
+			)}
+
+			{unbanTarget && (
+				<UnbanModal
+					target={{ userId: unbanTarget.id }}
+					targetLabel={unbanTarget.username}
+					onClose={() => setUnbanTarget(null)}
+					onUnbanned={() => {
+						setUnbanTarget(null);
+						loadData();
+					}}
+				/>
+			)}
+
+			{/* Menú contextual "⋮": ban/unban, cerrar sesiones y eliminar */}
+			<adc-context-menu
+				open={contextMenu.open}
+				x={contextMenu.x}
+				y={contextMenu.y}
+				items={contextMenu.user ? buildMenuItems(contextMenu.user) : []}
+				onadcContextMenuClose={() => setContextMenu((m) => ({ ...m, open: false }))}
+				onadcContextMenuSelect={(ev: CustomEvent<{ action: string }>) => handleMenuSelect(ev.detail.action)}
+			/>
+
+			{revokeTarget && (
+				<DeleteConfirmModal
+					message={t("users.revokeSessionsConfirm", { name: revokeTarget.username })}
+					onClose={() => setRevokeTarget(null)}
+					onConfirm={handleRevokeSessions}
 				/>
 			)}
 		</>

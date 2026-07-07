@@ -1,4 +1,4 @@
-import { IdentityError } from "@common/types/custom-errors/IdentityError.ts";
+import { ModerationError } from "@common/types/custom-errors/ModerationError.ts";
 
 export interface BanRequestInput {
 	reason?: string;
@@ -19,7 +19,7 @@ export interface ParsedBanRequest {
 export function parseBanRequest(body: BanRequestInput | undefined): ParsedBanRequest {
 	const rawReason = body?.reason?.trim();
 	if (!rawReason || rawReason.length < 3) {
-		throw new IdentityError(400, "INVALID_REASON", "Reason requerido (mín. 3 chars)");
+		throw new ModerationError(400, "INVALID_REASON", "Reason requerido (mín. 3 chars)");
 	}
 
 	const raw = body?.expiresAt;

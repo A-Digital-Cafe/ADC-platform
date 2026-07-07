@@ -1,26 +1,29 @@
 import { useMemo, useState, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Permission } from "@common/types/identity/Permission.js";
-import { RESOURCES, RESOURCE_MAP, type ScopeDef } from "@common/types/resources.js";
-import { ACTIONS, ACTION_MAP } from "./constants.ts";
-import { buildBitfieldMap, bitfieldMapToPermissions, getSimpleActions } from "./helpers.ts";
-import { SimpleResourceCard } from "./SimpleResourceCard.tsx";
+import { RESOURCES, type ScopeDef } from "@common/types/resources.js";
+import { ACTIONS } from "./constants.ts";
+import { buildBitfieldMap, bitfieldMapToPermissions } from "./helpers.ts";
 import { ResourceMatrix } from "./ResourceMatrix.tsx";
 
 interface PermissionEditorProps {
 	readonly permissions: Permission[];
 	readonly onChange: (permissions: Permission[]) => void;
 	readonly disabled?: boolean;
+	/**
+	 * Editando un rol de ORGANIZACIÓN: oculta los recursos `globalOnly`
+	 * (security, modules) — sólo asignables en roles globales.
+	 */
+	readonly orgContext?: boolean;
 }
 
-export function PermissionEditor({ permissions, onChange, disabled }: PermissionEditorProps) {
+export function PermissionEditor({ permissions, onChange, disabled, orgContext }: PermissionEditorProps) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 
-	// Separate bitfield vs simple permissions
-	const bitfieldPerms = useMemo(() => permissions.filter((p) => !RESOURCE_MAP.get(p.resource)?.simple), [permissions]);
-	const simplePerms = useMemo(() => permissions.filter((p) => RESOURCE_MAP.get(p.resource)?.simple), [permissions]);
+	const permMap = useMemo(() => buildBitfieldMap(permissions), [permissions]);
 
-	const permMap = useMemo(() => buildBitfieldMap(bitfieldPerms), [bitfieldPerms]);
+	// Recursos ofrecidos: en contexto org se excluyen los global-only.
+	const offeredResources = useMemo(() => (orgContext ? RESOURCES.filter((r) => !r.globalOnly) : RESOURCES), [orgContext]);
 
 	// Track which resources are visible (have permissions OR were explicitly added)
 	const [addedResources, setAddedResources] = useState<Set<string>>(new Set());
@@ -33,15 +36,7 @@ export function PermissionEditor({ permissions, onChange, disabled }: Permission
 		return active;
 	}, [permissions, addedResources]);
 
-	// ── Bitfield callbacks ──
-
-	const rebuildAll = useCallback(
-		(nextBitfield: Map<string, number>, nextSimple?: Permission[]) => {
-			const bf = bitfieldMapToPermissions(nextBitfield);
-			onChange([...bf, ...(nextSimple ?? simplePerms)]);
-		},
-		[onChange, simplePerms]
-	);
+	const rebuildAll = useCallback((nextBitfield: Map<string, number>) => onChange(bitfieldMapToPermissions(nextBitfield)), [onChange]);
 
 	const toggle = useCallback(
 		(resource: string, scope: number, actionValue: number) => {
@@ -83,44 +78,20 @@ export function PermissionEditor({ permissions, onChange, disabled }: Permission
 		[permMap, disabled, rebuildAll]
 	);
 
-	// ── Simple callbacks ──
-
-	const toggleSimple = useCallback(
-		(resource: string, actionKey: string) => {
-			if (disabled) return;
-			const actionValue = ACTION_MAP.get(actionKey) ?? 0;
-			const existing = simplePerms.find((p) => p.resource === resource);
-			const current = existing?.action ?? 0;
-			const toggled = (current & actionValue) === actionValue ? current & ~actionValue : current | actionValue;
-			const others = simplePerms.filter((p) => p.resource !== resource);
-			const next = toggled > 0 ? [...others, { resource, action: toggled, scope: 0 }] : others;
-			onChange([...bitfieldMapToPermissions(permMap), ...next]);
-		},
-		[disabled, simplePerms, permMap, onChange]
-	);
-
-	// ── Shared callbacks ──
-
 	const removeResource = useCallback(
 		(resource: string) => {
-			const def = RESOURCE_MAP.get(resource);
 			setAddedResources((prev) => {
 				const n = new Set(prev);
 				n.delete(resource);
 				return n;
 			});
-			if (def?.simple) {
-				const next = simplePerms.filter((p) => p.resource !== resource);
-				onChange([...bitfieldMapToPermissions(permMap), ...next]);
-			} else {
-				const updated = new Map(permMap);
-				for (const key of updated.keys()) {
-					if (key.startsWith(`${resource}:`)) updated.delete(key);
-				}
-				rebuildAll(updated);
+			const updated = new Map(permMap);
+			for (const key of updated.keys()) {
+				if (key.startsWith(`${resource}:`)) updated.delete(key);
 			}
+			rebuildAll(updated);
 		},
-		[permMap, simplePerms, onChange, rebuildAll]
+		[permMap, rebuildAll]
 	);
 
 	const addResource = useCallback(
@@ -134,38 +105,29 @@ export function PermissionEditor({ permissions, onChange, disabled }: Permission
 
 	// ── Visible / available ──
 
-	const visibleResources = useMemo(() => RESOURCES.filter((r) => activeResources.has(r.id)), [activeResources]);
+	const visibleResources = useMemo(() => offeredResources.filter((r) => activeResources.has(r.id)), [offeredResources, activeResources]);
 
-	const availableResources = useMemo(() => RESOURCES.filter((r) => !activeResources.has(r.id)), [activeResources]);
+	const availableResources = useMemo(
+		() => offeredResources.filter((r) => !activeResources.has(r.id)),
+		[offeredResources, activeResources]
+	);
 
 	return (
 		<div className="flex flex-col gap-3">
-			{visibleResources.map((res) =>
-				res.simple ? (
-					<SimpleResourceCard
-						key={res.id}
-						resource={res.id}
-						activeActions={getSimpleActions(simplePerms, res.id)}
-						onToggle={toggleSimple}
-						onRemove={removeResource}
-						disabled={disabled}
-						t={t}
-					/>
-				) : (
-					<ResourceMatrix
-						key={res.id}
-						resource={res.id}
-						scopes={res.scopes}
-						permMap={permMap}
-						onToggle={toggle}
-						onToggleRow={toggleRow}
-						onToggleCol={toggleCol}
-						onRemove={removeResource}
-						disabled={disabled}
-						t={t}
-					/>
-				)
-			)}
+			{visibleResources.map((res) => (
+				<ResourceMatrix
+					key={res.id}
+					resource={res.id}
+					scopes={res.scopes}
+					permMap={permMap}
+					onToggle={toggle}
+					onToggleRow={toggleRow}
+					onToggleCol={toggleCol}
+					onRemove={removeResource}
+					disabled={disabled}
+					t={t}
+				/>
+			))}
 
 			{!disabled && availableResources.length > 0 && (
 				<div>

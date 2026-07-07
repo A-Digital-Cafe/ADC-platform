@@ -13,6 +13,9 @@ import type { IOperationsService } from "@common/types/operations/IOperationsSer
 import type { Step } from "../../../core/OperationsService/types.ts";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
 
+/** Máximo duro de un listado de organizaciones (una respuesta sin límite es un DoS accidental). */
+const MAX_LIST_LIMIT = 500;
+
 function isDuplicateKeyError(error: unknown): error is { code: number } {
 	return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 }
@@ -174,19 +177,28 @@ export class OrgManager {
 		this.logger.logOk(`[OrgManager] Organización eliminada con cascade: ${orgId}`);
 	}
 
-	/** Obtiene todas las organizaciones */
-	async getAllOrganizations(token?: string): Promise<Organization[]> {
+	/** Obtiene todas las organizaciones (acotado a `MAX_LIST_LIMIT`) */
+	async getAllOrganizations(token?: string, limit: number = MAX_LIST_LIMIT): Promise<Organization[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
 
-		const orgs = await this.orgModel.find({}).lean();
+		const orgs = await this.orgModel
+			.find({})
+			.limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT))
+			.lean();
 		return orgs.map((org: any) => this.#toOrganization(org));
 	}
 
-	/** Obtiene organizaciones por región */
-	async getOrganizationsByRegion(region: string, token?: string): Promise<Organization[]> {
+	/** Total de organizaciones (para stats, sin materializar la colección) */
+	async countOrganizations(token?: string): Promise<number> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
+		return this.orgModel.countDocuments({});
+	}
+
+	/** Obtiene organizaciones por región (acotado a `MAX_LIST_LIMIT`) */
+	async getOrganizationsByRegion(region: string, token?: string, limit: number = MAX_LIST_LIMIT): Promise<Organization[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
 
-		const orgs = await this.orgModel.find({ region });
+		const orgs = await this.orgModel.find({ region }).limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT));
 		return orgs.map((org: any) => this.#toOrganization(org));
 	}
 

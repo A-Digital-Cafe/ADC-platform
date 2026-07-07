@@ -6,6 +6,7 @@ import type IdentityManagerService from "../index.js";
 import type { Capability } from "@common/security/Capability.ts";
 import * as US from "./schemas/users.js";
 import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
+import { assertCanManageUser, assertCanAssignRoles } from "../domain/hierarchy.js";
 
 /**
  * CAMPOS DE USUARIO - MATRIZ DE MODIFICABILIDAD
@@ -280,6 +281,7 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/me",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Users",
 			summary: "Usuario autenticado actual",
@@ -303,6 +305,7 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "GET",
 		url: "/api/identity/users/me/preferences",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Users",
 			summary: "Preferencias del usuario actual",
@@ -320,6 +323,7 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "PATCH",
 		url: "/api/identity/users/me/preferences",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Users",
 			summary: "Actualiza preferencias del usuario actual",
@@ -362,6 +366,7 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "POST",
 		url: "/api/identity/users/change-password",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Users",
 			summary: "Cambia la contraseña propia",
@@ -426,9 +431,10 @@ export class UserEndpoints {
 		}
 		// Org admin usa orgId del token; global admin puede especificar en body
 		const callerOrgId = ctx.user?.orgId || ctx.data?.orgId;
-		// Validar que los roleIds asignados sean del contexto correcto
+		// Validar que los roleIds asignados sean del contexto correcto y de jerarquía menor a la del actor
 		if (ctx.data.roleIds?.length) {
 			await validateRoleIdsContext(UserEndpoints.identity, ctx.data.roleIds, callerOrgId, ctx.token!);
+			await assertCanAssignRoles(UserEndpoints.identity.permissions, ctx.user?.id, ctx.data.roleIds, callerOrgId);
 		}
 		const globalRoleIds = callerOrgId ? [] : ctx.data.roleIds;
 		const user = await UserEndpoints.identity.users.createUser(ctx.data.username, ctx.data.password, globalRoleIds, ctx.token!);
@@ -469,6 +475,8 @@ export class UserEndpoints {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
 
 		await assertUserOrgAccess(UserEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		// Jerarquía: ni a sí mismo ni a usuarios de jerarquía igual o superior
+		await assertCanManageUser(UserEndpoints.identity.permissions, ctx.user?.id, ctx.params.userId, callerOrgId);
 
 		// Obtener usuario actual para validaciones comparativas
 		const currentUser = await UserEndpoints.identity.users.getUser(ctx.params.userId, ctx.token!);
@@ -483,9 +491,14 @@ export class UserEndpoints {
 		delete (updates as any).passwordHash;
 		delete (updates as any).id;
 
-		// Validar que los roleIds asignados sean del contexto correcto
+		// Validar que los roleIds asignados sean del contexto correcto; los roles
+		// AGREGADOS deben ser de jerarquía menor a la del actor (quitar roles altos
+		// ya lo bloquea assertCanManageUser: el target los porta y outrankea al actor)
 		if (updates.roleIds?.length) {
 			await validateRoleIdsContext(UserEndpoints.identity, updates.roleIds, callerOrgId, ctx.token!);
+			const currentRoleIds = new Set(getContextRoleIds(currentUser, callerOrgId));
+			const addedRoleIds = updates.roleIds.filter((rid) => !currentRoleIds.has(rid));
+			await assertCanAssignRoles(UserEndpoints.identity.permissions, ctx.user?.id, addedRoleIds, callerOrgId);
 		}
 
 		if (callerOrgId) {
@@ -533,6 +546,8 @@ export class UserEndpoints {
 	static async deleteUser(ctx: EndpointCtx<{ userId: string }>) {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
 		await assertUserOrgAccess(UserEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		// Jerarquía: la baja propia va por DELETE /users/me, no por el endpoint de gestión
+		await assertCanManageUser(UserEndpoints.identity.permissions, ctx.user?.id, ctx.params.userId, callerOrgId);
 		if (callerOrgId) {
 			await UserEndpoints.identity.users.removeOrgMembership(ctx.params.userId, callerOrgId, ctx.token!);
 			UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
@@ -540,6 +555,12 @@ export class UserEndpoints {
 		}
 		await UserEndpoints.identity.users.deleteUser(ctx.params.userId, ctx.token!);
 		UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
+		void UserEndpoints.identity.notifications(UserEndpoints.cap).securityEvent({
+			title: "Usuario eliminado",
+			body: `El usuario ${ctx.params.userId} fue eliminado por ${ctx.user?.id ?? "desconocido"}.`,
+			actorId: ctx.user?.id,
+			data: { userId: ctx.params.userId },
+		});
 		return { success: true };
 	}
 
@@ -550,6 +571,7 @@ export class UserEndpoints {
 	@RegisterEndpoint({
 		method: "DELETE",
 		url: "/api/identity/users/me",
+		deferAuth: true,
 		options: {
 			tag: "IdentityManagerService/Users",
 			summary: "Solicita la baja de la cuenta propia",
@@ -586,6 +608,7 @@ export class UserEndpoints {
 	})
 	static async grantTier(ctx: EndpointCtx<{ userId: string }, { tier: "pro" | "plus"; days: number; reason?: string }>) {
 		const { tier, days, reason } = ctx.data || ({} as { tier: "pro" | "plus"; days: number; reason?: string });
+		await assertCanManageUser(UserEndpoints.identity.permissions, ctx.user?.id, ctx.params.userId, ctx.user?.orgId);
 		const grant = await UserEndpoints.identity.users.grantTemporaryTier(ctx.params.userId, tier, days, reason, ctx.token!);
 		UserEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return grant;

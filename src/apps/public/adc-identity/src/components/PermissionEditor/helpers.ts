@@ -1,8 +1,7 @@
 import type { Permission } from "@common/types/identity/Permission.ts";
-import { ACTIONS } from "./constants.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bitfield helpers (identity-style: resource.scope.action)
+// Bitfield helpers (resource.scope.action)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function buildBitfieldMap(permissions: Permission[]): Map<string, number> {
@@ -23,20 +22,4 @@ export function bitfieldMapToPermissions(permMap: Map<string, number>): Permissi
 		}
 	}
 	return result;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Simple helpers (content-style: resource.action as string)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function getSimpleActions(permissions: Permission[], resource: string): Set<string> {
-	const set = new Set<string>();
-	for (const p of permissions) {
-		if (p.resource === resource) {
-			for (const a of ACTIONS) {
-				if ((p.action & a.value) === a.value) set.add(a.key);
-			}
-		}
-	}
-	return set;
 }

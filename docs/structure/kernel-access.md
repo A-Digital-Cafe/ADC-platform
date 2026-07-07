@@ -28,6 +28,16 @@ const email = this.tryGetMyService<EmailService>("EmailService");
 - **Nunca** uses `getMutableRegistry()` ni `getModuleLoader()` en lógica de negocio: son `protected`
   exclusivos de la maquinaria base (cargar/registrar sub‑dependencias declaradas).
 
+### Excepción: ciclos de dependencia
+
+Si declarar la dependencia crearía un ciclo **requerido** (A necesita B y B ya declara A como
+requerida), no puede declararse en `config.json`. Patrón sancionado: resolver por nombre fijo con
+el **reader** del kernel, de forma perezosa y documentando el ciclo en un comentario. Ejemplo real:
+`IdentityManagerService` ↔ `StorageQuotaService` (StorageQuota declara Identity; Identity resuelve
+StorageQuota vía `kernel.getReadonlyRegistry().getService(...)` dentro de un getter lazy). Si el
+ciclo es con una dependencia **opcional** en un solo sentido, preferí declararla `optional: true`
+y `tryGetMyService` (no hace falta el reader).
+
 ## Token de ciclo de vida (`start`/`stop`)
 
 `start(token)`/`stop(token)` reciben el token del kernel. Patrón vigente: capturarlo en un campo

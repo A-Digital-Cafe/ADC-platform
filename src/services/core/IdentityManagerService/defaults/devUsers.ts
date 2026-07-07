@@ -37,4 +37,8 @@ export const DEV_USERS: DevUserSeed[] = [
 	{ username: "devadmin", password: "devadmin123", globalRoles: [SystemRole.ADMIN] },
 	// Admin de organización: rol Admin dentro de la organización de desarrollo.
 	{ username: "devorgadmin", password: "devorgadmin123", orgRoles: [SystemRole.ADMIN] },
+	// Gestores globales SIN Admin: para probar los gates por permiso de cada rol
+	// (Data Manager: storage/drive.recover/email; Security Manager: identity + security).
+	{ username: "devdatamanager", password: "devdatamanager123", globalRoles: [SystemRole.DATA_MANAGER] },
+	{ username: "devsecmanager", password: "devsecmanager123", globalRoles: [SystemRole.SECURITY_MANAGER] },
 ];

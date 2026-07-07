@@ -7,6 +7,7 @@ import type IdentityManagerService from "../index.js";
 import * as GS from "./schemas/groups.js";
 import { UsersArrayResponse } from "./schemas/users.js";
 import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
+import { assertCanAssignRoles, assertCanManageUser } from "../domain/hierarchy.js";
 
 /**
  * Verifica que un grupo sea accesible para el caller.
@@ -132,6 +133,8 @@ export class GroupEndpoints {
 		const orgId = ctx.user?.orgId || ctx.data?.orgId;
 		if (ctx.data.roleIds?.length) {
 			await validateRoleIdsContext(GroupEndpoints.identity, ctx.data.roleIds, orgId, ctx.token!);
+			// Jerarquía: un grupo hereda sus roles a los miembros — mismas reglas que asignar roles
+			await assertCanAssignRoles(GroupEndpoints.identity.permissions, ctx.user?.id, ctx.data.roleIds, ctx.user?.orgId);
 		}
 		const group = await GroupEndpoints.identity.groups.createGroup(
 			ctx.data.name,
@@ -164,6 +167,11 @@ export class GroupEndpoints {
 		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
 		if (ctx.data?.roleIds?.length) {
 			await validateRoleIdsContext(GroupEndpoints.identity, ctx.data.roleIds, callerOrgId, ctx.token!);
+			// Jerarquía: sólo roles agregados (los existentes ya estaban en el grupo)
+			const currentGroup = await GroupEndpoints.identity.groups.getGroup(ctx.params.groupId, ctx.token!);
+			const currentRoleIds = new Set(currentGroup?.roleIds || []);
+			const addedRoleIds = ctx.data.roleIds.filter((rid) => !currentRoleIds.has(rid));
+			await assertCanAssignRoles(GroupEndpoints.identity.permissions, ctx.user?.id, addedRoleIds, callerOrgId);
 		}
 		const group = await GroupEndpoints.identity.groups.updateGroup(ctx.params.groupId, ctx.data || {}, ctx.token!);
 		GroupEndpoints.identity.permissions.invalidateGroup(ctx.params.groupId);
@@ -216,6 +224,11 @@ export class GroupEndpoints {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
 		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
 		await assertUserInOrg(GroupEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		// Jerarquía: cambiar la membresía de alguien es gestionarlo; además, meter a un
+		// usuario en un grupo le hereda los roles del grupo (mismas reglas que asignar)
+		await assertCanManageUser(GroupEndpoints.identity.permissions, ctx.user?.id, ctx.params.userId, callerOrgId);
+		const targetGroup = await GroupEndpoints.identity.groups.getGroup(ctx.params.groupId, ctx.token!);
+		await assertCanAssignRoles(GroupEndpoints.identity.permissions, ctx.user?.id, targetGroup?.roleIds, callerOrgId);
 		await GroupEndpoints.identity.groups.addUserToGroup(ctx.params.userId, ctx.params.groupId, ctx.token!);
 		GroupEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
@@ -235,6 +248,7 @@ export class GroupEndpoints {
 		const callerOrgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
 		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
 		await assertUserInOrg(GroupEndpoints.identity, ctx.params.userId, callerOrgId, ctx.token!);
+		await assertCanManageUser(GroupEndpoints.identity.permissions, ctx.user?.id, ctx.params.userId, callerOrgId);
 		await GroupEndpoints.identity.groups.removeUserFromGroup(ctx.params.userId, ctx.params.groupId, ctx.token!);
 		GroupEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };

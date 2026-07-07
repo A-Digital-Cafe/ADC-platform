@@ -6,6 +6,7 @@ import type { IJWTProviderMultiKey } from "@interfaces/modules/providers/IJWT.js
 import type RedisProvider from "../../../providers/queue/redis/index.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.ts";
+import type { IModerationService } from "@common/types/identity/IModerationService.ts";
 import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
 export type { AuthenticatedUser, TokenVerificationResult } from "./types.js";
 
@@ -24,6 +25,7 @@ import { permissionStringsCheck } from "./schemas/permissions.js";
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
 import { OAuthEndpoints } from "./endpoints/oauth.js";
+import { SessionAdminEndpoints } from "./endpoints/sessions.js";
 
 // Decoradores
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
@@ -73,9 +75,14 @@ export default class SessionManagerService extends BaseService implements ISessi
 	#sessionManager: SessionManager | null = null;
 	#oauthRegistry: OAuthProviderRegistry | null = null;
 
-	// Configuración
-	readonly #defaultRedirectUrl = IS_DEV ? "http://localhost:3000" : "https://adigitalcafe.com";
-	readonly #cookieDomain = IS_DEV ? "localhost" : ".adigitalcafe.com";
+	// Configuración (overrides opcionales vía config.json → private; defaults por entorno)
+	get #defaultRedirectUrl(): string {
+		return this.config.private?.defaultRedirectUrl || (IS_DEV ? "http://localhost:3000" : "https://adigitalcafe.com");
+	}
+
+	get #cookieDomain(): string {
+		return this.config.private?.cookieDomain || (IS_DEV ? "localhost" : ".adigitalcafe.com");
+	}
 
 	#kernelKey?: symbol;
 
@@ -89,7 +96,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 	// ─────────────────────────────────────────────────────────────────────────────
 
 	@EnableEndpoints({
-		managers: () => [AuthEndpoints, OAuthEndpoints],
+		managers: () => [AuthEndpoints, OAuthEndpoints, SessionAdminEndpoints],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -186,14 +193,11 @@ export default class SessionManagerService extends BaseService implements ISessi
 			})
 		);
 
-		// Inicializar singletons de endpoints
-		try {
-			if (!this.#moderation) {
-				const mod = this.getMyService<import("../ModerationService/index.js").default>("ModerationService");
-				this.#moderation = mod._internal(this.getCapability());
-			}
-		} catch {
-			this.#moderation = null;
+		// Inicializar singletons de endpoints. ModerationService es opcional: se tipa
+		// contra la interfaz de @common, nunca contra la clase concreta.
+		if (!this.#moderation) {
+			const mod = this.tryGetMyService<IModerationService>("ModerationService");
+			this.#moderation = mod ? mod._internal(this.getCapability()) : null;
 		}
 
 		AuthEndpoints.init(
@@ -213,6 +217,28 @@ export default class SessionManagerService extends BaseService implements ISessi
 			},
 			(username: string, password: string) => this.#validatePlatformCredentials(username, password)
 		);
+
+		SessionAdminEndpoints.init({
+			refreshTokenRepo: this.#refreshTokenRepo,
+			identityService: this.#identityService,
+			logger: this.logger,
+			// Aviso canónico al usuario expulsado (plantilla server-side security.sessions_revoked).
+			notifyRevoked: (targetUserId) =>
+				void this.emitNotification({
+					userId: targetUserId,
+					topic: "security.sessions_revoked",
+					title: "Tus sesiones fueron cerradas",
+					body: "Un administrador cerró tus sesiones activas.",
+				}),
+			// Alerta al equipo de seguridad (via NotifyManager de Identity; requiere identity:internal).
+			notifySecurityTeam: (event) => {
+				try {
+					void this.#identityService?.notifications(this.getCapability()).securityEvent(event);
+				} catch (err: any) {
+					this.logger.logDebug(`Alerta de seguridad no emitida: ${err?.message || err}`);
+				}
+			},
+		});
 
 		OAuthEndpoints.init({
 			tokenService: this.#tokenService,

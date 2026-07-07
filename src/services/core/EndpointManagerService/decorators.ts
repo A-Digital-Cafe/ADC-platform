@@ -119,7 +119,7 @@ function getPermissionValidator(instance: object): PermissionValidator | null {
  *   @RegisterEndpoint({
  *     method: "POST",
  *     url: "/api/articles",
- *     permissions: ["content.write"],
+ *     permissions: [P.COMMUNITY.CONTENT.WRITE],
  *   })
  *   async createArticle(ctx: EndpointCtx<{}, CreateArticleDTO>) {
  *     // ctx.user garantizado no-null porque permissions no vacío

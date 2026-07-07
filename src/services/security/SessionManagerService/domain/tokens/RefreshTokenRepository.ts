@@ -173,6 +173,28 @@ export class RefreshTokenRepository {
 	}
 
 	/**
+	 * Lista los refresh tokens ACTIVOS de un usuario (sesiones vivas por dispositivo).
+	 * No expone el valor del token: el caller debe proyectar sólo metadatos.
+	 */
+	async listForUser(userId: string): Promise<StoredRefreshToken[]> {
+		if (this.#redis) {
+			const tokens = await this.#redis.smembers(`${REDIS_PREFIX.USER}${userId}`);
+			const stored = await Promise.all(tokens.map((token) => this.findByToken(token)));
+			return stored.filter((s): s is StoredRefreshToken => s !== null);
+		}
+
+		const userTokens = this.#userTokens.get(userId);
+		if (!userTokens) return [];
+		const now = Date.now();
+		const result: StoredRefreshToken[] = [];
+		for (const token of userTokens) {
+			const stored = this.#tokens.get(token);
+			if (stored && !stored.revoked && stored.expiresAt > now) result.push(stored);
+		}
+		return result;
+	}
+
+	/**
 	 * Revoca todos los tokens de un usuario
 	 */
 	async revokeAllForUser(userId: string): Promise<number> {
