@@ -240,7 +240,11 @@ export class UserEndpoints {
 	static async listUsers(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		const users = await UserEndpoints.identity.users.getAllUsers(ctx.token!, orgId);
+		const limit = Number(ctx.query?.limit) || undefined;
+		const offset = Number(ctx.query?.offset) || undefined;
+		const rawQ = typeof ctx.query?.q === "string" ? ctx.query.q.trim() : "";
+		const q = rawQ.length >= 2 ? rawQ : undefined;
+		const { items: users, total } = await UserEndpoints.identity.users.getAllUsers(ctx.token!, orgId, { limit, offset, q });
 
 		// Recoger todos los roleIds referenciados por los usuarios (incluidos orgMemberships)
 		const roleIdSet = new Set<string>();
@@ -255,6 +259,7 @@ export class UserEndpoints {
 		return {
 			users: users.map((user) => sanitizeUserForContext(user, orgId)),
 			roles,
+			total,
 		};
 	}
 

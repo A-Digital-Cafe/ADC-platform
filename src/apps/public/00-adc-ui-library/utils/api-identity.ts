@@ -20,7 +20,14 @@ const api = createAdcApi({
 
 export const identityApi = {
 	// Users
-	listUsers: (orgId?: string) => api.get<{ users: ClientUser[]; roles: Role[] }>("/users", orgId ? { params: { orgId } } : undefined),
+	/**
+	 * Página de usuarios + roles referenciados + `total` (para paginar).
+	 * `q` (mín. 2 chars) filtra por username/email sobre TODA la colección (server-side).
+	 */
+	listUsers: (opts: { orgId?: string; q?: string; limit?: number; offset?: number } = {}) =>
+		api.get<{ users: ClientUser[]; roles: Role[]; total: number }>("/users", {
+			params: { orgId: opts.orgId, q: opts.q, limit: opts.limit, offset: opts.offset },
+		}),
 	searchUsers: (q: string, orgId?: string) => api.get<ClientUser[]>("/users/search", { params: { q, orgId } }),
 	getUser: (userId: string) => api.get<ClientUser>(`/users/${assertSafeId(userId, "userId")}`),
 	/** HEAD /users/username/:username → 200 si el username ya está tomado, 404 si está libre. */
@@ -38,7 +45,15 @@ export const identityApi = {
 		api.delete(`/users/${assertSafeId(userId, "userId")}`, { params: { orgId }, idempotencyData: { userId, orgId: orgId ?? null } }),
 
 	// Roles
-	listRoles: (orgId?: string) => api.get<Role[]>("/roles", orgId ? { params: { orgId } } : undefined),
+	/**
+	 * Página de roles + `total` (para paginar). `q` (mín. 2 chars) filtra por
+	 * nombre/descripción sobre TODA la colección; con `orgId`, `ownOnly` excluye
+	 * los predefinidos globales de referencia.
+	 */
+	listRoles: (opts: { orgId?: string; q?: string; limit?: number; offset?: number; ownOnly?: boolean } = {}) =>
+		api.get<{ roles: Role[]; total: number }>("/roles", {
+			params: { orgId: opts.orgId, q: opts.q, limit: opts.limit, offset: opts.offset, ownOnly: opts.ownOnly ? "true" : undefined },
+		}),
 	getRole: (roleId: string) => api.get<Role>(`/roles/${assertSafeId(roleId, "roleId")}`),
 	createRole: (data: { name: string; description: string; permissions?: Permission[]; orgId?: string; hierarchy?: number }) =>
 		api.post<Role>("/roles", { body: data, idempotencyData: data }),
@@ -47,7 +62,14 @@ export const identityApi = {
 	deleteRole: (roleId: string) => api.delete(`/roles/${assertSafeId(roleId, "roleId")}`, { idempotencyKey: roleId }),
 
 	// Groups
-	listGroups: (orgId?: string) => api.get<Group[]>("/groups", orgId ? { params: { orgId } } : undefined),
+	/**
+	 * Página de grupos + `total` (para paginar). `q` (mín. 2 chars) filtra por
+	 * nombre/descripción sobre TODA la colección (server-side).
+	 */
+	listGroups: (opts: { orgId?: string; q?: string; limit?: number; offset?: number } = {}) =>
+		api.get<{ groups: Group[]; total: number }>("/groups", {
+			params: { orgId: opts.orgId, q: opts.q, limit: opts.limit, offset: opts.offset },
+		}),
 	getGroup: (groupId: string) => api.get<Group>(`/groups/${assertSafeId(groupId, "groupId")}`),
 	createGroup: (data: { name: string; description: string; roleIds?: string[]; orgId?: string }) =>
 		api.post<Group>("/groups", { body: data, idempotencyData: data }),

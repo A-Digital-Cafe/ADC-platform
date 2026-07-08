@@ -4,6 +4,7 @@ import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import type { BanRecord, BanInput, BanLookupResult } from "@common/types/identity/Moderation.js";
 import { hashEmails, hashIp, maskEmails } from "@common/utils/identityHash.ts";
 import { generateId } from "@common/utils/crypto.ts";
+import { escapeRegex } from "@common/utils/escape.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
@@ -278,17 +279,30 @@ export class BanRepository {
 		return docs.length;
 	}
 
-	async listBans(opts: { activeOnly?: boolean; limit?: number } = {}, token?: string): Promise<BanRecord[]> {
+	/**
+	 * Listado paginado de bans (orden estable por `bannedAt` + `id`), con `total`.
+	 * `q` filtra por los campos NO sensibles (userId, reason, source, externalId, emailMasks);
+	 * nunca por los hashes (PII proxy). `limit` se clampa SIEMPRE.
+	 */
+	async listBans(
+		opts: { activeOnly?: boolean; limit?: number; offset?: number; q?: string } = {},
+		token?: string
+	): Promise<{ items: BanRecord[]; total: number }> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
 
 		const filter: Record<string, unknown> = {};
 		if (opts.activeOnly !== false) filter.active = true;
-		const docs = await this.model
-			.find(filter)
-			.sort({ bannedAt: -1 })
-			.limit(Math.min(Math.max(opts.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT))
-			.lean();
-		return docs;
+		if (opts.q) {
+			const regex = new RegExp(escapeRegex(opts.q), "i");
+			filter.$or = [{ userId: regex }, { reason: regex }, { source: regex }, { externalId: regex }, { emailMasks: regex }];
+		}
+		const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+		const offset = Math.max(opts.offset ?? 0, 0);
+		const [docs, total] = await Promise.all([
+			this.model.find(filter).sort({ bannedAt: -1, id: 1 }).skip(offset).limit(limit).lean(),
+			this.model.countDocuments(filter),
+		]);
+		return { items: docs, total };
 	}
 
 	async findActiveByExternalId(source: string, externalId: string, token?: string): Promise<BanRecord | null> {

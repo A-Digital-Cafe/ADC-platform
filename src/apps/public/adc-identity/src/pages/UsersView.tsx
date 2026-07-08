@@ -19,6 +19,9 @@ import type { ContextMenuItem } from "@ui-library/utils/react-jsx";
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
 const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,32}$/;
 
+/** Tamaño de página del listado (server-side: el endpoint devuelve la página + total). */
+const PAGE_SIZE = 10;
+
 interface UsersViewProps {
 	readonly perms: Permission[];
 	readonly orgId?: string;
@@ -30,11 +33,15 @@ interface UsersViewProps {
 export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, organizations = [] }: UsersViewProps) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [users, setUsers] = useState<ClientUser[]>([]);
-	const [filteredUsers, setFilteredUsers] = useState<ClientUser[]>([]);
 	const [roles, setRoles] = useState<Role[]>([]);
 	const [pickerRoles, setPickerRoles] = useState<Role[]>([]);
 	const orgMap = React.useMemo(() => new Map(organizations.map((o) => [o.orgId, o.slug])), [organizations]);
-	const [loading, setLoading] = useState(true);
+	// Paginación server-side: el endpoint devuelve la página + total (la colección puede superar el cap del server).
+	const [pageIndex, setPageIndex] = useState(1);
+	const [total, setTotal] = useState(0);
+	const [searchQuery, setSearchQuery] = useState("");
+	// Sólo el primer fetch muestra skeleton: los cambios de página/búsqueda mantienen la tabla montada.
+	const [initialLoading, setInitialLoading] = useState(true);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editingUser, setEditingUser] = useState<ClientUser | null>(null);
 	const [deleteConfirm, setDeleteConfirm] = useState<ClientUser | null>(null);
@@ -122,28 +129,27 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	}, [formUsername, editingUser, isScopedOrgView]);
 
 	const loadData = useCallback(async () => {
-		setLoading(true);
-		const usersRes = await identityApi.listUsers(orgId);
+		const q = searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined;
+		const usersRes = await identityApi.listUsers({ orgId, q, limit: PAGE_SIZE, offset: (pageIndex - 1) * PAGE_SIZE });
 
 		if (usersRes.success && usersRes.data) {
-			setUsers(usersRes.data.users ?? []);
-			setFilteredUsers(usersRes.data.users ?? []);
+			const items = usersRes.data.users ?? [];
+			setUsers(items);
 			setRoles(usersRes.data.roles ?? []);
+			setTotal(usersRes.data.total ?? items.length);
+			// Página huérfana (p.ej. tras borrar el último item): retroceder una.
+			if (items.length === 0 && pageIndex > 1) setPageIndex(pageIndex - 1);
 		}
-		setLoading(false);
-	}, [orgId]);
+		setInitialLoading(false);
+	}, [orgId, pageIndex, searchQuery]);
 
 	useEffect(() => {
 		loadData();
 	}, [loadData]);
 
 	const handleSearch = (query: string) => {
-		if (!query) {
-			setFilteredUsers(users);
-			return;
-		}
-		const q = query.toLowerCase();
-		setFilteredUsers(users.filter((u) => u.username.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)));
+		setSearchQuery(query);
+		setPageIndex(1);
 	};
 
 	const getVisibleRoleIds = (user: ClientUser): string[] => {
@@ -164,9 +170,10 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	}, [formRoleIds, isScopedOrgView, orgId, pickerRoles]);
 
 	const loadPickerRoles = useCallback(async () => {
-		const rolesRes = await identityApi.listRoles(orgId);
+		// El picker necesita el set completo de roles asignables (hasta el cap del server).
+		const rolesRes = await identityApi.listRoles({ orgId, limit: 500 });
 		if (rolesRes.success && rolesRes.data) {
-			setPickerRoles(rolesRes.data);
+			setPickerRoles(rolesRes.data.roles ?? []);
 		}
 	}, [orgId]);
 
@@ -359,8 +366,13 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		<>
 			<DataTable
 				columns={columns}
-				data={filteredUsers}
-				loading={loading}
+				data={users}
+				loading={initialLoading}
+				pageSize={PAGE_SIZE}
+				total={total}
+				page={pageIndex}
+				onPageChange={setPageIndex}
+				searchDebounce={300}
 				searchPlaceholder={t("users.searchPlaceholder")}
 				onSearch={handleSearch}
 				onAdd={writable ? openCreateModal : undefined}

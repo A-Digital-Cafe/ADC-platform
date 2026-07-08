@@ -7,8 +7,8 @@ import type { ReadonlyModuleRegistry } from "../utils/registry/ReadonlyModuleReg
 import type { ModuleRegistry } from "../utils/registry/ModuleRegistry.ts";
 import type { ModuleLoader } from "../utils/loaders/ModuleLoader.ts";
 import type { Capability } from "./security/Capability.ts";
-import { emitNotification } from "./utils/notifications/emit.js";
-import type { NotifyInput } from "./types/notifications/Notification.js";
+import { emitNotification, emitBroadcast, type BroadcastEmitResult } from "./utils/notifications/emit.js";
+import type { BroadcastInput, NotifyInput } from "./types/notifications/Notification.js";
 
 /**
  * Clase base abstracta para módulos que necesitan acceso al Kernel.
@@ -249,6 +249,21 @@ export abstract class BaseModule implements IModule {
 		} catch (e) {
 			// Defensa extra: emitNotification ya es no-throw, pero nunca propagamos.
 			this.logger.logWarn(`emitNotification falló (ignorado): ${(e as Error).message}`);
+		}
+	}
+
+	/**
+	 * Broadcast a TODOS los usuarios activos, reenviando la capability del módulo:
+	 * `NotificationService.broadcast` sólo lo acepta si porta el scope
+	 * `notifications:broadcast` (opt-in en `config.json`). **Nunca lanza**; devuelve
+	 * el modo real de despacho (`queued`/`direct`/`dropped`).
+	 */
+	protected async emitBroadcast(input: BroadcastInput): Promise<BroadcastEmitResult> {
+		try {
+			return await emitBroadcast(this.#requireRegistry(), this.getCapability(), { ...input, origin: this.name });
+		} catch (e) {
+			this.logger.logWarn(`emitBroadcast descartado (${input.topic}): ${(e as Error).message}`);
+			return "dropped";
 		}
 	}
 }

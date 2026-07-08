@@ -249,6 +249,24 @@ Reglas:
 - Para colecciones con crecimiento no acotado (mensajes, logs, comments) preferir cursor (`createdAt + id`) sobre `skip`, que degrada en Mongo con offsets grandes.
 - Los queries con `$regex` derivados de input DEBEN escapar el patrón con `escapeRegex` de `@common/utils/escape.ts`.
 
+### Capar un listado EXISTENTE (retrofit)
+
+Un `limit` agregado a un método que antes devolvía todo **trunca en silencio** a sus consumidores:
+tablas que filtran/buscan client-side, pickers, y mapas construidos desde "toda" la lista pasan a
+operar sobre un subconjunto sin que nadie lo note (el bug no se ve con datasets chicos). Al capar:
+
+1. Cambiá el contrato a `{ items, total }` **en el mismo commit** — un array capado que se sigue
+   viendo como "la colección completa" es una mentira de tipo; el `total` delata el recorte y
+   habilita paginar. TypeScript te fuerza entonces a visitar cada caller.
+2. Auditá TODOS los consumidores (`grep` del método **y** del endpoint HTTP, incluyendo `apps/` y
+   `presets/`): las UIs que filtran client-side deben pasar a `q`/paginación server-side; los
+   consumidores que realmente necesitan todo deben iterar páginas (`offset += limit` en loop, o
+   cursor con `forEachPage`).
+3. Agregá un **orden estable** (`sort` sobre campo indexado + `id` como desempate) — sin él, el
+   offset devuelve páginas con repetidos/salteados.
+4. Verificá contra un dataset que **supere el cap**: la búsqueda debe encontrar items más allá de
+   la primera página.
+
 ### Barridos que deben procesar TODO
 
 Las operaciones de mantenimiento que recorren la colección entera (purga de cuenta, recuperación masiva, cascadas de borrado) no pueden clamearse ni cargar todo de una. Paginá por cursor con `forEachPage` de `@common/utils/batch.ts`: procesa en lotes acotados (memoria O(lote)) y nunca relee items ya vistos, así que no se cuelga aunque `handlePage` mute la colección.
@@ -301,5 +319,6 @@ Usar logging de negocio, no logging narrativo.
 - [ ] Los métodos devuelven objetos planos del dominio.
 - [ ] Hay logs en cambios de estado importantes.
 - [ ] Todo listado/búsqueda pagina con `limit` clampado a un máximo duro.
+- [ ] Al capar un listado existente: contrato `{ items, total }`, orden estable, consumidores auditados (retrofit).
 - [ ] Los barridos full-collection (purga/cascada/recuperación) usan `forEachPage` por cursor, no full-scan.
 - [ ] Los `$regex` desde input usan `escapeRegex` de `@common/utils/escape.ts`.

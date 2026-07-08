@@ -146,9 +146,12 @@ export class AdcNotificationBell {
 	async #onItemClick(item: BellNotification): Promise<void> {
 		if (!item.readAt) {
 			const res = await api.post<{ unread: number }>(`/${item.id}/read`, { silent: true });
-			if (res.success && res.data) this.unread = res.data.unread;
-			this.items = this.items.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n));
-			this.#broadcast();
+			// Reflejar la lectura sólo si el server la persistió (si no, reaparece al recargar).
+			if (res.success && res.data) {
+				this.unread = res.data.unread;
+				this.items = this.items.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n));
+				this.#broadcast();
+			}
 		}
 		const href = notificationHref(item);
 		if (href) globalThis.location.href = href;

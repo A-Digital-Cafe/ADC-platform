@@ -15,7 +15,21 @@ export const RoleResponse = Type.Object({
 	createdAt: Type.String({ format: "date-time" }),
 });
 
-export const RolesListResponse = Type.Array(RoleResponse);
+/** Respuesta de `GET /api/identity/roles`: página de roles + total. */
+export const RolesListResponse = Type.Object({
+	roles: Type.Array(RoleResponse),
+	total: Type.Integer({ minimum: 0, description: "Total de roles que matchean el filtro (para paginar)" }),
+});
+
+// ── Query ────────────────────────────────────────────────────────────────
+
+export const ListRolesQuery = Type.Object({
+	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
+	q: Type.Optional(Type.String({ description: "Filtro por nombre/descripción (mín. 2 caracteres; busca sobre toda la colección)" })),
+	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (se clampa a 500)" })),
+	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
+	ownOnly: Type.Optional(Type.String({ description: "Con orgId: `true` excluye los predefinidos globales de referencia" })),
+});
 
 // ── Params ───────────────────────────────────────────────────────────────
 

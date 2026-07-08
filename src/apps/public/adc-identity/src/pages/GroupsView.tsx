@@ -12,6 +12,9 @@ import { MembersModal } from "../components/MembersModal.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { RowActions } from "../components/RowActions.tsx";
 
+/** Tamaño de página del listado (server-side: el endpoint devuelve la página + total). */
+const PAGE_SIZE = 10;
+
 interface GroupsViewProps {
 	readonly perms: Permission[];
 	readonly orgId?: string;
@@ -21,9 +24,13 @@ interface GroupsViewProps {
 export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [groups, setGroups] = useState<Group[]>([]);
-	const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
 	const [allRoles, setAllRoles] = useState<Role[]>([]);
-	const [loading, setLoading] = useState(true);
+	// Paginación server-side: el endpoint devuelve la página + total (la colección puede superar el cap del server).
+	const [pageIndex, setPageIndex] = useState(1);
+	const [total, setTotal] = useState(0);
+	const [searchQuery, setSearchQuery] = useState("");
+	// Sólo el primer fetch muestra skeleton: los cambios de página/búsqueda mantienen la tabla montada.
+	const [initialLoading, setInitialLoading] = useState(true);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editingGroup, setEditingGroup] = useState<Group | null>(null);
 	const [deleteConfirm, setDeleteConfirm] = useState<Group | null>(null);
@@ -46,27 +53,30 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 	}, []);
 
 	const loadData = useCallback(async () => {
-		setLoading(true);
-		const [groupsRes, rolesRes] = await Promise.all([identityApi.listGroups(orgId), identityApi.listRoles(orgId)]);
+		const q = searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined;
+		// El picker de roles necesita el set completo asignable (hasta el cap del server); los grupos van paginados.
+		const [groupsRes, rolesRes] = await Promise.all([
+			identityApi.listGroups({ orgId, q, limit: PAGE_SIZE, offset: (pageIndex - 1) * PAGE_SIZE }),
+			identityApi.listRoles({ orgId, limit: 500 }),
+		]);
 		if (groupsRes.success && groupsRes.data) {
-			setGroups(groupsRes.data);
-			setFilteredGroups(groupsRes.data);
+			const items = groupsRes.data.groups ?? [];
+			setGroups(items);
+			setTotal(groupsRes.data.total ?? items.length);
+			// Página huérfana (p.ej. tras borrar el último item): retroceder una.
+			if (items.length === 0 && pageIndex > 1) setPageIndex(pageIndex - 1);
 		}
-		if (rolesRes.success && rolesRes.data) setAllRoles(rolesRes.data);
-		setLoading(false);
-	}, [orgId]);
+		if (rolesRes.success && rolesRes.data) setAllRoles(rolesRes.data.roles ?? []);
+		setInitialLoading(false);
+	}, [orgId, pageIndex, searchQuery]);
 
 	useEffect(() => {
 		loadData();
 	}, [loadData]);
 
 	const handleSearch = (query: string) => {
-		if (!query) {
-			setFilteredGroups(groups);
-			return;
-		}
-		const q = query.toLowerCase();
-		setFilteredGroups(groups.filter((g) => g.name.toLowerCase().includes(q) || g.description?.toLowerCase().includes(q)));
+		setSearchQuery(query);
+		setPageIndex(1);
 	};
 
 	const assignableRoles = React.useMemo(() => {
@@ -189,8 +199,13 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 		<>
 			<DataTable
 				columns={columns}
-				data={filteredGroups}
-				loading={loading}
+				data={groups}
+				loading={initialLoading}
+				pageSize={PAGE_SIZE}
+				total={total}
+				page={pageIndex}
+				onPageChange={setPageIndex}
+				searchDebounce={300}
 				searchPlaceholder={t("groups.searchPlaceholder")}
 				onSearch={handleSearch}
 				onAdd={writable ? openCreateModal : undefined}

@@ -10,6 +10,9 @@ import { FormModalFooter } from "../components/FormModalFooter.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { RowActions } from "../components/RowActions.tsx";
 
+/** Tamaño de página del listado (server-side: el endpoint devuelve la página + total). */
+const PAGE_SIZE = 10;
+
 interface RolesViewProps {
 	readonly perms: Permission[];
 	readonly orgId?: string;
@@ -19,8 +22,12 @@ interface RolesViewProps {
 export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [roles, setRoles] = useState<Role[]>([]);
-	const [filteredRoles, setFilteredRoles] = useState<Role[]>([]);
-	const [loading, setLoading] = useState(true);
+	// Paginación server-side: el endpoint devuelve la página + total (la colección puede superar el cap del server).
+	const [pageIndex, setPageIndex] = useState(1);
+	const [total, setTotal] = useState(0);
+	const [searchQuery, setSearchQuery] = useState("");
+	// Sólo el primer fetch muestra skeleton: los cambios de página/búsqueda mantienen la tabla montada.
+	const [initialLoading, setInitialLoading] = useState(true);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [editingRole, setEditingRole] = useState<Role | null>(null);
 	const [deleteConfirm, setDeleteConfirm] = useState<Role | null>(null);
@@ -42,27 +49,26 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 	}, []);
 
 	const loadData = useCallback(async () => {
-		setLoading(true);
-		const result = await identityApi.listRoles(orgId);
+		const q = searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined;
+		// ownOnly: la vista de org muestra sólo los roles de ESA org (sin los globales de referencia).
+		const result = await identityApi.listRoles({ orgId, ownOnly: !!orgId, q, limit: PAGE_SIZE, offset: (pageIndex - 1) * PAGE_SIZE });
 		if (result.success && result.data) {
-			const scopedRoles = orgId ? result.data.filter((role) => role.orgId === orgId) : result.data;
-			setRoles(scopedRoles);
-			setFilteredRoles(scopedRoles);
+			const items = result.data.roles ?? [];
+			setRoles(items);
+			setTotal(result.data.total ?? items.length);
+			// Página huérfana (p.ej. tras borrar el último item): retroceder una.
+			if (items.length === 0 && pageIndex > 1) setPageIndex(pageIndex - 1);
 		}
-		setLoading(false);
-	}, [orgId]);
+		setInitialLoading(false);
+	}, [orgId, pageIndex, searchQuery]);
 
 	useEffect(() => {
 		loadData();
 	}, [loadData]);
 
 	const handleSearch = (query: string) => {
-		if (!query) {
-			setFilteredRoles(roles);
-			return;
-		}
-		const q = query.toLowerCase();
-		setFilteredRoles(roles.filter((r) => r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q)));
+		setSearchQuery(query);
+		setPageIndex(1);
 	};
 
 	const openCreateModal = () => {
@@ -171,8 +177,13 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 		<>
 			<DataTable
 				columns={columns}
-				data={filteredRoles}
-				loading={loading}
+				data={roles}
+				loading={initialLoading}
+				pageSize={PAGE_SIZE}
+				total={total}
+				page={pageIndex}
+				onPageChange={setPageIndex}
+				searchDebounce={300}
 				searchPlaceholder={t("roles.searchPlaceholder")}
 				onSearch={handleSearch}
 				onAdd={writable ? openCreateModal : undefined}

@@ -206,8 +206,8 @@ export default class UserProfileApp extends BaseApp {
 			Logger.ok(`[${this.name}] ✓ SYSTEM pudo crear usuario: ${newUser.username}`);
 
 			// SYSTEM puede leer usuarios
-			const allUsers = await this.identityManager.users.getAllUsers(systemToken);
-			Logger.ok(`[${this.name}] ✓ SYSTEM pudo listar ${allUsers.length} usuarios`);
+			const { total: totalUsers } = await this.identityManager.users.getAllUsers(systemToken);
+			Logger.ok(`[${this.name}] ✓ SYSTEM pudo listar ${totalUsers} usuarios`);
 		} catch (error: any) {
 			Logger.error(`[${this.name}] ✗ Error con token SYSTEM: ${error.message}`);
 		}
@@ -216,8 +216,8 @@ export default class UserProfileApp extends BaseApp {
 		Logger.info(`[${this.name}] Probando restricciones con token limitado...`);
 		try {
 			// Usuario limitado puede leer (tiene permiso READ)
-			const users = await this.identityManager.users.getAllUsers(limitedToken);
-			Logger.ok(`[${this.name}] ✓ Usuario limitado pudo listar ${users.length} usuarios (tiene READ)`);
+			const { total: readableUsers } = await this.identityManager.users.getAllUsers(limitedToken);
+			Logger.ok(`[${this.name}] ✓ Usuario limitado pudo listar ${readableUsers} usuarios (tiene READ)`);
 
 			// Usuario limitado NO puede crear (no tiene permiso WRITE)
 			try {

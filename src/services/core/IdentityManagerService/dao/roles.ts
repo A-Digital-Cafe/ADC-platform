@@ -12,6 +12,7 @@ import type { GroupManager } from "./groups.js";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type { Step } from "../../../core/OperationsService/types.ts";
 import { forEachPage } from "@common/utils/batch.ts";
+import { escapeRegex } from "@common/utils/escape.ts";
 
 /** Máximo duro de un listado de roles (una respuesta sin límite es un DoS accidental). */
 const MAX_LIST_LIMIT = 500;
@@ -297,29 +298,44 @@ export class RoleManager {
 	}
 
 	/**
-	 * Obtiene todos los roles, separados por contexto.
-	 * - Con orgId: roles predefinidos de la org + custom de la org + predefinidos globales (como referencia)
-	 * - Sin orgId (admin global): solo roles globales (orgId === null)
+	 * Listado paginado de roles (orden estable por `name` + `id`), separados por contexto.
+	 * - Con orgId: roles de la org + predefinidos globales (referencia); `ownOnly` restringe a la org.
+	 * - Sin orgId (admin global): solo roles globales (orgId === null).
+	 * `q` filtra por name/description; devuelve `total` para paginar; `limit` se clampa SIEMPRE.
 	 * @param token Token de autenticación (requerido para verificar permisos)
-	 * @param orgId Si se proporciona, retorna roles de esta org + globales predefinidos
 	 */
-	async getAllRoles(token?: string, orgId?: string): Promise<Role[]> {
+	async getAllRoles(
+		token?: string,
+		orgId?: string,
+		opts: { limit?: number; offset?: number; q?: string; ownOnly?: boolean } = {}
+	): Promise<{ items: Role[]; total: number }> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ROLES, orgId);
 
 		try {
-			const filter = orgId
-				? {
-						$or: [
-							{ orgId }, // Roles de esta org (predefinidos + custom)
-							{ orgId: null, isCustom: false }, // Predefinidos globales (referencia readonly)
-						],
-					}
-				: { orgId: null }; // Solo roles globales
-			const docs = await this.roleModel.find(filter).limit(MAX_LIST_LIMIT);
-			return docs.map((d: any) => d.toObject?.() || d);
+			let contextFilter: Record<string, unknown>;
+			if (orgId) {
+				contextFilter = opts.ownOnly
+					? { orgId } // Solo roles de esta org (predefinidos + custom)
+					: { $or: [{ orgId }, { orgId: null, isCustom: false }] }; // + predefinidos globales (referencia readonly)
+			} else {
+				contextFilter = { orgId: null }; // Solo roles globales
+			}
+			const filter: Record<string, unknown> = { ...contextFilter };
+			if (opts.q) {
+				const regex = new RegExp(escapeRegex(opts.q), "i");
+				// $and para no pisar el $or del filtro de contexto
+				filter.$and = [{ $or: [{ name: regex }, { description: regex }] }];
+			}
+			const limit = Math.min(Math.max(opts.limit ?? MAX_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+			const offset = Math.max(opts.offset ?? 0, 0);
+			const [docs, total] = await Promise.all([
+				this.roleModel.find(filter).sort({ name: 1, id: 1 }).skip(offset).limit(limit),
+				this.roleModel.countDocuments(filter),
+			]);
+			return { items: docs.map((d: any) => d.toObject?.() || d), total };
 		} catch (error) {
 			this.logger.logError(`Error obteniendo roles: ${error}`);
-			return [];
+			return { items: [], total: 0 };
 		}
 	}
 

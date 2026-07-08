@@ -6,7 +6,7 @@ import { CRUDXAction } from "@common/types/Actions.ts";
 import type IdentityManagerService from "../index.js";
 import * as GS from "./schemas/groups.js";
 import { UsersArrayResponse } from "./schemas/users.js";
-import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
+import { SuccessResponse } from "./schemas/common.js";
 import { assertCanAssignRoles, assertCanManageUser } from "../domain/hierarchy.js";
 
 /**
@@ -63,15 +63,21 @@ export class GroupEndpoints {
 		permissions: [P.IDENTITY.GROUPS.READ],
 		options: {
 			tag: "IdentityManagerService/Groups",
-			summary: "Lista grupos",
-			description: "El admin global puede filtrar por `orgId`; el admin de org usa su propia organización.",
-			schema: { querystring: OrgIdQuery, response: { 200: GS.GroupsListResponse } },
+			summary: "Lista grupos (paginado)",
+			description:
+				"Página de grupos + `total`. El admin global puede filtrar por `orgId`; el admin de org usa su propia organización. `q` busca por nombre/descripción sobre toda la colección.",
+			schema: { querystring: GS.ListGroupsQuery, response: { 200: GS.GroupsPageResponse } },
 		},
 	})
 	static async listGroups(ctx: EndpointCtx) {
 		// Org admin usa orgId del token; global admin puede filtrar por query param
 		const orgId = ctx.user?.orgId || ctx.query?.orgId || undefined;
-		return GroupEndpoints.identity.groups.getAllGroups(ctx.token!, orgId);
+		const limit = Number(ctx.query?.limit) || undefined;
+		const offset = Number(ctx.query?.offset) || undefined;
+		const rawQ = typeof ctx.query?.q === "string" ? ctx.query.q.trim() : "";
+		const q = rawQ.length >= 2 ? rawQ : undefined;
+		const { items: groups, total } = await GroupEndpoints.identity.groups.getAllGroups(ctx.token!, orgId, { limit, offset, q });
+		return { groups, total };
 	}
 
 	@RegisterEndpoint({

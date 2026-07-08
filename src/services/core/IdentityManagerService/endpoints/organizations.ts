@@ -190,7 +190,7 @@ export class OrgEndpoints {
 		if (!org) throw new IdentityError(404, "ORG_NOT_FOUND", "Organización no encontrada");
 		assertReadableOrganizationAccess(ctx, org.orgId);
 
-		const members = await OrgEndpoints.identity.users.getAllUsers(ctx.token!, ctx.params.orgId);
+		const { items: members } = await OrgEndpoints.identity.users.getAllUsers(ctx.token!, ctx.params.orgId);
 		return members.map(({ passwordHash, ...user }) => ({
 			...user,
 			orgMemberships: user.orgMemberships?.filter((membership) => membership.orgId === org.orgId) || [],

@@ -643,16 +643,34 @@ export class UserManager {
 	 * @param token Token de autenticación (requerido para verificar permisos)
 	 * @param orgId Si se proporciona, filtra usuarios que pertenecen a esta organización
 	 */
-	async getAllUsers(token?: string, orgId?: string, limit: number = MAX_LIST_LIMIT): Promise<User[]> {
+	/**
+	 * Listado paginado de usuarios (orden estable por `username`), con filtro opcional
+	 * por org y por texto (`q` sobre username/email). Devuelve `total` para que la UI
+	 * pueda paginar; `limit` se clampa SIEMPRE a `MAX_LIST_LIMIT`.
+	 */
+	async getAllUsers(
+		token?: string,
+		orgId?: string,
+		opts: { limit?: number; offset?: number; q?: string } = {}
+	): Promise<{ items: User[]; total: number }> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS, orgId);
 
 		try {
-			const filter = orgId ? { "orgMemberships.orgId": orgId } : {};
-			const docs = await this.userModel.find(filter).limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT));
-			return docs.map((d: any) => d.toObject?.() || d);
+			const filter: Record<string, unknown> = orgId ? { "orgMemberships.orgId": orgId } : {};
+			if (opts.q) {
+				const regex = new RegExp(escapeRegex(opts.q), "i");
+				filter.$or = [{ username: regex }, { email: regex }];
+			}
+			const limit = Math.min(Math.max(opts.limit ?? MAX_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+			const offset = Math.max(opts.offset ?? 0, 0);
+			const [docs, total] = await Promise.all([
+				this.userModel.find(filter).sort({ username: 1 }).skip(offset).limit(limit),
+				this.userModel.countDocuments(filter),
+			]);
+			return { items: docs.map((d: any) => d.toObject?.() || d), total };
 		} catch (error) {
 			this.logger.logError(`Error obteniendo usuarios: ${error}`);
-			return [];
+			return { items: [], total: 0 };
 		}
 	}
 
@@ -664,6 +682,22 @@ export class UserManager {
 	async getAllUserIds(token?: string): Promise<string[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
 		const docs = await this.userModel.find({ isActive: { $ne: false } }, { id: 1, _id: 0 }).lean();
+		return docs.map((d: any) => d.id).filter(Boolean);
+	}
+
+	/**
+	 * Página de IDs de usuarios activos (`id > afterId`, asc; contrato de `forEachPage`)
+	 * para fan-outs por lotes. Misma sensibilidad que `getAllUserIds`.
+	 */
+	async getUserIdsPage(afterId: string | null, limit: number, token?: string): Promise<string[]> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const query: Record<string, unknown> = { isActive: { $ne: false } };
+		if (afterId) query.id = { $gt: afterId };
+		const docs = await this.userModel
+			.find(query, { id: 1, _id: 0 })
+			.sort({ id: 1 })
+			.limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT))
+			.lean();
 		return docs.map((d: any) => d.id).filter(Boolean);
 	}
 

@@ -6,7 +6,9 @@ import { Type } from "@sinclair/typebox";
 
 export const ListBansQuery = Type.Object({
 	activeOnly: Type.Optional(Type.String({ description: '"false" para incluir bans inactivos (por defecto solo activos)' })),
-	limit: Type.Optional(Type.String({ description: "Máximo de resultados (máx. 500, por defecto 200)" })),
+	q: Type.Optional(Type.String({ description: "Filtro (mín. 2 chars) por userId/reason/source/externalId/email enmascarado; nunca por hashes" })),
+	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (máx. 500, por defecto 200)" })),
+	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
 });
 
 // ── Body ─────────────────────────────────────────────────────────────────
@@ -52,6 +54,9 @@ const BanRecord = Type.Object({
 	ipHashPrefixes: Type.Array(Type.String({ description: "Prefijo (12 hex) del hash de IP, para correlación visual" })),
 });
 
-export const ListBansResponse = Type.Object({ bans: Type.Array(BanRecord) });
+export const ListBansResponse = Type.Object({
+	bans: Type.Array(BanRecord),
+	total: Type.Integer({ minimum: 0, description: "Total de bans que matchean el filtro (para paginar)" }),
+});
 export const CreateBanResponse = Type.Object({ ok: Type.Boolean(), id: Type.String() });
 export const UnbanResponse = Type.Object({ ok: Type.Boolean(), removed: Type.Integer() });

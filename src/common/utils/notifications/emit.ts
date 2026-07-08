@@ -1,10 +1,12 @@
 import type { ReadonlyModuleRegistry } from "../../../utils/registry/ReadonlyModuleRegistry.ts";
-import type { NotifyInput } from "../../types/notifications/Notification.js";
+import type { BroadcastInput, NotifyInput } from "../../types/notifications/Notification.js";
 import type { INotificationService } from "../../types/notifications/INotificationService.js";
+import type { CapabilityToken } from "../../security/Capability.ts";
 
 /** Topología de cola para las notificaciones (debe coincidir con NotificationService). */
 export const NOTIFY_SERVICE = "NotificationService";
 export const NOTIFY_OPERATION = "notify";
+export const NOTIFY_BROADCAST_OPERATION = "broadcast";
 
 /** Subconjunto del provider RabbitMQ usado para emitir (evita acoplar `@common` a `@providers`). */
 interface BrokerProvider {
@@ -42,9 +44,10 @@ export async function emitNotification(registry: ReadonlyModuleRegistry, input: 
 		// Sin cola disponible: intentamos entrega directa.
 	}
 
-	// 2. Entrega directa si el servicio está cargado.
+	// 2. Entrega directa si el servicio está cargado. `hasAnyModule`, no `hasModule`:
+	// `hasModule` sin config chequea la uniqueKey default (false para servicios con config).
 	try {
-		if (registry.hasModule("service", NOTIFY_SERVICE)) {
+		if (registry.hasAnyModule("service", NOTIFY_SERVICE)) {
 			const service = registry.getService<INotificationService>(NOTIFY_SERVICE);
 			await service.notify(input);
 			return true;
@@ -55,4 +58,27 @@ export async function emitNotification(registry: ReadonlyModuleRegistry, input: 
 
 	// 3. Ni cola ni servicio: no se pudo emitir (no rompemos al productor).
 	return false;
+}
+
+/**
+ * Cómo se despachó el anuncio: `queued` (job firmado en cola; fan-out reanudable),
+ * `direct` (sin cola, fan-out inmediato; reintetable sin duplicar por `broadcastId`)
+ * o `dropped` (NO se anunció: servicio ausente, sin scope o fan-out fallido).
+ */
+export type BroadcastEmitResult = "queued" | "direct" | "dropped";
+
+/**
+ * Despacha un broadcast por su única puerta: `NotificationService.broadcast(cap, input)`
+ * — el productor NO publica a la cola; el servicio valida el scope y encola él mismo
+ * el job firmado. Devuelve `dropped` sólo si el servicio no está cargado; los errores
+ * del servicio se propagan para que `BaseModule.emitBroadcast` los loguee con causa.
+ */
+export async function emitBroadcast(
+	registry: ReadonlyModuleRegistry,
+	cap: CapabilityToken,
+	input: BroadcastInput
+): Promise<BroadcastEmitResult> {
+	if (!registry.hasAnyModule("service", NOTIFY_SERVICE)) return "dropped";
+	const service = registry.getService<INotificationService>(NOTIFY_SERVICE);
+	return await service.broadcast(cap, input);
 }

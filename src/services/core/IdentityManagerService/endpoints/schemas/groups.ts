@@ -15,7 +15,14 @@ export const GroupResponse = Type.Object({
 	updatedAt: Type.String({ format: "date-time" }),
 });
 
+/** Array plano de grupos (búsqueda incremental). */
 export const GroupsListResponse = Type.Array(GroupResponse);
+
+/** Respuesta de `GET /api/identity/groups`: página de grupos + total. */
+export const GroupsPageResponse = Type.Object({
+	groups: Type.Array(GroupResponse),
+	total: Type.Integer({ minimum: 0, description: "Total de grupos que matchean el filtro (para paginar)" }),
+});
 
 // ── Params ───────────────────────────────────────────────────────────────
 
@@ -33,6 +40,13 @@ export const GroupUserParams = Type.Object({
 export const SearchGroupsQuery = Type.Object({
 	q: Type.Optional(Type.String({ description: "Texto de búsqueda (mín. 2 caracteres)" })),
 	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
+});
+
+export const ListGroupsQuery = Type.Object({
+	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
+	q: Type.Optional(Type.String({ description: "Filtro por nombre/descripción (mín. 2 caracteres; busca sobre toda la colección)" })),
+	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (se clampa a 500)" })),
+	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
 });
 
 // ── Body ─────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
-import type { NotifyInput } from "./Notification.ts";
+import type { BroadcastInput, NotifyInput } from "./Notification.ts";
+import type { CapabilityToken } from "../../security/Capability.ts";
 
 /**
  * Contrato mínimo que exponen las notificaciones a sus **productores**.
@@ -17,6 +18,12 @@ import type { NotifyInput } from "./Notification.ts";
 export interface INotificationService {
 	/** Persiste (canal inApp) y reparte la notificación por los canales resueltos. */
 	notify(input: NotifyInput): Promise<void>;
+	/**
+	 * Anuncio a TODOS los usuarios activos. Superficie privilegiada: exige capability
+	 * con scope `notifications:broadcast`. Con cola encola UN job firmado (chunks
+	 * reanudables, dedup por `broadcastId`); sin cola, fan-out directo.
+	 */
+	broadcast(cap: CapabilityToken, input: BroadcastInput): Promise<"queued" | "direct">;
 }
 
 /**

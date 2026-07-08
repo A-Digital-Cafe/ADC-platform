@@ -20,6 +20,13 @@ interface DataTableProps<T> {
 	readonly keyExtractor: (item: T) => string;
 	readonly emptyMessage?: string;
 	readonly pageSize?: number;
+	/** Modo server-side: `data` es la página actual ya recortada y `total` el total remoto. */
+	readonly total?: number;
+	/** Página actual (1-based) en modo server-side; la controla el padre. */
+	readonly page?: number;
+	readonly onPageChange?: (page: number) => void;
+	/** Debounce (ms) del buscador; útil cuando `onSearch` dispara requests al server. */
+	readonly searchDebounce?: number;
 }
 
 export function DataTable<T>({
@@ -34,18 +41,27 @@ export function DataTable<T>({
 	keyExtractor,
 	emptyMessage,
 	pageSize = 10,
+	total,
+	page,
+	onPageChange,
+	searchDebounce,
 }: DataTableProps<T>) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [currentPage, setCurrentPage] = useState(1);
 	const [searchQuery, setSearchQuery] = useState("");
 
-	const totalPages = Math.ceil(data.length / pageSize);
+	// Server-side: el padre pagina (data = página actual); client-side: se recorta acá.
+	const serverMode = total !== undefined && onPageChange !== undefined;
+	const totalPages = Math.ceil((serverMode ? total : data.length) / pageSize);
+	const effectivePage = serverMode ? (page ?? 1) : currentPage;
 	const startIdx = (currentPage - 1) * pageSize;
-	const paginatedData = data.slice(startIdx, startIdx + pageSize);
+	const paginatedData = serverMode ? data : data.slice(startIdx, startIdx + pageSize);
 
-	// Keep latest onSearch in a ref to avoid stale closures in event listeners
+	// Keep latest callbacks in refs to avoid stale closures in event listeners
 	const onSearchRef = useRef(onSearch);
 	onSearchRef.current = onSearch;
+	const onPageChangeRef = useRef(onPageChange);
+	onPageChangeRef.current = onPageChange;
 
 	const searchRef = useCallback((el: HTMLElement | null) => {
 		if (el) {
@@ -58,7 +74,12 @@ export function DataTable<T>({
 		}
 	}, []);
 	const paginationRef = useCallback((el: HTMLElement | null) => {
-		if (el) el.addEventListener("adcPageChange", (e: Event) => setCurrentPage((e as CustomEvent<number>).detail));
+		if (el)
+			el.addEventListener("adcPageChange", (e: Event) => {
+				const nextPage = (e as CustomEvent<number>).detail;
+				setCurrentPage(nextPage);
+				onPageChangeRef.current?.(nextPage);
+			});
 	}, []);
 
 	if (loading) {
@@ -76,7 +97,12 @@ export function DataTable<T>({
 			<div className="flex items-center justify-between gap-4 flex-wrap">
 				{onSearch && (
 					<div className="flex-1 min-w-50 max-w-sm">
-						<adc-search-input ref={searchRef} value={searchQuery} placeholder={searchPlaceholder || t("common.search")} />
+						<adc-search-input
+							ref={searchRef}
+							value={searchQuery}
+							debounce={searchDebounce}
+							placeholder={searchPlaceholder || t("common.search")}
+						/>
 					</div>
 				)}
 				{onAdd && (
@@ -129,7 +155,7 @@ export function DataTable<T>({
 			{/* Pagination */}
 			{totalPages > 1 && (
 				<div className="flex justify-center">
-					<adc-pagination ref={paginationRef} currentPage={currentPage} totalPages={totalPages} />
+					<adc-pagination ref={paginationRef} currentPage={effectivePage} totalPages={totalPages} />
 				</div>
 			)}
 		</div>

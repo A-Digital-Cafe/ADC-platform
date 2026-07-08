@@ -8,6 +8,9 @@ import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { moderationApi, type BanItem } from "../utils/moderation-api.ts";
 import { UnbanModal, type UnbanTarget } from "../components/UnbanModal.tsx";
 
+/** Tamaño de página del listado (server-side: el endpoint devuelve la página + total). */
+const PAGE_SIZE = 10;
+
 interface ModerationViewProps {
 	readonly perms: Permission[];
 }
@@ -21,9 +24,13 @@ interface ModerationViewProps {
 export function ModerationView({ perms }: ModerationViewProps) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [bans, setBans] = useState<BanItem[]>([]);
-	const [filtered, setFiltered] = useState<BanItem[]>([]);
 	const [includeLifted, setIncludeLifted] = useState(false);
-	const [loading, setLoading] = useState(true);
+	// Paginación server-side: el endpoint devuelve la página + total (la lista de bans crece por el sync).
+	const [pageIndex, setPageIndex] = useState(1);
+	const [total, setTotal] = useState(0);
+	const [searchQuery, setSearchQuery] = useState("");
+	// Sólo el primer fetch muestra skeleton: los cambios de página/búsqueda mantienen la tabla montada.
+	const [initialLoading, setInitialLoading] = useState(true);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [detailBan, setDetailBan] = useState<BanItem | null>(null);
 	const [unbanBan, setUnbanBan] = useState<BanItem | null>(null);
@@ -47,33 +54,27 @@ export function ModerationView({ perms }: ModerationViewProps) {
 	}, []);
 
 	const loadData = useCallback(async () => {
-		setLoading(true);
-		const list = await moderationApi.listBans(!includeLifted);
-		setBans(list);
-		setFiltered(list);
-		setLoading(false);
-	}, [includeLifted]);
+		const q = searchQuery.trim().length >= 2 ? searchQuery.trim() : undefined;
+		const res = await moderationApi.listBans({ activeOnly: !includeLifted, q, limit: PAGE_SIZE, offset: (pageIndex - 1) * PAGE_SIZE });
+		setBans(res.bans);
+		setTotal(res.total);
+		// Página huérfana (p.ej. tras levantar el último ban visible): retroceder una.
+		if (res.bans.length === 0 && pageIndex > 1) setPageIndex(pageIndex - 1);
+		setInitialLoading(false);
+	}, [includeLifted, pageIndex, searchQuery]);
 
 	useEffect(() => {
 		void loadData();
 	}, [loadData]);
 
 	const handleSearch = (query: string) => {
-		if (!query) {
-			setFiltered(bans);
-			return;
-		}
-		const q = query.toLowerCase();
-		setFiltered(
-			bans.filter(
-				(b) =>
-					(b.userId ?? "").toLowerCase().includes(q) ||
-					b.reason.toLowerCase().includes(q) ||
-					b.source.toLowerCase().includes(q) ||
-					(b.externalId ?? "").toLowerCase().includes(q) ||
-					b.emailMasks.some((m) => m.toLowerCase().includes(q))
-			)
-		);
+		setSearchQuery(query);
+		setPageIndex(1);
+	};
+
+	const toggleIncludeLifted = () => {
+		setIncludeLifted((prev) => !prev);
+		setPageIndex(1);
 	};
 
 	const openCreate = () => {
@@ -179,17 +180,18 @@ export function ModerationView({ perms }: ModerationViewProps) {
 	return (
 		<>
 			<div className="mb-3 flex items-center gap-2">
-				<adc-checkbox
-					checked={includeLifted}
-					label={t("moderation.includeLifted")}
-					onClick={() => setIncludeLifted((prev) => !prev)}
-				/>
+				<adc-checkbox checked={includeLifted} label={t("moderation.includeLifted")} onClick={toggleIncludeLifted} />
 			</div>
 
 			<DataTable
 				columns={columns}
-				data={filtered}
-				loading={loading}
+				data={bans}
+				loading={initialLoading}
+				pageSize={PAGE_SIZE}
+				total={total}
+				page={pageIndex}
+				onPageChange={setPageIndex}
+				searchDebounce={300}
 				searchPlaceholder={t("moderation.searchPlaceholder")}
 				onSearch={handleSearch}
 				onAdd={updatable ? openCreate : undefined}

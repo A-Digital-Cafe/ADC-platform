@@ -159,7 +159,11 @@ return caller;
 ## Convenciones de respuesta
 
 - `GET` de un recurso: devolver el recurso plano.
-- `GET` de colección: devolver `{ items }` o una clave semántica estable.
+- `GET` de colección: devolver `{ items }` o una clave semántica estable. Si el listado está
+  capado/paginado en el DAO, incluir **`total`** en la respuesta (y su campo en el schema
+  TypeBox, o la serialización lo recorta): sin `total` la UI no puede paginar ni detectar el corte.
+- Los query params numéricos (`limit`, `offset`) van como `Type.String({ pattern: "^\d+$" })`
+  y se parsean en el handler: el validador de querystring NO coerciona tipos.
 - `DELETE`: devolver `{ ok: true }`.
 - Operaciones: devolver el estado actualizado o una estructura corta y explícita.
 

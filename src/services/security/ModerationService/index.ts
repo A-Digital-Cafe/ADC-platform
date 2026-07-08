@@ -36,7 +36,7 @@ export interface ModerationInternalApi {
 	banUserById(userId: string, args: { reason: string; expiresAt?: Date | null }, token: string): Promise<BanRecord>;
 	unbanUserById(userId: string, reason: string | undefined, token: string): Promise<number>;
 	unbanByExternalId(source: string, externalId: string, reason: string | undefined, token: string): Promise<number>;
-	listBans(opts: { activeOnly?: boolean; limit?: number }, token: string): Promise<BanRecord[]>;
+	listBans(opts: { activeOnly?: boolean; limit?: number; offset?: number; q?: string }, token: string): Promise<{ items: BanRecord[]; total: number }>;
 	/** Guard de jerarquía: el actor no puede moderarse a sí mismo ni a usuarios de jerarquía ≥. */
 	assertCanModerate(actorId: string | undefined, targetUserId: string): Promise<void>;
 }

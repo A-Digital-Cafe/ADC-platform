@@ -38,10 +38,11 @@ export const UserResponse = Type.Object({
 	lastLogin: Type.Optional(Type.String({ format: "date-time" })),
 });
 
-/** Respuesta de `GET /api/identity/users`: usuarios + roles referenciados. */
+/** Respuesta de `GET /api/identity/users`: página de usuarios + roles referenciados + total. */
 export const UsersListResponse = Type.Object({
 	users: Type.Array(UserResponse),
 	roles: Type.Array(RoleResponse),
+	total: Type.Integer({ minimum: 0, description: "Total de usuarios que matchean el filtro (para paginar)" }),
 });
 
 /** Array de usuarios (búsqueda, miembros, etc.). */
@@ -61,6 +62,9 @@ export const UsernameParams = Type.Object({
 
 export const ListUsersQuery = Type.Object({
 	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
+	q: Type.Optional(Type.String({ description: "Filtro por username/email (mín. 2 caracteres; busca sobre toda la colección)" })),
+	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (se clampa a 500)" })),
+	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
 });
 
 export const SearchUsersQuery = Type.Object({

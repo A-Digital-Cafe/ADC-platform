@@ -5,7 +5,7 @@ import type IdentityManagerService from "../index.js";
 import type { Capability } from "@common/security/Capability.ts";
 import type { Role } from "@common/types/identity/Role.ts";
 import * as RS from "./schemas/roles.js";
-import { JobAcceptedResponse, OrgIdQuery } from "./schemas/common.js";
+import { JobAcceptedResponse } from "./schemas/common.js";
 import { assertCanManageRole } from "../domain/hierarchy.js";
 
 /**
@@ -44,9 +44,10 @@ export class RoleEndpoints {
 		permissions: [P.IDENTITY.ROLES.READ],
 		options: {
 			tag: "IdentityManagerService/Roles",
-			summary: "Lista roles",
-			description: "El admin global puede filtrar por `orgId`; al filtrar por org se inicializan los roles predefinidos.",
-			schema: { querystring: OrgIdQuery, response: { 200: RS.RolesListResponse } },
+			summary: "Lista roles (paginado)",
+			description:
+				"Página de roles + `total`. El admin global puede filtrar por `orgId`; al filtrar por org se inicializan los roles predefinidos. `q` busca por nombre/descripción sobre toda la colección.",
+			schema: { querystring: RS.ListRolesQuery, response: { 200: RS.RolesListResponse } },
 		},
 	})
 	static async listRoles(ctx: EndpointCtx) {
@@ -56,7 +57,13 @@ export class RoleEndpoints {
 			const synced = await RoleEndpoints.identity.roles.initializePredefinedRoles(orgId);
 			if (synced) RoleEndpoints.identity.permissions.invalidateAll();
 		}
-		return RoleEndpoints.identity.roles.getAllRoles(ctx.token!, orgId);
+		const limit = Number(ctx.query?.limit) || undefined;
+		const offset = Number(ctx.query?.offset) || undefined;
+		const rawQ = typeof ctx.query?.q === "string" ? ctx.query.q.trim() : "";
+		const q = rawQ.length >= 2 ? rawQ : undefined;
+		const ownOnly = ctx.query?.ownOnly === "true";
+		const { items: roles, total } = await RoleEndpoints.identity.roles.getAllRoles(ctx.token!, orgId, { limit, offset, q, ownOnly });
+		return { roles, total };
 	}
 
 	@RegisterEndpoint({

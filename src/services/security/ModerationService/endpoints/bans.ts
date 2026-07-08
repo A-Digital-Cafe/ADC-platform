@@ -66,10 +66,14 @@ export class BanEndpoints {
 		BanEndpoints.assertGlobalAdmin(ctx);
 		const activeOnly = ctx.query?.activeOnly !== "false";
 		const limit = Math.min(Number.parseInt(ctx.query?.limit as string, 10) || 200, 500);
-		const bans = await BanEndpoints.api().listBans({ activeOnly, limit }, ctx.token!);
+		const offset = Math.max(Number.parseInt(ctx.query?.offset as string, 10) || 0, 0);
+		const rawQ = typeof ctx.query?.q === "string" ? ctx.query.q.trim() : "";
+		const q = rawQ.length >= 2 ? rawQ : undefined;
+		const { items: bans, total } = await BanEndpoints.api().listBans({ activeOnly, limit, offset, q }, ctx.token!);
 		// Sanitización: NO devolvemos los hashes completos (PII proxy). Las máscaras no
 		// son reversibles y los prefijos (12 hex) solo sirven para correlacionar entradas.
 		return {
+			total,
 			bans: bans.map((b) => ({
 				id: b.id,
 				userId: b.userId,

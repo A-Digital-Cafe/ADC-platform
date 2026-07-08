@@ -40,6 +40,11 @@ export interface Notification {
 	data?: Record<string, unknown> | null;
 	/** Canales por los que se intentó/realizó la entrega. */
 	channels: NotificationChannel[];
+	/**
+	 * Id del broadcast que la originó (`null` = dirigida). Índice único por
+	 * `(userId, broadcastId)`: dedup ante reentregas de la cola.
+	 */
+	broadcastId?: string | null;
 	/** Fecha de lectura; `null`/ausente = no leída. */
 	readAt?: Date | null;
 	createdAt: Date;
@@ -96,6 +101,25 @@ export interface NotifyInput {
 	 * nuevo" una vez y no apilás una por cada ocurrencia.
 	 */
 	collapseUnread?: boolean;
+}
+
+/**
+ * Anuncio a TODOS los usuarios activos. El productor no enumera destinatarios:
+ * emite UNA entrada y `NotificationService` hace el fan-out por lotes reanudables.
+ */
+export interface BroadcastInput {
+	/** Id único del anuncio (UUID del productor): clave de dedup por usuario. */
+	broadcastId: string;
+	topic: NotificationTopic;
+	title: string;
+	body: string;
+	/** Módulo productor (lo estampa `BaseModule.emitBroadcast`). Sólo informativo: la autorización es la capability. */
+	origin?: string;
+	icon?: string;
+	link?: string;
+	/** App de plataforma para resolver `link` como ruta dev/prod (ver `Notification.linkApp`). */
+	linkApp?: string;
+	data?: Record<string, unknown>;
 }
 
 /** Evento que viaja por el stream SSE hacia el cliente (campana del header). */

@@ -28,6 +28,8 @@ export enum Scope {
 	UiRegister = "ui:register",
 	/** Registrarse como app consumidora en StorageQuotaService. */
 	StorageRegister = "storage:register",
+	/** Anunciar a TODOS los usuarios (`NotificationService.broadcast`). Amplifica ×N: opt-in explícito. */
+	NotificationsBroadcast = "notifications:broadcast",
 }
 
 /** Símbolo de minteo: privado del módulo, nunca se exporta. */

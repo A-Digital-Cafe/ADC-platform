@@ -41,9 +41,15 @@ export const moderationApi = {
 	unbanUser: (userId: string, reason: string | undefined, intentKey: string) =>
 		api.post("/unban", { body: { userId, reason }, idempotencyKey: intentKey }),
 
-	listBans: async (activeOnly: boolean): Promise<BanItem[]> => {
-		const r = await api.get<{ bans: BanItem[] }>("/bans", { params: { activeOnly: String(activeOnly) } });
-		return r.data?.bans ?? [];
+	/**
+	 * Página de bans + `total` (para paginar). `q` (mín. 2 chars) filtra server-side por
+	 * userId/reason/source/externalId/email enmascarado; nunca por los hashes (PII proxy).
+	 */
+	listBans: async (opts: { activeOnly: boolean; q?: string; limit?: number; offset?: number }): Promise<{ bans: BanItem[]; total: number }> => {
+		const r = await api.get<{ bans: BanItem[]; total: number }>("/bans", {
+			params: { activeOnly: String(opts.activeOnly), q: opts.q, limit: opts.limit, offset: opts.offset },
+		});
+		return { bans: r.data?.bans ?? [], total: r.data?.total ?? 0 };
 	},
 
 	/** Ban raw por emails/IPs sueltos (sin usuario de plataforma; anti-evasión). */

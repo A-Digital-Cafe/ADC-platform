@@ -158,12 +158,11 @@ export default class StorageQuotaService extends BaseService implements IStorage
 		const internal = this.#internalIdentity;
 		if (!internal) throw new StorageError(503, "QUOTA_UNAVAILABLE", "Identity no disponible");
 
-		const [orgLimit, members, usageRows] = await Promise.all([
+		const [orgLimit, { usernameById, memberCount }, usageRows] = await Promise.all([
 			this.limits.resolveOrgLimit(orgId),
-			internal.users.getAllUsers(undefined, orgId),
+			this.#collectOrgMembers(internal, orgId),
 			this.quota.getOrgUsageRows(orgId),
 		]);
-		const usernameById = new Map(members.map((m) => [m.id, m.username]));
 
 		let totalBytes = 0;
 		let totalCount = 0;
@@ -181,8 +180,27 @@ export default class StorageQuotaService extends BaseService implements IStorage
 			totalBytes,
 			totalCount,
 			members: rows.slice(0, 200),
-			memberCount: members.length,
+			memberCount,
 		};
+	}
+
+	/**
+	 * `username` por userId de TODOS los miembros de la org, paginando el listado de
+	 * identity (que capea a 500 por página): con orgs grandes no se pierden usernames.
+	 */
+	async #collectOrgMembers(
+		internal: NonNullable<ReturnType<IIdentityManagerService["_internal"]>>,
+		orgId: string
+	): Promise<{ usernameById: Map<string, string>; memberCount: number }> {
+		const PAGE = 500;
+		const usernameById = new Map<string, string>();
+		for (let offset = 0; ; offset += PAGE) {
+			const { items, total } = await internal.users.getAllUsers(undefined, orgId, { limit: PAGE, offset });
+			for (const m of items) usernameById.set(m.id, m.username);
+			if (items.length < PAGE || offset + items.length >= total) {
+				return { usernameById, memberCount: total };
+			}
+		}
 	}
 
 	toOverrideDto(o: StorageLimitOverride) {

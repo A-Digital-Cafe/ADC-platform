@@ -159,22 +159,36 @@ export class GroupManager {
 	}
 
 	/**
-	 * Obtiene todos los grupos, separados por contexto.
+	 * Listado paginado de grupos (orden estable por `name` + `id`), separados por contexto.
 	 * - Con orgId: solo grupos de esta org
 	 * - Sin orgId (admin global): solo grupos globales (orgId === null)
+	 * `q` filtra por name/description; devuelve `total` para paginar; `limit` se clampa SIEMPRE.
 	 * @param token Token de autenticación (requerido para verificar permisos)
-	 * @param orgId Si se proporciona, retorna solo grupos de esta org
 	 */
-	async getAllGroups(token?: string, orgId?: string, limit: number = MAX_LIST_LIMIT): Promise<Group[]> {
+	async getAllGroups(
+		token?: string,
+		orgId?: string,
+		opts: { limit?: number; offset?: number; q?: string } = {}
+	): Promise<{ items: Group[]; total: number }> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.GROUPS, orgId);
 
 		try {
-			const filter = orgId ? { orgId } : { $or: [{ orgId: null }, { orgId: { $exists: false } }] };
-			const docs = await this.groupModel.find(filter).limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT));
-			return docs.map((d: any) => d.toObject?.() || d);
+			const filter: Record<string, unknown> = orgId ? { orgId } : { $or: [{ orgId: null }, { orgId: { $exists: false } }] };
+			if (opts.q) {
+				const regex = new RegExp(escapeRegex(opts.q), "i");
+				// $and para no pisar el $or del filtro de contexto (grupos globales)
+				filter.$and = [{ $or: [{ name: regex }, { description: regex }] }];
+			}
+			const limit = Math.min(Math.max(opts.limit ?? MAX_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+			const offset = Math.max(opts.offset ?? 0, 0);
+			const [docs, total] = await Promise.all([
+				this.groupModel.find(filter).sort({ name: 1, id: 1 }).skip(offset).limit(limit),
+				this.groupModel.countDocuments(filter),
+			]);
+			return { items: docs.map((d: any) => d.toObject?.() || d), total };
 		} catch (error) {
 			this.logger.logError(`Error obteniendo grupos: ${error}`);
-			return [];
+			return { items: [], total: 0 };
 		}
 	}
 
