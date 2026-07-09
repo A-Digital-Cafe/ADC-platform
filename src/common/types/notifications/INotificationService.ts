@@ -16,8 +16,13 @@ import type { CapabilityToken } from "../../security/Capability.ts";
  * (`hasModule("service", "NotificationService")` o `try/catch`).
  */
 export interface INotificationService {
-	/** Persiste (canal inApp) y reparte la notificación por los canales resueltos. */
-	notify(input: NotifyInput): Promise<void>;
+	/**
+	 * Persiste (canal inApp) y reparte la notificación por los canales resueltos.
+	 * Para topics **reservados** (`security.*`) exige `cap` con scope `identity:internal`
+	 * y deriva el `origin` de `cap.owner` (infalsificable); sin capability válida se
+	 * descartan. Los topics normales no requieren `cap`.
+	 */
+	notify(input: NotifyInput, cap?: CapabilityToken): Promise<void>;
 	/**
 	 * Anuncio a TODOS los usuarios activos. Superficie privilegiada: exige capability
 	 * con scope `notifications:broadcast`. Con cola encola UN job firmado (chunks

@@ -8,12 +8,6 @@ const REGISTERED_ENDPOINTS = Symbol("__registeredEndpoints__");
 const ENABLE_ENDPOINTS_META = Symbol("__enableEndpointsConfig__");
 const DISABLE_ENDPOINTS_META = Symbol("__disableEndpointsConfig__");
 
-/**
- * Almacena la kernelKey capturada en el start() de cada instancia para poder
- * invocar métodos protegidos con @OnlyKernel (p.ej. unregisterEndpointsByOwner)
- * durante el stop(), cuyo argumento puede no incluir la kernelKey.
- */
-const instanceKernelKeys = new WeakMap<object, symbol>();
 const PERMISSION_VALIDATOR = Symbol("__permissionValidator__");
 
 /**
@@ -226,9 +220,6 @@ export function EnableEndpoints(config?: EnableEndpointsConfig): MethodDecorator
 		descriptor.value = async function (this: any, ...args: any[]) {
 			const result = await originalMethod.apply(this, args);
 
-			// Capturar la kernelKey (primer argumento de start) para el teardown
-			if (typeof args[0] === "symbol") instanceKernelKeys.set(this, args[0]);
-
 			this.logger?.logDebug(`[EnableEndpoints] Intentando registrar endpoints para ${this.name || this.constructor.name}`);
 
 			try {
@@ -350,14 +341,19 @@ async function unregisterEndpointsForInstance(instance: any): Promise<void> {
 	const endpointManager = getEndpointManagerService(instance);
 	if (!endpointManager) return;
 
-	const kernelKey = instanceKernelKeys.get(instance);
-	if (!kernelKey) {
-		instance.logger?.logWarn("[DisableEndpoints] kernelKey no disponible; no se pueden desregistrar endpoints");
+	// Presenta la capability del propio módulo: EndpointManager desregistra sólo SUS endpoints
+	// (deriva el owner de `cap.owner`), sin depender de un token compartido.
+	let cap: unknown;
+	try {
+		cap = instance.getCapability?.();
+	} catch {
+		cap = null;
+	}
+	if (!cap) {
+		instance.logger?.logWarn("[DisableEndpoints] capability no disponible; no se pueden desregistrar endpoints");
 		return;
 	}
-
-	const ownerName = instance.name || instance.constructor.name;
-	await endpointManager.unregisterEndpointsByOwner(kernelKey, ownerName);
+	await endpointManager.unregisterEndpointsByOwner(cap);
 }
 
 /**

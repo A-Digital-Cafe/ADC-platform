@@ -1,5 +1,6 @@
 import { IModule, IModuleConfig } from "../../interfaces/modules/IModule.js";
 import { IApp } from "../../interfaces/modules/IApp.js";
+import { stopBoundModule } from "../decorators/OnlyKernel.ts";
 import { Logger } from "../logger/Logger.js";
 import { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { IProvider } from "../../providers/BaseProvider.ts";
@@ -314,13 +315,13 @@ export class ModuleRegistry {
 		if (!dependencies) return;
 
 		for (const { type, uniqueKey } of dependencies) {
-			await this.#releaseAppDependency(type, uniqueKey, kernelKey);
+			await this.#releaseAppDependency(type, uniqueKey);
 		}
 
 		this.#appModuleDependencies.delete(appName);
 	}
 
-	async #releaseAppDependency(type: ModuleType, uniqueKey: string, kernelKey: symbol): Promise<void> {
+	async #releaseAppDependency(type: ModuleType, uniqueKey: string): Promise<void> {
 		const refCountMap = this.#getRefCountMap(type);
 		const currentCount = refCountMap.get(uniqueKey) || 0;
 
@@ -330,16 +331,16 @@ export class ModuleRegistry {
 			return;
 		}
 
-		await this.#destroyModuleByKey(type, uniqueKey, kernelKey);
+		await this.#destroyModuleByKey(type, uniqueKey);
 	}
 
-	async #destroyModuleByKey(type: ModuleType, uniqueKey: string, kernelKey: symbol): Promise<void> {
+	async #destroyModuleByKey(type: ModuleType, uniqueKey: string): Promise<void> {
 		const registry = this.#getRegistry(type);
 		const module = registry.get(uniqueKey);
 		if (!module) return;
 
 		this.#logger.logDebug(`Limpiando ${type}: ${uniqueKey}`);
-		await module.stop?.(kernelKey);
+		await stopBoundModule(module, this.#kernelKey);
 		registry.delete(uniqueKey);
 		this.#getRefCountMap(type).delete(uniqueKey);
 		this.#removeFromNameMap(type, uniqueKey);
@@ -411,7 +412,7 @@ export class ModuleRegistry {
 		if (!module) return;
 		const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
 		this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name} (${uniqueKey})`);
-		await module.stop?.(kernelKey);
+		await stopBoundModule(module, this.#kernelKey);
 		registry.delete(uniqueKey);
 		this.#getRefCountMap(moduleType).delete(uniqueKey);
 
@@ -449,7 +450,7 @@ export class ModuleRegistry {
 		if (module) {
 			const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
 			this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name}`);
-			await module.stop?.(kernelKey);
+			await stopBoundModule(module, this.#kernelKey);
 			registry.delete(uniqueKey);
 
 			const nameMap = this.#getNameMap(moduleType);
@@ -466,6 +467,9 @@ export class ModuleRegistry {
 		kernelKey: symbol,
 		withTimeout: <T>(promise: Promise<T>, timeoutMs: number, name: string) => Promise<T | undefined>
 	): Promise<void> {
+		if (!this.verifyKernelKey(kernelKey)) {
+			throw new Error("stopAllModules: kernelKey inválida.");
+		}
 		for (const moduleType of ["provider", "utility", "service"] as ModuleType[]) {
 			const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
 			this.#logger.logInfo(`Deteniendo ${capitalizedModuleType === "Utility" ? "Utilitie" : capitalizedModuleType}s...`);
@@ -473,9 +477,7 @@ export class ModuleRegistry {
 			for (const [key, instance] of registry) {
 				try {
 					this.#logger.logDebug(`Deteniendo ${capitalizedModuleType} ${key}`);
-					if (instance.stop) {
-						await withTimeout(instance.stop(kernelKey), 2500, `${capitalizedModuleType} ${key}`);
-					}
+					await withTimeout(stopBoundModule(instance, this.#kernelKey), 2500, `${capitalizedModuleType} ${key}`);
 				} catch (e) {
 					this.#logger.logError(`Error deteniendo ${capitalizedModuleType} ${key}: ${e}`);
 				}

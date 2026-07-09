@@ -33,7 +33,7 @@ export default class OperationsService extends BaseService implements IOperation
 		await super.start(kernelKey);
 		this.#redis = this.getMyProvider<RedisProvider>("queue/redis");
 		const mongo = this.getMyProvider<MongoProvider>("object/mongo");
-		await mongo.connect(kernelKey);
+		await mongo.whenReady();
 		this.#stepperModel = mongo.createModel<StepperDocument>("OperationStep", stepperSchema);
 		this.logger.logOk("OperationsService iniciado");
 	}

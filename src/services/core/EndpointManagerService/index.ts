@@ -15,6 +15,7 @@ import { registerCsrfEndpoint } from "./parts/csrf.js";
 import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
 import { resolveRateLimitConfig, type RateLimitConfig, type ResolvedRateLimits } from "./parts/rate-limit.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
+import { Scope, assertScope, Capability, type CapabilityToken } from "@common/security/Capability.ts";
 
 // Re-exportar decoradores para uso externo
 export { RegisterEndpoint, EnableEndpoints, DisableEndpoints, readEndpointMetadata, readEnableEndpointsConfig } from "./decorators.js";
@@ -171,24 +172,28 @@ export default class EndpointManagerService extends BaseService {
 	}
 
 	/**
-	 * Elimina todos los endpoints asociados a un owner.
-	 * Solo invocable por el Kernel (o decoradores de ciclo de vida con kernelKey).
-	 * @param ownerName El nombre del propietario.
+	 * Elimina todos los endpoints asociados a un owner. Operación de infraestructura de
+	 * endpoints (la invoca el decorador `@DisableEndpoints` en el teardown del servicio,
+	 * o el orquestador): sin gate por token, ya que sólo desregistra rutas por `ownerName`
+	 * (no da acceso a datos ni escala privilegios).
 	 * @returns El número de endpoints eliminados.
 	 */
-	@OnlyKernel()
-	unregisterEndpointsByOwner(_kernelKey: symbol, ownerName: string) {
-		return this.#registry.unregisterByOwner(ownerName);
+	unregisterEndpointsByOwner(cap: CapabilityToken) {
+		// El owner se deriva de la capability del caller: un módulo sólo puede desregistrar
+		// SUS PROPIOS endpoints (no los de otro), sin depender de un token compartido.
+		if (!Capability.is(cap)) throw new Error("unregisterEndpointsByOwner: capability requerida");
+		return this.#registry.unregisterByOwner(cap.owner);
 	}
 
 	/**
 	 * Marca (o desmarca) un owner como "no disponible": sus endpoints responden 503
 	 * sin invocar el handler. El match cubre el owner exacto y sus managers
 	 * (`Owner::Manager`). Lo usa el ModuleOrchestrator al detener un servicio en
-	 * caliente (antes de descargarlo). Sólo invocable por el Kernel/orquestador.
+	 * caliente (antes de descargarlo). Gateado por `platform:infra`: sólo el kernel/orquestador
+	 * (que portan esa capability) pueden togglear el 503 de un owner arbitrario.
 	 */
-	@OnlyKernel()
-	setOwnerUnavailable(_kernelKey: symbol, ownerName: string, on: boolean, message?: string): void {
+	setOwnerUnavailable(cap: CapabilityToken, ownerName: string, on: boolean, message?: string): void {
+		assertScope(cap, Scope.PlatformInfra);
 		if (on) this.#unavailableOwners.set(ownerName, message || "Servicio temporalmente no disponible");
 		else this.#unavailableOwners.delete(ownerName);
 		this.logger.logDebug(`Owner ${ownerName} ${on ? "marcado NO disponible (503)" : "disponible de nuevo"}`);

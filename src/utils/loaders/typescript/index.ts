@@ -35,8 +35,11 @@ export default class TypeScriptLoader implements IModuleLoader {
 		const ProviderClass = await this.importClass<BaseProvider>(modulePath, "Provider");
 		const providerInstance = new ProviderClass(this.enrichConfig(modulePath, config));
 		try {
-			providerInstance.setKernelKey(this.#kernelKey);
-			await providerInstance.start(this.#kernelKey);
+			// Token de ciclo de vida ÚNICO por instancia (NO la master key): un provider
+			// comprometido no puede usar `Kernel.getModuleLoader(token)` ni otros gates con él.
+			const lifecycleToken = Symbol(`lifecycle:${providerInstance.name}`);
+			providerInstance.setKernelKey(lifecycleToken);
+			await providerInstance.start(lifecycleToken);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando provider ${providerInstance.name}: ${error.message}`);
 		}
@@ -47,8 +50,10 @@ export default class TypeScriptLoader implements IModuleLoader {
 		const UtilityClass = await this.importClass<IUtility>(modulePath, "Utility");
 		const utilityInstance = new UtilityClass(this.enrichConfig(modulePath, config));
 		try {
-			(utilityInstance as BaseUtility).setKernelKey?.(this.#kernelKey);
-			await utilityInstance.start?.(this.#kernelKey);
+			// Token de ciclo de vida ÚNICO por instancia (NO la master key).
+			const lifecycleToken = Symbol(`lifecycle:${utilityInstance.name}`);
+			(utilityInstance as BaseUtility).setKernelKey?.(lifecycleToken);
+			await utilityInstance.start?.(lifecycleToken);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando utility ${utilityInstance.name}: ${error.message}`);
 		}
@@ -68,8 +73,8 @@ export default class TypeScriptLoader implements IModuleLoader {
 			} catch {
 				/* sin config.json o sin privileges */
 			}
-			kernel.provisionModule(this.#kernelKey, serviceInstance, { name: serviceInstance.name, kind: "service", path: modulePath, declared });
-			await serviceInstance.start(this.#kernelKey);
+			const lifecycleToken = kernel.provisionModule(this.#kernelKey, serviceInstance, { name: serviceInstance.name, kind: "service", path: modulePath, declared });
+			await serviceInstance.start(lifecycleToken);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando service ${serviceInstance.name}: ${error.message}`);
 		}

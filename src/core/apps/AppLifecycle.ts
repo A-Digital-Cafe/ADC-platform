@@ -4,6 +4,8 @@ import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
 import type { Kernel } from "../../kernel.js";
 import type { AppInstanceTracker } from "./AppInstanceTracker.js";
+import { readBaseConfig } from "./AppConfigMerger.js";
+import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
 
 const RETRY_RUN_MS = 30_000;
 
@@ -35,11 +37,15 @@ export class AppLifecycle {
 
 		registry.setLoadingContext(instanceName);
 		try {
-			// Provisionar (liga la kernelKey + mintea/inyecta businessCap e infraCap) ANTES
-			// de cargar: loadModulesFromConfig usa la infraCap contenida; start valida la kernelKey.
-			kernel.provisionModule(kernelKey, app, { name: instanceName, kind: "app", path: filePath });
+			// Privilegios opt-in del app (default.json → `privileges`): scopes sensibles como
+			// `identity:system` sólo si el app los declara; si no, tier "app" = lifecycle + ui:register.
+			const baseConfig = await readBaseConfig(path.dirname(filePath));
+			const declared = Array.isArray(baseConfig.privileges) ? baseConfig.privileges : undefined;
+			// Provisionar (mintea/inyecta businessCap e infraCap + token de ciclo de vida) ANTES
+			// de cargar: loadModulesFromConfig usa la infraCap contenida; start valida el token.
+			const lifecycleToken = kernel.provisionModule(kernelKey, app, { name: instanceName, kind: "app", path: filePath, declared });
 			await app.loadModulesFromConfig();
-			await app.start?.(kernelKey);
+			await app.start?.(lifecycleToken);
 		} finally {
 			registry.setLoadingContext(null);
 		}
@@ -63,7 +69,7 @@ export class AppLifecycle {
 		if (!registry.hasApp(instanceName)) return;
 		const app = registry.getApp(instanceName);
 		logger.logInfo(`Recargando instancia de App: ${instanceName}`);
-		await app.stop?.(kernelKey);
+		await stopBoundModule(app, kernelKey);
 		await registry.cleanupAppModules(instanceName, kernelKey);
 		registry.deleteApp(instanceName);
 		tracker.removeFileKeysByInstance(instanceName);

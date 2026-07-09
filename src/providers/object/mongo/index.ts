@@ -80,6 +80,7 @@ export default class MongoProvider extends BaseProvider {
 
 	readonly #extraPhysicalKeys: Set<string> = new Set();
 	readonly #dbViewsCache: Map<string, Connection> = new Map();
+	#connectPromise: Promise<void> | null = null;
 
 	constructor(options?: any) {
 		super();
@@ -165,12 +166,13 @@ export default class MongoProvider extends BaseProvider {
 	}
 
 	/**
-	 * Asegura que la conexión esté establecida. Reservado al Kernel y a los
-	 * servicios que reciben la kernelKey en su `start()` (p.ej. OperationsService).
+	 * Espera a que la conexión iniciada en `start()` esté lista. No inicia ni reintenta
+	 * nada por sí misma (por eso no necesita capability: no hay poder que proteger).
+	 * Propaga el error si la conexión inicial agotó los reintentos.
 	 */
-	@OnlyKernel()
-	async connect(_kernelKey: symbol): Promise<void> {
-		return this.#connect();
+	async whenReady(): Promise<void> {
+		if (!this.#connectPromise) throw new Error("MongoProvider.whenReady: el provider aún no fue iniciado por el kernel");
+		await this.#connectPromise;
 	}
 
 	async #connect(): Promise<void> {
@@ -252,7 +254,8 @@ export default class MongoProvider extends BaseProvider {
 		super.start(kernelKey);
 		if (!this.initialized) {
 			this.initialized = true;
-			this.#connect().catch((err: any) => {
+			this.#connectPromise = this.#connect();
+			this.#connectPromise.catch((err: any) => {
 				Logger.error(`[MongoProvider] Error durante conexión inicial: ${err.message}`);
 			});
 		}

@@ -6,6 +6,7 @@ import { ModuleLoader } from "./utils/loaders/ModuleLoader.js";
 import { ModuleRegistry, type ModuleType } from "./utils/registry/ModuleRegistry.js";
 import { ReadonlyModuleRegistry } from "./utils/registry/ReadonlyModuleRegistry.ts";
 import { Scope, assertScope, CapabilityIssuer, type Capability, type CapabilityToken } from "./common/security/Capability.ts";
+import { setLifecycleRoot } from "./utils/decorators/OnlyKernel.ts";
 import { policyScopes, INFRA_CAP_SCOPES, type ModuleKind } from "./core/security/capabilityPolicy.ts";
 
 /** Superficie que el kernel usa para inyectar capabilities en un módulo recién construido. */
@@ -30,6 +31,13 @@ export class Kernel {
 	static readonly #kernelKey: symbol = Symbol(crypto.randomUUID());
 	/** Emisor de capabilities por módulo. Privado: ningún módulo puede mintear ni ampliarse scopes. */
 	readonly #issuer = new CapabilityIssuer();
+	/**
+	 * Capability propia del kernel para operaciones de infraestructura de plataforma
+	 * (`platform:infra`): la presenta el kernel/orquestador a `refreshAllImportMaps`,
+	 * `rebuildModule` y `setOwnerUnavailable`. `platform:infra` es INFRA_ONLY: ningún
+	 * módulo puede obtenerla vía `privileges`, así que no puede disparar esas operaciones.
+	 */
+	readonly #platformCap: Capability = this.#issuer.mint("kernel", "infra", [Scope.PlatformInfra]);
 	/** Secreto de arranque: lo posee sólo el bootstrap (`index.ts`), nunca un módulo. */
 	#bootToken?: symbol;
 	#isStartingUp = true;
@@ -71,6 +79,8 @@ export class Kernel {
 	readonly #orchestrator: ModuleOrchestrator;
 
 	constructor() {
+		// Raíz de confianza para el stop de ciclo de vida (ver `stopBoundModule`): la master key.
+		setLifecycleRoot(Kernel.#kernelKey);
 		const isShuttingDown = () => this.#isShuttingDown;
 		this.#appLoader = new AppLoader(this, this.#registry, this.#dockerManager, this.#logger, Kernel.#kernelKey, isShuttingDown);
 		this.#registrar = new ModuleRegistrar(this, this.#registry, Kernel.#moduleLoader, this.#logger, isShuttingDown);
@@ -93,6 +103,7 @@ export class Kernel {
 			disabledRegistry: this.#disabledRegistry,
 			logger: this.#logger,
 			kernelKey: Kernel.#kernelKey,
+			platformCap: this.#platformCap,
 			presetsPath: this.#presetsPath,
 			srcPath: this.#basePath,
 		});
@@ -147,17 +158,22 @@ export class Kernel {
 	 * más scopes: no conoce su `path`/`kind` reales ni la master key, y los setters son
 	 * idempotentes.
 	 */
-	public provisionModule(masterToken: symbol, instance: ProvisionableModule, opts: { name: string; kind: ModuleKind; path: string; declared?: string[] }): void {
+	public provisionModule(masterToken: symbol, instance: ProvisionableModule, opts: { name: string; kind: ModuleKind; path: string; declared?: string[] }): symbol {
 		if (masterToken !== Kernel.#kernelKey) {
 			this.#logger.logError("provisionModule: token inválido. Llamada rechazada.");
 			throw new Error("Invalid kernelKey");
 		}
-		// Liga la kernelKey para `@OnlyKernel` (transición) y mintea/inyecta las capabilities.
-		instance.setKernelKey(masterToken);
+		// Token de ciclo de vida ÚNICO por instancia para `@OnlyKernel` (start/stop). NO es la
+		// master key: el módulo lo recibe en `start()`, pero al no ser la master key no puede
+		// escalar (orchestrator/loader/registry mutable siguen exigiéndola) ni actuar por otro
+		// módulo. El caller lo usa para `start(token)`; el stop va por `stopBoundModule`.
+		const lifecycleToken = Symbol(`lifecycle:${opts.name}`);
+		instance.setKernelKey(lifecycleToken);
 		const businessCap = this.#issuer.mint(opts.name, opts.kind, policyScopes(opts));
 		const infraCap = this.#issuer.mint(opts.name, "infra", INFRA_CAP_SCOPES);
 		instance.setCapability?.(businessCap);
 		instance.setInfraToken?.(infraCap);
+		return lifecycleToken;
 	}
 
 	public async start(bootToken: symbol): Promise<void> {
@@ -285,7 +301,7 @@ export class Kernel {
 	async #refreshUiImportMaps(): Promise<void> {
 		try {
 			const uiFederation = this.#registry.getService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
-			if (uiFederation) await uiFederation.refreshAllImportMaps(Kernel.#kernelKey);
+			if (uiFederation) await uiFederation.refreshAllImportMaps(this.#platformCap);
 			else this.#logger.logWarn("UIFederationService no encontrado");
 		} catch (error: any) {
 			this.#logger.logError(`Error reinyectando import maps: ${error.message}`);

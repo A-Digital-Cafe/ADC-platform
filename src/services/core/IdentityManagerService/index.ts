@@ -90,7 +90,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 	#regionManager: RegionManager | null = null;
 	#orgManager: OrgManager | null = null;
 	#permissionManager: PermissionManager | null = null;
-	readonly #notifyManager: NotifyManager = new NotifyManager((input) => this.emitNotification(input));
+	readonly #notifyManager: NotifyManager = new NotifyManager((input) => this.emitSecureNotification(input));
 
 	// Managers internos (sin auth) para uso de servicios de infraestructura (ISessionManagerService)
 	#internalUserManager: UserManager | null = null;
@@ -414,10 +414,13 @@ export default class IdentityManagerService extends BaseService implements IIden
 		return buildInternalApi(this.#internalUserManager!, this.#internalOrgManager!, this.#internalRoleManager!);
 	}
 
-	/** Manager de attachments de avatares. Scope `identity:avatar`. */
+	/** Agregación de uso de avatares para cuota. Scope `identity:avatar`. */
 	_internalAvatar(token: CapabilityToken): IdentityAvatarApi {
 		assertScope(token, Scope.IdentityAvatar);
-		return { avatarAttachments: this.#avatarAttachmentsManager };
+		const mgr = this.#avatarAttachmentsManager;
+		const key = this.#kernelKey;
+		// `aggregateUsageByUser` va pre‑ligado al token de Identity: StorageQuota no cruza key.
+		return { avatarAttachments: mgr && key ? { aggregateUsageByUser: () => mgr.aggregateUsageByUser(key) } : null };
 	}
 
 	/** Mapeo de roles Discord (DB por guild con fallback a config). Scope `identity:discord`. */
@@ -629,8 +632,11 @@ export default class IdentityManagerService extends BaseService implements IIden
 	 * cascada. No falla si los presets no están cargados.
 	 */
 	#getUserDataPurgers(): UserDataPurger[] {
-		const kernelKey = this.#kernelKey;
-		if (!kernelKey) return [];
+		if (!this.#kernelKey) return []; // aún no iniciado
+		// Reenvía la **capability** de Identity (scope `identity:internal`): el servicio de
+		// datos (Drive/PM/Email) valida el scope y purga con SU PROPIO token interno. Así el
+		// handshake ya no depende de una master key compartida entre módulos.
+		const cap = this.getCapability();
 
 		const candidates: Array<{ service: string; method: string }> = [
 			{ service: "ProjectManagerService", method: "purgeUserPrivateData" },
@@ -647,7 +653,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			if (typeof fn === "function") {
 				purgers.push({
 					name: service,
-					run: (userId: string) => (fn as (k: symbol, u: string) => Promise<void>).call(instance, kernelKey, userId),
+					run: (userId: string) => (fn as (cap: CapabilityToken, u: string) => Promise<void>).call(instance, cap, userId),
 				});
 			}
 		}

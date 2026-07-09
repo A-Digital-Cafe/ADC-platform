@@ -32,6 +32,7 @@ export default class RabbitMQProvider extends BaseProvider {
 	#publisher: Publisher | null = null;
 	readonly #consumers: Map<string, Consumer> = new Map();
 	readonly #declaredTopologies: Set<string> = new Set();
+	#stopping = false;
 
 	constructor(config?: RabbitMQProviderConfig) {
 		super();
@@ -47,6 +48,10 @@ export default class RabbitMQProvider extends BaseProvider {
 		this.#connection = new Connection(url);
 
 		this.#connection.on("error", (err: Error) => {
+			if (this.#stopping) {
+				this.logger.logDebug(`[RabbitMQ] connection error during shutdown (expected): ${err.message}`);
+				return;
+			}
 			this.logger.logError(`[RabbitMQ] connection error: ${err.message}`);
 		});
 		this.#connection.on("connection", () => {
@@ -58,6 +63,7 @@ export default class RabbitMQProvider extends BaseProvider {
 	}
 
 	async stop(kernelKey: symbol): Promise<void> {
+		this.#stopping = true;
 		const drainPromises: Promise<void>[] = [];
 		for (const [key, consumer] of this.#consumers) {
 			this.logger.logDebug(`[RabbitMQ] draining consumer ${key}…`);

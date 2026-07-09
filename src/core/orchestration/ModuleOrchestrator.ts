@@ -10,6 +10,7 @@ import type { DependencyReloader } from "../modules/DependencyReloader.js";
 import type { DisabledRegistry } from "./DisabledRegistry.js";
 import { DependencyGraph } from "./DependencyGraph.js";
 import type { DisableOptions, FriendlyGroupState, ModuleSnapshotItem, OrchestratorLayer, PersistedStatusItem, ReloadTarget } from "./types.js";
+import type { Capability } from "@common/security/Capability.ts";
 
 /**
  * Margen tras el arranque antes de declarar "caído" a un módulo que nunca se vio cargado.
@@ -18,14 +19,14 @@ import type { DisableOptions, FriendlyGroupState, ModuleSnapshotItem, Orchestrat
  */
 const FAILURE_GRACE_MS = 180_000;
 
-/** Controlador de 503 expuesto por EndpointManagerService. */
+/** Controlador de 503 expuesto por EndpointManagerService. Gateado por `platform:infra`. */
 interface EndpointUnavailabilityController {
-	setOwnerUnavailable(kernelKey: symbol, ownerName: string, on: boolean, message?: string): void;
+	setOwnerUnavailable(cap: Capability, ownerName: string, on: boolean, message?: string): void;
 }
 
 /** Controlador de UI federada expuesto por UIFederationService (sólo para recompilar ui-libraries). */
 interface UIController {
-	rebuildModule(kernelKey: symbol, moduleName: string): Promise<{ rebuilt: boolean; mode: "watch" | "static"; error?: string }>;
+	rebuildModule(cap: Capability, moduleName: string): Promise<{ rebuilt: boolean; mode: "watch" | "static"; error?: string }>;
 	listModulesInfo(): Array<{ name: string; namespace: string; framework: string; isLibrary: boolean; isHost: boolean; buildStatus: string }>;
 }
 
@@ -37,6 +38,8 @@ export interface ModuleOrchestratorDeps {
 	disabledRegistry: DisabledRegistry;
 	logger: ILogger;
 	kernelKey: symbol;
+	/** Capability `platform:infra` del kernel para operaciones de infra (503/rebuild UI). */
+	platformCap: Capability;
 	presetsPath: string;
 	srcPath: string;
 }
@@ -457,7 +460,7 @@ export class ModuleOrchestrator {
 	}
 
 	async #stopNode(node: StopNode, messageKey?: string): Promise<void> {
-		const { kernelKey, logger } = this.#d;
+		const { logger } = this.#d;
 		try {
 			if (node.type === "app") {
 				// La app NO se descarga ni se baja su dev-server (eso daba "connection refused"):
@@ -470,7 +473,7 @@ export class ModuleOrchestrator {
 			if (node.type === "service") {
 				// Orden prolijo: 1) endpoints → 503, 2) stop del servicio, 3) liberar
 				// providers/utilities exclusivos (cierra su conexión, p.ej. mongo).
-				this.#endpointController()?.setOwnerUnavailable(kernelKey, node.name, true, this.#messageFor(messageKey));
+				this.#endpointController()?.setOwnerUnavailable(this.#d.platformCap, node.name, true, this.#messageFor(messageKey));
 				await this.#unloadAllAliases("service", node.name);
 				await this.#releaseExclusiveDeps(node.name);
 			} else {
@@ -528,7 +531,7 @@ export class ModuleOrchestrator {
 	}
 
 	async #startNode(node: StopNode): Promise<void> {
-		const { kernelKey, dependencyReloader, logger } = this.#d;
+		const { dependencyReloader, logger } = this.#d;
 		try {
 			if (node.type === "app") {
 				// Re-habilitar recarga la app desde disco (rebuild + re-registro de UI/i18n),
@@ -546,7 +549,7 @@ export class ModuleOrchestrator {
 				return;
 			}
 			if (node.type === "service") {
-				this.#endpointController()?.setOwnerUnavailable(kernelKey, node.name, false);
+				this.#endpointController()?.setOwnerUnavailable(this.#d.platformCap, node.name, false);
 			}
 			await dependencyReloader.reloadByName(node.type, node.name);
 			logger.logOk(`[orchestrator] re-habilitado ${node.type}:${node.name}`);
@@ -632,7 +635,7 @@ export class ModuleOrchestrator {
 		const controller = this.#uiController();
 		if (!controller) return { rebuilt: false, mode: "static", error: "UIFederationService no disponible" };
 		this.#d.logger.logInfo(`[orchestrator] recompilando ui-library ${moduleName}...`);
-		return controller.rebuildModule(this.#d.kernelKey, moduleName);
+		return controller.rebuildModule(this.#d.platformCap, moduleName);
 	}
 
 	#messageFor(messageKey?: string): string | undefined {

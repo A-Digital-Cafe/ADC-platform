@@ -1,6 +1,5 @@
 import type { Model } from "mongoose";
 import type { UserManager, OrgManager, RoleManager } from "./dao/index.js";
-import type { AttachmentsManager } from "../../../utilities/attachments/attachments-utility/index.js";
 import type { DiscordGuildConfig } from "./domain/index.js";
 
 /**
@@ -19,9 +18,14 @@ export interface IdentityInternalApi {
 	getUserIdsByRoleName(roleName: string): Promise<string[]>;
 }
 
-/** Manager de attachments de avatares (scope `identity:avatar`). */
+/**
+ * Superficie de avatares (scope `identity:avatar`): sólo agregación de uso para cuota,
+ * pre‑ligada al token de Identity (el consumidor —StorageQuota— no cruza key alguna).
+ */
 export interface IdentityAvatarApi {
-	avatarAttachments: AttachmentsManager | null;
+	avatarAttachments: {
+		aggregateUsageByUser(): Promise<Array<{ userId: string; orgId: string | null; bytes: number; count: number }>>;
+	} | null;
 }
 
 /** Mapeo de roles Discord (scope `identity:discord`). */

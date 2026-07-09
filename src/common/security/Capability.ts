@@ -22,6 +22,10 @@ export enum Scope {
 	IdentityDiscord = "identity:discord",
 	/** Acceso interno a ModerationService (`_internal`). */
 	ModerationInternal = "moderation:internal",
+	/** Acceso al usuario/credenciales SYSTEM de IdentityManager (`system.getSystemUser/getSystemCredentials`). */
+	IdentitySystem = "identity:system",
+	/** Login programático con credenciales (`SessionManager.loginProgrammatic`). Mintea sesión sin flujo interactivo. */
+	SessionProgrammatic = "session:programmatic",
 	/** Obtener la instancia cruda del servidor HTTP (fastify `getApp`). */
 	HttpRaw = "http:raw",
 	/** Registrar/desregistrar un módulo UI en UIFederation. */
@@ -30,6 +34,13 @@ export enum Scope {
 	StorageRegister = "storage:register",
 	/** Anunciar a TODOS los usuarios (`NotificationService.broadcast`). Amplifica ×N: opt-in explícito. */
 	NotificationsBroadcast = "notifications:broadcast",
+	/**
+	 * Control de infraestructura de plataforma invocado por el kernel/orquestador:
+	 * refrescar import maps, recompilar módulos UI, togglear disponibilidad (503) de
+	 * endpoints. La mintea SÓLO el kernel para sí mismo (no es declarable por un módulo);
+	 * evita que un módulo comprometido dispare esas operaciones (DoS) directamente.
+	 */
+	PlatformInfra = "platform:infra",
 }
 
 /** Símbolo de minteo: privado del módulo, nunca se exporta. */

@@ -1,5 +1,6 @@
 {
 	"failOnError": false,
+	"privileges": ["identity:system", "session:programmatic"],
 	"services": [
 		{
 			"name": "IdentityManagerService",

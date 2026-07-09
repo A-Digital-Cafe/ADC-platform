@@ -4,6 +4,7 @@ import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId, hashPassword, generateRandomCredentials } from "@common/utils/crypto.ts";
 import { SystemRole } from "../defaults/systemRoles.ts";
 import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
+import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
 
 export class SystemManager {
 	#systemUser: User | null = null;
@@ -56,12 +57,11 @@ export class SystemManager {
 	}
 
 	/**
-	 * Obtiene el usuario SYSTEM.
-	 * REQUIERE kernelKey - solo código con acceso al kernel puede obtener el usuario SYSTEM.
-	 * @param kernelKey - La clave del kernel para verificar acceso privilegiado
+	 * Obtiene el usuario SYSTEM. Gateado por capability con scope `identity:system`:
+	 * sólo un módulo que declare `identity:system` en sus `privileges` puede obtenerlo.
 	 */
-	@OnlyKernel()
-	async getSystemUser(_kernelKey: symbol): Promise<User> {
+	async getSystemUser(token: CapabilityToken): Promise<User> {
+		assertScope(token, Scope.IdentitySystem);
 		if (!this.#systemUser) {
 			throw new Error("Usuario SYSTEM no está disponible");
 		}
@@ -69,13 +69,11 @@ export class SystemManager {
 	}
 
 	/**
-	 * Obtiene las credenciales del usuario SYSTEM.
-	 * REQUIERE kernelKey - solo código privilegiado puede acceder.
-	 * Las credenciales son válidas solo durante este arranque del sistema.
-	 * @param kernelKey - La clave del kernel para verificar acceso privilegiado
+	 * Obtiene las credenciales del usuario SYSTEM (válidas sólo durante este arranque).
+	 * Gateado por capability con scope `identity:system`.
 	 */
-	@OnlyKernel()
-	getSystemCredentials(_kernelKey: symbol): { username: string; password: string } {
+	getSystemCredentials(token: CapabilityToken): { username: string; password: string } {
+		assertScope(token, Scope.IdentitySystem);
 		if (!this.#systemCredentials) {
 			throw new Error("Credenciales SYSTEM no disponibles");
 		}

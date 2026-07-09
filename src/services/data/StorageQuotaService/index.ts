@@ -102,7 +102,7 @@ export default class StorageQuotaService extends BaseService implements IStorage
 			this.#quotaManager.registerApp({
 				appId: "avatars",
 				label: "Avatares",
-				computeUsage: () => avatarAttachments.aggregateUsageByUser(kernelKey),
+				computeUsage: () => avatarAttachments.aggregateUsageByUser(),
 			});
 		}
 

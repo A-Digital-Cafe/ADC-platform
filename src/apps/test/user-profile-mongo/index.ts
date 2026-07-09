@@ -24,7 +24,6 @@ export default class UserProfileApp extends BaseApp {
 	private identityManager!: IIdentityManagerService;
 	private sessionManager!: ISessionManagerService;
 	#systemUser: User | null = null;
-	#kernelKey!: symbol;
 	#systemToken: string | null = null;
 	private testData: IdentityTestData = {
 		userIds: [],
@@ -34,10 +33,10 @@ export default class UserProfileApp extends BaseApp {
 
 	async start(kernelKey: symbol) {
 		await super.start(kernelKey);
-		this.#kernelKey = kernelKey;
 		this.identityManager = this.getMyService<IIdentityManagerService>("IdentityManagerService");
 		this.sessionManager = this.getMyService<ISessionManagerService>("SessionManagerService");
-		this.#systemUser = await this.identityManager.system.getSystemUser(kernelKey);
+		// Capability del app (scopes `identity:system` + `session:programmatic`, declarados en default.json).
+		this.#systemUser = await this.identityManager.system.getSystemUser(this.getCapability());
 	}
 
 	async stop() {
@@ -158,13 +157,13 @@ export default class UserProfileApp extends BaseApp {
 	async #testAuthenticatedOperations(): Promise<void> {
 		Logger.info(`\n[${this.name}] --- Test: Operaciones Autenticadas (con token) ---`);
 
-		// 1. Obtener el usuario SYSTEM y sus credenciales (requiere kernelKey)
+		// 1. Obtener el usuario SYSTEM y sus credenciales (requiere capability `identity:system`)
 		Logger.ok(`[${this.name}] ✓ Usuario SYSTEM obtenido: ${this.#systemUser!.username}`);
 
 		// 2. Hacer login del SYSTEM usando sus credenciales reales
-		// Las credenciales solo son accesibles con kernelKey (seguro)
-		const systemCredentials = this.identityManager.system.getSystemCredentials(this.#kernelKey);
-		const systemToken = await this.sessionManager.loginProgrammatic(this.#kernelKey, systemCredentials.username, systemCredentials.password);
+		// Las credenciales solo son accesibles con capability `identity:system` (seguro)
+		const systemCredentials = this.identityManager.system.getSystemCredentials(this.getCapability());
+		const systemToken = await this.sessionManager.loginProgrammatic(this.getCapability(), systemCredentials.username, systemCredentials.password);
 		if (!systemToken) {
 			throw new Error("No se pudo obtener token para usuario SYSTEM");
 		}
@@ -187,7 +186,7 @@ export default class UserProfileApp extends BaseApp {
 		Logger.ok(`[${this.name}] ✓ Usuario limitado creado: ${limitedUser.username}`);
 
 		// 5. Hacer login del usuario limitado usando sus credenciales reales
-		const limitedToken = await this.sessionManager.loginProgrammatic(this.#kernelKey, limitedUser.username, limitedPassword);
+		const limitedToken = await this.sessionManager.loginProgrammatic(this.getCapability(), limitedUser.username, limitedPassword);
 		if (!limitedToken) {
 			throw new Error("No se pudo obtener token para usuario limitado");
 		}
@@ -273,8 +272,8 @@ export default class UserProfileApp extends BaseApp {
 	async #getSystemToken(): Promise<string> {
 		if (this.#systemToken) return this.#systemToken;
 
-		const systemCredentials = this.identityManager.system.getSystemCredentials(this.#kernelKey);
-		const token = await this.sessionManager.loginProgrammatic(this.#kernelKey, systemCredentials.username, systemCredentials.password);
+		const systemCredentials = this.identityManager.system.getSystemCredentials(this.getCapability());
+		const token = await this.sessionManager.loginProgrammatic(this.getCapability(), systemCredentials.username, systemCredentials.password);
 		if (!token) {
 			throw new Error("No se pudo obtener token para usuario SYSTEM");
 		}

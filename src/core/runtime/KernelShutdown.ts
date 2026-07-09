@@ -1,6 +1,7 @@
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
 import type { DockerManager } from "../../utils/system/DockerManager.js";
+import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
 
 type WithTimeoutFn = <T>(promise: Promise<T>, timeoutMs: number, name: string) => Promise<T | undefined>;
 
@@ -43,9 +44,7 @@ async function stopApp(
 ): Promise<void> {
 	try {
 		logger.logDebug(`Deteniendo App ${name}`);
-		if (instance.stop) {
-			await withTimeout(instance.stop(kernelKey), 3000, `App ${name}`);
-		}
+		await withTimeout(stopBoundModule(instance, kernelKey), 3000, `App ${name}`);
 		await stopAppDocker(name.split(":")[0], dockerManager, withTimeout, logger);
 	} catch (e) {
 		logger.logError(`Error deteniendo App ${name}: ${e}`);

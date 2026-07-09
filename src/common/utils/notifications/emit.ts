@@ -61,6 +61,26 @@ export async function emitNotification(registry: ReadonlyModuleRegistry, input: 
 }
 
 /**
+ * Emite una notificación de **topic reservado** (`security.*`) de forma segura:
+ * entrega **directa en proceso** presentando la `cap` del productor, de modo que
+ * `NotificationService` derive el `origin` de `cap.owner` (infalsificable) en vez de
+ * confiar en el `origin` del payload. NO usa la cola durable (una capability viva no
+ * se puede serializar): si el servicio no está cargado, se descarta (best-effort).
+ *
+ * **Nunca lanza.** @returns `true` si se entregó; `false` si se descartó.
+ */
+export async function emitNotificationSecure(registry: ReadonlyModuleRegistry, cap: CapabilityToken, input: NotifyInput): Promise<boolean> {
+	try {
+		if (!registry.hasAnyModule("service", NOTIFY_SERVICE)) return false;
+		const service = registry.getService<INotificationService>(NOTIFY_SERVICE);
+		await service.notify(input, cap);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Cómo se despachó el anuncio: `queued` (job firmado en cola; fan-out reanudable),
  * `direct` (sin cola, fan-out inmediato; reintetable sin duplicar por `broadcastId`)
  * o `dropped` (NO se anunció: servicio ausente, sin scope o fan-out fallido).

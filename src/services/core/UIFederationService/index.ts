@@ -17,7 +17,7 @@ import { updateImportMap } from "./utils/server/import-map-updater.js";
 import { setupImportMapEndpoints } from "./utils/server/endpoints.js";
 import { computeStats, refreshAllImportMaps, unregisterUIModule, type UIStats } from "./utils/server/service-operations.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
-import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
+import { Scope, assertScope, type Capability, type CapabilityToken } from "@common/security/Capability.ts";
 import type { IUIFederationService } from "@common/types/ui/IUIFederationService.ts";
 
 export default class UIFederationService extends BaseService implements IUIFederationService {
@@ -147,10 +147,13 @@ export default class UIFederationService extends BaseService implements IUIFeder
 		return this.#importMaps.get(namespace || DEFAULT_NAMESPACE) || { imports: {} };
 	}
 
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
-	@OnlyKernel()
-	refreshAllImportMaps(_kernelKey: symbol): Promise<void> {
+	/**
+	 * Reinyecta los import maps de todas las namespaces. Infra UI invocada por el
+	 * kernel (en boot) y el orquestador; gateada por `platform:infra` (que sólo mintea
+	 * el kernel), de modo que un módulo no pueda dispararla.
+	 */
+	refreshAllImportMaps(cap: CapabilityToken): Promise<void> {
+		assertScope(cap, Scope.PlatformInfra);
 		return refreshAllImportMaps(this.#ctx());
 	}
 
@@ -180,10 +183,8 @@ export default class UIFederationService extends BaseService implements IUIFeder
 	 * `git pull`. En desarrollo el `stencil build --watch` ya reconstruye al cambiar
 	 * los archivos, así que es no-op; en producción re-ejecuta el build estático.
 	 */
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore - Falso positivo del IDE con decorador legacy (experimentalDecorators: true)
-	@OnlyKernel()
-	async rebuildModule(_kernelKey: symbol, moduleName: string): Promise<{ rebuilt: boolean; mode: "watch" | "static"; error?: string }> {
+	async rebuildModule(cap: CapabilityToken, moduleName: string): Promise<{ rebuilt: boolean; mode: "watch" | "static"; error?: string }> {
+		assertScope(cap, Scope.PlatformInfra);
 		const found = this.#registry.findModuleByName(moduleName);
 		if (!found) return { rebuilt: false, mode: this.#isDevelopment ? "watch" : "static", error: `Módulo UI no encontrado: ${moduleName}` };
 

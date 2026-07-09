@@ -34,6 +34,37 @@ function verify(self: object, provided: unknown, label: string): void {
 	}
 }
 
+/**
+ * Raíz de confianza para detener módulos: la master key del kernel. La fija UNA vez el
+ * Kernel en su construcción; sólo el kernel/loaders/registry (que la poseen) pueden
+ * invocar {@link stopBoundModule}. Un módulo nunca recibe la master key, así que no
+ * puede detener a otros módulos (ni leer su token de ciclo de vida).
+ */
+let LIFECYCLE_ROOT: symbol | undefined;
+
+/** Registra (idempotente) la master key como raíz autorizada para el stop de ciclo de vida. */
+export function setLifecycleRoot(rootKey: symbol): void {
+	LIFECYCLE_ROOT ??= rootKey;
+}
+
+/**
+ * Detiene un módulo usando el **token de ciclo de vida por-instancia** con el que fue
+ * ligado (`bindKernelKey`), sin exponerlo. Reemplaza a `instance.stop(masterKey)`: cada
+ * módulo se detiene con SU propio token, de modo que la master key no se filtra a la
+ * lógica de negocio vía `stop()`.
+ *
+ * Requiere presentar la master key (`rootKey`), que sólo tienen kernel/registry/loaders;
+ * un módulo no puede llamar esto para detener a otro (no la posee). No devuelve el token.
+ */
+export async function stopBoundModule(instance: { stop?: (...args: any[]) => unknown } | null | undefined, rootKey: symbol): Promise<void> {
+	if (LIFECYCLE_ROOT === undefined || rootKey !== LIFECYCLE_ROOT) {
+		throw new Error("stopBoundModule: no autorizado (se requiere la master key del kernel)");
+	}
+	if (!instance || typeof instance.stop !== "function") return;
+	const token = instanceKeys.get(instance);
+	await instance.stop(token);
+}
+
 export function OnlyKernel() {
 	return function (targetOrMethod: any, propertyKeyOrContext: string | ClassMethodDecoratorContext, descriptor?: PropertyDescriptor): any {
 		// Stage 3 decorators: targetOrMethod es el método, propertyKeyOrContext es el context

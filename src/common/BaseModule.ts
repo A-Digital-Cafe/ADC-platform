@@ -7,7 +7,7 @@ import type { ReadonlyModuleRegistry } from "../utils/registry/ReadonlyModuleReg
 import type { ModuleRegistry } from "../utils/registry/ModuleRegistry.ts";
 import type { ModuleLoader } from "../utils/loaders/ModuleLoader.ts";
 import type { Capability } from "./security/Capability.ts";
-import { emitNotification, emitBroadcast, type BroadcastEmitResult } from "./utils/notifications/emit.js";
+import { emitNotification, emitNotificationSecure, emitBroadcast, type BroadcastEmitResult } from "./utils/notifications/emit.js";
 import type { BroadcastInput, NotifyInput } from "./types/notifications/Notification.js";
 
 /**
@@ -249,6 +249,22 @@ export abstract class BaseModule implements IModule {
 		} catch (e) {
 			// Defensa extra: emitNotification ya es no-throw, pero nunca propagamos.
 			this.logger.logWarn(`emitNotification falló (ignorado): ${(e as Error).message}`);
+		}
+	}
+
+	/**
+	 * Emite una notificación de **topic reservado** (`security.*`) reenviando la
+	 * **capability** del módulo: `NotificationService` deriva el `origin` de `cap.owner`
+	 * (infalsificable) en vez de confiar en el payload, y sólo la acepta si el módulo
+	 * porta `identity:internal` y su owner está allowlisted para ese topic. Entrega
+	 * directa en proceso (sin cola durable). **Nunca lanza.**
+	 */
+	protected async emitSecureNotification(input: NotifyInput): Promise<void> {
+		try {
+			const ok = await emitNotificationSecure(this.#requireRegistry(), this.getCapability(), { ...input, origin: this.name });
+			if (!ok) this.logger.logDebug(`Notificación de seguridad descartada (subsistema no disponible): topic=${input.topic}`);
+		} catch (e) {
+			this.logger.logWarn(`emitSecureNotification falló (ignorado): ${(e as Error).message}`);
 		}
 	}
 

@@ -7,6 +7,7 @@ import type RedisProvider from "../../../providers/queue/redis/index.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.ts";
 import type { IModerationService } from "@common/types/identity/IModerationService.ts";
+import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
 import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
 export type { AuthenticatedUser, TokenVerificationResult } from "./types.js";
 
@@ -84,8 +85,6 @@ export default class SessionManagerService extends BaseService implements ISessi
 		return this.config.private?.cookieDomain || (IS_DEV ? "localhost" : ".adigitalcafe.com");
 	}
 
-	#kernelKey?: symbol;
-
 	/** Configuración custom interpolada desde config.json + .env */
 	get #customConfig(): SessionManagerConfig {
 		return (this.config?.custom || {}) as SessionManagerConfig;
@@ -100,7 +99,6 @@ export default class SessionManagerService extends BaseService implements ISessi
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
-		this.#kernelKey ??= kernelKey;
 
 		this.#jwtProvider ??= this.getMyProvider<IJWTProviderMultiKey>("security/jwt");
 		this.#identityService ??= this.getMyService<IIdentityManagerService>("IdentityManagerService");
@@ -223,8 +221,9 @@ export default class SessionManagerService extends BaseService implements ISessi
 			identityService: this.#identityService,
 			logger: this.logger,
 			// Aviso canónico al usuario expulsado (plantilla server-side security.sessions_revoked).
+			// Vía segura (reenvía la capability): origin infalsificable desde `cap.owner`.
 			notifyRevoked: (targetUserId) =>
-				void this.emitNotification({
+				void this.emitSecureNotification({
 					userId: targetUserId,
 					topic: "security.sessions_revoked",
 					title: "Tus sesiones fueron cerradas",
@@ -336,18 +335,14 @@ export default class SessionManagerService extends BaseService implements ISessi
 	}
 
 	/**
-	 * Login programático - Solo para servicios del kernel
-	 *
-	 * Permite autenticar un usuario sin pasar por HTTP.
-	 * Requiere kernelKey para prevenir uso no autorizado.
+	 * Login programático (sin HTTP): autentica con credenciales y mintea un token.
+	 * Gateado por capability con scope `session:programmatic`: un módulo debe declararlo
+	 * en sus `privileges` para poder crear sesiones sin flujo interactivo.
 	 *
 	 * @returns Token de acceso válido o null si las credenciales son inválidas
 	 */
-	async loginProgrammatic(kernelKey: symbol, username: string, password: string): Promise<string | null> {
-		// Verificar que es una llamada autorizada del kernel
-		if (this.#kernelKey !== kernelKey) {
-			throw new Error("Acceso denegado: kernelKey inválido");
-		}
+	async loginProgrammatic(cap: CapabilityToken, username: string, password: string): Promise<string | null> {
+		assertScope(cap, Scope.SessionProgrammatic);
 
 		if (!this.#tokenService || !this.#keyStore || !this.#jwtProvider) {
 			throw new Error("SessionManagerService no está inicializado");
@@ -402,7 +397,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 			await this.#redis.sadd(key, ip);
 			await this.#redis.expire(key, 180 * 24 * 60 * 60); // 180 días
 			if (known.length === 0) return; // primer login: registrar la IP sin avisar
-			await this.emitNotification({
+			await this.emitSecureNotification({
 				userId,
 				topic: "security.new_login",
 				title: "Nuevo inicio de sesión",

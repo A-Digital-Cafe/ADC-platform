@@ -657,13 +657,13 @@ export class ModuleLoader {
 			services: serviceConfig.services || [],
 			__modulePath: serviceDir,
 		});
-		kernel.provisionModule(kernelKey, instance, {
+		const lifecycleToken = kernel.provisionModule(kernelKey, instance, {
 			name: serviceName,
 			kind: "service",
 			path: serviceDir,
 			declared: Array.isArray(serviceConfig.privileges) ? serviceConfig.privileges : undefined,
 		});
-		await instance.start(kernelKey);
+		await instance.start(lifecycleToken);
 
 		const registrationConfig: IModuleConfig = {
 			name: serviceName,
