@@ -112,12 +112,6 @@ export class AdcPlatformLink {
 		return this.authorLabel || info.title;
 	}
 
-	/** Estado "sin acceso": el chip no navega ni propaga el click a routers SPA. */
-	private readonly blockNavigation = (ev: MouseEvent) => {
-		ev.preventDefault();
-		ev.stopPropagation();
-	};
-
 	private renderIcon(iconTag?: string) {
 		if (iconTag) {
 			const IconTag = iconTag;
@@ -160,27 +154,36 @@ export class AdcPlatformLink {
 		const appLabel = this.appLabel(info);
 		const title = this.title(info);
 
-		return (
-			<a
-				href={denied ? undefined : info.href}
-				target={denied ? undefined : "_blank"}
-				rel={denied ? undefined : "noopener noreferrer"}
-				role={denied ? "link" : undefined}
-				aria-disabled={denied ? "true" : undefined}
-				tabindex={denied ? "-1" : undefined}
-				onClick={denied ? this.blockNavigation : undefined}
-				class={`${chipClass} ${denied ? "cursor-not-allowed opacity-70" : "text-text"}`}
-				aria-label={`${appLabel}: ${denied ? deniedText : title}`}
-				title={denied ? `${appLabel} · ${deniedText}` : `${appLabel} · ${title}`}
-			>
-				{denied ? (
+		// Estado "sin acceso": chip inerte (un <a> sin href con onClick es un
+		// anti-patrón de accesibilidad, typescript:S6844); no navega ni recibe foco.
+		if (denied) {
+			return (
+				<span
+					aria-disabled="true"
+					class={`${chipClass} cursor-not-allowed opacity-70`}
+					aria-label={`${appLabel}: ${deniedText}`}
+					title={`${appLabel} · ${deniedText}`}
+				>
 					<span class="adc-platform-link__icon shrink-0" aria-hidden="true">
 						🔒
 					</span>
-				) : (
-					this.renderIcon(info.iconTag)
-				)}
-				<span class="adc-platform-link__title truncate font-medium text-text">{denied ? deniedText : title}</span>
+					<span class="adc-platform-link__title truncate font-medium text-text">{deniedText}</span>
+					<span class="adc-platform-link__app shrink-0 text-xs text-muted">{appLabel}</span>
+				</span>
+			);
+		}
+
+		return (
+			<a
+				href={info.href}
+				target="_blank"
+				rel="noopener noreferrer"
+				class={`${chipClass} text-text`}
+				aria-label={`${appLabel}: ${title}`}
+				title={`${appLabel} · ${title}`}
+			>
+				{this.renderIcon(info.iconTag)}
+				<span class="adc-platform-link__title truncate font-medium text-text">{title}</span>
 				<span class="adc-platform-link__app shrink-0 text-xs text-muted">{appLabel}</span>
 			</a>
 		);

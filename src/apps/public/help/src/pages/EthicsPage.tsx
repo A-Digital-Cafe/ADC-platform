@@ -52,7 +52,7 @@ export function EthicsPage() {
 				<a href="https://database.ilga.org/criminalisation-consensual-same-sex-sexual-acts" rel="noreferrer">
 					criminalización de relaciones consensuales entre personas del mismo sexo
 				</a>
-				. Las solicitudes, reportes o correcciones de contexto pueden enviarse desde <a href="/contact#canales">contacto</a>.
+				{"."} Las solicitudes, reportes o correcciones de contexto pueden enviarse desde <a href="/contact#canales">contacto</a>.
 			</p>
 
 			<h2 id="accesibilidad-e-inclusion">Accesibilidad e inclusión</h2>

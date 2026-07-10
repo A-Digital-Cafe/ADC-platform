@@ -6,6 +6,7 @@ import type { Attachment, AttachmentDTO } from "../../../../common/types/attachm
 import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from "../../../../common/types/attachments/Attachment.js";
 import type { AttachmentDoc } from "../schemas/attachment.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
+import { trimChar } from "../../../../common/utils/strings.ts";
 import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
 import type { QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
 import { ENCRYPTION_SCHEME, createObjectCipher, createObjectDecipher, type UserKeyStore } from "../crypto/userKeys.js";
@@ -111,18 +112,13 @@ const FILE_NAME_SAFE = /[^A-Za-z0-9._-]+/g;
 
 function safeFileName(name: string): string {
 	const bounded = name.slice(0, 240);
-	const cleaned = bounded.replaceAll(FILE_NAME_SAFE, "_").replaceAll(/_+/g, "_").replace(/^_+/, "").replace(/_+$/, "");
+	const cleaned = trimChar(bounded.replaceAll(FILE_NAME_SAFE, "_").replaceAll(/_+/g, "_"), "_");
 	return cleaned.length > 0 ? cleaned.slice(0, 120) : "file";
 }
 
 function sanitizeSegment(seg: string): string {
 	const bounded = seg.slice(0, 200);
-	return (
-		bounded
-			.replaceAll(/[^A-Za-z0-9._-]+/g, "_")
-			.replace(/^_+/, "")
-			.replace(/_+$/, "") || "_"
-	);
+	return trimChar(bounded.replaceAll(/[^A-Za-z0-9._-]+/g, "_"), "_") || "_";
 }
 
 export class AttachmentsManager {

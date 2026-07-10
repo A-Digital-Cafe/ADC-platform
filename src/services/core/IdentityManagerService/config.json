@@ -68,6 +68,12 @@
 		}
 	],
 	"private": {
+		"devUserPasswords": {
+			"devadmin": "${DEV_USER_PASSWORD_DEVADMIN:-devadmin123}",
+			"devorgadmin": "${DEV_USER_PASSWORD_DEVORGADMIN:-devorgadmin123}",
+			"devdatamanager": "${DEV_USER_PASSWORD_DEVDATAMANAGER:-devdatamanager123}",
+			"devsecmanager": "${DEV_USER_PASSWORD_DEVSECMANAGER:-devsecmanager123}"
+		},
 		"discordGuildId": "${DISCORD_GUILD_ID}",
 		"defaultRegionObjectUri": "${MONGODB_URI:-mongodb://localhost:27017/adc-platform}",
 		"discordRoleMap": {

@@ -37,7 +37,7 @@ export function HomePage() {
 						<a className="hover:underline" href="/terms">
 							términos de uso
 						</a>
-						.
+						{"."}
 					</span>
 				</adc-feature-card>
 				<adc-feature-card title="Valores y comunidad">
@@ -56,7 +56,7 @@ export function HomePage() {
 						<a className="hover:underline" href="/hria">
 							derechos humanos
 						</a>
-						.
+						{"."}
 					</span>
 				</adc-feature-card>
 				<adc-feature-card title="Ética y roadmap">
@@ -71,7 +71,7 @@ export function HomePage() {
 						<a className="hover:underline" href="/roadmap">
 							plan público de cumplimiento
 						</a>
-						.
+						{"."}
 					</span>
 				</adc-feature-card>
 			</section>

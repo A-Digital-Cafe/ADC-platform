@@ -105,30 +105,22 @@ function buildExportRegistry(srcDir) {
 	return nameToFile;
 }
 
-// ─── Main generator ───
+// ─── Type collection (imports del components.d.ts + resolución recursiva) ───
 
-function generate(libPath) {
-	const absLib = resolveWithinRoot(libPath, ROOT);
-	const dtsPath = resolve(absLib, "src/components.d.ts");
+/** Resuelve el archivo fuente (.tsx/.ts) de un import relativo del components.d.ts. */
+function resolveSourceFile(absLib, sourceRel) {
+	const basePath = sourceRel.replace(/^\.\//, "").replace(/\.js$/, "");
+	let srcFile = resolve(absLib, "src", basePath + ".tsx");
+	if (!existsSync(srcFile)) srcFile = resolve(absLib, "src", basePath + ".ts");
+	return existsSync(srcFile) ? srcFile : null;
+}
 
-	if (!existsSync(dtsPath)) {
-		console.log(`⏭  Skipping ${libPath} — no src/components.d.ts`);
-		return;
-	}
-
-	const content = readFileSync(dtsPath, "utf-8");
-	const lines = content.split("\n");
-
-	// Global registry of all exported interfaces/types in the library's src/
-	const exportRegistry = buildExportRegistry(resolve(absLib, "src"));
-
-	// ============================================================
-	// 1. Collect custom type imports (from .tsx sources, not @stencil)
-	// ============================================================
-
-	/** @type {Map<string, {original: string, sourceRel: string}>} alias → info */
+/**
+ * Imports de tipos custom del components.d.ts (fuentes .tsx propias, no @stencil).
+ * @returns {Map<string, {original: string, sourceRel: string}>} alias → info
+ */
+function collectTypeImports(lines) {
 	const typeImports = new Map();
-
 	for (const line of lines) {
 		const m = line.match(/^import\s+\{(.+?)\}\s+from\s+"(\.[^"]+)"/);
 		if (!m || m[2].includes("@stencil")) continue;
@@ -138,119 +130,238 @@ function generate(libPath) {
 			typeImports.set(name, { original: raw.trim(), sourceRel: m[2] });
 		}
 	}
+	return typeImports;
+}
 
-	// Deduplicate: AccessMenuItem1 is same as AccessMenuItem, just aliased
-	// We'll map aliases → canonical name for later replacement
-	/** @type {Map<string, string>} alias → canonical */
-	const typeAliases = new Map();
-	/** @type {Map<string, string>} canonical → definition */
-	const typeDefs = new Map();
-	/** @type {string[]} extra local types to emit (e.g. Align) */
-	const extraDefs = [];
-
+/**
+ * Extrae las definiciones de los tipos importados, deduplicando aliases
+ * (AccessMenuItem1 ≡ AccessMenuItem) hacia su nombre canónico.
+ */
+function extractImportedTypeDefs(absLib, typeImports) {
+	/** @type {{typeAliases: Map<string,string>, typeDefs: Map<string,string>, extraDefs: string[]}} */
+	const acc = { typeAliases: new Map(), typeDefs: new Map(), extraDefs: [] };
 	for (const [alias, { original, sourceRel }] of typeImports) {
-		// Resolve source file
-		const basePath = sourceRel.replace(/^\.\//, "").replace(/\.js$/, "");
-		let srcFile = resolve(absLib, "src", basePath + ".tsx");
-		if (!existsSync(srcFile)) srcFile = resolve(absLib, "src", basePath + ".ts");
-		if (!existsSync(srcFile)) continue;
+		extractOneImportedType(absLib, { alias, original, sourceRel }, acc);
+	}
+	return acc;
+}
 
-		// Check if this alias maps to an already-extracted type (dedup)
-		if (typeDefs.has(original)) {
-			if (alias !== original) typeAliases.set(alias, original);
-			continue;
-		}
+/** Extrae la definición de un tipo importado hacia `acc`, deduplicando aliases hacia el canónico. */
+function extractOneImportedType(absLib, { alias, original, sourceRel }, acc) {
+	const noteAlias = () => {
+		if (alias !== original) acc.typeAliases.set(alias, original);
+	};
 
-		const srcContent = readFileSync(srcFile, "utf-8");
-		const def = extractInterface(srcContent, original);
-		if (!def) {
-			// Try as exported type alias
-			const typeDef = extractExportedType(srcContent, original);
-			if (typeDef) {
-				extraDefs.push(`export ${typeDef}`);
-				if (alias !== original) typeAliases.set(alias, original);
-			}
-			continue;
-		}
+	const srcFile = resolveSourceFile(absLib, sourceRel);
+	if (!srcFile) return;
 
-		typeDefs.set(original, def);
-		if (alias !== original) typeAliases.set(alias, original);
+	// Alias de un tipo ya extraído (dedup)
+	if (acc.typeDefs.has(original)) {
+		noteAlias();
+		return;
 	}
 
-	// Recursively resolve any referenced types still missing.
-	const builtIns = new Set([
-		"string", "number", "boolean", "any", "unknown", "void", "null",
-		"undefined", "never", "object", "Array", "Record", "Map", "Set",
-		"Promise", "Partial", "Required", "Readonly", "Pick", "Omit",
-		"true", "false", "Event", "MouseEvent", "KeyboardEvent",
-		"HTMLElement", "Element", "EventEmitter", "CustomEvent",
-	]);
-	const refRegex = /(?<!\w)([A-Z][a-zA-Z0-9]+)(?=[\s;[\]|&,?>)}])/g;
+	const srcContent = readFileSync(srcFile, "utf-8");
+	const def = extractInterface(srcContent, original);
+	if (def) {
+		acc.typeDefs.set(original, def);
+		noteAlias();
+		return;
+	}
 
+	// Try as exported type alias
+	const typeDef = extractExportedType(srcContent, original);
+	if (typeDef) {
+		acc.extraDefs.push(`export ${typeDef}`);
+		noteAlias();
+	}
+}
+
+const BUILT_INS = new Set([
+	"string", "number", "boolean", "any", "unknown", "void", "null",
+	"undefined", "never", "object", "Array", "Record", "Map", "Set",
+	"Promise", "Partial", "Required", "Readonly", "Pick", "Omit",
+	"true", "false", "Event", "MouseEvent", "KeyboardEvent",
+	"HTMLElement", "Element", "EventEmitter", "CustomEvent",
+]);
+const REF_REGEX = /(?<!\w)([A-Z][a-zA-Z0-9]+)(?=[\s;[\]|&,?>)}])/g;
+
+function isKnownType(ref, typeDefs, extraDefs) {
+	return BUILT_INS.has(ref) || typeDefs.has(ref) || extraDefs.some((d) => d.includes(`type ${ref} =`) || d.includes(`type ${ref}=`));
+}
+
+/** Resuelve recursivamente tipos referenciados que falten, buscando en el registry de exports. */
+function resolveReferencedTypes(typeDefs, extraDefs, exportRegistry) {
 	const queue = [...typeDefs.entries()].map(([n, d]) => ({ name: n, def: d }));
 	while (queue.length > 0) {
 		const { def } = queue.shift();
 		let rm;
-		while ((rm = refRegex.exec(def)) !== null) {
+		while ((rm = REF_REGEX.exec(def)) !== null) {
 			const ref = rm[1];
-			if (builtIns.has(ref) || typeDefs.has(ref) || extraDefs.some(d => d.includes(`type ${ref} =`) || d.includes(`type ${ref}=`))) continue;
+			if (isKnownType(ref, typeDefs, extraDefs)) continue;
 
 			// Try the registry: any exported interface/type in the lib
 			const regContent = exportRegistry.get(ref);
-			if (regContent) {
-				const ifaceDef = extractInterface(regContent, ref);
-				if (ifaceDef) {
-					typeDefs.set(ref, ifaceDef);
-					queue.push({ name: ref, def: ifaceDef });
-					continue;
-				}
-				const typeDef = extractExportedType(regContent, ref);
-				if (typeDef) {
-					extraDefs.push(`export ${typeDef}`);
-					queue.push({ name: ref, def: typeDef });
-					continue;
-				}
+			if (!regContent) continue;
+			const ifaceDef = extractInterface(regContent, ref);
+			if (ifaceDef) {
+				typeDefs.set(ref, ifaceDef);
+				queue.push({ name: ref, def: ifaceDef });
+				continue;
+			}
+			const typeDef = extractExportedType(regContent, ref);
+			if (typeDef) {
+				extraDefs.push(`export ${typeDef}`);
+				queue.push({ name: ref, def: typeDef });
 			}
 		}
-		refRegex.lastIndex = 0;
+		REF_REGEX.lastIndex = 0;
 	}
+}
 
-	// Also pull in non-exported local types from the original imported source files
+/** Suma tipos locales NO exportados desde los archivos fuente de los imports originales. */
+function pullLocalTypes(absLib, typeImports, typeDefs, extraDefs) {
 	for (const [, { sourceRel }] of typeImports) {
-		const basePath = sourceRel.replace(/^\.\//, "").replace(/\.js$/, "");
-		let srcFile = resolve(absLib, "src", basePath + ".tsx");
-		if (!existsSync(srcFile)) srcFile = resolve(absLib, "src", basePath + ".ts");
-		if (!existsSync(srcFile)) continue;
-		const srcContent = readFileSync(srcFile, "utf-8");
-		for (const [, def] of typeDefs) {
-			let rm;
-			while ((rm = refRegex.exec(def)) !== null) {
-				const ref = rm[1];
-				if (builtIns.has(ref) || typeDefs.has(ref) || extraDefs.some(d => d.includes(`type ${ref} =`) || d.includes(`type ${ref}=`))) continue;
-				const localDef = extractLocalType(srcContent, ref);
-				if (localDef) extraDefs.push(localDef);
-			}
-			refRegex.lastIndex = 0;
+		const srcFile = resolveSourceFile(absLib, sourceRel);
+		if (!srcFile) continue;
+		pullLocalTypesFromSource(readFileSync(srcFile, "utf-8"), typeDefs, extraDefs);
+	}
+}
+
+/** Busca en un archivo fuente definiciones locales para referencias aún sin resolver. */
+function pullLocalTypesFromSource(srcContent, typeDefs, extraDefs) {
+	for (const [, def] of typeDefs) {
+		let rm;
+		while ((rm = REF_REGEX.exec(def)) !== null) {
+			const ref = rm[1];
+			if (isKnownType(ref, typeDefs, extraDefs)) continue;
+			const localDef = extractLocalType(srcContent, ref);
+			if (localDef) extraDefs.push(localDef);
+		}
+		REF_REGEX.lastIndex = 0;
+	}
+}
+
+// ─── LocalJSX parsing ───
+
+/**
+ * Une declaraciones de props multilínea en líneas lógicas (acumula hasta que
+ * las llaves balancean y la línea termina en `;`); los JSDoc pasan tal cual.
+ */
+function joinLogicalPropLines(block) {
+	// The block string includes the surrounding `{` and `}` — strip them first.
+	const innerBlock = block.replace(/^\s*\{/, "").replace(/\}\s*$/, "");
+	const blockLines = [];
+	let pending = "";
+	let pendingDepth = 0;
+
+	const braceDelta = (line) => {
+		let depth = 0;
+		for (const ch of line) {
+			if (ch === "{") depth++;
+			else if (ch === "}") depth--;
+		}
+		return depth;
+	};
+
+	for (const rawLine of innerBlock.split("\n")) {
+		const trimmedRaw = rawLine.trim();
+		// JSDoc passes through as-is to keep buffer tracking simple
+		if (pending === "" && (trimmedRaw.startsWith("/**") || trimmedRaw.startsWith("*") || trimmedRaw.endsWith("*/"))) {
+			blockLines.push(rawLine);
+			continue;
+		}
+		if (pending === "") {
+			pending = rawLine;
+			pendingDepth = braceDelta(rawLine);
+		} else {
+			pending += " " + trimmedRaw;
+			pendingDepth += braceDelta(rawLine);
+		}
+		if (pendingDepth <= 0 && trimmedRaw.endsWith(";")) {
+			blockLines.push(pending);
+			pending = "";
+			pendingDepth = 0;
 		}
 	}
+	if (pending) blockLines.push(pending);
+	return blockLines;
+}
 
-	// ============================================================
-	// 2. Parse LocalJSX namespace
-	// ============================================================
-
-	const nsMatch = content.match(/declare\s+namespace\s+LocalJSX\s*\{/);
-	if (!nsMatch) {
-		console.log(`⏭  Skipping ${libPath} — no LocalJSX namespace`);
-		return;
+/** Reescribe el tipo de una prop: aliases → canónico y, para eventos, ComponentCustomEvent<T> → CustomEvent<T>. */
+function resolvePropType(propType, propName, typeAliases) {
+	let resolvedType = propType;
+	for (const [alias, canonical] of typeAliases) {
+		resolvedType = resolvedType.replaceAll(new RegExp(String.raw`\b${alias}\b`, "g"), canonical);
 	}
+	if (propName.startsWith("onAdc")) {
+		// `\b` limita el intento de match al inicio de cada palabra: sin él, cada
+		// posición interna de un identificador reescanea `[^>]+` completo
+		// (backtracking super-lineal, javascript:S8786). Filtramos en código los
+		// que terminan en `CustomEvent` para preservar el comportamiento original.
+		resolvedType = resolvedType.replaceAll(/\b\w+<([^>]+)>/g, (match, inner) => {
+			const name = match.slice(0, match.indexOf("<"));
+			return name.endsWith("CustomEvent") ? `CustomEvent<${inner}>` : match;
+		});
+	}
+	return resolvedType;
+}
 
-	const nsOpenBrace = content.indexOf("{", nsMatch.index);
-	const nsBlock = extractBraceBlock(content, nsOpenBrace);
+/** Parsea las props de un interface de componente: filtra handlers DOM y arrastra los JSDoc. */
+function buildPropLines(blockLines, typeAliases) {
+	const propLines = [];
+	let inJsdoc = false;
+	let jsdocBuffer = [];
 
-	// Parse component interfaces (skip *Attributes, IntrinsicElements, OneOf)
-	/** @type {Array<{name: string, body: string}>} */
+	for (const line of blockLines) {
+		const trimmed = line.trim();
+
+		// Track JSDoc blocks
+		if (trimmed.startsWith("/**")) {
+			inJsdoc = true;
+			jsdocBuffer = [line];
+			if (trimmed.endsWith("*/")) inJsdoc = false;
+			continue;
+		}
+		if (inJsdoc) {
+			jsdocBuffer.push(line);
+			if (trimmed.endsWith("*/")) inJsdoc = false;
+			continue;
+		}
+
+		const emitted = renderPropLine(trimmed, typeAliases);
+		if (emitted === null) continue;
+
+		// Emit JSDoc + prop
+		for (const jl of jsdocBuffer) propLines.push(jl);
+		jsdocBuffer = [];
+		propLines.push(emitted);
+	}
+	return propLines;
+}
+
+/** Renderiza una línea lógica de prop (`"nombre"?: tipo;`), o null si no es prop o es handler DOM estándar. */
+function renderPropLine(trimmed, typeAliases) {
+	const propMatch = trimmed.match(/^"(\w+)"(\?)?:\s(.+);$/);
+	if (!propMatch) return null;
+	const [, propName, , propType] = propMatch;
+
+	// Skip standard DOM event handlers (React.DOMAttributes already provides them)
+	// But keep custom Stencil events (onAdc*)
+	if (propName.startsWith("on") && !propName.startsWith("onAdc")) return null;
+
+	const resolvedType = resolvePropType(propType, propName, typeAliases);
+
+	// Lowercase del prefijo (onAdcRate → onadcRate) para que React 19 lo cablee a
+	// addEventListener("adcRate", ...): React preserva el casing después de "on" y
+	// Stencil emite nombres de evento que empiezan en minúscula.
+	const emittedName = propName.startsWith("onAdc") ? "on" + propName.charAt(2).toLowerCase() + propName.slice(3) : propName;
+	return `\t"${emittedName}"?: ${resolvedType};`;
+}
+
+/** Interfaces de componentes del namespace LocalJSX (salvo *Attributes / IntrinsicElements). */
+function parseComponentInterfaces(nsBlock, typeAliases) {
 	const componentInterfaces = [];
-
 	const ifaceRegex = /\binterface\s+(\w+)\s*\{/g;
 	let im;
 	while ((im = ifaceRegex.exec(nsBlock)) !== null) {
@@ -259,142 +370,34 @@ function generate(libPath) {
 
 		const braceStart = nsBlock.indexOf("{", im.index + im[0].length - 1);
 		const block = extractBraceBlock(nsBlock, braceStart);
-
-		// Parse props line by line, stripping event handlers (on* props)
-		// Pre-process: join multi-line prop declarations into single logical lines.
-		// A prop spans multiple lines when its type uses inline `{ ... }` or other
-		// brace-enclosed structures. We accumulate until braces are balanced and
-		// the line ends with `;`.
-		// The block string includes the surrounding `{` and `}` — strip them first.
-		const innerBlock = block.replace(/^\s*\{/, "").replace(/\}\s*$/, "");
-		const rawLines = innerBlock.split("\n");
-		const blockLines = [];
-		let pending = "";
-		let pendingDepth = 0;
-		for (const rawLine of rawLines) {
-			const trimmedRaw = rawLine.trim();
-			// JSDoc passes through as-is to keep buffer tracking simple
-			if (
-				pending === "" &&
-				(trimmedRaw.startsWith("/**") || trimmedRaw.startsWith("*") || trimmedRaw.endsWith("*/"))
-			) {
-				blockLines.push(rawLine);
-				continue;
-			}
-			if (pending === "") {
-				// Start of a logical prop line
-				pending = rawLine;
-				pendingDepth = 0;
-				for (const ch of rawLine) {
-					if (ch === "{") pendingDepth++;
-					else if (ch === "}") pendingDepth--;
-				}
-				if (pendingDepth <= 0 && trimmedRaw.endsWith(";")) {
-					blockLines.push(pending);
-					pending = "";
-					pendingDepth = 0;
-				}
-			} else {
-				pending += " " + trimmedRaw;
-				for (const ch of rawLine) {
-					if (ch === "{") pendingDepth++;
-					else if (ch === "}") pendingDepth--;
-				}
-				if (pendingDepth <= 0 && trimmedRaw.endsWith(";")) {
-					blockLines.push(pending);
-					pending = "";
-					pendingDepth = 0;
-				}
-			}
-		}
-		if (pending) blockLines.push(pending);
-
-		const propLines = [];
-		let inJsdoc = false;
-		let jsdocBuffer = [];
-
-		for (const line of blockLines) {
-			const trimmed = line.trim();
-
-			// Track JSDoc blocks
-			if (trimmed.startsWith("/**")) {
-				inJsdoc = true;
-				jsdocBuffer = [line];
-				if (trimmed.endsWith("*/")) inJsdoc = false;
-				continue;
-			}
-			if (inJsdoc) {
-				jsdocBuffer.push(line);
-				if (trimmed.endsWith("*/")) inJsdoc = false;
-				continue;
-			}
-
-			// Match property line: "propName"?: type;
-			const propMatch = trimmed.match(/^"(\w+)"(\?)?:\s(.+);$/);
-			if (!propMatch) continue;
-
-			const [, propName, , propType] = propMatch;
-
-			// Skip standard DOM event handlers (React.DOMAttributes already provides them)
-			// But keep custom Stencil events (onAdc*)
-			if (propName.startsWith("on") && !propName.startsWith("onAdc")) continue;
-
-			// Replace type aliases (e.g. AccessMenuItem1 → AccessMenuItem)
-			let resolvedType = propType;
-			for (const [alias, canonical] of typeAliases) {
-				resolvedType = resolvedType.replaceAll(new RegExp(String.raw`\b${alias}\b`, "g"), canonical);
-			}
-
-			// For Stencil custom events, replace ComponentCustomEvent<T> with CustomEvent<T>
-			// and lowercase the prefix (onAdcRate → onadcRate) so React 19 wires it to
-			// addEventListener("adcRate", ...). React preserves casing after "on", and
-			// Stencil emits event names starting with lowercase (e.g. "adcRate").
-			let emittedName = propName;
-			if (propName.startsWith("onAdc")) {
-				// `\w+` va seguido de `<` (carácter NO de palabra), por lo que no hay
-				// solapamiento ni backtracking super-lineal. Filtramos en código los que
-				// terminan en `CustomEvent` para preservar el comportamiento original.
-				resolvedType = resolvedType.replaceAll(/\w+<([^>]+)>/g, (match, inner) => {
-					const name = match.slice(0, match.indexOf("<"));
-					return name.endsWith("CustomEvent") ? `CustomEvent<${inner}>` : match;
-				});
-				emittedName = "on" + propName.charAt(2).toLowerCase() + propName.slice(3);
-			}
-
-			// Emit JSDoc + prop
-			for (const jl of jsdocBuffer) propLines.push(jl);
-			jsdocBuffer = [];
-			propLines.push(`\t"${emittedName}"?: ${resolvedType};`);
-		}
-
-		componentInterfaces.push({ name, props: propLines });
+		const props = buildPropLines(joinLogicalPropLines(block), typeAliases);
+		componentInterfaces.push({ name, props });
 	}
+	return componentInterfaces;
+}
 
-	// ============================================================
-	// 3. Extract tag → interface mapping from IntrinsicElements
-	// ============================================================
-
-	/** @type {Map<string, string>} tag → InterfaceName */
+/** Mapa tag → InterfaceName del interface IntrinsicElements. */
+function parseTagMap(nsBlock) {
+	/** @type {Map<string, string>} */
 	const tagMap = new Map();
 	const ieStart = nsBlock.indexOf("interface IntrinsicElements");
-	if (ieStart !== -1) {
-		const ieBrace = nsBlock.indexOf("{", ieStart);
-		const ieBlock = extractBraceBlock(nsBlock, ieBrace);
+	if (ieStart === -1) return tagMap;
 
-		// Match: "adc-xxx": Omit<AdcXxx, ... or "adc-xxx": AdcXxx;
-		const tagRegex = /^\s+"(adc-[\w-]+)":\s(?:Omit<(\w+),|(\w+)\b)/gm;
-		let tm;
-		while ((tm = tagRegex.exec(ieBlock)) !== null) {
-			tagMap.set(tm[1], tm[2] || tm[3]);
-		}
+	const ieBlock = extractBraceBlock(nsBlock, nsBlock.indexOf("{", ieStart));
+	// Match: "adc-xxx": Omit<AdcXxx, ... or "adc-xxx": AdcXxx;
+	// `[ \t]+` (indentación) en vez de `\s+`: con la flag `m`, `\s+` cruza los
+	// `\n` y reintenta desde cada inicio de línea en blanco (S8786).
+	const tagRegex = /^[ \t]+"(adc-[\w-]+)":\s(?:Omit<(\w+),|(\w+)\b)/gm;
+	let tm;
+	while ((tm = tagRegex.exec(ieBlock)) !== null) {
+		tagMap.set(tm[1], tm[2] || tm[3]);
 	}
+	return tagMap;
+}
 
-	// ============================================================
-	// 4. Generate output
-	// ============================================================
+// ─── Output rendering ───
 
-	const hasCustomTypes = typeDefs.size > 0 || extraDefs.length > 0;
-
+function renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMap }) {
 	let out = `/* eslint-disable @typescript-eslint/no-namespace */
 /**
  * AUTO-GENERATED by scripts/generate-react-jsx.mjs — Do not edit manually.
@@ -408,7 +411,7 @@ function generate(libPath) {
 import "react";
 `;
 
-	if (hasCustomTypes) {
+	if (typeDefs.size > 0 || extraDefs.length > 0) {
 		out += `\n// ─── Custom types (inlined from Stencil component sources) ───\n\n`;
 		for (const def of extraDefs) out += `${def}\n\n`;
 		for (const [, def] of typeDefs) out += `export ${def}\n\n`;
@@ -448,7 +451,41 @@ declare module "react" {
 \t}
 }
 `;
+	return out;
+}
 
+// ─── Main generator ───
+
+function generate(libPath) {
+	const absLib = resolveWithinRoot(libPath, ROOT);
+	const dtsPath = resolve(absLib, "src/components.d.ts");
+
+	if (!existsSync(dtsPath)) {
+		console.log(`⏭  Skipping ${libPath} — no src/components.d.ts`);
+		return;
+	}
+
+	const content = readFileSync(dtsPath, "utf-8");
+
+	// 1. Tipos custom importados por el d.ts + resolución recursiva de referencias
+	const exportRegistry = buildExportRegistry(resolve(absLib, "src"));
+	const typeImports = collectTypeImports(content.split("\n"));
+	const { typeAliases, typeDefs, extraDefs } = extractImportedTypeDefs(absLib, typeImports);
+	resolveReferencedTypes(typeDefs, extraDefs, exportRegistry);
+	pullLocalTypes(absLib, typeImports, typeDefs, extraDefs);
+
+	// 2. Namespace LocalJSX → interfaces de componentes + mapa de tags
+	const nsMatch = content.match(/declare\s+namespace\s+LocalJSX\s*\{/);
+	if (!nsMatch) {
+		console.log(`⏭  Skipping ${libPath} — no LocalJSX namespace`);
+		return;
+	}
+	const nsBlock = extractBraceBlock(content, content.indexOf("{", nsMatch.index));
+	const componentInterfaces = parseComponentInterfaces(nsBlock, typeAliases);
+	const tagMap = parseTagMap(nsBlock);
+
+	// 3. Render + write
+	const out = renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMap });
 	const outPath = resolve(absLib, "utils/react-jsx.ts");
 	writeFileSync(outPath, out, "utf-8");
 	console.log(`✅ Generated ${outPath}`);

@@ -13,6 +13,12 @@ interface DevSeederDeps {
 	orgModel: Model<Organization>;
 	/** RoleManager interno (sin auth) para crear los roles predefinidos de la org dev. */
 	roles: RoleManager;
+	/**
+	 * Passwords por username, provenientes de `private.devUserPasswords` del
+	 * config.json del servicio (interpoladas de env `DEV_USER_PASSWORD_*`).
+	 * Un usuario sin password acá se saltea con warning.
+	 */
+	passwords: Record<string, string | undefined>;
 	logger: ILogger;
 }
 
@@ -57,7 +63,7 @@ export async function purgeDevUsers(deps: DevPurgeDeps): Promise<void> {
  * `PermissionManager` resuelve roles/orgs desde los modelos locales.
  */
 export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
-	const { userModel, roleModel, orgModel, roles, logger } = deps;
+	const { userModel, roleModel, orgModel, roles, passwords, logger } = deps;
 
 	// 1. Org de desarrollo con orgId estable (= slug) para login directo.
 	await orgModel.updateOne(
@@ -97,6 +103,11 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 	}
 
 	async function upsertDevUser(seed: DevUserSeed): Promise<void> {
+		const password = passwords[seed.username];
+		if (!password) {
+			logger.logWarn(`[DevSeed] Usuario "${seed.username}" sin password en private.devUserPasswords: se saltea.`);
+			return;
+		}
 		const roleIds = await resolveRoleIds(seed.globalRoles, null);
 		const orgRoleIds = await resolveRoleIds(seed.orgRoles, DEV_ORG_ID);
 		const orgMemberships = orgRoleIds.length ? [{ orgId: DEV_ORG_ID, roleIds: orgRoleIds, joinedAt: new Date() }] : [];
@@ -107,7 +118,7 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 				$setOnInsert: { id: generateId(), username: seed.username, createdAt: new Date() },
 				$set: {
 					email: seed.email ?? `${seed.username}@dev.local`,
-					passwordHash: hashPassword(seed.password),
+					passwordHash: hashPassword(password),
 					roleIds,
 					groupIds: [],
 					orgMemberships,
@@ -123,6 +134,6 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 			...(seed.globalRoles?.length ? [`global:[${seed.globalRoles.join(", ")}]`] : []),
 			...(seed.orgRoles?.length ? [`${DEV_ORG_SLUG}:[${seed.orgRoles.join(", ")}]`] : []),
 		].join(" ");
-		logger.logOk(`[DevSeed] Usuario dev listo: ${seed.username} / ${seed.password} → ${scopes || "sin roles"}`);
+		logger.logOk(`[DevSeed] Usuario dev listo: ${seed.username} / ${password} → ${scopes || "sin roles"}`);
 	}
 }

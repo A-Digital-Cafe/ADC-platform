@@ -2,7 +2,7 @@ import { SessionUser } from "@common/types/identity/Session";
 import { IdentityScopes } from "@common/types/identity/permissions";
 import { hasBitfieldPermission } from "@common/utils/perms";
 import { AppMenuItem } from "./adc-apps-menu";
-import { getUrl } from "../../../utils/url.js";
+import { getUrl } from "@common/utils/url-utils.js";
 
 /** Built-in app definitions */
 export const DEFAULT_APPS: AppMenuItem[] = [

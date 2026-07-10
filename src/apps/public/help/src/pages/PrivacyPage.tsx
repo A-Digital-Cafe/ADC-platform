@@ -21,7 +21,7 @@ export function PrivacyPage() {
 				<a href={CONTACTS.discordUrl} rel="noreferrer">
 					Discord
 				</a>
-				.
+				{"."}
 			</p>
 
 			<h2 id="que-datos-tratamos">2. Qué datos tratamos</h2>

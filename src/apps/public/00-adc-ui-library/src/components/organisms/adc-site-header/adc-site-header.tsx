@@ -1,6 +1,6 @@
 import { Component, Prop, Element, Host } from "@stencil/core";
 import type { AccessMenuItem } from "../../molecules/adc-access-button/adc-access-button.js";
-import { isPrivateHost } from "../../../utils/url.js";
+import { isPrivateHost } from "@common/utils/url-utils.js";
 const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");
 @Component({
 	tag: "adc-site-header",

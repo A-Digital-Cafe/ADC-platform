@@ -1,5 +1,5 @@
 import { Component, Prop, State, Event, EventEmitter, Listen, Element } from "@stencil/core";
-import { isPrivateHost } from "../../../utils/url.js";
+import { isPrivateHost } from "@common/utils/url-utils.js";
 import {
 	authMarkerFor,
 	broadcastAuthChange,

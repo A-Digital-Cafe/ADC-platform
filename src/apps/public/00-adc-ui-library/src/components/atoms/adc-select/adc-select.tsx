@@ -79,7 +79,6 @@ export class AdcSelect {
 					class={`w-full px-3 py-2 rounded-xxl border bg-surface text-text text-[12px] font-text flex justify-between items-center ${isInvalid ? "border-danger" : "border-text/15"}`}
 					aria-haspopup="menu"
 					aria-expanded={this.isOpen ? "true" : "false"}
-					aria-invalid={isInvalid ? "true" : undefined}
 					onClick={this.handleToggle}
 					onKeyDown={this.handleKeyDown}
 				>

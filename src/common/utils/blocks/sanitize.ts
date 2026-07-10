@@ -46,133 +46,163 @@ function sanitizeMentions(raw: unknown): string[] | undefined {
 	return unique.length ? unique : undefined;
 }
 
+/** `clampString` solo si el valor era string; si no, `undefined` (campos opcionales). */
+function optionalString(value: unknown, max: number): string | undefined {
+	return typeof value === "string" ? clampString(value, max) : undefined;
+}
+
+/** Marks de texto válidas, o `undefined` si no queda ninguna. */
+function sanitizeMarks(raw: unknown): TextMark[] | undefined {
+	const marks = Array.isArray(raw) ? (raw.filter((m) => TEXT_MARKS.has(m as TextMark)) as TextMark[]) : undefined;
+	return marks?.length ? marks : undefined;
+}
+
+type Raw = Record<string, unknown>;
+
+function sanitizeHeading(r: Raw): Block {
+	const level = [2, 3, 4, 5, 6].includes(r.level as number) ? (r.level as 2 | 3 | 4 | 5 | 6) : 2;
+	return {
+		type: "heading",
+		level,
+		text: clampString(r.text, HEADING_MAX),
+		align: pickEnum(r.align, TEXT_ALIGNS),
+		id: optionalString(r.id, 80),
+		mentions: sanitizeMentions(r.mentions),
+	};
+}
+
+function sanitizeParagraph(r: Raw): Block {
+	return {
+		type: "paragraph",
+		text: clampString(r.text, TEXT_MAX),
+		align: pickEnum(r.align, TEXT_ALIGNS),
+		marks: sanitizeMarks(r.marks),
+		mentions: sanitizeMentions(r.mentions),
+	};
+}
+
+function sanitizeCheckbox(r: Raw): Block {
+	return {
+		type: "checkbox",
+		checked: r.checked === true,
+		text: clampString(r.text, TEXT_MAX),
+		align: pickEnum(r.align, TEXT_ALIGNS),
+		marks: sanitizeMarks(r.marks),
+		mentions: sanitizeMentions(r.mentions),
+	};
+}
+
+function sanitizeList(r: Raw): Block | null {
+	const itemsRaw = Array.isArray(r.items) ? r.items.slice(0, MAX_LIST_ITEMS) : [];
+	const items = itemsRaw.map((it) => clampString(it, LIST_ITEM_MAX)).filter((s) => s.length > 0);
+	if (items.length === 0) return null;
+	return {
+		type: "list",
+		ordered: r.ordered === true,
+		items,
+		start: typeof r.start === "number" && Number.isFinite(r.start) ? Math.floor(r.start) : undefined,
+		ariaLabel: optionalString(r.ariaLabel, 200),
+	};
+}
+
+function sanitizeCode(r: Raw): Block {
+	return {
+		type: "code",
+		language: clampString(r.language, 40) || "plaintext",
+		content: clampString(r.content, CODE_MAX),
+		ariaLabel: optionalString(r.ariaLabel, 200),
+	};
+}
+
+function sanitizeCallout(r: Raw): Block {
+	return {
+		type: "callout",
+		tone: pickEnum(r.tone, CALLOUT_TONES, "info") as CalloutTone,
+		role: pickEnum(r.role, CALLOUT_ROLES),
+		text: clampString(r.text, TEXT_MAX),
+		mentions: sanitizeMentions(r.mentions),
+	};
+}
+
+function sanitizeQuote(r: Raw): Block {
+	const rel = Array.isArray(r.rel) ? (r.rel.filter((x) => LINK_RELS.has(x as LinkRel)) as LinkRel[]) : undefined;
+	const url = optionalString(r.url, 600);
+	const safeUrl = url && /^https?:\/\//i.test(url) ? url : undefined;
+	return {
+		type: "quote",
+		text: clampString(r.text, TEXT_MAX),
+		url: safeUrl,
+		rel: rel?.length ? rel : undefined,
+		ariaLabel: optionalString(r.ariaLabel, 200),
+		mentions: sanitizeMentions(r.mentions),
+	};
+}
+
+function sanitizeTable(r: Raw): Block | null {
+	const headerRaw = Array.isArray(r.header) ? r.header.slice(0, MAX_TABLE_COLS) : [];
+	const header = headerRaw.map((c) => clampString(c, TABLE_CELL_MAX));
+	const cols = header.length;
+	if (cols === 0) return null;
+	const rowsRaw = Array.isArray(r.rows) ? r.rows.slice(0, MAX_TABLE_ROWS) : [];
+	const rows = rowsRaw.map((row) => {
+		const arr = Array.isArray(row) ? row.slice(0, cols) : [];
+		const padded = [...arr];
+		while (padded.length < cols) padded.push("");
+		return padded.map((c) => clampString(c, TABLE_CELL_MAX));
+	});
+	const columnAlign = Array.isArray(r.columnAlign)
+		? (r.columnAlign
+				.slice(0, cols)
+				.map((a) => pickEnum(a, TEXT_ALIGNS))
+				.filter(Boolean) as TextAlign[])
+		: undefined;
+	return {
+		type: "table",
+		header,
+		rows,
+		columnAlign: columnAlign?.length ? columnAlign : undefined,
+		caption: optionalString(r.caption, 240),
+		rowHeaders: r.rowHeaders === true,
+	};
+}
+
+function sanitizeAttachment(r: Raw, opts: SanitizeOptions): Block | null {
+	const attachmentId = typeof r.attachmentId === "string" ? r.attachmentId : "";
+	if (!attachmentId) return null;
+	if (opts.allowedAttachmentIds && !opts.allowedAttachmentIds.has(attachmentId)) return null;
+	const kind = pickEnum(r.kind, ["image", "file"] as const, "file");
+	return {
+		type: "attachment",
+		kind: kind!,
+		attachmentId,
+		fileName: clampString(r.fileName, 240) || "archivo",
+		mimeType: clampString(r.mimeType, 120) || "application/octet-stream",
+		size: typeof r.size === "number" && Number.isFinite(r.size) && r.size >= 0 ? Math.floor(r.size) : 0,
+		alt: optionalString(r.alt, 240),
+		caption: optionalString(r.caption, 400),
+		align: pickEnum(r.align, TEXT_ALIGNS),
+	};
+}
+
+/** Un sanitizador por tipo de bloque; tipo desconocido → se descarta. */
+const BLOCK_SANITIZERS: Record<string, (r: Raw, opts: SanitizeOptions) => Block | null> = {
+	heading: sanitizeHeading,
+	paragraph: sanitizeParagraph,
+	checkbox: sanitizeCheckbox,
+	list: sanitizeList,
+	code: sanitizeCode,
+	callout: sanitizeCallout,
+	quote: sanitizeQuote,
+	table: sanitizeTable,
+	attachment: sanitizeAttachment,
+	divider: () => ({ type: "divider" }),
+};
+
 function sanitizeBlock(raw: unknown, opts: SanitizeOptions): Block | null {
 	if (!raw || typeof raw !== "object") return null;
-	const r = raw as Record<string, unknown>;
-	switch (r.type) {
-		case "heading": {
-			const level = [2, 3, 4, 5, 6].includes(r.level as number) ? (r.level as 2 | 3 | 4 | 5 | 6) : 2;
-			return {
-				type: "heading",
-				level,
-				text: clampString(r.text, HEADING_MAX),
-				align: pickEnum(r.align, TEXT_ALIGNS),
-				id: typeof r.id === "string" ? clampString(r.id, 80) : undefined,
-				mentions: sanitizeMentions(r.mentions),
-			};
-		}
-		case "paragraph": {
-			const marks = Array.isArray(r.marks) ? (r.marks.filter((m) => TEXT_MARKS.has(m as TextMark)) as TextMark[]) : undefined;
-			return {
-				type: "paragraph",
-				text: clampString(r.text, TEXT_MAX),
-				align: pickEnum(r.align, TEXT_ALIGNS),
-				marks: marks?.length ? marks : undefined,
-				mentions: sanitizeMentions(r.mentions),
-			};
-		}
-		case "checkbox": {
-			const marks = Array.isArray(r.marks) ? (r.marks.filter((m) => TEXT_MARKS.has(m as TextMark)) as TextMark[]) : undefined;
-			return {
-				type: "checkbox",
-				checked: r.checked === true,
-				text: clampString(r.text, TEXT_MAX),
-				align: pickEnum(r.align, TEXT_ALIGNS),
-				marks: marks?.length ? marks : undefined,
-				mentions: sanitizeMentions(r.mentions),
-			};
-		}
-		case "list": {
-			const itemsRaw = Array.isArray(r.items) ? r.items.slice(0, MAX_LIST_ITEMS) : [];
-			const items = itemsRaw.map((it) => clampString(it, LIST_ITEM_MAX)).filter((s) => s.length > 0);
-			if (items.length === 0) return null;
-			return {
-				type: "list",
-				ordered: r.ordered === true,
-				items,
-				start: typeof r.start === "number" && Number.isFinite(r.start) ? Math.floor(r.start) : undefined,
-				ariaLabel: typeof r.ariaLabel === "string" ? clampString(r.ariaLabel, 200) : undefined,
-			};
-		}
-		case "code": {
-			return {
-				type: "code",
-				language: clampString(r.language, 40) || "plaintext",
-				content: clampString(r.content, CODE_MAX),
-				ariaLabel: typeof r.ariaLabel === "string" ? clampString(r.ariaLabel, 200) : undefined,
-			};
-		}
-		case "callout": {
-			return {
-				type: "callout",
-				tone: pickEnum(r.tone, CALLOUT_TONES, "info") as CalloutTone,
-				role: pickEnum(r.role, CALLOUT_ROLES),
-				text: clampString(r.text, TEXT_MAX),
-				mentions: sanitizeMentions(r.mentions),
-			};
-		}
-		case "quote": {
-			const rel = Array.isArray(r.rel) ? (r.rel.filter((x) => LINK_RELS.has(x as LinkRel)) as LinkRel[]) : undefined;
-			const url = typeof r.url === "string" ? clampString(r.url, 600) : undefined;
-			const safeUrl = url && /^https?:\/\//i.test(url) ? url : undefined;
-			return {
-				type: "quote",
-				text: clampString(r.text, TEXT_MAX),
-				url: safeUrl,
-				rel: rel?.length ? rel : undefined,
-				ariaLabel: typeof r.ariaLabel === "string" ? clampString(r.ariaLabel, 200) : undefined,
-				mentions: sanitizeMentions(r.mentions),
-			};
-		}
-		case "table": {
-			const headerRaw = Array.isArray(r.header) ? r.header.slice(0, MAX_TABLE_COLS) : [];
-			const header = headerRaw.map((c) => clampString(c, TABLE_CELL_MAX));
-			const cols = header.length;
-			if (cols === 0) return null;
-			const rowsRaw = Array.isArray(r.rows) ? r.rows.slice(0, MAX_TABLE_ROWS) : [];
-			const rows = rowsRaw.map((row) => {
-				const arr = Array.isArray(row) ? row.slice(0, cols) : [];
-				const padded = [...arr];
-				while (padded.length < cols) padded.push("");
-				return padded.map((c) => clampString(c, TABLE_CELL_MAX));
-			});
-			const columnAlign = Array.isArray(r.columnAlign)
-				? (r.columnAlign
-						.slice(0, cols)
-						.map((a) => pickEnum(a, TEXT_ALIGNS))
-						.filter(Boolean) as TextAlign[])
-				: undefined;
-			return {
-				type: "table",
-				header,
-				rows,
-				columnAlign: columnAlign?.length ? columnAlign : undefined,
-				caption: typeof r.caption === "string" ? clampString(r.caption, 240) : undefined,
-				rowHeaders: r.rowHeaders === true,
-			};
-		}
-		case "attachment": {
-			const attachmentId = typeof r.attachmentId === "string" ? r.attachmentId : "";
-			if (!attachmentId) return null;
-			if (opts.allowedAttachmentIds && !opts.allowedAttachmentIds.has(attachmentId)) return null;
-			const kind = pickEnum(r.kind, ["image", "file"] as const, "file");
-			return {
-				type: "attachment",
-				kind: kind!,
-				attachmentId,
-				fileName: clampString(r.fileName, 240) || "archivo",
-				mimeType: clampString(r.mimeType, 120) || "application/octet-stream",
-				size: typeof r.size === "number" && Number.isFinite(r.size) && r.size >= 0 ? Math.floor(r.size) : 0,
-				alt: typeof r.alt === "string" ? clampString(r.alt, 240) : undefined,
-				caption: typeof r.caption === "string" ? clampString(r.caption, 400) : undefined,
-				align: pickEnum(r.align, TEXT_ALIGNS),
-			};
-		}
-		case "divider":
-			return { type: "divider" };
-		default:
-			return null;
-	}
+	const r = raw as Raw;
+	const sanitizer = typeof r.type === "string" ? BLOCK_SANITIZERS[r.type] : undefined;
+	return sanitizer ? sanitizer(r, opts) : null;
 }
 
 export function sanitizeBlocks(raw: unknown, opts: SanitizeOptions = {}): Block[] {

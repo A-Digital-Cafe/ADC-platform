@@ -1,5 +1,5 @@
 import { Component, Prop } from "@stencil/core";
-import { IS_DEV } from "../../../utils/url.js";
+import { IS_DEV } from "@common/utils/url-utils.js";
 const host = () => globalThis.location?.hostname ?? "localhost";
 const proto = () => globalThis.location?.protocol ?? "http:";
 const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");

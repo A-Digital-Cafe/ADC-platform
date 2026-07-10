@@ -1,6 +1,17 @@
 import { Component, Prop, Event, EventEmitter, State, Watch, Element } from "@stencil/core";
 import type { Block } from "../adc-blocks-renderer/adc-blocks-renderer";
 import { registerBlocksClipboard, type ClipboardBlocksPayload } from "../../../../utils/blocks-clipboard.js";
+import {
+	sanitizeUrl,
+	nodeToMarkdown,
+	flowElementToBlock,
+	transformToList,
+	transformToCheckboxRows,
+	transformToPlainBlocks,
+	topLevelBlockOf,
+	placeCaretAtEnd,
+	marksAtSelection,
+} from "./blocks-editor-dom.js";
 
 /**
  * Editor WYSIWYG inline para bloques de comentario. Usa `contenteditable` con
@@ -112,41 +123,13 @@ export class AdcBlocksEditor {
 		const escaped = AdcBlocksEditor.escapeHtml(md);
 		// Orden: enlaces antes que énfasis; bold antes que italic para evitar que `*` capture `**`.
 		return escaped
-			.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (m, text: string, url: string) => {
-				const href = AdcBlocksEditor.sanitizeUrl(url);
+			.replace(/(?<!\[)\[([^\]\n]+)\]\(([^)\s]+)\)/g, (m, text: string, url: string) => {
+				const href = sanitizeUrl(url);
 				return href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>` : m;
 			})
 			.replaceAll(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
 			.replaceAll(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
 			.replaceAll(/`([^`\n]+?)`/g, "<code>$1</code>");
-	}
-
-	/** Acepta http(s) y rutas relativas; rechaza esquemas peligrosos y caracteres que rompan el atributo. */
-	private static sanitizeUrl(url: string): string | null {
-		const value = url.trim();
-		if (!value || /["'<>]/.test(value)) return null;
-		if (value.startsWith("/") || value.startsWith("#")) return value;
-		return /^https?:\/\//i.test(value) ? value : null;
-	}
-
-	/** Recorre un nodo y emite markdown para texto + strong/em/code. Cualquier otro tag: extraer texto. */
-	private static nodeToMarkdown(node: Node): string {
-		if (node.nodeType === Node.TEXT_NODE) return (node.textContent || "").replaceAll("\u200B", "");
-		if (node.nodeType !== Node.ELEMENT_NODE) return "";
-		const el = node as HTMLElement;
-		const tag = el.tagName.toLowerCase();
-		if (tag === "br") return "\n";
-		const inner = Array.from(el.childNodes).map(AdcBlocksEditor.nodeToMarkdown).join("");
-		if (tag === "strong" || tag === "b") return inner ? `**${inner}**` : "";
-		if (tag === "em" || tag === "i") return inner ? `*${inner}*` : "";
-		if (tag === "code") return inner ? `\`${inner}\`` : "";
-		if (tag === "a") {
-			const safe = AdcBlocksEditor.sanitizeUrl((node as HTMLElement).getAttribute("href") || "");
-			return safe && inner ? `[${inner}](${safe})` : inner;
-		}
-		// Bloques: cada <div>/<p> introduce salto de línea.
-		if (tag === "div" || tag === "p") return `\n${inner}`;
-		return inner;
 	}
 
 	/** Determina si el bloque es un "card" no editable embebido en el flujo (code/quote/callout/divider/table/attachment). */
@@ -292,7 +275,7 @@ export class AdcBlocksEditor {
 		let inlineBuf: Node[] = [];
 		const flushInline = () => {
 			if (inlineBuf.length === 0) return;
-			const md = inlineBuf.map(AdcBlocksEditor.nodeToMarkdown).join("").trim();
+			const md = inlineBuf.map(nodeToMarkdown).join("").trim();
 			inlineBuf = [];
 			if (md) blocks.push({ type: "paragraph", text: md });
 		};
@@ -304,8 +287,9 @@ export class AdcBlocksEditor {
 			flushInline();
 			if (child.nodeType !== Node.ELEMENT_NODE) continue;
 			const el = child as HTMLElement;
-			const id = el.dataset?.standaloneId;
 
+			// Cards standalone: re-leer del DOM y conservar el orden encontrado.
+			const id = el.dataset?.standaloneId;
 			if (id) {
 				const current = this.standaloneById.get(id);
 				if (!current) continue;
@@ -315,38 +299,14 @@ export class AdcBlocksEditor {
 				blocks.push(updated);
 				continue;
 			}
-			if (el.classList.contains("adc-blocks-editor__checkbox-row")) {
-				const inputEl = el.querySelector(".adc-blocks-editor__checkbox-input") as HTMLInputElement | null;
-				const checked = inputEl ? inputEl.checked : false;
-				const spanEl = el.querySelector("span") || el;
-				const md = AdcBlocksEditor.inlineMarkdown(spanEl).trim();
-				blocks.push({ type: "checkbox", checked, text: md });
-				continue;
-			}
-			const tag = el.tagName.toLowerCase();
-			if (tag === "h2" || tag === "h3" || tag === "h4" || tag === "h5" || tag === "h6") {
-				const text = AdcBlocksEditor.inlineMarkdown(el).trim();
-				const level = Number(tag.slice(1)) as 2 | 3 | 4 | 5 | 6;
-				blocks.push({ type: "heading", level, text });
-				continue;
-			}
-			if (tag === "ul" || tag === "ol") {
-				const items = Array.from(el.querySelectorAll(":scope > li")).map((li) => AdcBlocksEditor.inlineMarkdown(li).trim());
-				blocks.push({ type: "list", ordered: tag === "ol", items });
-				continue;
-			}
-			const md = AdcBlocksEditor.inlineMarkdown(el).trim();
-			if (md) blocks.push({ type: "paragraph", text: md });
+
+			const block = flowElementToBlock(el);
+			if (block) blocks.push(block);
 		}
 		flushInline();
 		// Reordenar el Map según el orden encontrado en DOM, descartando ids huérfanos.
 		this.standaloneById = new Map(orderedStandalone);
 		return blocks;
-	}
-
-	/** Recorre los hijos de un elemento generando markdown inline (sin tags de bloque). */
-	private static inlineMarkdown(el: Node): string {
-		return Array.from(el.childNodes).map(AdcBlocksEditor.nodeToMarkdown).join("");
 	}
 
 	/** Convierte tamaño en bytes a representación humana ("12.3 KB"). */
@@ -486,31 +446,8 @@ export class AdcBlocksEditor {
 	}
 
 	private updateActiveMarks() {
-		if (!this.isSelectionInsideEditor()) {
-			this.activeMarks = { bold: false, italic: false, code: false };
-			return;
-		}
-		const sel = globalThis.getSelection();
-		let isCode = false;
-		let isBold = false;
-		let isItalic = false;
-		if (sel && sel.rangeCount > 0) {
-			let node: Node | null = sel.getRangeAt(0).startContainer;
-			while (node && node !== this.editorEl) {
-				if (node.nodeType === Node.ELEMENT_NODE) {
-					const tag = (node as HTMLElement).tagName.toLowerCase();
-					if (tag === "code") isCode = true;
-					if (tag === "strong" || tag === "b") isBold = true;
-					if (tag === "em" || tag === "i") isItalic = true;
-				}
-				node = node.parentNode;
-			}
-		}
-		this.activeMarks = {
-			bold: isBold,
-			italic: isItalic,
-			code: isCode,
-		};
+		this.activeMarks =
+			this.isSelectionInsideEditor() && this.editorEl ? marksAtSelection(this.editorEl) : { bold: false, italic: false, code: false };
 	}
 
 	private execMark(mark: "bold" | "italic" | "code") {
@@ -567,7 +504,7 @@ export class AdcBlocksEditor {
 
 	private applyLink() {
 		if (!this.editorEl) return;
-		const url = AdcBlocksEditor.sanitizeUrl(this.linkDraft);
+		const url = sanitizeUrl(this.linkDraft);
 		if (!url) {
 			this.closeLinkMenu();
 			return;
@@ -613,7 +550,7 @@ export class AdcBlocksEditor {
 		this.editorEl.focus();
 		const range = this.restoreSavedRange();
 		const ancestor =
-			range && range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+			range?.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
 				? (range.commonAncestorContainer as HTMLElement)
 				: range?.commonAncestorContainer.parentElement;
 		const existing = ancestor?.closest("a");
@@ -777,14 +714,8 @@ export class AdcBlocksEditor {
 		// Asegurar que la selección está dentro del editor.
 		if (!this.editorEl.contains(range.commonAncestorContainer)) return;
 
-		const findTopBlock = (node: Node): HTMLElement | null => {
-			let current: Node | null = node;
-			while (current && current.parentNode !== this.editorEl) current = current.parentNode;
-			return current?.nodeType === Node.ELEMENT_NODE ? (current as HTMLElement) : null;
-		};
-
-		const startBlock = findTopBlock(range.startContainer);
-		const endBlock = findTopBlock(range.endContainer);
+		const startBlock = topLevelBlockOf(this.editorEl, range.startContainer);
+		const endBlock = topLevelBlockOf(this.editorEl, range.endContainer);
 		if (!startBlock || !endBlock) return;
 
 		// Recolectar bloques entre start y end (inclusivo) en orden DOM.
@@ -795,86 +726,17 @@ export class AdcBlocksEditor {
 		const targets = all.slice(Math.min(startIdx, endIdx), Math.max(startIdx, endIdx) + 1);
 
 		if (target === "ul" || target === "ol") {
-			// Crear UL/OL único con un <li> por cada bloque target.
-			const list = document.createElement(target);
-			for (const block of targets) {
-				const li = document.createElement("li");
-				// Si era lista previa, mover sus <li> en vez de envolver.
-				if (block.tagName.toLowerCase() === "ul" || block.tagName.toLowerCase() === "ol") {
-					for (const li2 of Array.from(block.querySelectorAll(":scope > li"))) {
-						list.appendChild(li2);
-					}
-				} else {
-					let innerHTML = block.innerHTML;
-					if (block.classList.contains("adc-blocks-editor__checkbox-row")) {
-						const spanEl = block.querySelector("span");
-						if (spanEl) innerHTML = spanEl.innerHTML;
-					}
-					li.innerHTML = innerHTML || "<br>";
-					list.appendChild(li);
-				}
-			}
-			targets[0].replaceWith(list);
-			for (const b of targets.slice(1)) b.remove();
+			transformToList(targets, target);
 		} else if (target === "checkbox") {
-			for (const block of targets) {
-				const tag = block.tagName.toLowerCase();
-				if (tag === "ul" || tag === "ol") {
-					const lis = Array.from(block.querySelectorAll(":scope > li"));
-					const replacements: HTMLElement[] = lis.map((li) => {
-						const newEl = document.createElement("div");
-						newEl.className = "adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2";
-						newEl.innerHTML = `<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" /><span class="flex-1">${li.innerHTML || "<br>"}</span>`;
-						return newEl;
-					});
-					block.replaceWith(...replacements);
-				} else {
-					let innerHTML = block.innerHTML;
-					if (block.classList.contains("adc-blocks-editor__checkbox-row")) {
-						const spanEl = block.querySelector("span");
-						if (spanEl) innerHTML = spanEl.innerHTML;
-					}
-					const newEl = document.createElement("div");
-					newEl.className = "adc-blocks-editor__checkbox-row flex items-start gap-2 mb-2";
-					newEl.innerHTML = `<input type="checkbox" contenteditable="false" class="adc-blocks-editor__checkbox-input mt-1 cursor-pointer" /><span class="flex-1">${innerHTML || "<br>"}</span>`;
-					block.replaceWith(newEl);
-				}
-			}
+			transformToCheckboxRows(targets);
 		} else {
-			// p / h2 / h3 / h4
-			for (const block of targets) {
-				const tag = block.tagName.toLowerCase();
-				let innerHTML = block.innerHTML;
-				if (block.classList.contains("adc-blocks-editor__checkbox-row")) {
-					const spanEl = block.querySelector("span");
-					if (spanEl) innerHTML = spanEl.innerHTML;
-				}
-				if (tag === "ul" || tag === "ol") {
-					// Convertir cada <li> en un bloque target separado.
-					const lis = Array.from(block.querySelectorAll(":scope > li"));
-					const replacements: HTMLElement[] = lis.map((li) => {
-						const newEl = document.createElement(target === "p" ? "div" : target);
-						newEl.innerHTML = li.innerHTML || "<br>";
-						return newEl;
-					});
-					block.replaceWith(...replacements);
-				} else {
-					const newEl = document.createElement(target === "p" ? "div" : target);
-					newEl.innerHTML = innerHTML || "<br>";
-					block.replaceWith(newEl);
-				}
-			}
+			transformToPlainBlocks(targets, target);
 		}
+
 		this.emit();
 		// Restaurar caret al primer hijo nuevo
 		const first = this.editorEl.children[Math.min(startIdx, endIdx)] as HTMLElement | undefined;
-		if (first) {
-			const newRange = document.createRange();
-			newRange.selectNodeContents(first);
-			newRange.collapse(false);
-			sel.removeAllRanges();
-			sel.addRange(newRange);
-		}
+		if (first) placeCaretAtEnd(first);
 	}
 
 	/**
@@ -1014,9 +876,7 @@ export class AdcBlocksEditor {
 		const sel = globalThis.getSelection();
 		let anchor: HTMLElement | null = null;
 		if (sel && sel.rangeCount > 0 && this.editorEl.contains(sel.getRangeAt(0).startContainer)) {
-			let n: Node | null = sel.getRangeAt(0).startContainer;
-			while (n && n.parentNode !== this.editorEl) n = n.parentNode;
-			anchor = n?.nodeType === Node.ELEMENT_NODE ? (n as HTMLElement) : null;
+			anchor = topLevelBlockOf(this.editorEl, sel.getRangeAt(0).startContainer);
 		}
 		let cursor: Node | null = anchor?.parentNode === this.editorEl ? anchor : null;
 		let last: Node | null = null;
@@ -1031,13 +891,7 @@ export class AdcBlocksEditor {
 		}
 		this.ensureTrailingParagraph();
 		// Mover caret al final del último bloque insertado.
-		if (last?.nodeType === Node.ELEMENT_NODE) {
-			const range = document.createRange();
-			range.selectNodeContents(last);
-			range.collapse(false);
-			sel?.removeAllRanges();
-			sel?.addRange(range);
-		}
+		if (last?.nodeType === Node.ELEMENT_NODE) placeCaretAtEnd(last);
 		this.emit();
 	}
 

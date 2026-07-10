@@ -267,6 +267,8 @@ export default class IdentityManagerService extends BaseService implements IIden
 						roleModel: RoleModel,
 						orgModel: OrganizationModel,
 						roles: this.#roleManager,
+						passwords:
+							(this.config?.private as { devUserPasswords?: Record<string, string> } | undefined)?.devUserPasswords ?? {},
 						logger: this.logger,
 					});
 					this.#permissionManager.invalidateAll();

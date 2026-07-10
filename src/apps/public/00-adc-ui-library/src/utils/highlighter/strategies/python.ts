@@ -36,8 +36,8 @@ export class PythonHighlighter implements HighlighterStrategy {
 			});
 		});
 
-		// Line comments
-		const lineCommentRegex = /#.*$/gm;
+		// Line comments (`.` ya no cruza `\n`; el `$` era redundante y disparaba S8786)
+		const lineCommentRegex = /#.*/g;
 		escaped = escaped.replaceAll(lineCommentRegex, (match) => {
 			const ph = `__COMMENT_${placeholderIndex++}__`;
 			replacements.set(ph, `<span class="token comment">${match}</span>`);

@@ -1,5 +1,5 @@
 import { Component, Prop, State, Host } from "@stencil/core";
-import { isPrivateHost } from "../../../utils/url.js";
+import { isPrivateHost } from "@common/utils/url-utils.js";
 
 interface BannerData {
 	bannerId: string;

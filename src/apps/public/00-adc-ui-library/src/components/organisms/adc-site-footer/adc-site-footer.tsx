@@ -1,5 +1,5 @@
 import { Component, Prop, State } from "@stencil/core";
-import { IS_DEV } from "../../../utils/url.js";
+import { IS_DEV } from "@common/utils/url-utils.js";
 
 type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help" | "status";
 

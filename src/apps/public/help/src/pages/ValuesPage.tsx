@@ -112,7 +112,7 @@ export function ValuesPage() {
 				<a href="https://database.ilga.org/criminalisation-consensual-same-sex-sexual-acts" rel="noreferrer">
 					interacciones entre personas LGBTQ+ están criminalizadas
 				</a>
-				o en las que el contexto legal/de seguridad implica un riesgo elevado para nuestra comunidad.
+				{" "}o en las que el contexto legal/de seguridad implica un riesgo elevado para nuestra comunidad.
 			</p>
 
 			<h2 id="geofiltro-activo">Geofiltro activo</h2>

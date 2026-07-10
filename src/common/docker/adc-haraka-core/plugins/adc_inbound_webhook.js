@@ -4,23 +4,24 @@
 // El cuerpo se envía como MIME crudo (base64) y se autentica con un secreto
 // compartido en la cabecera `x-adc-webhook-secret`.
 
-const http = require('http');
-const https = require('https');
-const { URL } = require('url');
+const http = require('node:http');
+const https = require('node:https');
+const { URL } = require('node:url');
 
 exports.register = function () {
 	this.cfg = this.config.get('adc_inbound_webhook.ini');
 };
 
 exports.hook_queue = function (next, connection) {
-	const plugin = this;
+	// Los callbacks internos son arrow functions, así que `this` (el plugin de
+	// Haraka) se preserva sin necesidad del alias `const plugin = this`.
 	const txn = connection.transaction;
 	if (!txn) return next();
 
-	const url = (plugin.cfg && plugin.cfg.main && plugin.cfg.main.url) || process.env.INBOUND_WEBHOOK_URL;
-	const secret = (plugin.cfg && plugin.cfg.main && plugin.cfg.main.secret) || process.env.INBOUND_WEBHOOK_SECRET || '';
+	const url = this.cfg?.main?.url || process.env.INBOUND_WEBHOOK_URL;
+	const secret = this.cfg?.main?.secret || process.env.INBOUND_WEBHOOK_SECRET || '';
 	if (!url) {
-		connection.logerror(plugin, 'INBOUND_WEBHOOK_URL no configurado');
+		connection.logerror(this, 'INBOUND_WEBHOOK_URL no configurado');
 		return next(DENYSOFT, 'webhook no configurado');
 	}
 
@@ -55,12 +56,12 @@ exports.hook_queue = function (next, connection) {
 				if (res.statusCode >= 200 && res.statusCode < 300) {
 					return next(OK);
 				}
-				connection.logerror(plugin, `webhook status ${res.statusCode}`);
+				connection.logerror(this, `webhook status ${res.statusCode}`);
 				return next(DENYSOFT, 'reintentar entrega');
 			}
 		);
 		req.on('error', (err) => {
-			connection.logerror(plugin, `webhook error: ${err.message}`);
+			connection.logerror(this, `webhook error: ${err.message}`);
 			return next(DENYSOFT, 'reintentar entrega');
 		});
 		req.write(payload);

@@ -1,5 +1,6 @@
 import type { RegisteredEndpoint } from "../types.js";
 import { describePermission } from "@common/types/Permissions.js";
+import { trimChar } from "@common/utils/strings.js";
 
 /**
  * Generación del documento OpenAPI 3.0 a partir del EndpointRegistry (U-01).
@@ -46,7 +47,7 @@ function resolveTag(endpoint: RegisteredEndpoint): string {
 
 /** operationId único y estable derivado de método + ruta. */
 function buildOperationId(endpoint: RegisteredEndpoint): string {
-	return `${endpoint.method}_${endpoint.url}`.replaceAll(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+	return trimChar(`${endpoint.method}_${endpoint.url}`.replaceAll(/[^A-Za-z0-9]+/g, "_"), "_");
 }
 
 const DEFAULT_RESPONSES: Record<string, Record<string, unknown>> = {

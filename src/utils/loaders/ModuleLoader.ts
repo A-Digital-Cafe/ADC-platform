@@ -6,6 +6,7 @@ import type { BaseProvider } from "../../providers/BaseProvider.ts";
 import type { IUtility } from "../../utilities/BaseUtility.ts";
 import type { BaseService } from "../../services/BaseService.ts";
 import { Kernel } from "../../kernel.js";
+import type { ModuleRegistry } from "../registry/ModuleRegistry.js";
 import { Logger } from "../logger/Logger.js";
 import { VersionResolver } from "../VersionResolver.js";
 import { safeParseJson, parseJsonOrThrow } from "@common/utils/json-schema.ts";
@@ -173,276 +174,287 @@ export class ModuleLoader {
 	async loadAllModulesFromDefinition(modulesConfig: IModuleConfig, kernel: Kernel): Promise<void> {
 		const registry = kernel.getMutableRegistry(this.#kernelKey);
 		try {
-			// Cargar providers globales (NO se registran como dependencias de la app)
-			// Solo se registran como dependencias cuando un servicio los usa
-			if (modulesConfig.providers && Array.isArray(modulesConfig.providers)) {
-				for (const providerConfig of modulesConfig.providers) {
-					const interpolatedProviderConfig = this.interpolateEnvVars(providerConfig);
-						if (this.#isModuleDisabled(kernel, "provider", interpolatedProviderConfig.name)) {
-							Logger.warn(`[ModuleLoader] Provider ${interpolatedProviderConfig.name} deshabilitado (modules-manager): no se carga.`);
-							continue;
-						}
-					if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) {
-						Logger.debug(`[ModuleLoader] Provider opcional ${interpolatedProviderConfig.name} omitido (uri vacía)`);
-						continue;
-					}
-
-					// Verificar si el provider ya existe antes de cargarlo
-					if (registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)) {
-						Logger.debug(`[ModuleLoader] Provider global ${interpolatedProviderConfig.name} ya existe, saltando`);
-						continue;
-					}
-					try {
-						const provider = await this.loadProvider(interpolatedProviderConfig);
-						// Pasar null como appName para que NO se registre como dependencia de la app actual
-						// Registrar por el nombre de la clase del provider
-						registry.registerProvider(provider.name, provider, interpolatedProviderConfig, null);
-
-						// También registrar por el nombre del módulo/configuración para que sea encontrable
-						if (interpolatedProviderConfig.name !== provider.name) {
-							registry.registerProvider(interpolatedProviderConfig.name, provider, interpolatedProviderConfig, null);
-						}
-					} catch (error) {
-						const message = `Error cargando provider ${providerConfig.name}`;
-						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
-						Logger.warn(message);
-					}
-				}
-			}
-
-			// Cargar utilities globales (NO se registran como dependencias de la app)
-			if (modulesConfig.utilities && Array.isArray(modulesConfig.utilities)) {
-				for (const utilityConfig of modulesConfig.utilities) {
-					if (this.#isModuleDisabled(kernel, "utility", utilityConfig.name)) {
-						Logger.warn(`[ModuleLoader] Utility ${utilityConfig.name} deshabilitado (modules-manager): no se carga.`);
-						continue;
-					}
-					try {
-						const utility = await this.loadUtility(utilityConfig);
-						// Pasar null como appName para que NO se registre como dependencia de la app actual
-						registry.registerUtility(utility.name, utility, utilityConfig, null);
-
-						// Si el nombre contiene "/", también registrar con el nombre base como alias
-						if (utilityConfig.name.includes("/")) {
-							const baseName = utilityConfig.name.split("/").pop()!;
-							registry.registerUtility(baseName, utility, utilityConfig, null);
-						}
-					} catch (error) {
-						const message = `Error cargando utility ${utilityConfig.name}`;
-						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
-						Logger.warn(message);
-					}
-				}
-			}
-
-			// Cargar services
-			if (modulesConfig.services && Array.isArray(modulesConfig.services)) {
-				for (const serviceConfig of modulesConfig.services) {
-					if (this.#isModuleDisabled(kernel, "service", serviceConfig.name)) {
-						Logger.warn(`[ModuleLoader] Service ${serviceConfig.name} deshabilitado (modules-manager): no se carga.`);
-						continue;
-					}
-					try {
-						// Clonar la configuración para poder mutarla, ya que el original está congelado
-						const mutableServiceConfig = structuredClone(serviceConfig);
-
-						// PASO 0: Cargar las variables de entorno del servicio primero
-						let serviceEnvVars: Record<string, string> = {};
-						try {
-							const resolved = await VersionResolver.resolveModuleVersion(
-								this.#servicesPath,
-								serviceConfig.name,
-								serviceConfig.version,
-								serviceConfig.language
-							);
-							if (resolved) {
-								// resolved.path ya es el directorio del servicio
-								const envPath = path.join(resolved.path, ".env");
-								Logger.debug(`[ModuleLoader] Intentando cargar .env del servicio desde: ${envPath}`);
-								serviceEnvVars = await this.loadEnvFile(envPath);
-								Logger.debug(
-									`[ModuleLoader] Variables del servicio ${serviceConfig.name}: ${JSON.stringify(Object.keys(serviceEnvVars))}`
-								);
-							}
-						} catch (error) {
-							Logger.warn(`[ModuleLoader] Error cargando variables de entorno del servicio ${serviceConfig.name}: ${error}`);
-						}
-
-						// PRIMERO: Calcular el uniqueKey para verificar si el servicio ya existe
-						// Necesitamos resolver los providers para construir el config correcto
-						let finalProviders = mutableServiceConfig.providers;
-						if (!finalProviders || finalProviders.length === 0) {
-							try {
-								const resolved = await VersionResolver.resolveModuleVersion(
-									this.#servicesPath,
-									serviceConfig.name,
-									serviceConfig.version,
-									serviceConfig.language
-								);
-								if (resolved) {
-									// resolved.path es el directorio del servicio, no el archivo
-									const configJsonPath = path.join(resolved.path, "config.json");
-									const configContent = await fs.readFile(configJsonPath, "utf-8");
-									const configJson = safeParseJson(configContent, moduleConfigCheck);
-									if (configJson?.providers && Array.isArray(configJson.providers)) {
-										finalProviders = configJson.providers;
-									}
-								}
-							} catch {
-								// Si no se puede leer, usar el array vacío
-							}
-						}
-
-						// Interpolar las configuraciones de los providers con las variables del servicio
-						if (finalProviders) {
-							finalProviders = this.interpolateEnvVars(finalProviders, serviceEnvVars);
-						}
-
-						// Construir el config que se usará para el uniqueKey
-						const serviceUniqueConfig = {
-							...serviceConfig.config,
-							__providers: finalProviders,
-						};
-
-						// VERIFICAR si el servicio ya existe antes de cargarlo
-						if (registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
-							Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya existe, reutilizando instancia`);
-							// Solo agregar la dependencia a la app actual (el kernel lo maneja internamente)
-							registry.addModuleDependency("service", serviceConfig.name, serviceUniqueConfig);
-							continue; // Saltar al siguiente servicio
-						}
-
-						// Reutilizar instancia kernel-mode (registrada con su propio uniqueKey) si existe
-						const existingKeys = registry.getUniqueKeysByName("service", serviceConfig.name);
-						if (existingKeys.length > 0) {
-							Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya cargado (kernel-mode u otro), reutilizando`);
-							registry.addModuleDependency("service", serviceConfig.name);
-							continue;
-						}
-
-						// SEGUNDO: Cargar los providers específicos del servicio (si los tiene)
-						// Esto evita duplicación porque los providers se cargan una sola vez en el kernel
-						if (mutableServiceConfig.providers && Array.isArray(mutableServiceConfig.providers)) {
-							for (const providerConfig of mutableServiceConfig.providers) {
-								// Solo cargar si no es global (los globales ya fueron cargados)
-								if (!providerConfig.global) {
-									Logger.debug(`[ModuleLoader] Provider config ANTES de interpolar: ${JSON.stringify(providerConfig)}`);
-									Logger.debug(`[ModuleLoader] Variables disponibles para interpolación: ${JSON.stringify(serviceEnvVars)}`);
-
-									// Interpolar la configuración del provider con las variables del servicio
-									const interpolatedProviderConfig = this.interpolateEnvVars(providerConfig, serviceEnvVars);
-									Logger.debug(
-										`[ModuleLoader] Provider config DESPUÉS de interpolar: ${JSON.stringify(interpolatedProviderConfig)}`
-									);
-
-									if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) {
-										Logger.debug(`[ModuleLoader] Provider opcional ${interpolatedProviderConfig.name} omitido (uri vacía)`);
-										continue;
-									}
-
-									// Verificar si el provider ya existe
-									if (
-										registry.hasModule("provider", interpolatedProviderConfig.name, interpolatedProviderConfig.config)
-									) {
-										Logger.debug(`[ModuleLoader] Provider ${interpolatedProviderConfig.name} ya existe, reutilizando`);
-										registry.addModuleDependency(
-											"provider",
-											interpolatedProviderConfig.name,
-											interpolatedProviderConfig.config
-										);
-										continue;
-									}
-									try {
-										// Pasar las variables del servicio al cargar el provider
-										const provider = await this.loadProvider(interpolatedProviderConfig, serviceEnvVars);
-										registry.registerProvider(provider.name, provider, interpolatedProviderConfig);
-
-										// También registrar por el nombre del módulo/configuración
-										if (interpolatedProviderConfig.name !== provider.name) {
-											registry.registerProvider(
-												interpolatedProviderConfig.name,
-												provider,
-												interpolatedProviderConfig
-											);
-										}
-									} catch (error) {
-										const message = `Error cargando provider ${interpolatedProviderConfig.name} del servicio ${serviceConfig.name}`;
-										if (modulesConfig.failOnError) throw new Error(message, { cause: error });
-										Logger.warn(message);
-									}
-								}
-							}
-						}
-
-						// Cargar utilities específicas del servicio (si las tiene)
-						if (mutableServiceConfig.utilities && Array.isArray(mutableServiceConfig.utilities)) {
-							Logger.debug(
-								`[ModuleLoader] Cargando ${mutableServiceConfig.utilities.length} utilities para servicio ${serviceConfig.name}`
-							);
-							for (const utilityConfig of mutableServiceConfig.utilities) {
-								Logger.debug(`[ModuleLoader] Utility '${utilityConfig.name}' - global: ${utilityConfig.global}`);
-								if (utilityConfig.global) {
-									Logger.debug(`[ModuleLoader] Saltando utility global: ${utilityConfig.name}`);
-								} else {
-									try {
-										const utility = await this.loadUtility(utilityConfig);
-										registry.registerUtility(utility.name, utility, utilityConfig);
-
-										// Si el nombre contiene "/", también registrar con el nombre base como alias
-										if (utilityConfig.name.includes("/")) {
-											const baseName = utilityConfig.name.split("/").pop()!;
-											Logger.debug(`[ModuleLoader] Registrando alias '${baseName}' para utility '${utilityConfig.name}'`);
-											registry.registerUtility(baseName, utility, utilityConfig);
-										}
-									} catch (error) {
-										const message = `Error cargando utility ${utilityConfig.name} del servicio ${serviceConfig.name}`;
-										if (modulesConfig.failOnError) throw new Error(message, { cause: error });
-										Logger.warn(message);
-									}
-								}
-							}
-						}
-
-						// TERCERO: Cargar el servicio (que ahora puede acceder a sus providers del kernel)
-						const service = await this.loadService(mutableServiceConfig, kernel);
-
-						// CUARTO: Registrar los providers del servicio como dependencias de la app
-						// Esto es necesario para el reference counting correcto
-						if (mutableServiceConfig.providers && Array.isArray(mutableServiceConfig.providers)) {
-							for (const providerConfig of mutableServiceConfig.providers) {
-								const interpolatedProviderConfig = this.interpolateEnvVars(providerConfig, serviceEnvVars);
-								if (ModuleLoader.#shouldSkipOptionalProvider(interpolatedProviderConfig)) continue;
-
-								// Agregar el provider como dependencia de la app actual
-								// Esto incrementa el reference count y lo añade a appModuleDependencies
-								// addModuleDependency también maneja automáticamente los aliases (type)
-								registry.addModuleDependency(
-									"provider",
-									interpolatedProviderConfig.name,
-									interpolatedProviderConfig.config
-								);
-							}
-						}
-
-						// QUINTO: Registrar el servicio con el config que incluye providers
-						const registrationConfig: IModuleConfig = {
-							name: serviceConfig.name,
-							version: serviceConfig.version,
-							language: serviceConfig.language,
-							config: serviceUniqueConfig,
-						};
-						registry.registerService(service.name, service, registrationConfig);
-					} catch (error) {
-						const message = `Error cargando service ${serviceConfig.name}`;
-						if (modulesConfig.failOnError) throw new Error(message, { cause: error });
-						Logger.warn(message);
-					}
-				}
-			}
+			await this.#loadGlobalProviders(modulesConfig, kernel, registry);
+			await this.#loadGlobalUtilities(modulesConfig, kernel, registry);
+			await this.#loadServices(modulesConfig, kernel, registry);
 		} catch (error) {
 			const message = `Error procesando la definición de módulos`;
 			Logger.error(message);
 			throw new Error(message, { cause: error });
+		}
+	}
+
+	/** Lanza (envolviendo `error`) si la definición pide failOnError; si no, degrada a warn. */
+	static #failOrWarn(failOnError: boolean | undefined, message: string, error: unknown): void {
+		if (failOnError) throw new Error(message, { cause: error });
+		Logger.warn(message);
+	}
+
+	/** Registra el provider por el nombre de su clase y, si difiere, por el nombre del módulo. */
+	#registerProviderBothNames(registry: ModuleRegistry, provider: BaseProvider, config: IModuleConfig, appName?: string | null): void {
+		registry.registerProvider(provider.name, provider, config, appName);
+		if (config.name !== provider.name) {
+			registry.registerProvider(config.name, provider, config, appName);
+		}
+	}
+
+	/** Registra la utility y, si su nombre contiene "/", también el nombre base como alias. */
+	#registerUtilityWithAlias(registry: ModuleRegistry, utility: IUtility, config: IModuleConfig, appName?: string | null): void {
+		registry.registerUtility(utility.name, utility, config, appName);
+		if (config.name.includes("/")) {
+			const baseName = config.name.split("/").pop()!;
+			registry.registerUtility(baseName, utility, config, appName);
+		}
+	}
+
+	/**
+	 * Providers globales de la definición. NO se registran como dependencias de
+	 * la app (appName null): sólo cuentan como dependencia cuando un servicio los usa.
+	 */
+	async #loadGlobalProviders(modulesConfig: IModuleConfig, kernel: Kernel, registry: ModuleRegistry): Promise<void> {
+		const providers = Array.isArray(modulesConfig.providers) ? modulesConfig.providers : [];
+		for (const providerConfig of providers) {
+			const config = this.interpolateEnvVars(providerConfig);
+			if (this.#isModuleDisabled(kernel, "provider", config.name)) {
+				Logger.warn(`[ModuleLoader] Provider ${config.name} deshabilitado (modules-manager): no se carga.`);
+				continue;
+			}
+			if (ModuleLoader.#shouldSkipOptionalProvider(config)) {
+				Logger.debug(`[ModuleLoader] Provider opcional ${config.name} omitido (uri vacía)`);
+				continue;
+			}
+			if (registry.hasModule("provider", config.name, config.config)) {
+				Logger.debug(`[ModuleLoader] Provider global ${config.name} ya existe, saltando`);
+				continue;
+			}
+			try {
+				const provider = await this.loadProvider(config);
+				this.#registerProviderBothNames(registry, provider, config, null);
+			} catch (error) {
+				ModuleLoader.#failOrWarn(modulesConfig.failOnError, `Error cargando provider ${providerConfig.name}`, error);
+			}
+		}
+	}
+
+	/** Utilities globales de la definición (tampoco se registran como dependencias de la app). */
+	async #loadGlobalUtilities(modulesConfig: IModuleConfig, kernel: Kernel, registry: ModuleRegistry): Promise<void> {
+		const utilities = Array.isArray(modulesConfig.utilities) ? modulesConfig.utilities : [];
+		for (const utilityConfig of utilities) {
+			if (this.#isModuleDisabled(kernel, "utility", utilityConfig.name)) {
+				Logger.warn(`[ModuleLoader] Utility ${utilityConfig.name} deshabilitado (modules-manager): no se carga.`);
+				continue;
+			}
+			try {
+				const utility = await this.loadUtility(utilityConfig);
+				this.#registerUtilityWithAlias(registry, utility, utilityConfig, null);
+			} catch (error) {
+				ModuleLoader.#failOrWarn(modulesConfig.failOnError, `Error cargando utility ${utilityConfig.name}`, error);
+			}
+		}
+	}
+
+	/** Services de la definición, cada uno con sus providers/utilities propios. */
+	async #loadServices(modulesConfig: IModuleConfig, kernel: Kernel, registry: ModuleRegistry): Promise<void> {
+		const services = Array.isArray(modulesConfig.services) ? modulesConfig.services : [];
+		for (const serviceConfig of services) {
+			if (this.#isModuleDisabled(kernel, "service", serviceConfig.name)) {
+				Logger.warn(`[ModuleLoader] Service ${serviceConfig.name} deshabilitado (modules-manager): no se carga.`);
+				continue;
+			}
+			try {
+				await this.#loadServiceFromDefinition(serviceConfig, modulesConfig, kernel, registry);
+			} catch (error) {
+				ModuleLoader.#failOrWarn(modulesConfig.failOnError, `Error cargando service ${serviceConfig.name}`, error);
+			}
+		}
+	}
+
+	/**
+	 * Carga un servicio de la definición: resuelve env/providers para calcular su
+	 * uniqueKey, reutiliza instancias existentes, y si no hay, carga providers y
+	 * utilities propios, instancia el servicio y lo registra con sus dependencias.
+	 */
+	async #loadServiceFromDefinition(
+		serviceConfig: IModuleConfig,
+		modulesConfig: IModuleConfig,
+		kernel: Kernel,
+		registry: ModuleRegistry
+	): Promise<void> {
+		// Clonar la configuración para poder mutarla, ya que el original está congelado
+		const mutableServiceConfig = structuredClone(serviceConfig);
+
+		const serviceEnvVars = await this.#loadServiceEnvVars(serviceConfig);
+		const finalProviders = await this.#resolveServiceProviders(mutableServiceConfig, serviceConfig, serviceEnvVars);
+
+		// Config que define el uniqueKey del servicio
+		const serviceUniqueConfig = { ...serviceConfig.config, __providers: finalProviders };
+
+		if (registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
+			Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya existe, reutilizando instancia`);
+			registry.addModuleDependency("service", serviceConfig.name, serviceUniqueConfig);
+			return;
+		}
+
+		// Reutilizar instancia kernel-mode (registrada con su propio uniqueKey) si existe
+		if (registry.getUniqueKeysByName("service", serviceConfig.name).length > 0) {
+			Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya cargado (kernel-mode u otro), reutilizando`);
+			registry.addModuleDependency("service", serviceConfig.name);
+			return;
+		}
+
+		await this.#loadServiceScopedProviders(mutableServiceConfig, serviceConfig.name, serviceEnvVars, modulesConfig, registry);
+		await this.#loadServiceScopedUtilities(mutableServiceConfig, serviceConfig.name, modulesConfig, registry);
+
+		// Cargar el servicio (que ahora puede acceder a sus providers del kernel)
+		const service = await this.loadService(mutableServiceConfig, kernel);
+
+		// Registrar los providers del servicio como dependencias de la app (reference counting)
+		this.#registerServiceProviderDeps(mutableServiceConfig, serviceEnvVars, registry);
+
+		// Registrar el servicio con el config que incluye providers
+		registry.registerService(service.name, service, {
+			name: serviceConfig.name,
+			version: serviceConfig.version,
+			language: serviceConfig.language,
+			config: serviceUniqueConfig,
+		});
+	}
+
+	/** Variables de entorno del `.env` del servicio (objeto vacío si no hay o falla). */
+	async #loadServiceEnvVars(serviceConfig: IModuleConfig): Promise<Record<string, string>> {
+		try {
+			const resolved = await VersionResolver.resolveModuleVersion(
+				this.#servicesPath,
+				serviceConfig.name,
+				serviceConfig.version,
+				serviceConfig.language
+			);
+			if (!resolved) return {};
+			// resolved.path ya es el directorio del servicio
+			const envPath = path.join(resolved.path, ".env");
+			Logger.debug(`[ModuleLoader] Intentando cargar .env del servicio desde: ${envPath}`);
+			const serviceEnvVars = await this.loadEnvFile(envPath);
+			Logger.debug(`[ModuleLoader] Variables del servicio ${serviceConfig.name}: ${JSON.stringify(Object.keys(serviceEnvVars))}`);
+			return serviceEnvVars;
+		} catch (error) {
+			Logger.warn(`[ModuleLoader] Error cargando variables de entorno del servicio ${serviceConfig.name}: ${error}`);
+			return {};
+		}
+	}
+
+	/**
+	 * Providers efectivos del servicio para calcular su uniqueKey: los de la
+	 * definición o, si no declara, los de su propio config.json; interpolados
+	 * con las variables del servicio.
+	 */
+	async #resolveServiceProviders(
+		mutableServiceConfig: IModuleConfig,
+		serviceConfig: IModuleConfig,
+		serviceEnvVars: Record<string, string>
+	): Promise<IModuleConfig["providers"]> {
+		let finalProviders = mutableServiceConfig.providers;
+		if (!finalProviders || finalProviders.length === 0) {
+			try {
+				const resolved = await VersionResolver.resolveModuleVersion(
+					this.#servicesPath,
+					serviceConfig.name,
+					serviceConfig.version,
+					serviceConfig.language
+				);
+				if (resolved) {
+					// resolved.path es el directorio del servicio, no el archivo
+					const configContent = await fs.readFile(path.join(resolved.path, "config.json"), "utf-8");
+					const configJson = safeParseJson(configContent, moduleConfigCheck);
+					if (configJson?.providers && Array.isArray(configJson.providers)) {
+						finalProviders = configJson.providers;
+					}
+				}
+			} catch {
+				// Si no se puede leer, usar el array vacío
+			}
+		}
+		return finalProviders ? this.interpolateEnvVars(finalProviders, serviceEnvVars) : finalProviders;
+	}
+
+	/**
+	 * Providers propios (no globales) del servicio: se cargan una sola vez en el
+	 * kernel y se reutilizan si ya existen con el mismo config.
+	 */
+	async #loadServiceScopedProviders(
+		mutableServiceConfig: IModuleConfig,
+		serviceName: string,
+		serviceEnvVars: Record<string, string>,
+		modulesConfig: IModuleConfig,
+		registry: ModuleRegistry
+	): Promise<void> {
+		const providers = Array.isArray(mutableServiceConfig.providers) ? mutableServiceConfig.providers : [];
+		for (const providerConfig of providers) {
+			// Solo cargar si no es global (los globales ya fueron cargados)
+			if (providerConfig.global) continue;
+
+			const config = this.interpolateEnvVars(providerConfig, serviceEnvVars);
+			Logger.debug(`[ModuleLoader] Provider config interpolado para ${serviceName}: ${JSON.stringify(config)}`);
+
+			if (ModuleLoader.#shouldSkipOptionalProvider(config)) {
+				Logger.debug(`[ModuleLoader] Provider opcional ${config.name} omitido (uri vacía)`);
+				continue;
+			}
+			if (registry.hasModule("provider", config.name, config.config)) {
+				Logger.debug(`[ModuleLoader] Provider ${config.name} ya existe, reutilizando`);
+				registry.addModuleDependency("provider", config.name, config.config);
+				continue;
+			}
+			try {
+				const provider = await this.loadProvider(config, serviceEnvVars);
+				this.#registerProviderBothNames(registry, provider, config);
+			} catch (error) {
+				ModuleLoader.#failOrWarn(
+					modulesConfig.failOnError,
+					`Error cargando provider ${config.name} del servicio ${serviceName}`,
+					error
+				);
+			}
+		}
+	}
+
+	/** Utilities propias (no globales) del servicio. */
+	async #loadServiceScopedUtilities(
+		mutableServiceConfig: IModuleConfig,
+		serviceName: string,
+		modulesConfig: IModuleConfig,
+		registry: ModuleRegistry
+	): Promise<void> {
+		const utilities = Array.isArray(mutableServiceConfig.utilities) ? mutableServiceConfig.utilities : [];
+		for (const utilityConfig of utilities) {
+			if (utilityConfig.global) {
+				Logger.debug(`[ModuleLoader] Saltando utility global: ${utilityConfig.name}`);
+				continue;
+			}
+			try {
+				const utility = await this.loadUtility(utilityConfig);
+				this.#registerUtilityWithAlias(registry, utility, utilityConfig);
+			} catch (error) {
+				ModuleLoader.#failOrWarn(
+					modulesConfig.failOnError,
+					`Error cargando utility ${utilityConfig.name} del servicio ${serviceName}`,
+					error
+				);
+			}
+		}
+	}
+
+	/** Registra los providers del servicio como dependencias de la app actual (reference counting). */
+	#registerServiceProviderDeps(
+		mutableServiceConfig: IModuleConfig,
+		serviceEnvVars: Record<string, string>,
+		registry: ModuleRegistry
+	): void {
+		const providers = Array.isArray(mutableServiceConfig.providers) ? mutableServiceConfig.providers : [];
+		for (const providerConfig of providers) {
+			const config = this.interpolateEnvVars(providerConfig, serviceEnvVars);
+			if (ModuleLoader.#shouldSkipOptionalProvider(config)) continue;
+			// addModuleDependency también maneja automáticamente los aliases (type)
+			registry.addModuleDependency("provider", config.name, config.config);
 		}
 	}
 
@@ -615,24 +627,7 @@ export class ModuleLoader {
 		const rawConfig = parseJsonOrThrow(configContent, moduleConfigCheck, `service config ${configPath}`);
 		const serviceConfig = this.interpolateEnvVars(rawConfig, serviceEnvVars);
 
-		if (serviceConfig.providers && Array.isArray(serviceConfig.providers)) {
-			for (const providerConfig of serviceConfig.providers) {
-				if (ModuleLoader.#shouldSkipOptionalProvider(providerConfig)) {
-					Logger.debug(`[ModuleLoader] Provider opcional ${providerConfig.name} omitido (uri vacía)`);
-					continue;
-				}
-
-				if (registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
-					Logger.debug(`[ModuleLoader] Provider ${providerConfig.name} ya existe`);
-					continue;
-				}
-				const provider = await this.loadProvider(providerConfig, serviceEnvVars);
-				registry.registerProvider(provider.name, provider, providerConfig, null);
-				if (providerConfig.name !== provider.name) {
-					registry.registerProvider(providerConfig.name, provider, providerConfig, null);
-				}
-			}
-		}
+		await this.#loadKernelServiceProviders(serviceConfig, serviceEnvVars, registry);
 
 		// Anti path-traversal: el servicePath viene del walk de FS de las raíces de
 		// servicios; antes de ejecutar su código (import = code execution) se exige
@@ -674,5 +669,26 @@ export class ModuleLoader {
 		};
 
 		return { instance, config: registrationConfig };
+	}
+
+	/** Providers de un servicio kernel-mode (config ya interpolado; no cuentan como dependencia de app). */
+	async #loadKernelServiceProviders(
+		serviceConfig: IModuleConfig,
+		serviceEnvVars: Record<string, string>,
+		registry: ModuleRegistry
+	): Promise<void> {
+		const providers = Array.isArray(serviceConfig.providers) ? serviceConfig.providers : [];
+		for (const providerConfig of providers) {
+			if (ModuleLoader.#shouldSkipOptionalProvider(providerConfig)) {
+				Logger.debug(`[ModuleLoader] Provider opcional ${providerConfig.name} omitido (uri vacía)`);
+				continue;
+			}
+			if (registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
+				Logger.debug(`[ModuleLoader] Provider ${providerConfig.name} ya existe`);
+				continue;
+			}
+			const provider = await this.loadProvider(providerConfig, serviceEnvVars);
+			this.#registerProviderBothNames(registry, provider, providerConfig, null);
+		}
 	}
 }

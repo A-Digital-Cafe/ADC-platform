@@ -6,7 +6,6 @@ import type RabbitMQProvider from "../../../../providers/queue/rabbitmq/index.ts
 import type RedisProvider from "../../../../providers/queue/redis/index.ts";
 import type { OperationMessage } from "@interfaces/modules/providers/IMessageQueue.js";
 import type { Consumer } from "rabbitmq-client";
-import { CircuitOpenError } from "@common/types/custom-errors/CircuitOpenError.ts";
 import { createHash } from "node:crypto";
 import { safeParseJson } from "@common/utils/json-schema.ts";
 import { jobStatusCheck } from "../schemas/job-status.js";
@@ -99,10 +98,6 @@ export class JobManager {
 		queueOpts?: QueueOptions
 	): Promise<void> {
 		const rabbitmq = this.#rabbitmq!;
-		const redis = this.#redis;
-		const circuitBreaker = operationsService.circuitBreaker;
-		const logger = this.#logger;
-		const getSessionManager = this.#getSessionManager;
 		const consumerKey = `${serviceName}.${methodName}`;
 
 		// Declare topology once per service
@@ -116,140 +111,7 @@ export class JobManager {
 		const consumer = rabbitmq.createOperationConsumer(
 			serviceName,
 			methodName,
-			async (msg: OperationMessage) => {
-				const {
-					jobId,
-					params,
-					data,
-					userId,
-					orgId,
-					methodName: _method,
-				} = msg.body as {
-					jobId: string;
-					params: Record<string, string>;
-					data: unknown;
-					userId?: string;
-					orgId?: string;
-					methodName: string;
-				};
-
-				// Update job status → processing
-				if (redis && jobId) {
-					try {
-						const existing = await redis.get(`job:${jobId}`);
-						const parsed = safeParseJson(existing, jobStatusCheck);
-						if (parsed) {
-							parsed.status = "processing";
-							await redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(parsed));
-						}
-					} catch {
-						/* non-critical */
-					}
-				}
-
-				// ── Retrieve + verify session token from Redis ──────────────────
-				let verifiedToken: string | null = null;
-				if (redis && jobId) {
-					try {
-						const storedToken = await redis.get(`job-token:${jobId}`);
-						if (storedToken) {
-							// Verify hash matches the one sent in the AMQP header
-							const expectedHash = msg.headers["x-token-hash"];
-							const actualHash = createHash("sha256").update(storedToken).digest("hex");
-							if (expectedHash && actualHash === expectedHash) {
-								// Verify the session is still valid
-								const sessionMgr = getSessionManager();
-								if (sessionMgr) {
-									const result = await sessionMgr.verifyToken(storedToken);
-									if (result.valid) {
-										verifiedToken = storedToken;
-									} else {
-										// Session revoked/expired → DROP, don't process
-										logger.logError(`[EndpointManager] ${consumerKey}: session expired/revoked for job ${jobId}, dropping`);
-										if (redis) {
-											const jobData: JobStatus = {
-												status: "failed",
-												endpoint: `${endpoint.method}:${endpoint.url}`,
-												userId,
-												error: "Session expired or revoked",
-												createdAt: new Date().toISOString(),
-											};
-											await redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(jobData));
-											await redis.del(`job-token:${jobId}`);
-										}
-										return; // ACK without processing
-									}
-								}
-							}
-						}
-					} catch {
-						/* non-critical: proceed without token */
-					}
-				}
-
-				// Reconstruct minimal EndpointCtx - permissions already verified at HTTP level
-				const ctx = {
-					params: params || {},
-					query: {},
-					data,
-					user: userId ? { id: userId, username: "", permissions: [], orgId } : null,
-					token: verifiedToken,
-					cookies: {},
-					headers: {},
-					ip: "queue-worker",
-				};
-
-				// Read stepper resume index from retry headers
-				const stepperIdx = msg.headers["x-stepper-idx"] ? Number.parseInt(msg.headers["x-stepper-idx"], 10) : undefined;
-				if (stepperIdx !== undefined) {
-					(ctx as any)._stepperResumeIdx = stepperIdx;
-				}
-
-				try {
-					// Execute under circuit breaker
-					const result = await circuitBreaker.execute(consumerKey, () => endpoint.handler(ctx as any));
-
-					// Update job status → completed
-					if (redis && jobId) {
-						try {
-							const jobData: JobStatus = {
-								status: "completed",
-								endpoint: `${endpoint.method}:${endpoint.url}`,
-								userId,
-								result,
-								createdAt: new Date().toISOString(),
-								completedAt: new Date().toISOString(),
-							};
-							await redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(jobData));
-							await redis.del(`job-token:${jobId}`);
-						} catch {
-							/* non-critical */
-						}
-					}
-				} catch (error: any) {
-					// Update job status → failed
-					if (redis && jobId) {
-						try {
-							const jobData: JobStatus = {
-								status: "failed",
-								endpoint: `${endpoint.method}:${endpoint.url}`,
-								userId,
-								error: error.message,
-								createdAt: new Date().toISOString(),
-							};
-							await redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(jobData));
-						} catch {
-							/* non-critical */
-						}
-					}
-
-					// Propagate stepper index if available (for retry queue headers)
-					if (error.failedStep !== undefined || error instanceof CircuitOpenError) {
-						throw error; // consumer wrapper in rabbitmq provider handles retry logic
-					}
-					throw error;
-				}
-			},
+			(msg: OperationMessage) => this.#consumeJob(msg, endpoint, operationsService, consumerKey),
 			{
 				prefetch: queueOpts?.prefetch,
 				concurrency: queueOpts?.concurrency,
@@ -258,7 +120,176 @@ export class JobManager {
 		);
 
 		this.#consumers.set(consumerKey, consumer);
-		logger.logOk(`[EndpointManager] consumer set up: ${consumerKey}`);
+		this.#logger.logOk(`[EndpointManager] consumer set up: ${consumerKey}`);
+	}
+
+	// ─── Consumo de jobs encolados ────────────────────────────────────────────────
+
+	/** Cuerpo del mensaje AMQP de un job encolado. */
+	#jobBody(msg: OperationMessage) {
+		return msg.body as {
+			jobId: string;
+			params: Record<string, string>;
+			data: unknown;
+			userId?: string;
+			orgId?: string;
+			methodName: string;
+		};
+	}
+
+	/**
+	 * Procesa un job encolado: marca `processing`, verifica el token de sesión
+	 * (drop si la sesión fue revocada), ejecuta el handler bajo circuit breaker
+	 * y persiste el resultado (`completed`/`failed`) en Redis.
+	 */
+	async #consumeJob(
+		msg: OperationMessage,
+		endpoint: ConsumerEndpoint,
+		operationsService: IOperationsService,
+		consumerKey: string
+	): Promise<void> {
+		const body = this.#jobBody(msg);
+		const { jobId, userId } = body;
+		const endpointLabel = `${endpoint.method}:${endpoint.url}`;
+
+		await this.#markJobProcessing(jobId);
+
+		const verification = await this.#verifyJobToken(msg, jobId, userId, endpointLabel, consumerKey);
+		if (verification.drop) return; // ACK sin procesar (sesión revocada/expirada)
+
+		const ctx = JobManager.#buildConsumerCtx(body, verification.token, msg.headers);
+
+		try {
+			// Execute under circuit breaker
+			const result = await operationsService.circuitBreaker.execute(consumerKey, () => endpoint.handler(ctx as any));
+			await this.#storeJobStatus(
+				jobId,
+				{
+					status: "completed",
+					endpoint: endpointLabel,
+					userId,
+					result,
+					createdAt: new Date().toISOString(),
+					completedAt: new Date().toISOString(),
+				},
+				true
+			);
+		} catch (error: any) {
+			await this.#storeJobStatus(
+				jobId,
+				{
+					status: "failed",
+					endpoint: endpointLabel,
+					userId,
+					error: error.message,
+					createdAt: new Date().toISOString(),
+				},
+				false
+			);
+			// El wrapper del consumer en el provider de rabbitmq maneja la lógica de
+			// retry (incluye el índice de stepper y CircuitOpenError).
+			throw error;
+		}
+	}
+
+	/** Marca el job como `processing` en Redis (best-effort, no crítico). */
+	async #markJobProcessing(jobId: string): Promise<void> {
+		if (!this.#redis || !jobId) return;
+		try {
+			const existing = await this.#redis.get(`job:${jobId}`);
+			const parsed = safeParseJson(existing, jobStatusCheck);
+			if (parsed) {
+				parsed.status = "processing";
+				await this.#redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(parsed));
+			}
+		} catch {
+			/* non-critical */
+		}
+	}
+
+	/** Persiste el estado final del job (best-effort); opcionalmente borra el token guardado. */
+	async #storeJobStatus(jobId: string, jobData: JobStatus, deleteToken: boolean): Promise<void> {
+		if (!this.#redis || !jobId) return;
+		try {
+			await this.#redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(jobData));
+			if (deleteToken) await this.#redis.del(`job-token:${jobId}`);
+		} catch {
+			/* non-critical */
+		}
+	}
+
+	/**
+	 * Recupera y verifica el token de sesión del job desde Redis: el hash debe
+	 * coincidir con el header AMQP y la sesión seguir válida. Si la sesión fue
+	 * revocada/expirada, marca el job como fallido y pide DROP. Cualquier error
+	 * de infraestructura degrada a "procesar sin token".
+	 */
+	async #verifyJobToken(
+		msg: OperationMessage,
+		jobId: string,
+		userId: string | undefined,
+		endpointLabel: string,
+		consumerKey: string
+	): Promise<{ token: string | null; drop: boolean }> {
+		const redis = this.#redis;
+		const noToken = { token: null, drop: false };
+		if (!redis || !jobId) return noToken;
+		try {
+			const storedToken = await redis.get(`job-token:${jobId}`);
+			if (!storedToken) return noToken;
+
+			// Verify hash matches the one sent in the AMQP header
+			const expectedHash = msg.headers["x-token-hash"];
+			const actualHash = createHash("sha256").update(storedToken).digest("hex");
+			if (!expectedHash || actualHash !== expectedHash) return noToken;
+
+			// Verify the session is still valid
+			const sessionMgr = this.#getSessionManager();
+			if (!sessionMgr) return noToken;
+			const result = await sessionMgr.verifyToken(storedToken);
+			if (result.valid) return { token: storedToken, drop: false };
+
+			// Session revoked/expired → DROP, don't process
+			this.#logger.logError(`[EndpointManager] ${consumerKey}: session expired/revoked for job ${jobId}, dropping`);
+			const jobData: JobStatus = {
+				status: "failed",
+				endpoint: endpointLabel,
+				userId,
+				error: "Session expired or revoked",
+				createdAt: new Date().toISOString(),
+			};
+			await redis.setex(`job:${jobId}`, JobManager.JOB_TTL_SECONDS, JSON.stringify(jobData));
+			await redis.del(`job-token:${jobId}`);
+			return { token: null, drop: true };
+		} catch {
+			/* non-critical: proceed without token */
+			return noToken;
+		}
+	}
+
+	/** Reconstruye el EndpointCtx mínimo (los permisos ya se verificaron a nivel HTTP). */
+	static #buildConsumerCtx(
+		body: { jobId: string; params: Record<string, string>; data: unknown; userId?: string; orgId?: string },
+		verifiedToken: string | null,
+		headers: OperationMessage["headers"]
+	) {
+		const ctx = {
+			params: body.params || {},
+			query: {},
+			data: body.data,
+			user: body.userId ? { id: body.userId, username: "", permissions: [], orgId: body.orgId } : null,
+			token: verifiedToken,
+			cookies: {},
+			headers: {},
+			ip: "queue-worker",
+		};
+
+		// Read stepper resume index from retry headers
+		const stepperIdx = headers["x-stepper-idx"] ? Number.parseInt(headers["x-stepper-idx"], 10) : undefined;
+		if (stepperIdx !== undefined) {
+			(ctx as any)._stepperResumeIdx = stepperIdx;
+		}
+		return ctx;
 	}
 
 	/**

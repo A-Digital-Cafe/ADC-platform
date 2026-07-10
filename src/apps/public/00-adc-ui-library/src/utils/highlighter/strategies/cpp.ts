@@ -10,8 +10,8 @@ export class CppHighlighter implements HighlighterStrategy {
 		const replacements = new Map<string, string>();
 		let placeholderIndex = 0;
 
-		// Comments
-		const lineCommentRegex = /\/\/.*$/gm;
+		// Comments (`.` ya no cruza `\n`; el `$` era redundante y disparaba S8786)
+		const lineCommentRegex = /\/\/.*/g;
 		const blockCommentRegex = /\/\*[\s\S]*?\*\//g;
 		escaped = escaped.replaceAll(lineCommentRegex, (match) => {
 			const placeholder = `__COMMENT_${placeholderIndex++}__`;

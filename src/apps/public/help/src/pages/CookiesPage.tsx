@@ -40,11 +40,11 @@ export function CookiesPage() {
 			<h2 id="gestion">5. Gestión</h2>
 			<p>
 				Puedes borrar las cookies desde tu navegador en cualquier momento. Para dudas, contáctanos desde los{" "}
-				<a href="/contact#canales">canales publicados</a>: <a href={`mailto:${CONTACTS.email}`}>{CONTACTS.email}</a> o vía Discord (
+				<a href="/contact#canales">canales publicados</a>: <a href={`mailto:${CONTACTS.email}`}>{CONTACTS.email}</a> o vía Discord{" ("}
 				<a href={CONTACTS.discordUrl} rel="noreferrer">
 					{CONTACTS.discordHandle}
 				</a>
-				).
+				{")."}
 			</p>
 		</PageShell>
 	);

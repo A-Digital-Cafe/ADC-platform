@@ -2,6 +2,8 @@ import * as path from "node:path";
 import { IModule, IModuleConfig } from "../interfaces/modules/IModule.js";
 import * as fs from "node:fs/promises";
 import { Kernel } from "../kernel.js";
+import type { ModuleLoader } from "../utils/loaders/ModuleLoader.js";
+import type { ModuleRegistry } from "../utils/registry/ModuleRegistry.js";
 import { ILifecycle } from "../interfaces/behaviours/ILifecycle.js";
 import { OnlyKernel } from "../utils/decorators/OnlyKernel.ts";
 import { BaseModule } from "../common/BaseModule.js";
@@ -51,73 +53,13 @@ export abstract class BaseService extends BaseModule implements IService {
 		try {
 			// Cargar variables de entorno del servicio usando ModuleLoader
 			const serviceEnvVars = await moduleLoader.loadEnvFile(envPath);
+			const baseConfig = await this.#readBaseConfig(moduleLoader, modulesConfigPath, serviceEnvVars);
+			const providersToUse = await this.#resolveProviders(moduleLoader, registry, baseConfig, serviceEnvVars);
 
-			let baseConfig: Partial<IModuleConfig> = {};
-			try {
-				const configContent = await fs.readFile(modulesConfigPath, "utf-8");
-				const rawConfig = safeParseJson(configContent, moduleConfigCheck);
-				if (rawConfig) baseConfig = moduleLoader.interpolateEnvVars(rawConfig, serviceEnvVars);
-			} catch (e: any) {
-				this.logger.logDebug(`No se pudo leer config.json: ${e.message}`);
-			}
-
-			// Determinar qué providers usar:
-			// - Si la app proporciona providers (options.providers), usar esos
-			// - Si no, cargar los del config.json del servicio
-			let providersToUse = this.options?.providers || [];
-
-			if (!providersToUse || providersToUse.length === 0) {
-				// No hay providers de la app, usar los del config.json del servicio
-				if (baseConfig.providers && Array.isArray(baseConfig.providers)) {
-					providersToUse = baseConfig.providers;
-
-					// Cargar estos providers con las variables de entorno del servicio
-					for (const providerConfig of baseConfig.providers) {
-						try {
-							const provider = await moduleLoader.loadProvider(providerConfig, serviceEnvVars);
-							registry.registerProvider(provider.name, provider, providerConfig);
-
-							// También registrar por el nombre del módulo/configuración
-							if (providerConfig.name !== provider.name) {
-								registry.registerProvider(providerConfig.name, provider, providerConfig);
-							}
-
-							// Agregar como dependencia de la app actual
-							registry.addModuleDependency("provider", providerConfig.name, providerConfig.custom);
-						} catch (error) {
-							const message = `Error cargando provider ${providerConfig.name}`;
-							// failOnError puede venir del config.json del servicio
-							if (baseConfig.failOnError) throw new Error(message, { cause: error });
-							this.logger.logWarn(message);
-						}
-					}
-				}
-			}
-
-			// Cargar las utilities del servicio
-			// Prioridad: utilities de la app (options) > utilities del config.json del servicio
-			// Estas utilities son globales (no limitadas a una app específica)
+			// Utilities: prioridad app (options) > config.json del servicio.
+			// Son globales (no limitadas a una app específica).
 			const utilitiesToLoad = this.options?.utilities || baseConfig.utilities || [];
-
-			if (utilitiesToLoad && Array.isArray(utilitiesToLoad)) {
-				for (const utilityConfig of utilitiesToLoad) {
-					try {
-						const utility = await moduleLoader.loadUtility(utilityConfig);
-						registry.registerUtility(utility.name, utility, utilityConfig, null);
-
-						// Si el nombre contiene "/", también registrar con el nombre base como alias
-						if (utilityConfig.name.includes("/")) {
-							const baseName = utilityConfig.name.split("/").pop()!;
-							registry.registerUtility(baseName, utility, utilityConfig, null);
-						}
-					} catch (error: any) {
-						const message = `Error cargando utility ${utilityConfig.name}: ${error.message}`;
-						this.logger.logError(message);
-						if (baseConfig.failOnError) throw new Error(message, { cause: error });
-						else throw error; // Re-lanzar para que el servicio no se registre
-					}
-				}
-			}
+			await this.#loadUtilities(moduleLoader, registry, utilitiesToLoad, baseConfig.failOnError);
 
 			this.config = {
 				name: this.name,
@@ -135,6 +77,83 @@ export abstract class BaseService extends BaseModule implements IService {
 		} catch (error) {
 			this.logger.logError(`Error durante inicialización: ${error}`);
 			throw error;
+		}
+	}
+
+	/** Lee e interpola el config.json del servicio (objeto vacío si no existe o no parsea). */
+	async #readBaseConfig(
+		moduleLoader: ModuleLoader,
+		modulesConfigPath: string,
+		serviceEnvVars: Record<string, string>
+	): Promise<Partial<IModuleConfig>> {
+		try {
+			const configContent = await fs.readFile(modulesConfigPath, "utf-8");
+			const rawConfig = safeParseJson(configContent, moduleConfigCheck);
+			if (rawConfig) return moduleLoader.interpolateEnvVars(rawConfig, serviceEnvVars);
+		} catch (e: any) {
+			this.logger.logDebug(`No se pudo leer config.json: ${e.message}`);
+		}
+		return {};
+	}
+
+	/**
+	 * Providers efectivos del servicio: si la app los proporciona (options),
+	 * se usan esos (ya cargados); si no, se cargan los del config.json propio.
+	 */
+	async #resolveProviders(
+		moduleLoader: ModuleLoader,
+		registry: ModuleRegistry,
+		baseConfig: Partial<IModuleConfig>,
+		serviceEnvVars: Record<string, string>
+	): Promise<IModuleConfig["providers"]> {
+		const fromApp = this.options?.providers || [];
+		if (fromApp.length > 0) return fromApp;
+		if (!baseConfig.providers || !Array.isArray(baseConfig.providers)) return fromApp;
+
+		// Cargar los providers del config.json con las variables de entorno del servicio
+		for (const providerConfig of baseConfig.providers) {
+			try {
+				const provider = await moduleLoader.loadProvider(providerConfig, serviceEnvVars);
+				registry.registerProvider(provider.name, provider, providerConfig);
+				// También registrar por el nombre del módulo/configuración
+				if (providerConfig.name !== provider.name) {
+					registry.registerProvider(providerConfig.name, provider, providerConfig);
+				}
+				// Agregar como dependencia de la app actual
+				registry.addModuleDependency("provider", providerConfig.name, providerConfig.custom);
+			} catch (error) {
+				const message = `Error cargando provider ${providerConfig.name}`;
+				// failOnError puede venir del config.json del servicio
+				if (baseConfig.failOnError) throw new Error(message, { cause: error });
+				this.logger.logWarn(message);
+			}
+		}
+		return baseConfig.providers;
+	}
+
+	/** Carga y registra las utilities del servicio (con alias por nombre base si contiene "/"). */
+	async #loadUtilities(
+		moduleLoader: ModuleLoader,
+		registry: ModuleRegistry,
+		utilitiesToLoad: IModuleConfig["utilities"],
+		failOnError: boolean | undefined
+	): Promise<void> {
+		if (!utilitiesToLoad || !Array.isArray(utilitiesToLoad)) return;
+		for (const utilityConfig of utilitiesToLoad) {
+			try {
+				const utility = await moduleLoader.loadUtility(utilityConfig);
+				registry.registerUtility(utility.name, utility, utilityConfig, null);
+				// Si el nombre contiene "/", también registrar con el nombre base como alias
+				if (utilityConfig.name.includes("/")) {
+					const baseName = utilityConfig.name.split("/").pop()!;
+					registry.registerUtility(baseName, utility, utilityConfig, null);
+				}
+			} catch (error: any) {
+				const message = `Error cargando utility ${utilityConfig.name}: ${error.message}`;
+				this.logger.logError(message);
+				if (failOnError) throw new Error(message, { cause: error });
+				else throw error; // Re-lanzar para que el servicio no se registre
+			}
 		}
 	}
 
