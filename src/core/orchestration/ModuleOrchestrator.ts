@@ -410,17 +410,19 @@ export class ModuleOrchestrator {
 		const now = Date.now();
 		if (this.#failureGraceUntil === 0) this.#failureGraceUntil = now + FAILURE_GRACE_MS;
 		const graceOver = now >= this.#failureGraceUntil;
-		const isFailed = (member: string, loaded: boolean): boolean => {
+		// "unknown" = ausente dentro de la gracia: no se afirma ni caída ni recuperación.
+		const memberState = (member: string, loaded: boolean): "up" | "failed" | "unknown" => {
 			if (loaded) {
 				this.#everLoaded.add(member);
-				return false;
+				return "up";
 			}
-			return graceOver || this.#everLoaded.has(member);
+			return graceOver || this.#everLoaded.has(member) ? "failed" : "unknown";
 		};
 		const out: FriendlyGroupState[] = [];
 		for (const [name, members] of graph.friendlyGroups()) {
 			const hasFront = members.apps.length > 0;
 			const failed: string[] = [];
+			const unknown: string[] = [];
 			const downApps: string[] = [];
 			let downFronts = 0;
 			let downBacks = 0;
@@ -430,9 +432,12 @@ export class ModuleOrchestrator {
 				const svcEntry = this.#d.disabledRegistry.get("service", svc);
 				if (svcEntry?.pending) continue;
 				if (svcEntry) downBacks++;
-				else if (isFailed(`service:${svc}`, loadedServices.has(svc))) {
-					downBacks++;
-					failed.push(`service:${svc}`);
+				else {
+					const state = memberState(`service:${svc}`, loadedServices.has(svc));
+					if (state === "failed") {
+						downBacks++;
+						failed.push(`service:${svc}`);
+					} else if (state === "unknown") unknown.push(`service:${svc}`);
 				}
 			}
 			for (const base of members.apps) {
@@ -440,12 +445,12 @@ export class ModuleOrchestrator {
 				if (this.#d.disabledRegistry.getApp(base)?.pending) continue;
 				if (disabledAppBases.has(base)) downFronts++;
 				else {
-					const frontFailed = isFailed(`app:${base}`, loadedAppBases.has(base));
-					if (frontFailed) {
+					const state = memberState(`app:${base}`, loadedAppBases.has(base));
+					if (state === "failed") {
 						downFronts++;
 						failed.push(`app:${base}`);
-					}
-					if (frontFailed || downBacks > 0) downApps.push(base);
+					} else if (state === "unknown") unknown.push(`app:${base}`);
+					if (state === "failed" || downBacks > 0) downApps.push(base);
 				}
 			}
 			const down = downFronts + downBacks;
@@ -456,7 +461,7 @@ export class ModuleOrchestrator {
 			if (down === 0) state = "ok";
 			else if (failed.length === 0) state = "maintenance";
 			else state = available ? "degraded" : "down";
-			out.push({ name, hasFront, total: members.apps.length + members.services.length, down, failed, downApps, state });
+			out.push({ name, hasFront, total: members.apps.length + members.services.length, down, failed, unknown, downApps, state });
 		}
 		// Orden estable: grupos con frente primero, luego alfabético (back-only como "Core" al final).
 		out.sort((a, b) => Number(b.hasFront) - Number(a.hasFront) || a.name.localeCompare(b.name));

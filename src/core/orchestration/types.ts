@@ -40,6 +40,12 @@ export interface FriendlyGroupState {
 	 */
 	failed: string[];
 	/**
+	 * Miembros ausentes DENTRO de la gracia de arranque: aún no se sabe si van a cargar
+	 * o están caídos (tras un reinicio, `#everLoaded` se vacía). Mismos ids que `failed`.
+	 * No abrir NI resolver incidentes automáticos para estos miembros.
+	 */
+	unknown: string[];
+	/**
 	 * Apps del grupo (nombres base) NO disponibles por caída: su front falló o algún
 	 * service del grupo está caído/deshabilitado. Excluye bajas manuales de la propia
 	 * app (esas viajan en `disabled` del snapshot de plataforma) y pendientes. Alimenta
@@ -47,7 +53,7 @@ export interface FriendlyGroupState {
 	 */
 	downApps: string[];
 	/**
-	 * - `ok`: todo arriba.
+	 * - `ok`: modulos arriba.
 	 * - `maintenance`: sólo hay bajas MANUALES (deshabilitado desde modules-manager) — planificado, no es una caída.
 	 * - `degraded`: hay un FALLO real pero el grupo sigue disponible (algún frente arriba).
 	 * - `down`: hay un FALLO real y el grupo no está disponible.
