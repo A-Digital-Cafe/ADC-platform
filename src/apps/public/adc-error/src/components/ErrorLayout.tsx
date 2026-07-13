@@ -1,11 +1,14 @@
 import React from "react";
+import { getUrl } from "@common/utils/url-utils.js";
+
+const HOME_URL = getUrl(3024, "adigitalcafe.com");
 
 export function ErrorLayout({ children }: { readonly children: React.ReactNode }) {
 	return (
 		<div className="min-h-screen flex flex-col bg-background text-text">
 			<adc-custom-error variant="toast" global handle-unhandled />
 			<header className="flex items-center justify-center py-6 px-8 shadow-cozy bg-header text-theader rounded-b-xxl">
-				<a href="https://adigitalcafe.com" aria-label="Volver al inicio" className="flex items-center gap-3">
+				<a href={HOME_URL} aria-label="Volver al inicio" className="flex items-center gap-3">
 					<img
 						src="/ui/images/mini-logo.webp"
 						alt="ADC"

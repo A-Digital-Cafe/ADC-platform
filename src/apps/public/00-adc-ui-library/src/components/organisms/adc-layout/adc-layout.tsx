@@ -9,6 +9,8 @@ const AUTH_PORT = 3012;
 const AUTH_HOST = "auth.adigitalcafe.com";
 /** API dev port */
 const API_PORT = 3000;
+/** Home (adc-home) dev port */
+const HOME_PORT = 3024;
 
 function resolveAuthUrl(): string {
 	return IS_DEV ? `http://${host()}:${AUTH_PORT}` : `${proto()}//${AUTH_HOST}${port()}`;
@@ -16,6 +18,10 @@ function resolveAuthUrl(): string {
 
 function resolveApiBaseUrl(): string {
 	return IS_DEV ? `http://${host()}:${API_PORT}` : "";
+}
+
+function resolveHomeHref(): string {
+	return IS_DEV ? `http://${host()}:${HOME_PORT}` : "/";
 }
 
 @Component({
@@ -27,7 +33,7 @@ export class AdcLayout {
 
 	@Prop() logoSrc: string = "/ui/images/mini-logo.webp";
 	@Prop() logoAlt: string = "ADC";
-	@Prop() homeHref: string = "/";
+	@Prop() homeHref?: string;
 	@Prop() fullWidth: boolean = false;
 	@Prop() showAccessButton: boolean = true;
 	@Prop() authUrl?: string;
@@ -41,6 +47,7 @@ export class AdcLayout {
 	render() {
 		const authUrl = this.authUrl || resolveAuthUrl();
 		const apiBaseUrl = this.apiBaseUrl ?? resolveApiBaseUrl();
+		const homeHref = this.homeHref || resolveHomeHref();
 
 		return (
 			<div
@@ -58,7 +65,7 @@ export class AdcLayout {
 				<adc-site-header
 					logo-src={this.logoSrc}
 					logo-alt={this.logoAlt}
-					home-href={this.homeHref}
+					home-href={homeHref}
 					show-access-button={this.showAccessButton}
 					auth-url={authUrl}
 					api-base-url={apiBaseUrl}

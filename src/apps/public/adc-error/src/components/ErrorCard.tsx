@@ -2,6 +2,7 @@ import React from "react";
 import { getUrl } from "@common/utils/url-utils.js";
 
 const AUTH_URL = getUrl(3012, "auth.adigitalcafe.com", "/login");
+const HOME_URL = getUrl(3024, "adigitalcafe.com");
 
 interface ErrorCardProps {
 	readonly icon: string;
@@ -42,7 +43,7 @@ export function ErrorCard({ icon, title, subtitle, description, hint, tone = "da
 						Volver al inicio de sesión
 					</a>
 					<span className="hidden sm:inline text-muted">·</span>
-					<a href="https://adigitalcafe.com" className="text-accent hover:underline text-sm font-medium">
+					<a href={HOME_URL} className="text-accent hover:underline text-sm font-medium">
 						Ir a adigitalcafe.com
 					</a>
 				</div>
