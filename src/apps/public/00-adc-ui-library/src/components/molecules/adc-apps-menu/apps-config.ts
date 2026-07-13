@@ -11,6 +11,12 @@ export const DEFAULT_APPS: AppMenuItem[] = [
 	{ id: "projects", name: "Projects", url: getUrl(3018, "projects.adigitalcafe.com"), moduleName: "adc-project-manager" },
 	{ id: "mail", name: "Mail", url: getUrl(3030, "mail.adigitalcafe.com"), moduleName: "adc-mail" },
 	{ id: "drive", name: "Drive", url: getUrl(3032, "drive.adigitalcafe.com"), moduleName: "adc-drive" },
+	{
+		id: "image-editor",
+		name: "Editor de imágenes",
+		url: getUrl(3034, "editor.adigitalcafe.com"),
+		moduleName: "adc-image-editor",
+	},
 ];
 
 /** Identity: solo admin, admin de organización o security_manager (detectado por permiso `users` READ). */

@@ -50,6 +50,7 @@
     color: var(--c-text);
     transition: background-color 0.15s;
     font-family: var(--font-text, system-ui, sans-serif);
+    text-align: center;
 }
 
 .app-link:hover {
