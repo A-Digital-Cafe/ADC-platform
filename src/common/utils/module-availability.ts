@@ -36,6 +36,8 @@ interface PlatformBanner {
 
 export interface PlatformState {
 	disabled: Record<string, AppAvailability>;
+	/** Apps caídas (nombres base): front caído o algún service de su grupo amigable caído. */
+	down?: string[];
 	banners: PlatformBanner[];
 }
 
@@ -85,7 +87,7 @@ export function loadPlatformState(force = false): Promise<PlatformState> {
 	const p = fetch(`${kernelApiBase()}/api/modules/platform`, { credentials: "include" })
 		.then((r) => (r.ok ? (r.json() as Promise<PlatformState>) : EMPTY_PLATFORM))
 		.then((d) => {
-			const state: PlatformState = { disabled: d?.disabled ?? {}, banners: d?.banners ?? [] };
+			const state: PlatformState = { disabled: d?.disabled ?? {}, down: d?.down ?? [], banners: d?.banners ?? [] };
 			win.__ADC_PLATFORM__ = state;
 			return state;
 		})
@@ -103,6 +105,16 @@ export function fetchModuleAvailability(force = false): Promise<AvailabilityResp
 export async function isAppUnavailable(appBaseName: string): Promise<AppAvailability | null> {
 	const { disabled } = await fetchModuleAvailability();
 	return disabled[appBaseName] ?? null;
+}
+
+/**
+ * Apps NO disponibles (nombres base): deshabilitadas manualmente (mantenimiento) ∪
+ * caídas (`down`). Para ocultar sus botones/cards en menús (apps-menu, adc-home).
+ * Degrada a set vacío (mostrar todo) si el estado de plataforma no está disponible.
+ */
+export async function getUnavailableApps(): Promise<Set<string>> {
+	const state = await loadPlatformState();
+	return new Set([...Object.keys(state.disabled), ...(state.down ?? [])]);
 }
 
 /** Dev port y host de producción de la app de errores (adc-error). */

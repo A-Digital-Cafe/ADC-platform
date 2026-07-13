@@ -52,6 +52,13 @@ export interface PlatformApp {
 	 */
 	settingsExpose?: string;
 	/**
+	 * Clave del módulo expuesto en `federationExposes` que default-exporta el **menú
+	 * del header** de la app con contrato vanilla `mount(container, props) → unmount`
+	 * (ej. `./NotificationsMenu`, consumido por `adc-notification-bell`). Si la app
+	 * está offline, el host degrada (la campana avisa con un toast al abrir).
+	 */
+	headerMenuExpose?: string;
+	/**
 	 * Hostname de producción del `remoteEntry.js` (ej: `community.adigitalcafe.com`).
 	 * Por defecto se deriva como `{subdomain}.adigitalcafe.com`.
 	 */
@@ -159,9 +166,17 @@ const DEFAULT_APPS: PlatformApp[] = [
 	},
 	{ id: "editor", label: "Image Editor", devPort: 3034, subdomain: "editor" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
+	{ id: "modules", label: "Modules Manager", devPort: 3038, subdomain: "modules" },
 	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
 	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
-	{ id: "notifications", label: "Notificaciones", devPort: 3036, subdomain: "notifications" },
+	{
+		id: "notifications",
+		label: "Notificaciones",
+		devPort: 3036,
+		subdomain: "notifications",
+		remoteName: "adc_notifications",
+		headerMenuExpose: "./NotificationsMenu",
+	},
 	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org", iconTag: "adc-icon-app-org" },
 	{ id: "status", label: "Status", devPort: 3020, subdomain: "status", iconTag: "adc-icon-app-status" },
 ];
@@ -184,6 +199,11 @@ function getRegistry(): PlatformLinkRegistry {
 /** Lista las apps de plataforma conocidas. */
 export function getPlatformApps(): PlatformApp[] {
 	return Array.from(getRegistry().apps.values());
+}
+
+/** Una app de plataforma por su id (`community`, `notifications`, …), o `null`. */
+export function getPlatformApp(id: string): PlatformApp | null {
+	return getRegistry().apps.get(id) ?? null;
 }
 
 /**
@@ -360,6 +380,32 @@ interface FederationContainer {
 }
 
 /**
+ * Carga bajo demanda un módulo federado de una app (inyecta su `remoteEntry.js`,
+ * inicializa el contenedor y resuelve la clave de `federationExposes`). Devuelve
+ * el **default export** del módulo (o el módulo mismo si no lo tiene). Degrada a
+ * `null` ante cualquier fallo —SSR, app offline, expose ausente o error de red—.
+ */
+export async function loadPlatformRemoteModule<T>(app: PlatformApp, expose: string): Promise<T | null> {
+	if (!app.remoteName || !expose) return null;
+	try {
+		await loadRemoteEntryScript(remoteEntryUrl(app), app.remoteName);
+		const container = (globalThis as Record<string, unknown>)[app.remoteName] as FederationContainer | undefined;
+		if (!container?.get) return null;
+		try {
+			const shareScope = (globalThis as { __webpack_share_scopes__?: { default?: unknown } }).__webpack_share_scopes__?.default ?? {};
+			await container.init(shareScope);
+		} catch {
+			// El contenedor ya estaba inicializado por el host: continuar.
+		}
+		const factory = await container.get(expose);
+		const mod = factory() as { default?: T } | T;
+		return ((mod as { default?: T })?.default ?? mod) as T;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Carga bajo demanda el resolver federado de una app (su `remoteEntry.js`) y lo
  * cachea. Degrada a `null` (fallback por defecto) ante cualquier fallo —incluido
  * SSR, app sin resolver expuesto o error de red—.
@@ -372,26 +418,11 @@ function loadRemoteResolver(app: PlatformApp): Promise<PlatformLinkResolver | nu
 	if (inFlight) return inFlight;
 
 	const promise = (async (): Promise<PlatformLinkResolver | null> => {
-		if (!app.remoteName || !app.resolverExpose) return null;
-		try {
-			await loadRemoteEntryScript(remoteEntryUrl(app), app.remoteName);
-			const container = (globalThis as Record<string, unknown>)[app.remoteName] as FederationContainer | undefined;
-			if (!container?.get) return null;
-			try {
-				const shareScope = (globalThis as { __webpack_share_scopes__?: { default?: unknown } }).__webpack_share_scopes__?.default ?? {};
-				await container.init(shareScope);
-			} catch {
-				// El contenedor ya estaba inicializado por el host: continuar.
-			}
-			const factory = await container.get(app.resolverExpose);
-			const mod = factory() as { default?: PlatformLinkResolver } | PlatformLinkResolver;
-			const resolver = typeof mod === "function" ? mod : mod?.default;
-			if (typeof resolver !== "function") return null;
-			registry.resolvers.set(app.id, resolver);
-			return resolver;
-		} catch {
-			return null;
-		}
+		if (!app.resolverExpose) return null;
+		const resolver = await loadPlatformRemoteModule<PlatformLinkResolver>(app, app.resolverExpose);
+		if (typeof resolver !== "function") return null;
+		registry.resolvers.set(app.id, resolver);
+		return resolver;
 	})();
 
 	registry.loading.set(app.id, promise);

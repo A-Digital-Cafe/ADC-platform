@@ -4,19 +4,20 @@ import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { Kernel } from "../../kernel.js";
 import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
 import type { DockerManager } from "../../utils/system/DockerManager.js";
+import type { DisabledRegistry } from "../orchestration/DisabledRegistry.js";
 import { findConfigFiles, getConfigName, isAppDisabled, readJson, type AppCtor } from "./AppFileUtils.js";
 import { AppInstanceTracker } from "./AppInstanceTracker.js";
 import { AppLifecycle } from "./AppLifecycle.js";
 import { AppReloader } from "./AppReloader.js";
+import { CircuitBreaker } from "./CircuitBreaker.js";
 
-const RETRY_LOAD_MS = 30_000;
-
-interface LoadErrorLike extends Error {
-	code?: string;
-}
+const RETRY_SHORT_MS = 30_000;
+const RETRY_SHORT_MAX = 5;
+const RETRY_LONG_MS = 10 * 60_000;
 
 export class AppLoader {
 	readonly #tracker = new AppInstanceTracker();
+	readonly #breaker: CircuitBreaker;
 	readonly #lifecycle: AppLifecycle;
 	readonly #reloader: AppReloader;
 	readonly #kernelKey: symbol;
@@ -27,11 +28,29 @@ export class AppLoader {
 		private readonly dockerManager: DockerManager,
 		private readonly logger: ILogger,
 		kernelKey: symbol,
-		private readonly isShuttingDown: () => boolean
+		private readonly isShuttingDown: () => boolean,
+		private readonly disabledRegistry: DisabledRegistry,
+		onModuleFailure?: (moduleName: string, error: string) => void
 	) {
 		this.#kernelKey = kernelKey;
-		this.#lifecycle = new AppLifecycle({ kernel, registry, tracker: this.#tracker, logger, kernelKey, isShuttingDown });
-		this.#reloader = new AppReloader({ kernel, tracker: this.#tracker, lifecycle: this.#lifecycle, logger });
+		this.#breaker = new CircuitBreaker({
+			shortMs: RETRY_SHORT_MS,
+			maxShort: RETRY_SHORT_MAX,
+			longMs: RETRY_LONG_MS,
+			logger,
+			onOpen: (key, lastError) => onModuleFailure?.(key, lastError),
+		});
+		this.#lifecycle = new AppLifecycle({
+			kernel,
+			registry,
+			tracker: this.#tracker,
+			logger,
+			kernelKey,
+			isShuttingDown,
+			disabledRegistry,
+			breaker: this.#breaker,
+		});
+		this.#reloader = new AppReloader({ kernel, tracker: this.#tracker, lifecycle: this.#lifecycle, logger, breaker: this.#breaker });
 	}
 
 	get appFilePaths(): ReadonlyMap<string, string> {
@@ -56,18 +75,29 @@ export class AppLoader {
 		}
 		try {
 			await this.#tryLoadApp(filePath);
+			// Carga sana a nivel archivo: olvidar fallos previos (los fallos por
+			// instancia se rastrean aparte, por instanceName).
+			this.#breaker.clear(filePath);
 		} catch (e) {
-			this.#handleLoadError(filePath, e as LoadErrorLike);
+			this.#handleLoadError(filePath, e as Error);
 		}
 	};
 
 	async #tryLoadApp(filePath: string): Promise<void> {
+		const appDir = path.dirname(filePath);
+		const appName = path.basename(appDir);
+
+		// App PENDIENTE (detectada en runtime, nunca aprobada): no se importa ni se levanta.
+		// A diferencia de una disabled común (que sigue sirviendo tras el gate), acá el
+		// código no debe ejecutarse hasta que un admin la lance desde el modules-manager.
+		if (this.disabledRegistry.getApp(appName)?.pending) {
+			this.logger.logWarn(`App ${appName} pendiente de lanzamiento (modules-manager): no se carga.`);
+			return;
+		}
+
 		const module = await import(`${filePath}?v=${Date.now()}`);
 		const AppClass: AppCtor | undefined = module.default;
 		if (!AppClass) return;
-
-		const appDir = path.dirname(filePath);
-		const appName = path.basename(appDir);
 
 		// Nota: una app deshabilitada por el modules-manager SÍ se levanta (su dev-server/host
 		// debe seguir sirviendo): el gate cliente la redirige a la página de mantenimiento.
@@ -83,8 +113,7 @@ export class AppLoader {
 		const configFiles = await findConfigFiles(appDir, this.logger);
 
 		if (configFiles.length === 0) {
-			const app: IApp = new AppClass(this.kernel, appName, undefined, filePath);
-			await this.#lifecycle.initializeAndRunApp(app, filePath, appName);
+			await this.#tryLoadInstance(AppClass, filePath, appName);
 			return;
 		}
 
@@ -93,29 +122,51 @@ export class AppLoader {
 		}
 	}
 
-	async #tryLoadInstance(AppClass: AppCtor, filePath: string, appName: string, configPath: string): Promise<void> {
-		const config = await readJson<{ disabled?: boolean }>(configPath);
-		if (!config) return;
-		if (config.disabled === true) {
-			this.logger.logDebug(`App ${appName} está deshabilitada (config: ${path.basename(configPath)})`);
+	async #tryLoadInstance(AppClass: AppCtor, filePath: string, appName: string, configPath?: string): Promise<void> {
+		let config: { disabled?: boolean } | undefined;
+		let instanceName = appName;
+		if (configPath) {
+			config = (await readJson<{ disabled?: boolean }>(configPath)) ?? undefined;
+			if (!config) return;
+			if (config.disabled === true) {
+				this.logger.logDebug(`App ${appName} está deshabilitada (config: ${path.basename(configPath)})`);
+				return;
+			}
+			instanceName = `${appName}:${getConfigName(path.basename(configPath))}`;
+		}
+		const app: IApp = new AppClass(this.kernel, instanceName, config, filePath);
+		try {
+			await this.#lifecycle.initializeAndRunApp(app, filePath, instanceName, configPath);
+		} catch (e) {
+			// Fallo de UNA instancia: no aborta a las hermanas ni re-carga el archivo
+			// entero (duplicaría a las sanas); se reintenta sólo esta vía el breaker.
+			const error = e instanceof Error ? e : new Error(String(e));
+			this.logger.logError(`Error inicializando App ${instanceName}: ${error.message}`);
+			this.#lifecycle.scheduleRetry(error, filePath, instanceName, configPath);
+		}
+	}
+
+	/** Fallo a nivel archivo (import/deps npm): reintenta la carga completa bajo el breaker. */
+	#handleLoadError(filePath: string, e: Error): void {
+		const prefix =
+			(e as { code?: string })?.code === "ERR_MODULE_NOT_FOUND"
+				? `Faltan dependencias de Node.js para la app en ${filePath}`
+				: `Error cargando App ${filePath}`;
+		this.logger.logError(`${prefix}: ${e}`);
+		this.#breaker.schedule(filePath, e?.message ?? String(e), () => this.#retryLoad(filePath));
+	}
+
+	readonly #retryLoad = async (filePath: string): Promise<void> => {
+		if (this.isShuttingDown()) {
+			this.#breaker.clear(filePath);
 			return;
 		}
-		const instanceName = `${appName}:${getConfigName(path.basename(configPath))}`;
-		const app: IApp = new AppClass(this.kernel, instanceName, config, filePath);
-		await this.#lifecycle.initializeAndRunApp(app, filePath, instanceName, configPath);
-	}
-
-	#handleLoadError(filePath: string, e: LoadErrorLike): void {
-		if (e?.code === "ERR_MODULE_NOT_FOUND") {
-			this.logger.logError(`Faltan dependencias de Node.js para la app en ${filePath}. Reintentando en 30 segundos...`);
-			this.logger.logError(String(e));
-			setTimeout(() => this.loadApp(filePath), RETRY_LOAD_MS);
-		} else {
-			this.logger.logError(`Error ejecutando App ${filePath}: ${e}`);
-		}
-	}
+		await this.#tryLoadApp(filePath); // si lanza, el breaker re-agenda
+		this.#breaker.clear(filePath);
+	};
 
 	unloadApp = async (filePath: string): Promise<void> => {
+		this.#breaker.clear(filePath);
 		const keys = this.#tracker.findFileKeysByPrefix(filePath);
 		for (const key of keys) {
 			await this.#unloadByKey(key);
@@ -124,7 +175,9 @@ export class AppLoader {
 
 	async #unloadByKey(key: string): Promise<void> {
 		const instanceName = this.#tracker.getInstanceByFileKey(key);
-		if (!instanceName || !this.registry.hasApp(instanceName)) return;
+		if (!instanceName) return;
+		this.#breaker.clear(instanceName);
+		if (!this.registry.hasApp(instanceName)) return;
 		const app = this.registry.getApp(instanceName);
 		this.logger.logDebug(`Removiendo app: ${app.name}`);
 		await app.stop?.(this.#kernelKey);

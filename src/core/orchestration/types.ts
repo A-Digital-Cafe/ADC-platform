@@ -8,7 +8,8 @@ export interface ModuleSnapshotItem {
 	type: OrchestratorLayer;
 	/** App: instanceName; resto: nombre lógico. */
 	name: string;
-	state: "running" | "disabled";
+	/** `pending`: módulo nuevo detectado en runtime, nunca ejecutado; requiere lanzamiento manual. */
+	state: "running" | "disabled" | "pending";
 	/** Para services deshabilitados: sus endpoints responden 503. */
 	unavailable?: boolean;
 	/** App que es ui-library Stencil: no se detiene, se recompila (rebuild). */
@@ -39,6 +40,13 @@ export interface FriendlyGroupState {
 	 */
 	failed: string[];
 	/**
+	 * Apps del grupo (nombres base) NO disponibles por caída: su front falló o algún
+	 * service del grupo está caído/deshabilitado. Excluye bajas manuales de la propia
+	 * app (esas viajan en `disabled` del snapshot de plataforma) y pendientes. Alimenta
+	 * el `down` de `platformState()` (ocultar botones en apps-menu / adc-home).
+	 */
+	downApps: string[];
+	/**
 	 * - `ok`: todo arriba.
 	 * - `maintenance`: sólo hay bajas MANUALES (deshabilitado desde modules-manager) — planificado, no es una caída.
 	 * - `degraded`: hay un FALLO real pero el grupo sigue disponible (algún frente arriba).
@@ -54,6 +62,19 @@ export interface PersistedStatusItem {
 	enabled: boolean;
 	messageKey?: string;
 	cascadeRoot?: string;
+	/** Detectado en runtime y nunca ejecutado (ver DisabledEntry.pending). */
+	pending?: boolean;
+	/** Ruta del `index` detectado (necesaria para poder lanzar un pending). */
+	filePath?: string;
+}
+
+/** Módulo nuevo detectado en runtime (aún sin ejecutar). */
+export interface DetectedModuleEvent {
+	type: OrchestratorLayer;
+	name: string;
+	filePath: string;
+	/** Topic del preset si el módulo vive bajo `presets/`, o null (core). */
+	preset: string | null;
 }
 
 /** Opciones al deshabilitar. */

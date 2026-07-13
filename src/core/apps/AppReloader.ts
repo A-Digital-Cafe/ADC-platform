@@ -5,12 +5,14 @@ import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import { FILE_EXT, readJson, type AppCtor } from "./AppFileUtils.js";
 import type { AppInstanceTracker } from "./AppInstanceTracker.js";
 import type { AppLifecycle } from "./AppLifecycle.js";
+import type { CircuitBreaker } from "./CircuitBreaker.js";
 
 export interface AppReloaderDeps {
 	kernel: Kernel;
 	tracker: AppInstanceTracker;
 	lifecycle: AppLifecycle;
 	logger: ILogger;
+	breaker: CircuitBreaker;
 }
 
 export class AppReloader {
@@ -37,6 +39,9 @@ export class AppReloader {
 				logger.logWarn(`No se encontró instancia para el archivo de configuración: ${configPath}`);
 				return;
 			}
+			// Recarga explícita = arranque fresco: cancela reintentos pendientes y
+			// resetea el historial del breaker de la instancia.
+			this.deps.breaker.clear(instanceName);
 			await lifecycle.stopAndCleanupInstance(instanceName);
 
 			const appDir = configPath.includes(`${path.sep}configs${path.sep}`)

@@ -45,25 +45,57 @@ export class NotifyManager {
 	 * actor (ya sabe lo que hizo).
 	 */
 	async securityEvent(event: { title: string; body: string; actorId?: string; data?: Record<string, unknown> }): Promise<void> {
+		await this.#fanoutToSecurityTeam(
+			{
+				topic: "security.alert",
+				title: event.title,
+				body: event.body,
+				linkApp: "identity",
+				link: "/users",
+				data: event.data,
+			},
+			event.actorId
+		);
+	}
+
+	/**
+	 * Aviso al equipo (mismos destinatarios que `securityEvent`) de que un módulo
+	 * quedó en fallo repetido (circuit breaker del kernel abierto), topic
+	 * `security.module_failure`. El detalle (módulo, último error) viaja en `data`;
+	 * el texto visible es la plantilla canónica del servidor.
+	 */
+	async moduleFailure(event: { module: string; error: string }): Promise<void> {
+		await this.#fanoutToSecurityTeam({
+			topic: "security.module_failure",
+			title: "Fallo de módulo en la plataforma",
+			body: `El módulo '${event.module}' está fallando repetidamente.`,
+			data: { module: event.module, error: event.error },
+		});
+	}
+
+	/**
+	 * Aviso al equipo (mismos destinatarios) de que apareció un módulo NUEVO en runtime,
+	 * topic `security.module_detected`. El módulo quedó PENDIENTE (no se ejecutó): el
+	 * aviso pide revisarlo y lanzarlo (o eliminarlo) desde el gestor de módulos.
+	 */
+	async moduleDetected(event: { module: string; layer: string; filePath: string; preset: string | null }): Promise<void> {
+		await this.#fanoutToSecurityTeam({
+			topic: "security.module_detected",
+			title: "Módulo nuevo detectado en la plataforma",
+			body: `Se detectó el ${event.layer} '${event.module}' en runtime. NO se ejecutó: está pendiente de lanzamiento en el gestor de módulos.`,
+			data: { module: event.module, layer: event.layer, filePath: event.filePath, preset: event.preset },
+		});
+	}
+
+	/** Fan-out best-effort a los destinatarios de seguridad, excluyendo opcionalmente al actor. */
+	async #fanoutToSecurityTeam(input: Omit<NotifyInput, "userId">, excludeUserId?: string): Promise<void> {
 		let recipients: string[];
 		try {
 			recipients = await this.#resolveSecurityRecipients();
 		} catch {
 			return; // resolver caído: no bloquear la operación de origen
 		}
-		const targets = [...new Set(recipients)].filter((id) => id && id !== event.actorId);
-		await Promise.allSettled(
-			targets.map((userId) =>
-				this.#emit({
-					userId,
-					topic: "security.alert",
-					title: event.title,
-					body: event.body,
-					linkApp: "identity",
-					link: "/users",
-					data: event.data,
-				})
-			)
-		);
+		const targets = [...new Set(recipients)].filter((id) => id && id !== excludeUserId);
+		await Promise.allSettled(targets.map((userId) => this.#emit({ ...input, userId })));
 	}
 }

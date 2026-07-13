@@ -1,5 +1,6 @@
 import { Component, Prop, State, Element, Host, Listen } from "@stencil/core";
 
+import { getUnavailableApps } from "@common/utils/module-availability.js";
 import { getSession, type SessionUser } from "../../../../utils/session.js";
 import { DEFAULT_APPS } from "./apps-config.js";
 export interface AppMenuItem {
@@ -9,6 +10,12 @@ export interface AppMenuItem {
 	icon?: string;
 	/** Si se define, solo se muestra cuando el predicado retorna true con el usuario actual. */
 	requires?: (user: SessionUser | undefined) => boolean;
+	/**
+	 * Nombre base del app en el kernel (ej: `adc-drive`). Si se define, el botón se
+	 * oculta cuando la app está caída o deshabilitada vía modules-manager; sin él,
+	 * el item se muestra siempre.
+	 */
+	moduleName?: string;
 }
 
 /** Icon tag name from app id: "community" → "adc-icon-app-community" */
@@ -30,13 +37,18 @@ export class AdcAppsMenu {
 	@State() open = false;
 	@State() sessionUser: SessionUser | undefined = undefined;
 
+	/** Apps caídas/deshabilitadas (nombres base): sus botones no se muestran. */
+	#unavailable: ReadonlySet<string> = new Set();
+
 	async componentWillLoad() {
-		try {
-			const session = await getSession(false, true);
-			this.sessionUser = session.authenticated ? session.user : undefined;
-		} catch {
-			this.sessionUser = undefined;
-		}
+		// En paralelo: la sesión (predicados `requires`) y el estado de plataforma
+		// (`__ADC_PLATFORM__`: 0 fetch en prod, 1 fetch cacheado en dev). Ambos degradan.
+		const [session, unavailable] = await Promise.all([
+			getSession(false, true).catch(() => null),
+			getUnavailableApps().catch(() => new Set<string>()),
+		]);
+		this.sessionUser = session?.authenticated ? session.user : undefined;
+		this.#unavailable = unavailable;
 	}
 
 	private get appList(): AppMenuItem[] {
@@ -48,7 +60,9 @@ export class AdcAppsMenu {
 				list = DEFAULT_APPS;
 			}
 		}
-		return list.filter((app) => (app.requires ? app.requires(this.sessionUser) : true));
+		return list
+			.filter((app) => !app.moduleName || !this.#unavailable.has(app.moduleName))
+			.filter((app) => (app.requires ? app.requires(this.sessionUser) : true));
 	}
 
 	@Listen("mousedown", { target: "document" })

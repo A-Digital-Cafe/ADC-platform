@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import type { ModuleTypes } from "../../utils/registry/ModuleRegistry.js";
 
 export interface DisabledEntry {
@@ -12,6 +13,15 @@ export interface DisabledEntry {
 	 * cascada (se restaura al re-habilitar el root).
 	 */
 	cascadeRoot?: string;
+	/**
+	 * Módulo NUEVO detectado en runtime (watcher): su código NUNCA se ejecutó.
+	 * A diferencia de un disabled común (apps siguen sirviendo tras el gate),
+	 * un pending se saltea por completo en loaders y watchers hasta que un
+	 * administrador lo lance desde el modules-manager (`enable`).
+	 */
+	pending?: boolean;
+	/** Ruta del `index` detectado; permite lanzar un pending que nunca se cargó. */
+	filePath?: string;
 }
 
 /**
@@ -63,6 +73,20 @@ export class DisabledRegistry {
 
 	list(): DisabledEntry[] {
 		return [...this.#entries.values()];
+	}
+
+	/**
+	 * `true` si `p` es (o cae dentro de) el directorio de un módulo pendiente.
+	 * Gate para los watchers: los eventos de archivos de un pending (p.ej. mientras
+	 * se termina de copiar/clonar) no deben disparar cargas.
+	 */
+	isPendingPath(p: string): boolean {
+		for (const e of this.#entries.values()) {
+			if (!e.pending || !e.filePath) continue;
+			const dir = path.dirname(e.filePath);
+			if (p === e.filePath || p.startsWith(dir + path.sep)) return true;
+		}
+		return false;
 	}
 
 	clear(): void {

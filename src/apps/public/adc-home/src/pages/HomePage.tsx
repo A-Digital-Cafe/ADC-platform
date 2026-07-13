@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { CafeDividerIcon } from "../components/CafeDividerIcon";
 import { MicroappCard } from "../components/MicroappCard";
 import { getUrl } from "@common/utils/url-utils.js";
+import { getUnavailableApps } from "@common/utils/module-availability.js";
 
 type AccentColor = "text-accentorange" | "text-accentcyan" | "text-accentpurple" | "text-accentgreen" | "text-accentred";
 
@@ -11,6 +13,8 @@ interface Microapp {
 	iconColor: AccentColor;
 	href: string;
 	icon: React.ReactNode;
+	/** Nombre base del app en el kernel: la card se oculta si está caída/deshabilitada. */
+	moduleName?: string;
 }
 
 const MICROAPPS: Microapp[] = [
@@ -21,6 +25,7 @@ const MICROAPPS: Microapp[] = [
 		iconColor: "text-accentpurple",
 		href: getUrl(3032, "drive.adigitalcafe.com"),
 		icon: <adc-icon-app-drive size="2rem" />,
+		moduleName: "adc-drive",
 	},
 	{
 		id: "community",
@@ -29,6 +34,7 @@ const MICROAPPS: Microapp[] = [
 		iconColor: "text-accentorange",
 		href: getUrl(3010, "adigitalcafe.com"),
 		icon: <adc-icon-home size="2rem" />,
+		moduleName: "community-home",
 	},
 	{
 		id: "project-manager",
@@ -37,14 +43,16 @@ const MICROAPPS: Microapp[] = [
 		iconColor: "text-accentgreen",
 		href: getUrl(3018, "projects.adigitalcafe.com"),
 		icon: <adc-icon-app-projects size="2rem" />,
+		moduleName: "adc-project-manager",
 	},
 	{
 		id: "org-requests",
 		name: "Org Requests",
 		description: "Solicita la creación de una organización dentro de la plataforma.",
 		iconColor: "text-accentpurple",
-		href: getUrl(3020, "org.adigitalcafe.com"),
+		href: getUrl(3028, "org.adigitalcafe.com"),
 		icon: <adc-icon-org size="2rem" />,
+		moduleName: "adc-org-requests",
 	},
 	{
 		id: "identity",
@@ -53,6 +61,7 @@ const MICROAPPS: Microapp[] = [
 		iconColor: "text-accentcyan",
 		href: getUrl(3014, "identity.adigitalcafe.com"),
 		icon: <adc-icon-members size="2rem" />,
+		moduleName: "adc-identity",
 	},
 	{
 		id: "mail",
@@ -61,6 +70,7 @@ const MICROAPPS: Microapp[] = [
 		iconColor: "text-accentcyan",
 		href: getUrl(3030, "mail.adigitalcafe.com"),
 		icon: <adc-icon-app-mail size="2rem" />,
+		moduleName: "adc-mail",
 	},
 	{
 		id: "help-legal",
@@ -69,10 +79,26 @@ const MICROAPPS: Microapp[] = [
 		iconColor: "text-accentred",
 		href: getUrl(3022, "help.adigitalcafe.com"),
 		icon: <adc-icon-heart size="2rem" />,
+		moduleName: "help",
 	},
 ];
 
 export function HomePage() {
+	// Apps caídas/deshabilitadas (modules-manager): sus cards no se muestran. Arranca
+	// mostrando todo y filtra al resolver (0 fetch en prod: __ADC_PLATFORM__ inyectado).
+	const [unavailable, setUnavailable] = useState<ReadonlySet<string>>(new Set());
+	useEffect(() => {
+		let alive = true;
+		getUnavailableApps()
+			.then((set) => {
+				if (alive && set.size > 0) setUnavailable(set);
+			})
+			.catch(() => undefined);
+		return () => {
+			alive = false;
+		};
+	}, []);
+	const microapps = MICROAPPS.filter((app) => !app.moduleName || !unavailable.has(app.moduleName));
 	return (
 		<section className="relative overflow-hidden">
 			{/* background glow */}
@@ -111,7 +137,7 @@ export function HomePage() {
 						<p className="text-lg text-text">Explora las herramientas diseñadas para nuestra comunidad.</p>
 					</div>
 					<div className="flex flex-wrap justify-center gap-6">
-						{MICROAPPS.map((app) => (
+						{microapps.map((app) => (
 							<div key={app.id} className="w-full md:w-[calc(50%-12px)] xl:w-[calc(33.333%-16px)]">
 								<MicroappCard
 									name={app.name}

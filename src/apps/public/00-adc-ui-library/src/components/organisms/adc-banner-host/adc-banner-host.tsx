@@ -13,6 +13,8 @@ interface BannerData {
 
 interface PlatformState {
 	disabled?: Record<string, unknown>;
+	/** Apps caídas (no las consume este componente, pero debe preservarlas al cachear). */
+	down?: string[];
 	banners?: BannerData[];
 }
 
@@ -39,7 +41,11 @@ function loadBanners(apiBaseUrl: string): Promise<BannerData[]> {
 	const p: Promise<PlatformState> = fetch(`${apiBaseUrl}/api/modules/platform`, { credentials: "include" })
 		.then((r) => (r.ok ? r.json() : null))
 		.then((d) => {
-			const state: PlatformState = { disabled: d?.disabled ?? {}, banners: Array.isArray(d?.banners) ? d.banners : [] };
+			const state: PlatformState = {
+				disabled: d?.disabled ?? {},
+				down: Array.isArray(d?.down) ? d.down : [],
+				banners: Array.isArray(d?.banners) ? d.banners : [],
+			};
 			win.__ADC_PLATFORM__ = state;
 			return state;
 		})

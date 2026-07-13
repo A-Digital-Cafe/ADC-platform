@@ -1,8 +1,17 @@
 /**
  * Campana de notificaciones del header de plataforma.
  *
- * Vive en la UI library de núcleo y se **auto-oculta** si el backend de
- * notificaciones (preset `adc-notifications` / `NotificationService`) no responde.
+ * Vive en la UI library de núcleo pero es sólo el **botón + badge**: el menú
+ * desplegable es un módulo **federado** del preset `adc-notifications`
+ * (`headerMenuExpose` en el registro de apps, `./NotificationsMenu` en su
+ * `config.json`), así la UI de la bandeja vive en el preset y no acá.
+ *
+ * Degradación:
+ * - Backend caído/deshabilitado (`NotificationService`): la sonda a
+ *   `/unread-count` falla y la campana **no se muestra**.
+ * - App `adc-notifications` caída (su `remoteEntry.js` no carga): la campana se
+ *   muestra pero al abrirla avisa con un **toast** de no disponibilidad.
+ *
  * Entrega en tiempo real por SSE (`/api/notifications/stream`) con fallback a la
  * carga inicial; sincroniza el badge entre pestañas con `BroadcastChannel`.
  */
@@ -11,36 +20,20 @@ import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 import { getSession } from "../../../../utils/session.js";
 import { toast } from "../../../../utils/toast.js";
 import { createAdcApi } from "../../../../utils/adc-fetch.js";
-import { resolvePlatformPath } from "../../../../utils/platform-links.js";
-
-interface BellNotification {
-	id: string;
-	topic: string;
-	title: string;
-	body: string;
-	icon?: string | null;
-	link?: string | null;
-	/** Si está, `link` es una ruta a resolver según entorno (dev port / prod subdominio). */
-	linkApp?: string | null;
-	readAt?: string | null;
-	createdAt: string;
-}
-
-/** URL final del enlace de una notificación: ruta de app resuelta o URL absoluta. */
-function notificationHref(n: BellNotification): string | null {
-	if (!n.link) return null;
-	if (n.linkApp) return resolvePlatformPath(n.linkApp, n.link) ?? n.link;
-	return n.link;
-}
+import { getPlatformApp, loadPlatformRemoteModule } from "../../../../utils/platform-links.js";
 
 type StreamEvent =
 	| { type: "ready"; unread: number }
-	| { type: "notification"; unread: number; notification: BellNotification }
+	| { type: "notification"; unread: number; notification: { title: string } }
 	| { type: "read"; unread: number };
+
+/** Contrato del menú federado: monta en el contenedor y devuelve el disposer. */
+type NotificationsMenuMount = (container: HTMLElement, props: { onUnreadChange?: (unread: number) => void }) => () => void;
 
 const api = createAdcApi({ basePath: "/api/notifications", devPort: 3000 });
 const STREAM_URL = IS_DEV ? getDevUrl(3000, "/api/notifications/stream") : "/api/notifications/stream";
 const SYNC_CHANNEL = "adc-notifications";
+const MENU_UNAVAILABLE_MSG = "Las notificaciones no están disponibles en este momento";
 
 @Component({
 	tag: "adc-notification-bell",
@@ -53,17 +46,22 @@ export class AdcNotificationBell {
 	@State() available = false;
 	@State() open = false;
 	@State() unread = 0;
-	@State() items: BellNotification[] = [];
-	@State() loadingList = false;
 
 	#source: EventSource | null = null;
 	#channel: BroadcastChannel | null = null;
+
+	/** Mount federado ya resuelto (se limpia si falló, para reintentar al próximo click). */
+	#menuMountPromise: Promise<NotificationsMenuMount | null> | null = null;
+	#menuMount: NotificationsMenuMount | null = null;
+	#unmountMenu: (() => void) | null = null;
+	#menuContainer: HTMLElement | null = null;
 
 	async componentWillLoad(): Promise<void> {
 		const session = await getSession(false, true);
 		if (!session.authenticated) return;
 
-		// Sondea el backend: si la ruta no existe (preset ausente) la campana no aparece.
+		// Sondea el backend: si la ruta no existe (preset ausente o servicio
+		// deshabilitado vía modules-manager) la campana no aparece.
 		const res = await api.get<{ unread: number }>("/unread-count", { silent: true });
 		if (!res.success || !res.data) return;
 
@@ -74,15 +72,28 @@ export class AdcNotificationBell {
 	}
 
 	disconnectedCallback(): void {
+		this.#closeMenu();
 		this.#source?.close();
 		this.#source = null;
 		this.#channel?.close();
 		this.#channel = null;
 	}
 
+	componentDidRender(): void {
+		// El contenedor del dropdown recién existe tras el render con open=true.
+		if (this.open && this.#menuContainer && this.#menuMount && !this.#unmountMenu) {
+			this.#unmountMenu = this.#menuMount(this.#menuContainer, {
+				onUnreadChange: (unread: number) => {
+					this.unread = unread;
+					this.#broadcast();
+				},
+			});
+		}
+	}
+
 	@Listen("click", { target: "document" })
 	onDocumentClick(ev: MouseEvent): void {
-		if (this.open && !this.el.contains(ev.target as Node)) this.open = false;
+		if (this.open && !this.el.contains(ev.target as Node)) this.#closeMenu();
 	}
 
 	// ─── Tiempo real ─────────────────────────────────────────────────────────
@@ -106,7 +117,6 @@ export class AdcNotificationBell {
 		}
 		if (ev.type === "notification") {
 			this.unread = ev.unread;
-			this.items = [ev.notification, ...this.items].slice(0, 50);
 			toast.info(ev.notification.title);
 			this.#broadcast();
 		} else if (ev.type === "read" || ev.type === "ready") {
@@ -127,43 +137,40 @@ export class AdcNotificationBell {
 		this.#channel?.postMessage({ unread: this.unread });
 	}
 
-	// ─── Acciones ──────────────────────────────────────────────────────────────
-	async #toggle(): Promise<void> {
-		this.open = !this.open;
-		if (this.open) await this.#loadList();
-	}
-
-	async #loadList(): Promise<void> {
-		this.loadingList = true;
-		const res = await api.get<{ notifications: BellNotification[]; unread: number }>("", { silent: true });
-		if (res.success && res.data) {
-			this.items = res.data.notifications;
-			this.unread = res.data.unread;
-		}
-		this.loadingList = false;
-	}
-
-	async #onItemClick(item: BellNotification): Promise<void> {
-		if (!item.readAt) {
-			const res = await api.post<{ unread: number }>(`/${item.id}/read`, { silent: true });
-			// Reflejar la lectura sólo si el server la persistió (si no, reaparece al recargar).
-			if (res.success && res.data) {
-				this.unread = res.data.unread;
-				this.items = this.items.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n));
-				this.#broadcast();
+	// ─── Menú federado ──────────────────────────────────────────────────────
+	#loadMenuMount(): Promise<NotificationsMenuMount | null> {
+		this.#menuMountPromise ??= (async () => {
+			const app = getPlatformApp("notifications");
+			if (!app?.headerMenuExpose) return null;
+			const mount = await loadPlatformRemoteModule<NotificationsMenuMount>(app, app.headerMenuExpose);
+			if (typeof mount !== "function") {
+				// App offline: soltar la promesa cacheada para reintentar al próximo click.
+				this.#menuMountPromise = null;
+				return null;
 			}
-		}
-		const href = notificationHref(item);
-		if (href) globalThis.location.href = href;
+			return mount;
+		})();
+		return this.#menuMountPromise;
 	}
 
-	async #markAllRead(): Promise<void> {
-		const res = await api.post<{ unread: number }>("/read-all", { silent: true });
-		if (res.success) {
-			this.unread = 0;
-			this.items = this.items.map((n) => (n.readAt ? n : { ...n, readAt: new Date().toISOString() }));
-			this.#broadcast();
+	async #toggle(): Promise<void> {
+		if (this.open) {
+			this.#closeMenu();
+			return;
 		}
+		this.#menuMount = await this.#loadMenuMount();
+		if (!this.#menuMount) {
+			toast.info(MENU_UNAVAILABLE_MSG);
+			return;
+		}
+		this.open = true;
+	}
+
+	#closeMenu(): void {
+		this.#unmountMenu?.();
+		this.#unmountMenu = null;
+		this.#menuContainer = null;
+		this.open = false;
 	}
 
 	render() {
@@ -192,49 +199,7 @@ export class AdcNotificationBell {
 					)}
 				</button>
 
-				{this.open && (
-					<div class="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-1.5rem)] max-h-112 overflow-hidden rounded-xl bg-surface text-tsurface shadow-cozy ring-1 ring-black/5 z-50 flex flex-col">
-						<div class="flex items-center justify-between px-4 py-2.5 border-b border-black/10">
-							<span class="font-bold text-sm">Notificaciones</span>
-							{this.unread > 0 && (
-								<button type="button" class="text-xs text-accent hover:underline" onClick={() => this.#markAllRead()}>
-									Marcar todas como leídas
-								</button>
-							)}
-						</div>
-						<div class="overflow-y-auto">
-							{this.loadingList && <div class="px-4 py-6 text-center text-sm opacity-60">Cargando…</div>}
-							{!this.loadingList && this.items.length === 0 && (
-								<div class="px-4 py-8 text-center text-sm opacity-60">No tenés notificaciones</div>
-							)}
-							{!this.loadingList &&
-								this.items.map((n) => (
-									<button
-										key={n.id}
-										type="button"
-										class={`w-full text-left px-4 py-3 border-b border-black/5 hover:bg-black/5 transition-colors ${
-											n.readAt ? "opacity-60" : ""
-										}`}
-										onClick={() => this.#onItemClick(n)}
-									>
-										<div class="flex items-start gap-2">
-											{!n.readAt && <span class="mt-1.5 w-2 h-2 rounded-full bg-accent shrink-0" />}
-											<span class="flex-1 min-w-0">
-												<span class="block font-semibold text-sm truncate">{n.title}</span>
-												{n.body && <span class="block text-xs opacity-70 line-clamp-2">{n.body}</span>}
-											</span>
-										</div>
-									</button>
-								))}
-						</div>
-						<a
-							href={resolvePlatformPath("notifications", "/") ?? "#"}
-							class="block px-4 py-2.5 text-center text-xs font-semibold text-accent border-t border-black/10 hover:bg-black/5"
-						>
-							Ver todas las notificaciones
-						</a>
-					</div>
-				)}
+				{this.open && <div class="absolute right-0 top-full mt-2 z-50" ref={(el) => (this.#menuContainer = el ?? null)}></div>}
 			</Host>
 		);
 	}

@@ -7,7 +7,8 @@ import type { ModuleRegistry, ModuleType } from "../../utils/registry/ModuleRegi
 import type { AppLoader } from "../apps/AppLoader.js";
 import type { ModuleRegistrar } from "../modules/ModuleRegistrar.js";
 import type { DependencyReloader } from "../modules/DependencyReloader.js";
-import type { DisabledRegistry } from "./DisabledRegistry.js";
+import type { DisabledEntry, DisabledRegistry } from "./DisabledRegistry.js";
+import type { ModuleDetector, ModuleDetectionEvent } from "../runtime/ModuleDetector.js";
 import { DependencyGraph } from "./DependencyGraph.js";
 import type { DisableOptions, FriendlyGroupState, ModuleSnapshotItem, OrchestratorLayer, PersistedStatusItem, ReloadTarget } from "./types.js";
 import type { Capability } from "@common/security/Capability.ts";
@@ -36,6 +37,7 @@ export interface ModuleOrchestratorDeps {
 	registrar: ModuleRegistrar;
 	dependencyReloader: DependencyReloader;
 	disabledRegistry: DisabledRegistry;
+	detector: ModuleDetector;
 	logger: ILogger;
 	kernelKey: symbol;
 	/** Capability `platform:infra` del kernel para operaciones de infra (503/rebuild UI). */
@@ -101,10 +103,19 @@ export class ModuleOrchestrator {
 	}
 
 	/** Mapa público (apps deshabilitadas) para el endpoint de availability. */
+	/**
+	 * Suscribe un observador de módulos nuevos detectados en runtime (quedan pendientes,
+	 * sin ejecutar). Lo usa el preset modules-manager para persistir/auditar/notificar.
+	 */
+	onModuleDetected(cb: (e: ModuleDetectionEvent) => void): void {
+		this.#d.detector.onDetected(cb);
+	}
+
 	availabilitySnapshot(): Record<string, { messageKey?: string; since?: number }> {
 		const result: Record<string, { messageKey?: string }> = {};
 		for (const entry of this.#d.disabledRegistry.list()) {
-			if (entry.type !== "app") continue;
+			// Un pending nunca fue parte de la superficie pública: no es "mantenimiento".
+			if (entry.type !== "app" || entry.pending) continue;
 			const base = entry.name.split(":")[0];
 			result[base] = { messageKey: entry.messageKey };
 		}
@@ -123,8 +134,16 @@ export class ModuleOrchestrator {
 			if (item.enabled) {
 				this.#d.disabledRegistry.remove(item.type, item.name);
 			} else {
-				this.#d.disabledRegistry.add({ type: item.type, name: item.name, messageKey: item.messageKey, cascadeRoot: item.cascadeRoot });
-				this.#d.logger.logWarn(`[orchestrator] ${item.type} '${item.name}' marcado inactivo desde estado persistido.`);
+				this.#d.disabledRegistry.add({
+					type: item.type,
+					name: item.name,
+					messageKey: item.messageKey,
+					cascadeRoot: item.cascadeRoot,
+					pending: item.pending || undefined,
+					filePath: item.filePath,
+				});
+				const label = item.pending ? "PENDIENTE de lanzamiento (nunca ejecutado)" : "marcado inactivo";
+				this.#d.logger.logWarn(`[orchestrator] ${item.type} '${item.name}' ${label} desde estado persistido.`);
 			}
 		}
 	}
@@ -148,6 +167,11 @@ export class ModuleOrchestrator {
 
 	/** Deshabilita un módulo y cascadea el corte a sus dependientes (dependientes primero). */
 	async disable(type: OrchestratorLayer, name: string, opts: DisableOptions = {}): Promise<string[]> {
+		// Un pendiente nunca se ejecutó: no hay nada que deshabilitar (y hacerlo pisaría
+		// su filePath, dejándolo imposible de lanzar).
+		if (this.#pendingEntry(type, name)) {
+			throw new Error(`'${name}' está pendiente de lanzamiento (nunca se ejecutó): no se puede deshabilitar.`);
+		}
 		// Una ui-library no se detiene (rompería a todos sus consumidores): se recompila.
 		if (type === "app" && (await this.#isLibraryApp(name))) {
 			throw new Error(`'${name}' es una ui-library: no se puede deshabilitar. Usá "Recompilar" tras un git pull.`);
@@ -165,8 +189,44 @@ export class ModuleOrchestrator {
 		return affected;
 	}
 
+	/** Entrada pendiente para `type:name` (app-aware), o undefined. */
+	#pendingEntry(type: OrchestratorLayer, name: string): DisabledEntry | undefined {
+		const entry = type === "app" ? this.#d.disabledRegistry.getApp(name) : this.#d.disabledRegistry.get(type, name);
+		return entry?.pending ? entry : undefined;
+	}
+
+	/**
+	 * Lanza un módulo PENDIENTE (detectado en runtime, nunca ejecutado): primera y única
+	 * carga de su código, aprobada manualmente. Se retira del disabled-set ANTES de cargar
+	 * (los loaders saltean pendings); si la carga lanza, vuelve a pendiente (visible y
+	 * reintenable). Nota: los loaders absorben la mayoría de los errores (logs/breaker),
+	 * en cuyo caso el módulo queda como fallo normal de carga, no como pendiente.
+	 */
+	async #launchPending(entry: DisabledEntry): Promise<string[]> {
+		if (!entry.filePath) {
+			throw new Error(`'${entry.name}' está pendiente pero sin filePath registrado: no se puede lanzar (revisá su origen en disco).`);
+		}
+		this.#d.disabledRegistry.remove(entry.type, entry.name);
+		this.#invalidateGraph(); // su config ya está en disco: el grafo debe verlo
+		this.#d.logger.logWarn(`[orchestrator] Lanzando módulo pendiente ${entry.type}:${entry.name} (${entry.filePath}).`);
+		try {
+			if (entry.type === "app") {
+				await this.#d.appLoader.loadApp(entry.filePath);
+			} else {
+				await this.#d.registrar.registerByPath(entry.type, entry.filePath);
+			}
+		} catch (e) {
+			this.#d.disabledRegistry.add(entry);
+			throw e;
+		}
+		return [`${entry.type}:${entry.name}`];
+	}
+
 	/** Re-habilita un módulo y su grupo de cascada (root primero, luego dependientes). */
 	async enable(type: OrchestratorLayer, name: string): Promise<string[]> {
+		// Pendiente: no es un re-enable sino el LANZAMIENTO inicial aprobado.
+		const pending = this.#pendingEntry(type, name);
+		if (pending) return this.#launchPending(pending);
 		// Grupo de cascada: el target + lo que cayó por su culpa.
 		const group = this.#d.disabledRegistry
 			.list()
@@ -290,8 +350,8 @@ export class ModuleOrchestrator {
 				items.push({
 					type,
 					name,
-					state: entry ? "disabled" : "running",
-					unavailable: type === "service" && !!entry,
+					state: this.#stateOf(entry),
+					unavailable: type === "service" && !!entry && !entry.pending,
 					messageKey: entry?.messageKey,
 					cascadeRoot: entry?.cascadeRoot,
 					uiName: graph.uiNameOf(type, name),
@@ -309,7 +369,7 @@ export class ModuleOrchestrator {
 			items.push({
 				type: "app",
 				name,
-				state: entry ? "disabled" : "running",
+				state: this.#stateOf(entry),
 				library: await this.#isLibraryApp(name),
 				messageKey: entry?.messageKey,
 				cascadeRoot: entry?.cascadeRoot,
@@ -318,6 +378,11 @@ export class ModuleOrchestrator {
 			});
 		}
 		return items;
+	}
+
+	#stateOf(entry: DisabledEntry | undefined): ModuleSnapshotItem["state"] {
+		if (!entry) return "running";
+		return entry.pending ? "pending" : "disabled";
 	}
 
 	/**
@@ -356,20 +421,31 @@ export class ModuleOrchestrator {
 		for (const [name, members] of graph.friendlyGroups()) {
 			const hasFront = members.apps.length > 0;
 			const failed: string[] = [];
+			const downApps: string[] = [];
 			let downFronts = 0;
 			let downBacks = 0;
-			for (const base of members.apps) {
-				if (disabledAppBases.has(base)) downFronts++;
-				else if (isFailed(`app:${base}`, loadedAppBases.has(base))) {
-					downFronts++;
-					failed.push(`app:${base}`);
-				}
-			}
+			// Services primero: si algún back del grupo está caído/deshabilitado, las apps
+			// del grupo tampoco están operativas (criterio "por grupo amigable" de `downApps`).
 			for (const svc of members.services) {
-				if (this.#d.disabledRegistry.has("service", svc)) downBacks++;
+				const svcEntry = this.#d.disabledRegistry.get("service", svc);
+				if (svcEntry?.pending) continue;
+				if (svcEntry) downBacks++;
 				else if (isFailed(`service:${svc}`, loadedServices.has(svc))) {
 					downBacks++;
 					failed.push(`service:${svc}`);
+				}
+			}
+			for (const base of members.apps) {
+				// Pendiente de lanzamiento: nunca fue parte de la plataforma, no cuenta como caída/fallo.
+				if (this.#d.disabledRegistry.getApp(base)?.pending) continue;
+				if (disabledAppBases.has(base)) downFronts++;
+				else {
+					const frontFailed = isFailed(`app:${base}`, loadedAppBases.has(base));
+					if (frontFailed) {
+						downFronts++;
+						failed.push(`app:${base}`);
+					}
+					if (frontFailed || downBacks > 0) downApps.push(base);
 				}
 			}
 			const down = downFronts + downBacks;
@@ -380,7 +456,7 @@ export class ModuleOrchestrator {
 			if (down === 0) state = "ok";
 			else if (failed.length === 0) state = "maintenance";
 			else state = available ? "degraded" : "down";
-			out.push({ name, hasFront, total: members.apps.length + members.services.length, down, failed, state });
+			out.push({ name, hasFront, total: members.apps.length + members.services.length, down, failed, downApps, state });
 		}
 		// Orden estable: grupos con frente primero, luego alfabético (back-only como "Core" al final).
 		out.sort((a, b) => Number(b.hasFront) - Number(a.hasFront) || a.name.localeCompare(b.name));

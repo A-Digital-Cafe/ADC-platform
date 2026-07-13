@@ -20,7 +20,8 @@ import { DockerManager } from "./utils/system/DockerManager.ts";
 import { AppLoader } from "./core/apps/AppLoader.js";
 import { ModuleRegistrar } from "./core/modules/ModuleRegistrar.js";
 import { KernelServiceLoader } from "./core/services/KernelServiceLoader.js";
-import { ConfigWatcher, watchLayer } from "./core/runtime/ConfigWatcher.js";
+import { ConfigWatcher, watchLayer, watchPresetTopic, watchPresetsRoot, type LayerEventHandlers } from "./core/runtime/ConfigWatcher.js";
+import { ModuleDetector } from "./core/runtime/ModuleDetector.js";
 import { shutdownKernel } from "./core/runtime/KernelShutdown.js";
 import { loadLayerRecursive } from "./core/apps/LayerLoader.js";
 import { DependencyReloader } from "./core/modules/DependencyReloader.js";
@@ -38,6 +39,13 @@ export class Kernel {
 	 * módulo puede obtenerla vía `privileges`, así que no puede disparar esas operaciones.
 	 */
 	readonly #platformCap: Capability = this.#issuer.mint("kernel", "infra", [Scope.PlatformInfra]);
+	/**
+	 * Capability del kernel para avisar al equipo de seguridad (Admins + Security
+	 * Managers globales) cuando un módulo queda en fallo repetido (circuit breaker
+	 * abierto), vía `IdentityManagerService.notifications()` (exige `identity:internal`).
+	 * La presenta sólo el kernel; nunca se entrega a módulos.
+	 */
+	readonly #securityNotifyCap: Capability = this.#issuer.mint("kernel", "infra", [Scope.IdentityInternal]);
 	/** Secreto de arranque: lo posee sólo el bootstrap (`index.ts`), nunca un módulo. */
 	#bootToken?: symbol;
 	#isStartingUp = true;
@@ -76,13 +84,23 @@ export class Kernel {
 	readonly #kernelServiceLoader: KernelServiceLoader;
 	readonly #dependencyReloader: DependencyReloader;
 	readonly #disabledRegistry = new DisabledRegistry();
+	readonly #detector: ModuleDetector;
 	readonly #orchestrator: ModuleOrchestrator;
 
 	constructor() {
 		// Raíz de confianza para el stop de ciclo de vida (ver `stopBoundModule`): la master key.
 		setLifecycleRoot(Kernel.#kernelKey);
 		const isShuttingDown = () => this.#isShuttingDown;
-		this.#appLoader = new AppLoader(this, this.#registry, this.#dockerManager, this.#logger, Kernel.#kernelKey, isShuttingDown);
+		this.#appLoader = new AppLoader(
+			this,
+			this.#registry,
+			this.#dockerManager,
+			this.#logger,
+			Kernel.#kernelKey,
+			isShuttingDown,
+			this.#disabledRegistry,
+			(moduleName, error) => this.#notifyModuleFailure(moduleName, error)
+		);
 		this.#registrar = new ModuleRegistrar(this, this.#registry, Kernel.#moduleLoader, this.#logger, isShuttingDown);
 		this.#kernelServiceLoader = new KernelServiceLoader(
 			this,
@@ -95,18 +113,72 @@ export class Kernel {
 			this.#disabledRegistry
 		);
 		this.#dependencyReloader = new DependencyReloader(this.#registry, this.#registrar, this.#appLoader, this.#logger, Kernel.#kernelKey);
+		this.#detector = new ModuleDetector({
+			logger: this.#logger,
+			registry: this.#registry,
+			appLoader: this.#appLoader,
+			disabledRegistry: this.#disabledRegistry,
+			presetsPath: this.#presetsPath,
+			isShuttingDown,
+		});
+		this.#detector.onDetected((e) => {
+			if (e.kind === "detected") this.#notifyModuleDetected(e);
+		});
 		this.#orchestrator = new ModuleOrchestrator({
 			registry: this.#registry,
 			appLoader: this.#appLoader,
 			registrar: this.#registrar,
 			dependencyReloader: this.#dependencyReloader,
 			disabledRegistry: this.#disabledRegistry,
+			detector: this.#detector,
 			logger: this.#logger,
 			kernelKey: Kernel.#kernelKey,
 			platformCap: this.#platformCap,
 			presetsPath: this.#presetsPath,
 			srcPath: this.#basePath,
 		});
+	}
+
+	/**
+	 * Avisa al equipo de seguridad que un módulo agotó sus reintentos rápidos y quedó
+	 * en reintento lento (breaker abierto). Va vía `IdentityManagerService.notifications()`
+	 * —que resuelve destinatarios (Admins + Security Managers globales) y emite el topic
+	 * reservado `security.module_failure`—. Best-effort: sin identity cargado, sólo log.
+	 */
+	#notifyModuleFailure(moduleName: string, error: string): void {
+		interface IdentityNotifier {
+			notifications(token: CapabilityToken): { moduleFailure(event: { module: string; error: string }): Promise<void> };
+		}
+		try {
+			const identity = this.#registry.getService<IdentityNotifier>("IdentityManagerService");
+			void identity
+				.notifications(this.#securityNotifyCap)
+				.moduleFailure({ module: moduleName, error })
+				.catch((e: unknown) => this.#logger.logDebug(`Alerta de fallo de módulo no emitida: ${e}`));
+		} catch {
+			this.#logger.logDebug(`Alerta de fallo de módulo no emitida (IdentityManagerService no disponible): ${moduleName}`);
+		}
+	}
+
+	/**
+	 * Avisa al equipo de seguridad que apareció un módulo NUEVO en runtime (quedó
+	 * pendiente, sin ejecutar). Mismo canal best-effort que `#notifyModuleFailure`.
+	 */
+	#notifyModuleDetected(e: { type: string; name: string; filePath: string; preset: string | null }): void {
+		interface IdentityNotifier {
+			notifications(token: CapabilityToken): {
+				moduleDetected(event: { module: string; layer: string; filePath: string; preset: string | null }): Promise<void>;
+			};
+		}
+		try {
+			const identity = this.#registry.getService<IdentityNotifier>("IdentityManagerService");
+			void identity
+				.notifications(this.#securityNotifyCap)
+				.moduleDetected({ module: e.name, layer: e.type, filePath: e.filePath, preset: e.preset })
+				.catch((err: unknown) => this.#logger.logDebug(`Alerta de módulo detectado no emitida: ${err}`));
+		} catch {
+			this.#logger.logDebug(`Alerta de módulo detectado no emitida (IdentityManagerService no disponible): ${e.name}`);
+		}
 	}
 
 	/**
@@ -237,52 +309,22 @@ export class Kernel {
 
 	#startWatchers(): void {
 		const isStartingUp = () => this.#isStartingUp;
-		const unload = (type: ModuleType) => (p: string) => this.#registry.unloadModule(type, Kernel.#kernelKey, p);
-		const onChange = (type: ModuleType) => (p: string) => this.#dependencyReloader.handleFileChange(type, p);
 
-		const providerPaths = [this.#providersPath, ...this.#presetLayerPaths("providers")];
-		const utilityPaths = [this.#utilitiesPath, ...this.#presetLayerPaths("utilities")];
-		const servicePaths = [this.#servicesPath, ...this.#presetLayerPaths("services")];
-		const appPaths = [this.#appsPath, ...this.#presetLayerPaths("apps")];
+		// Capas del core (los directorios siempre existen).
+		for (const type of ["provider", "utility", "service"] as ModuleType[]) {
+			const dir = { provider: this.#providersPath, utility: this.#utilitiesPath, service: this.#servicesPath }[type] as string;
+			watchLayer(dir, this.#fileExtension, this.#layerEventHandlers(type), { isStartingUp });
+		}
+		watchLayer(this.#appsPath, this.#fileExtension, this.#layerEventHandlers("app"), {
+			isStartingUp,
+			exclude: ["BaseApp.ts", "AppWithSeo.ts"],
+		});
 
-		for (const p of providerPaths) {
-			watchLayer(
-				p,
-				this.#fileExtension,
-				(q) => this.#registrar.registerByPath("provider", q),
-				unload("provider"),
+		// Presets conocidos al boot: un watcher por topic (cubre capas creadas después).
+		for (const topic of this.#presetTopics) {
+			watchPresetTopic(path.resolve(this.#presetsPath, topic), this.#fileExtension, (layer) => this.#layerEventHandlers(layer), {
 				isStartingUp,
-				[],
-				onChange("provider")
-			);
-		}
-		for (const p of utilityPaths) {
-			watchLayer(
-				p,
-				this.#fileExtension,
-				(q) => this.#registrar.registerByPath("utility", q),
-				unload("utility"),
-				isStartingUp,
-				[],
-				onChange("utility")
-			);
-		}
-		for (const p of servicePaths) {
-			watchLayer(
-				p,
-				this.#fileExtension,
-				(q) => this.#registrar.registerByPath("service", q),
-				unload("service"),
-				isStartingUp,
-				[],
-				onChange("service")
-			);
-		}
-		for (const p of appPaths) {
-			watchLayer(p, this.#fileExtension, this.#appLoader.loadApp, this.#appLoader.unloadApp, isStartingUp, [
-				"BaseApp.ts",
-				"AppWithSeo.ts",
-			]);
+			});
 		}
 
 		new ConfigWatcher({
@@ -294,8 +336,84 @@ export class Kernel {
 			isStartingUp,
 			isDevelopment: this.#isDevelopment,
 			reloadAppInstance: this.#appLoader.reloadAppInstance,
-			loadApp: this.#appLoader.loadApp,
+			onNewAppConfig: (appFile) => this.#onNewAppConfig(appFile),
+			isPendingPath: (p) => this.#disabledRegistry.isPendingPath(p),
 		}).start();
+
+		// Presets agregados en runtime: se adoptan (watcher de topic) pero sus módulos
+		// quedan PENDIENTES de lanzamiento manual; nada se autoejecuta.
+		watchPresetsRoot(this.#presetsPath, isStartingUp, (topicPath) => this.#adoptRuntimePreset(topicPath));
+	}
+
+	/**
+	 * Handlers de eventos de `index.ts` por capa, compartidos por los watchers de core
+	 * y de presets. `add` va al detector (módulo nuevo → pendiente, SIN ejecutar);
+	 * `change` recarga sólo módulos ya cargados (pendientes/deshabilitados se ignoran
+	 * para no resucitarlos); `unlink` retira pendientes o descarga cargados.
+	 */
+	#layerEventHandlers(type: ModuleType | "app"): LayerEventHandlers {
+		if (type === "app") {
+			return {
+				add: (p) => this.#detector.detect("app", p),
+				change: async (p) => {
+					if (await this.#detector.isReloadBlocked("app", p)) {
+						this.#logger.logDebug(`Cambio en app pendiente/deshabilitada ignorado: ${p}`);
+						return;
+					}
+					await this.#appLoader.unloadApp(p);
+					await this.#appLoader.loadApp(p);
+				},
+				unlink: async (p) => {
+					if (await this.#detector.undetect("app", p)) return;
+					await this.#appLoader.unloadApp(p);
+				},
+			};
+		}
+		return {
+			add: (p) => this.#detector.detect(type, p),
+			change: async (p) => {
+				if (await this.#detector.isReloadBlocked(type, p)) {
+					this.#logger.logDebug(`Cambio en módulo pendiente/deshabilitado ignorado: ${p}`);
+					return;
+				}
+				await this.#dependencyReloader.handleFileChange(type, p);
+			},
+			unlink: async (p) => {
+				if (await this.#detector.undetect(type, p)) return;
+				await this.#registry.unloadModule(type, Kernel.#kernelKey, p);
+			},
+		};
+	}
+
+	/**
+	 * Config nuevo para un app: si el app ya corre (código confiable), la instancia
+	 * nueva se carga como siempre; si el app no corre (directorio nuevo o pendiente),
+	 * va al detector y queda pendiente de lanzamiento manual.
+	 */
+	async #onNewAppConfig(appFilePath: string): Promise<void> {
+		const base = path.basename(path.dirname(appFilePath));
+		const isRunning = this.#appLoader.instanceNames.some((i) => i === base || i.split(":")[0] === base);
+		if (isRunning && !this.#disabledRegistry.getApp(base)?.pending) {
+			await this.#appLoader.loadApp(appFilePath);
+			return;
+		}
+		await this.#detector.detect("app", appFilePath);
+	}
+
+	/** Adopta un preset aparecido en runtime: topic + watcher de su árbol (módulos → pendientes). */
+	#adoptRuntimePreset(topicPath: string): void {
+		const topic = path.basename(topicPath);
+		if (this.#presetTopics.includes(topic)) return;
+		this.#presetTopics.push(topic);
+		Kernel.#moduleLoader.setPresetTopics(this.#presetTopics);
+		this.#logger.logWarn(
+			`Preset nuevo detectado en runtime: '${topic}'. Sus módulos NO se autoejecutan: quedan pendientes de lanzamiento en modules-manager.`
+		);
+		// `ignoreInitial: false`: los archivos ya copiados/clonados también pasan por el detector.
+		watchPresetTopic(topicPath, this.#fileExtension, (layer) => this.#layerEventHandlers(layer), {
+			isStartingUp: () => this.#isStartingUp,
+			ignoreInitial: false,
+		});
 	}
 
 	async #refreshUiImportMaps(): Promise<void> {
