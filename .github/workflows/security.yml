@@ -28,10 +28,10 @@ on:
         type: boolean
         default: false
 
-# GitHub valida los permisos del caller contra el MÁXIMO de TODOS los jobs del
-# reusable (ignora los `if`): como el reusable incluye el job `scorecard`, que en
-# repos PRIVADOS necesita actions/checks/issues/pull-requests:read + id-token,
-# TODO job del caller que lo invoque debe conceder ese set. Por eso va a nivel
+# GitHub valida los permisos del caller contra el MÁXIMO que pide el conjunto de
+# jobs del reusable (ignora los `if`): como el reusable incluye el job `scorecard`,
+# que en repos PRIVADOS necesita actions/checks/issues/pull-requests:read + id-token,
+# cada job del caller que lo invoque debe conceder ese set. Por eso va a nivel
 # workflow (lo heredan pr/scheduled/manual); el caller solo puede acotar, no
 # ampliar. No sobre-privilegia: cada job del reusable recibe la intersección con
 # lo que realmente pide (semgrep/osv/trivy se quedan en contents:read).
@@ -46,7 +46,7 @@ permissions:
 jobs:
   pr:
     if: ${{ github.event_name == 'pull_request_review' && github.event.review.state == 'approved' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@7c9eeeb8570b498540076c598d8678be5f4a9435 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@724d6c2f5cab142b95ff97b810e0c33d40cc9aa3 # main
     with:
       mode: pr
 
@@ -55,7 +55,7 @@ jobs:
   # reusable omite el email.
   scheduled:
     if: ${{ github.event_name == 'schedule' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@7c9eeeb8570b498540076c598d8678be5f4a9435 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@724d6c2f5cab142b95ff97b810e0c33d40cc9aa3 # main
     with:
       mode: weekly
       email: true
@@ -71,7 +71,7 @@ jobs:
   # por job solo lo que pide).
   manual:
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@7c9eeeb8570b498540076c598d8678be5f4a9435 # main
+    uses: A-Digital-Cafe/adc-ci/.github/workflows/security-suite.yml@724d6c2f5cab142b95ff97b810e0c33d40cc9aa3 # main
     with:
       mode: weekly
       only: ${{ inputs.only }}
