@@ -22,9 +22,12 @@ function buildAttachmentSchema(connection: Connection): Schema<AttachmentDoc> {
 			encryption: {
 				type: new SchemaCtor(
 					{
-						scheme: { type: String, required: true, enum: ["aes-256-gcm"] },
+						scheme: { type: String, required: true, enum: ["aes-256-gcm", "aes-256-gcm-chunked"] },
 						iv: { type: String, required: true, maxlength: 32 },
-						authTag: { type: String, required: true, maxlength: 32 },
+						// Sólo el esquema legado (objeto entero); en chunked cada chunk lleva su tag inline.
+						authTag: { type: String, default: null, maxlength: 32 },
+						// Sólo `aes-256-gcm-chunked`: bytes en claro por chunk.
+						chunkSize: { type: Number, default: null, min: 1 },
 						keyRef: { type: String, required: true, maxlength: 80 },
 					},
 					{ _id: false }
@@ -37,6 +40,7 @@ function buildAttachmentSchema(connection: Connection): Schema<AttachmentDoc> {
 			orgId: { type: String, default: null, maxlength: 80 },
 			createdAt: { type: Date, required: true, default: () => new Date() },
 			uploadedAt: { type: Date, default: null },
+			retainedAt: { type: Date, default: null },
 		},
 		{
 			versionKey: false,

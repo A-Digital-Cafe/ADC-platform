@@ -64,7 +64,7 @@ export function buildRspackConfigContent(options: IRspackConfigOptions): string 
 	const hasExposes = !!module.uiConfig.federationExposes && Object.keys(module.uiConfig.federationExposes).length > 0;
 	const publicPath = resolvePublicPath({ isRemote, isHost, isProduction, devPort: module.uiConfig.devPort, hasExposes });
 	const staticDirs = buildStaticDirectories(context);
-	const devServerConfig = buildDevServerBlock(module.uiConfig.devPort, !isProduction, staticDirs);
+	const devServerConfig = buildDevServerBlock(module.uiConfig.devPort, !isProduction, staticDirs, context.namespace);
 
 	const externalsLine =
 		externals.length > 0

@@ -3,93 +3,132 @@
 El correo de la plataforma es **multi-tenant por organización**: cada organización
 usa un subdominio del dominio raíz de correo.
 
-- Dominio raíz de correo: `mail.tudominio.com` (ejemplo; configúralo en el
-  `email-service` y en Haraka).
-- Direcciones de usuario: `usuario@<orgSlug>.tudominio.com`.
+- Dominio raíz de correo: `adigitalcafe.com` (`MAIL_ROOT_DOMAIN`).
+- Hostname del MTA: `mail.adigitalcafe.com` (`MAIL_HOSTNAME`).
+- Direcciones de usuario: `usuario@<orgSlug>.adigitalcafe.com`.
 
-Sustituye `tudominio.com`, las IPs y el selector DKIM por los tuyos reales.
+Sustituye dominio, IPs y selector por los tuyos si despliegas otra instancia.
 
-## 1. Registro A / AAAA del MTA
+## 0. Estado actual del envío
 
-El servidor Haraka necesita un hostname público estable:
+Mientras `MAIL_INTERNAL_ONLY=true`, el envío está **puenteado por vía interna**:
+el `email-service` sólo acepta destinatarios con buzón dentro del dominio de la
+plataforma, así que el correo nunca sale a internet. **La recepción desde fuera
+no depende de esa variable** y necesita el DNS completo de abajo.
+
+### Desarrollo local sin MTA
+
+En local, el relay apunta a `localhost:25`. Si ahí hay otro MTA (un Postfix del
+sistema, por ejemplo) va a rechazar el dominio de la plataforma con un
+`550 5.1.1 ... Recipient address rejected`, porque no es un destino suyo.
+
+Para probar el correo sin montar Haraka, poné `MAIL_DEV_LOOPBACK=true`: el
+mensaje se genera igual —mismo MIME, mismos adjuntos— pero en vez de salir por
+SMTP se inyecta en el buzón destino por la misma vía que usa el webhook
+entrante. Sólo aplica a destinatarios internos; si hay alguno externo, el envío
+vuelve al relay normal. **Nunca activarla en producción**: se saltea el MTA y con
+él DKIM, colas y reintentos. Por eso el default es `false` y hay que optar
+explícitamente.
+
+## 1. Registro A / AAAA del MTA ✅
+
+El servidor Haraka necesita un hostname público estable. En Cloudflare, este
+registro va **sin proxy** (nube gris): el proxy no reenvía SMTP.
 
 ```
-mail.tudominio.com.      IN  A     203.0.113.10
-mail.tudominio.com.      IN  AAAA  2001:db8::10
+mail.adigitalcafe.com.   IN  A     <ip>
 ```
 
-## 2. Registros MX (por subdominio de organización)
+## 2. Registros MX ✅
 
-Cada subdominio de organización debe enrutar su correo entrante al MTA. Lo más
-simple es un **wildcard** que cubre a todas las organizaciones:
+El dominio raíz y un **wildcard** que cubre a todas las organizaciones:
 
 ```
-*.tudominio.com.         IN  MX  10  mail.tudominio.com.
+adigitalcafe.com.        IN  MX  10  mail.adigitalcafe.com.
+*.adigitalcafe.com.      IN  MX  10  mail.adigitalcafe.com.
 ```
 
+> Sin el wildcard, `usuario@<orgSlug>.adigitalcafe.com` no recibe correo externo.
 > Si prefieres no usar wildcard, añade un `MX` por cada `orgSlug` al provisionar
-> la organización (automatizable desde `email-service`).
+> la organización — pero ojo: crear un nodo explícito `<orgSlug>.adigitalcafe.com`
+> bloquea el wildcard para los nombres por debajo de él.
 
-## 3. SPF (autoriza al MTA a enviar)
-
-Un único registro SPF en el dominio raíz, heredable por los subdominios vía
-wildcard TXT:
+## 3. SPF (autoriza al MTA a enviar) ✅
 
 ```
-tudominio.com.           IN  TXT  "v=spf1 ip4:203.0.113.10 ip6:2001:db8::10 -all"
-*.tudominio.com.         IN  TXT  "v=spf1 ip4:203.0.113.10 ip6:2001:db8::10 -all"
+adigitalcafe.com.        IN  TXT  "v=spf1 ip4:<ip> ~all"
+*.adigitalcafe.com.      IN  TXT  "v=spf1 ip4:<ip> ~all"
 ```
 
-## 4. DKIM (selector global)
+## 4. DKIM (un único registro para todo el dominio) ✅
 
-Usamos un **único selector global** para todo el dominio (decisión de la
-plataforma: simplifica la entregabilidad). Haraka firma con una sola clave
-privada; publica la clave pública en:
-
-```
-adcmail._domainkey.tudominio.com.   IN  TXT  "v=DKIM1; k=rsa; p=MIIBIjANBgkq...<clave pública>"
-*._domainkey.tudominio.com.         IN  TXT  "v=DKIM1; k=rsa; p=MIIBIjANBgkq...<clave pública>"
-```
-
-- Selector: `adcmail` (debe coincidir con la config de Haraka).
-- Genera el par con: `openssl genrsa -out dkim.private.pem 2048` y
-  `openssl rsa -in dkim.private.pem -pubout`. Monta la privada en el contenedor
-  de Haraka (`src/common/docker/adc-haraka-core/`).
-
-## 5. DMARC
+Se usa un **selector global** (`adcmail`) y **una sola clave**. `haraka-plugin-dkim`
+resuelve el directorio de claves subiendo por la jerarquía de labels y firma con
+`d=` igual al **nombre del directorio encontrado**: con un único directorio
+`config/dkim/adigitalcafe.com/`, el correo de `usuario@<org>.adigitalcafe.com`
+se firma igual con `d=adigitalcafe.com`. DMARC lo da por alineado gracias a la
+alineación relajada (`adkim=r`, el valor por defecto).
 
 ```
-_dmarc.tudominio.com.    IN  TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@tudominio.com; adkim=r; aspf=r; pct=100"
+adcmail._domainkey.adigitalcafe.com.  IN  TXT  "v=DKIM1; k=rsa; p=..."
 ```
 
-Empieza con `p=none` para monitorizar, sube a `quarantine` y luego `reject`.
+> **No hace falta `*._domainkey`**: un wildcard en `*._domainkey.adigitalcafe.com`
+> cubriría otros selectores del dominio raíz, pero **no** los subdominios de
+> organización (`adcmail._domainkey.<org>.adigitalcafe.com` no cuelga de
+> `_domainkey.adigitalcafe.com`). Firmar con `d=` en la raíz lo resuelve mejor.
+
+Generar el par (la privada queda gitignorada):
+
+```bash
+cd src/common/docker/adc-haraka-core/dkim
+openssl genrsa -out private 2048 && chmod 600 private
+openssl rsa -in private -pubout -out public.pem
+# Valor del TXT (una sola línea):
+printf 'v=DKIM1; k=rsa; p=%s\n' "$(grep -v '^-----' public.pem | tr -d '\n')"
+```
+
+El valor supera los 255 caracteres: en un archivo de zona hay que partirlo en
+varias cadenas entrecomilladas (`"…" "…"`); en el panel de Cloudflare se pega
+entero y lo divide él.
+
+## 5. DMARC ✅
+
+```
+_dmarc.adigitalcafe.com.  IN  TXT  "v=DMARC1; p=none; rua=mailto:dmarc@adigitalcafe.com; fo=1"
+```
+
+Empieza en `p=none` para monitorizar y sube a `quarantine` y luego `reject`
+cuando los informes salgan limpios.
 
 ## 6. PTR (DNS inverso)
 
-Imprescindible para entregabilidad. Configúralo en tu proveedor de hosting/IP
-(no en tu zona DNS): la IP del MTA debe resolver a `mail.tudominio.com`.
-
-```
-10.113.0.203.in-addr.arpa.  IN  PTR  mail.tudominio.com.
-```
+Imprescindible para entregabilidad **saliente**. Se configura en el proveedor de
+la IP, no en tu zona. Hoy `<tu-ip>` resuelve a una IP residencial cuyo reverse no
+controlas, por lo que el envío externo sería rechazado o marcado como spam por
+la mayoría de los destinos. Es la razón de peso para mantener
+`MAIL_INTERNAL_ONLY=true` hasta mover el MTA a una IP con PTR propio.
 
 ## 7. Puertos a abrir en el firewall
 
-| Puerto | Uso                                                  |
-| ------ | ---------------------------------------------------- |
-| 25     | SMTP entrante (recepción)                            |
-| 587    | Submission (envío autenticado desde `email-service`) |
-| 465    | SMTPS (opcional)                                     |
+| Puerto | Uso                                      |
+| ------ | ---------------------------------------- |
+| 25     | SMTP entrante (recepción)                |
+| 587    | Submission (envío desde `email-service`) |
 
-> El puerto 25 saliente suele estar bloqueado por proveedores cloud; solicita su
-> apertura o usa un smarthost.
+El `docker-compose.yml` publica ambos en `127.0.0.1`. Para recibir de fuera hay
+que exponer el 25 al exterior (cambiar el binding y redirigir el puerto en el
+router/firewall). El 25 **saliente** suele estar bloqueado por el ISP; con envío
+interno no molesta.
 
 ## 8. Checklist de verificación
 
-- [ ] `dig MX <orgSlug>.tudominio.com` apunta a `mail.tudominio.com`.
-- [ ] `dig TXT tudominio.com` muestra el SPF.
-- [ ] `dig TXT adcmail._domainkey.tudominio.com` muestra la clave DKIM.
-- [ ] `dig TXT _dmarc.tudominio.com` muestra DMARC.
-- [ ] PTR inverso resuelve al hostname del MTA.
-- [ ] Prueba de envío a `check-auth@verifier.port25.com` o mail-tester.com con
+- [x] `dig MX <orgSlug>.adigitalcafe.com` apunta a `mail.adigitalcafe.com`.
+- [x] `dig TXT adigitalcafe.com` muestra el SPF.
+- [x] `dig TXT adcmail._domainkey.adigitalcafe.com` muestra la clave DKIM.
+- [x] `dig TXT _dmarc.adigitalcafe.com` muestra DMARC.
+- [ ] `docker logs adc-haraka-core` no muestra el aviso de clave DKIM ausente.
+- [ ] Correo interno entre dos buzones de la plataforma llega a la bandeja.
+- [ ] Correo desde una cuenta externa llega al buzón (puerto 25 alcanzable).
+- [ ] Antes de abrir el envío externo: PTR propio + prueba en mail-tester.com con
       SPF/DKIM/DMARC en verde.

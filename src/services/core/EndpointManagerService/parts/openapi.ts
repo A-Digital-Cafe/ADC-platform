@@ -57,8 +57,18 @@ const DEFAULT_RESPONSES: Record<string, Record<string, unknown>> = {
 	"403": { description: "Sin permisos" },
 };
 
+/** Códigos que por definición no llevan cuerpo: se documentan solo con su descripción. */
+const BODYLESS_STATUSES = new Set(["204", "205", "304"]);
+
 function buildResponses(endpoint: RegisteredEndpoint): Record<string, unknown> {
 	const responses: Record<string, Record<string, unknown>> = structuredClone(DEFAULT_RESPONSES);
+
+	// `successStatus: 201` reemplaza al 200 por defecto: el endpoint no responde ambos.
+	const successStatus = endpoint.options?.successStatus ?? 200;
+	if (successStatus !== 200) {
+		delete responses["200"];
+		responses[String(successStatus)] = { description: "Creado" };
+	}
 
 	if (endpoint.permissions.length > 0) {
 		responses["403"] = { description: `Requiere: ${endpoint.permissions.map(describePermission).join(" | ")}` };
@@ -69,6 +79,12 @@ function buildResponses(endpoint: RegisteredEndpoint): Record<string, unknown> {
 	if (declared && typeof declared === "object") {
 		for (const [status, schema] of Object.entries(declared)) {
 			const existing = responses[status] ?? {};
+			if (BODYLESS_STATUSES.has(status)) {
+				// 204/205/304 no llevan cuerpo: se documenta la descripción declarada
+				// (ej. `Type.Null({ description: "Bandeja vacía" })`), sin `content`.
+				responses[status] = { description: schema?.description ?? existing.description ?? "Sin contenido" };
+				continue;
+			}
 			responses[status] = {
 				description: existing.description ?? "OK",
 				content: { "application/json": { schema: sanitizeSchema(schema) } },

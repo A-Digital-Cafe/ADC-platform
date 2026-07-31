@@ -1,6 +1,8 @@
 import type { Model } from "mongoose";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId } from "@common/utils/crypto.ts";
+import { buildUpdateSet } from "@common/utils/mongo-update.ts";
+import { ROLE_UPDATABLE_FIELDS } from "../domain/role.js";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
@@ -212,7 +214,8 @@ export class RoleManager {
 		}
 
 		try {
-			const updated = await this.roleModel.findOneAndUpdate({ id: roleId }, updates, { new: true });
+			const update = buildUpdateSet(updates, ROLE_UPDATABLE_FIELDS, { updatedAt: new Date() });
+			const updated = await this.roleModel.findOneAndUpdate({ id: roleId }, update, { new: true });
 			if (!updated) throw new Error(`Rol ${roleId} no encontrado`);
 			this.logger.logDebug(`Rol actualizado: ${roleId}`);
 			return updated.toObject?.() || updated;

@@ -1,3 +1,5 @@
+import { isPrivateHost } from "@common/utils/url-utils.js";
+
 export const ALLOWED_HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
 export const ALLOWED_CORS_HEADERS = ["Content-Type", "Authorization", "Idempotency-Key", "X-CSRF-Token", "X-Requested-With"];
 
@@ -9,10 +11,16 @@ function parseOriginList(): string[] {
 		.filter(Boolean);
 }
 
+/**
+ * Origen de desarrollo: localhost/loopback **o IP privada de LAN** (probar desde el
+ * móvil contra `bun run dev` implica origen `http://192.168.x.x:<puerto-app>`).
+ * Misma regla que `IS_DEV` del front (`@common/utils/url-utils`): si el cliente se
+ * considera en dev y manda `credentials: "include"`, el server debe aceptar ese origen.
+ */
 function isLocalOrigin(origin: string): boolean {
 	try {
-		const url = new URL(origin);
-		return ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+		const { hostname } = new URL(origin);
+		return hostname === "::1" || isPrivateHost(hostname);
 	} catch {
 		return false;
 	}

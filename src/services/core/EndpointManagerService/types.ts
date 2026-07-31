@@ -41,6 +41,10 @@ interface EndpointOptions {
 		 * Schemas de respuesta por código de estado (ej. `"200"`, `"404"`). Solo
 		 * documentación: alimentan el doc OpenAPI en `/api/docs`, NO se validan en
 		 * runtime. Usar `Type` de `@sinclair/typebox`.
+		 *
+		 * Los códigos sin cuerpo (204/205/304) se documentan únicamente con su
+		 * descripción: `204: Type.Null({ description: "Bandeja vacía" })`. Un
+		 * handler que devuelve `undefined`/`null` responde 204 automáticamente.
 		 */
 		response?: Record<string, Record<string, unknown>>;
 	};
@@ -58,10 +62,27 @@ interface EndpointOptions {
 	/** Marca el endpoint como obsoleto (`deprecated`) en el doc OpenAPI. */
 	deprecated?: boolean;
 	/**
+	 * Código de éxito cuando el handler devuelve contenido. Por defecto `200`;
+	 * usar `201` en los POST que **crean** un recurso nuevo. Devolver
+	 * `undefined`/`null` sigue respondiendo `204` (ver docs/architecture/http-status.md).
+	 */
+	successStatus?: 200 | 201;
+	/**
 	 * Cabeceras de cache para respuestas GET 200 (las absorben CDN/navegador).
 	 * Sólo se aplica a método GET; ignorado en mutativos.
 	 */
 	cache?: { maxAge: number; staleWhileRevalidate?: number; scope?: "public" | "private" };
+	/**
+	 * Valida el cuerpo con `ETag` + `If-None-Match` y responde `304` sin cuerpo si
+	 * el cliente ya tiene la versión vigente. Sólo GET. Pensado para endpoints que
+	 * se pollean (semáforo de estado, contadores): el navegador revalida solo y
+	 * el JS recibe el cuerpo cacheado, así que los clientes no cambian.
+	 *
+	 * `{ ignore: [...] }` excluye claves de primer nivel del hash: un campo que
+	 * cambia en cada request (`generatedAt` y compañía) haría que el ETag nunca
+	 * coincida y el 304 no se dispararía nunca.
+	 */
+	etag?: boolean | { ignore: string[] };
 	/** Skip automatic idempotency check for this endpoint (default: false). */
 	skipIdempotency?: boolean;
 	/** Skip cookie-auth CSRF validation for this endpoint (default: false). */

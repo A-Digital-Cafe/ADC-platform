@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
+import { createClientId } from "@common/utils/client-crypto.ts";
 import { moderationApi } from "../utils/moderation-api.ts";
 import { FormModalFooter } from "./FormModalFooter.tsx";
 
@@ -24,7 +25,7 @@ export function UnbanModal({ target, targetLabel, onClose, onUnbanned }: UnbanMo
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [reason, setReason] = useState("");
 	const [submitting, setSubmitting] = useState(false);
-	const intentKey = useMemo(() => crypto.randomUUID(), []);
+	const intentKey = useMemo(() => createClientId(), []);
 
 	const modalRef = useCallback(
 		(el: HTMLElement | null) => {

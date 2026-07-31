@@ -1,8 +1,11 @@
 {
+	"kernelMode": 55,
 	"name": "LogManagerService",
+	"uiName": "Core",
 	"type": "service",
 	"version": "1.0.0",
 	"global": true,
+	"failOnError": false,
 	"language": "typescript",
 	"custom": {
 		"retentionDays": 3,
@@ -10,5 +13,12 @@
 		"logsDir": "temp/logs"
 	},
 	"providers": [],
+	"services": [
+		{
+			"name": "EndpointManagerService",
+			"version": "latest",
+			"optional": true
+		}
+	],
 	"utilities": []
 }

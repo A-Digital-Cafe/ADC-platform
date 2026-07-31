@@ -13,7 +13,7 @@ import type { Connection, Model, Schema } from "mongoose";
 const DEK_LENGTH = 32;
 const IV_LENGTH = 12;
 
-export const ENCRYPTION_SCHEME = "aes-256-gcm" as const;
+const ENCRYPTION_SCHEME = "aes-256-gcm" as const;
 
 interface UserKeyDoc {
 	_id: string;

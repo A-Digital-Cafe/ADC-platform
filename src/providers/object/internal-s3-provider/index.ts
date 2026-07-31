@@ -16,6 +16,7 @@ interface SharedS3Entry {
 const SHARED_KEY = Symbol.for("adc.s3.sharedClients");
 const SHARED_S3_CLIENTS: Map<string, SharedS3Entry> = ((globalThis as any)[SHARED_KEY] ??= new Map<string, SharedS3Entry>());
 import type {
+	GetObjectStreamInput,
 	GetObjectStreamResult,
 	HeadObjectResult,
 	IS3Config,
@@ -27,6 +28,7 @@ import type {
 } from "./types.js";
 
 export type {
+	GetObjectStreamInput,
 	GetObjectStreamResult,
 	HeadObjectResult,
 	PresignDownloadInput,
@@ -149,7 +151,7 @@ export default class InternalS3Provider extends BaseProvider {
 	putObject(input: PutObjectInput): Promise<PutObjectResult> {
 		return putObject(this.#getClient(), input, this.#bucket(input.bucket));
 	}
-	getObjectStream(input: { bucket?: string; key: string }): Promise<GetObjectStreamResult> {
+	getObjectStream(input: GetObjectStreamInput): Promise<GetObjectStreamResult> {
 		return getObjectStream(this.#getClient(), input, this.#bucket(input.bucket));
 	}
 	headObject(input: { bucket?: string; key: string }): Promise<HeadObjectResult> {

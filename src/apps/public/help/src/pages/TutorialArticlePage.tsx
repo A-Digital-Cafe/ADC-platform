@@ -2,7 +2,7 @@ import "@ui-library/utils/react-jsx";
 import { useEffect, useState } from "react";
 import { getPlatformApps } from "@ui-library/utils/platform-links";
 import { fetchAppTutorials, fetchTutorialMarkdown, type TutorialMeta } from "@ui-library/utils/tutorials";
-import { markdownToBlocks, type MarkdownBlock } from "@ui-library/utils/markdown-blocks";
+import { markdownToBlocks, type MarkdownBlock } from "@media-ui-library/utils/markdown-blocks";
 import PageShell from "../components/PageShell";
 
 interface TutorialArticleState {

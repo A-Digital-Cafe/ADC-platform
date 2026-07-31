@@ -25,10 +25,11 @@ exports.hook_queue = function (next, connection) {
 		return next(DENYSOFT, 'webhook no configurado');
 	}
 
-	const chunks = [];
-	txn.message_stream.on('data', (c) => chunks.push(c));
-	txn.message_stream.on('end', () => {
-		const raw = Buffer.concat(chunks);
+	// `get_data` es la única forma soportada de leer el mensaje entero:
+	// `message_stream` sólo emite a través de `pipe()`, así que escucharlo con
+	// `.on('data')`/`.on('end')` no dispara nunca y la sesión SMTP se cuelga en
+	// DATA hasta el timeout del plugin (ningún correo llegaba a entregarse).
+	txn.message_stream.get_data((raw) => {
 		const recipients = txn.rcpt_to.map((r) => r.address());
 		const payload = JSON.stringify({
 			mailFrom: txn.mail_from ? txn.mail_from.address() : null,

@@ -19,6 +19,9 @@ export const MODULES_RESOURCE_NAME = "modules" as const;
  * - BANNERS: avisos de la status page + anuncios broadcast (EXECUTE).
  * - SCHEDULE: programar mantenimientos/updates.
  * - AUDIT: audit log completo del modules-manager.
+ * - LOGS: lectura del ring buffer de logs del proceso. Bit propio y no derivado
+ *   de RUNTIME porque los logs pueden filtrar datos de otros módulos: se otorga
+ *   por separado aunque el rol ya pueda parar/arrancar módulos.
  */
 export const ModulesScopes = {
 	NONE: 0,
@@ -27,7 +30,8 @@ export const ModulesScopes = {
 	BANNERS: 1 << 2, // 4
 	SCHEDULE: 1 << 3, // 8
 	AUDIT: 1 << 4, // 16
-	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // 31
+	LOGS: 1 << 5, // 32
+	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5), // 63
 } as const;
 
 export type ModulesScopeValue = (typeof ModulesScopes)[keyof typeof ModulesScopes];

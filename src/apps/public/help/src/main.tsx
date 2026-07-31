@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { redirectIfUnderMaintenance } from "@common/utils/module-availability.js";
 import "@ui-library";
+import "@media-ui-library";
 import "@ui-library/styles";
 import "./styles/tailwind.css";
 

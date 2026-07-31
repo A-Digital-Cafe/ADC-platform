@@ -266,6 +266,7 @@ export default {
 			banners: "Avisos y anuncios",
 			schedule: "Programación",
 			audit: "Auditoría",
+			logs: "Logs del proceso",
 		},
 		email: {
 			messages: "Mensajes",
@@ -274,6 +275,11 @@ export default {
 			attachments: "Adjuntos",
 			accounts: "Cuentas",
 			settings: "Configuración",
+		},
+		plans: {
+			catalog: "Catálogo de planes",
+			overrides: "Excepciones de límites",
+			subscriptions: "Suscripciones y asientos",
 		},
 		toggleAll: "Alternar toda la columna",
 		toggleRow: "Alternar toda la fila",
@@ -315,6 +321,7 @@ export default {
 		email: "Correo",
 		security: "Seguridad (global)",
 		modules: "Módulos de plataforma (global)",
+		plans: "Planes y límites (global)",
 	},
 	errors: {
 		// Acceso / aislamiento de org
@@ -327,6 +334,7 @@ export default {
 		CANNOT_MODIFY_SELF: "No podés modificarte a vos mismo con permisos de gestión",
 		HIERARCHY_VIOLATION: "No podés gestionar usuarios o roles de jerarquía igual o superior a la tuya",
 		GLOBAL_ONLY_RESOURCE: "Ese recurso sólo puede asignarse en roles globales",
+		SEAT_LIMIT_REACHED: "La organización no tiene asientos disponibles. Sumá asientos para agregar más miembros.",
 		CANNOT_DELETE_PREDEFINED: "Los roles predefinidos no se pueden eliminar",
 		// No encontrado
 		USER_NOT_FOUND: "Usuario no encontrado",

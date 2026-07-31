@@ -5,7 +5,8 @@ import path from "node:path";
 import process from "node:process";
 
 const projectRoot = process.cwd();
-const appDir = path.join(projectRoot, "src/apps/public/00-adc-ui-library");
+const appDirArg = process.argv[2] ?? "src/apps/public/00-adc-ui-library";
+const appDir = path.resolve(projectRoot, appDirArg);
 const configPath = path.join(appDir, "config.json");
 
 const config = JSON.parse(await fs.readFile(configPath, "utf-8"));

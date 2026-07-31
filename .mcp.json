@@ -1,14 +1,30 @@
 {
-	"allowedTools": [],
-	"mcpContextUris": [],
-	"mcpServers": {},
-	"disabledMcpjsonServers": [],
-	"hasTrustDialogAccepted": true,
-	"projectOnboardingSeenCount": 0,
-	"hasClaudeMdExternalIncludesApproved": false,
-	"hasClaudeMdExternalIncludesWarningShown": false,
-	"exampleFiles": ["kernel.ts", "BaseApp.ts", "UIFederationService", "ModuleLoader.ts", "BaseService.ts"],
-	"exampleFilesGeneratedAt": 1764964335508,
-	"hasCompletedProjectOnboarding": true,
-	"lastTotalWebSearchRequests": 0
+  "allowedTools": [],
+  "mcpContextUris": [],
+  "mcpServers": {
+    "sonarqube": {
+      "command": "sonar",
+      "args": [
+        "run",
+        "mcp",
+        "--project",
+        "A-Digital-Cafe_ADC-platform"
+      ]
+    }
+  },
+  "disabledMcpjsonServers": [],
+  "hasTrustDialogAccepted": true,
+  "projectOnboardingSeenCount": 0,
+  "hasClaudeMdExternalIncludesApproved": false,
+  "hasClaudeMdExternalIncludesWarningShown": false,
+  "exampleFiles": [
+    "kernel.ts",
+    "BaseApp.ts",
+    "UIFederationService",
+    "ModuleLoader.ts",
+    "BaseService.ts"
+  ],
+  "exampleFilesGeneratedAt": 1764964335508,
+  "hasCompletedProjectOnboarding": true,
+  "lastTotalWebSearchRequests": 0
 }

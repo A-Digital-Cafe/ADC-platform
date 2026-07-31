@@ -73,7 +73,7 @@
         "@types/archiver": "^6.0.3",
       },
     },
-    "presets/adc-email-backend/services/email-service": {
+    "presets/adc-email-backend/services/EmailService": {
       "name": "@adc-platform/email-service",
       "version": "1.0.0",
       "dependencies": {
@@ -106,6 +106,10 @@
       "name": "@adc-platform/image-editor",
       "version": "1.0.0",
     },
+    "presets/adc-media/apps/media-ui-library": {
+      "name": "@adc-platform/media-ui-library",
+      "version": "1.0.0",
+    },
     "presets/adc-modules-manager/apps/adc-modules-manager": {
       "name": "@adc-platform/adc-modules-manager",
       "version": "1.0.0",
@@ -120,6 +124,14 @@
     },
     "presets/adc-notifications/services/NotificationService": {
       "name": "@adc-platform/notification-service",
+      "version": "1.0.0",
+    },
+    "presets/adc-subscriptions/apps/adc-subscriptions": {
+      "name": "@adc-platform/adc-subscriptions",
+      "version": "1.0.0",
+    },
+    "presets/adc-subscriptions/services/SubscriptionService": {
+      "name": "subscription-service",
       "version": "1.0.0",
     },
     "presets/community-content/services/content-service": {
@@ -302,6 +314,10 @@
       "name": "@adc-platform/ui-federation-service",
       "version": "1.0.0",
     },
+    "src/services/data/PlanService": {
+      "name": "plan-service",
+      "version": "1.0.0",
+    },
     "src/services/data/StorageQuotaService": {
       "name": "storage-quota-service",
       "version": "1.0.0",
@@ -377,6 +393,8 @@
 
     "@adc-platform/adc-status": ["@adc-platform/adc-status@workspace:presets/status/apps/adc-status"],
 
+    "@adc-platform/adc-subscriptions": ["@adc-platform/adc-subscriptions@workspace:presets/adc-subscriptions/apps/adc-subscriptions"],
+
     "@adc-platform/adc-ui-library": ["@adc-platform/adc-ui-library@workspace:src/apps/public/00-adc-ui-library"],
 
     "@adc-platform/community-home": ["@adc-platform/community-home@workspace:src/apps/public/community-home"],
@@ -385,7 +403,7 @@
 
     "@adc-platform/drive-service": ["@adc-platform/drive-service@workspace:presets/adc-drive/services/DriveService"],
 
-    "@adc-platform/email-service": ["@adc-platform/email-service@workspace:presets/adc-email-backend/services/email-service"],
+    "@adc-platform/email-service": ["@adc-platform/email-service@workspace:presets/adc-email-backend/services/EmailService"],
 
     "@adc-platform/execution-manager-service": ["@adc-platform/execution-manager-service@workspace:src/services/core/ExecutionManagerService"],
 
@@ -404,6 +422,8 @@
     "@adc-platform/json-file-crud-service": ["@adc-platform/json-file-crud-service@workspace:src/services/data/json-file-crud"],
 
     "@adc-platform/lang-manager-service": ["@adc-platform/lang-manager-service@workspace:src/services/core/LangManagerService"],
+
+    "@adc-platform/media-ui-library": ["@adc-platform/media-ui-library@workspace:presets/adc-media/apps/media-ui-library"],
 
     "@adc-platform/modules-manager-service": ["@adc-platform/modules-manager-service@workspace:presets/adc-modules-manager/services/ModulesManagerService"],
 
@@ -2137,6 +2157,8 @@
 
     "pino-std-serializers": ["pino-std-serializers@7.0.0", "", {}, "sha512-e906FRY0+tV27iq4juKzSYPbUj2do2X2JX4EzSca1631EB2QJQUqGbDuERal7LCtOpxl6x3+nvo9NPZcmjkiFA=="],
 
+    "plan-service": ["plan-service@workspace:src/services/data/PlanService"],
+
     "postcss": ["postcss@8.5.15", "", { "dependencies": { "nanoid": "^3.3.12", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A=="],
 
     "postcss-loader": ["postcss-loader@8.2.1", "", { "dependencies": { "cosmiconfig": "^9.0.0", "jiti": "^2.5.1", "semver": "^7.6.2" }, "peerDependencies": { "@rspack/core": "0.x || ^1.0.0 || ^2.0.0-0", "postcss": "^7.0.0 || ^8.0.1", "webpack": "^5.0.0" } }, "sha512-k98jtRzthjj3f76MYTs9JTpRqV1RaaMhEU0Lpw9OTmQZQdppg4B30VZ74BojuBHt3F4KyubHJoXCMUeM8Bqeow=="],
@@ -2346,6 +2368,8 @@
     "strnum": ["strnum@2.2.3", "", {}, "sha512-oKx6RUCuHfT3oyVjtnrmn19H1SiCqgJSg+54XqURKp5aCMbrXrhLjRN9TjuwMjiYstZ0MzDrHqkGZ5dFTKd+zg=="],
 
     "style-loader": ["style-loader@4.0.0", "", { "peerDependencies": { "webpack": "^5.27.0" } }, "sha512-1V4WqhhZZgjVAVJyt7TdDPZoPBPNHbekX4fWnCJL1yQukhCeZhJySUL+gL9y6sNdN95uEOS83Y55SqHcP7MzLA=="],
+
+    "subscription-service": ["subscription-service@workspace:presets/adc-subscriptions/services/SubscriptionService"],
 
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 

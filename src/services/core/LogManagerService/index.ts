@@ -5,7 +5,23 @@ import { Kernel } from "../../../kernel.js";
 import { ILogManagerService } from "./types.js";
 import { ModuleTypes } from "../../../utils/registry/ModuleRegistry.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
+import { EnableEndpoints, DisableEndpoints, type EndpointCtx } from "../EndpointManagerService/index.js";
+import { AuthError } from "@common/types/custom-errors/AuthError.ts";
+import { logBuffer, type LogPage, type LogQuery } from "@common/utils/log-buffer.ts";
+import { LogsEndpoints } from "./endpoints/logs.ts";
 
+/**
+ * Dueño de los logs de la plataforma, en sus dos formas:
+ *
+ * - **Archivos en disco** (`temp/logs/**`, que escriben los dev-servers de UI): rotación
+ *   y limpieza por antigüedad y por cantidad.
+ * - **Buffer en memoria del proceso**: las últimas N líneas de todos los módulos, que
+ *   sirve la consulta de `GET /api/logs`.
+ *
+ * El buffer NO vive acá sino en `@common/utils/log-buffer.ts`: tiene que existir desde el `import`
+ * para capturar el arranque del kernel y de los servicios `kernelMode`. Este servicio es el dueño
+ * de la **lectura**; el único que escribe es `ConsoleLogger`.
+ */
 export default class LogManagerService extends BaseService implements ILogManagerService {
 	public readonly name = "LogManagerService";
 	private cleanupInterval: NodeJS.Timeout | null = null;
@@ -15,8 +31,10 @@ export default class LogManagerService extends BaseService implements ILogManage
 	}
 
 	@OnlyKernel()
+	@EnableEndpoints({ managers: () => [LogsEndpoints] })
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
+		LogsEndpoints.init(this);
 
 		// Ensure logs directory exists
 		const logsDir = this.getLogsDir();
@@ -41,6 +59,7 @@ export default class LogManagerService extends BaseService implements ILogManage
 	}
 
 	@OnlyKernel()
+	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		if (this.cleanupInterval) {
@@ -135,41 +154,20 @@ export default class LogManagerService extends BaseService implements ILogManage
 	}
 
 	/**
-	 * Query logs for a specific app
+	 * Consulta del buffer en memoria. Envoltorio fino a propósito: la redacción de
+	 * secretos ya ocurrió AL ESCRIBIR (`ConsoleLogger`), así que acá no queda nada
+	 * que sanear, sólo filtrar y paginar.
 	 */
-	async queryLogs(title: string, moduleType: ModuleTypes, date?: string): Promise<string> {
-		const logsDir = this.getLogsDir();
-		const moduleLogDir = path.join(logsDir, moduleType, title);
+	queryBuffer(filter: LogQuery): LogPage {
+		return logBuffer.query(filter);
+	}
 
-		try {
-			// Check if directory exists
-			try {
-				await fs.access(moduleLogDir);
-			} catch {
-				// Check for flat file
-				const flatFile = path.join(logsDir, `${title}.log`);
-				try {
-					return await fs.readFile(flatFile, "utf-8");
-				} catch {
-					return `No logs found for ${title}`;
-				}
-			}
-
-			// If directory, read files
-			const files = await fs.readdir(moduleLogDir);
-			let content = "";
-
-			for (const file of files) {
-				if (date && !file.includes(date)) continue;
-
-				content += `--- Log File: ${file} ---\n`;
-				content += await fs.readFile(path.join(moduleLogDir, file), "utf-8");
-				content += "\n";
-			}
-
-			return content || "No matching logs found.";
-		} catch (error: any) {
-			return `Error querying logs: ${error.message}`;
-		}
+	/**
+	 * Los logs son de la plataforma, no de una organización: en contexto de org no se
+	 * sirven, aunque el token traiga el permiso. Espejo de `assertGlobalActor` de
+	 * `PlanService`; el permiso en sí lo valida el decorador del endpoint.
+	 */
+	assertGlobalContext(ctx: Pick<EndpointCtx<never, unknown>, "user">): void {
+		if (ctx.user?.orgId) throw new AuthError(403, "FORBIDDEN", "Los logs de la plataforma se consultan en contexto global");
 	}
 }

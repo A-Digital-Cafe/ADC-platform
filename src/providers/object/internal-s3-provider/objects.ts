@@ -7,7 +7,7 @@ import {
 	type PutObjectCommandInput,
 } from "@aws-sdk/client-s3";
 import type { Readable } from "node:stream";
-import type { GetObjectStreamResult, HeadObjectResult, PutObjectInput, PutObjectResult } from "./types.js";
+import type { GetObjectStreamInput, GetObjectStreamResult, HeadObjectResult, PutObjectInput, PutObjectResult } from "./types.js";
 
 export async function putObject(client: S3Client, input: PutObjectInput, bucket: string): Promise<PutObjectResult> {
 	const cmd: PutObjectCommandInput = {
@@ -22,8 +22,15 @@ export async function putObject(client: S3Client, input: PutObjectInput, bucket:
 	return { bucket, key: input.key, etag: res.ETag ?? null };
 }
 
-export async function getObjectStream(client: S3Client, input: { key: string }, bucket: string): Promise<GetObjectStreamResult> {
-	const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: input.key }));
+export async function getObjectStream(client: S3Client, input: GetObjectStreamInput, bucket: string): Promise<GetObjectStreamResult> {
+	const res = await client.send(
+		new GetObjectCommand({
+			Bucket: bucket,
+			Key: input.key,
+			// S3/MinIO corta el objeto por su cuenta: el stream ya viene con el tramo exacto.
+			Range: input.range ? `bytes=${input.range.start}-${input.range.end}` : undefined,
+		})
+	);
 	return {
 		stream: res.Body as Readable,
 		contentType: res.ContentType,

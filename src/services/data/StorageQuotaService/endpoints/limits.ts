@@ -57,14 +57,23 @@ export class LimitsEndpoints {
 		permissions: [P.STORAGE.LIMITS.READ],
 		options: {
 			tag: "StorageQuotaService/Admin",
-			summary: "Lista overrides de límite",
-			description: "En contexto organización, el filtro se fuerza a los overrides de esa organización.",
-			schema: { response: { 200: S.OverridesListResponse } },
+			summary: "Lista overrides de límite (paginada)",
+			description:
+				"En contexto organización, el filtro se fuerza a los overrides de esa organización. " +
+				"El listado está capado en el motor de planes: `total` es el conteo real del filtro, no el de la página.",
+			schema: { querystring: S.OverridesQuery, response: { 200: S.OverridesListResponse } },
 		},
 	})
 	static async list(ctx: EndpointCtx) {
-		const overrides = await LimitsEndpoints.service.limits.listOverrides(LimitsEndpoints.#actor(ctx));
-		return { overrides: overrides.map((o) => LimitsEndpoints.service.toOverrideDto(o)) };
+		const query = ctx.query ?? {};
+		const toNumber = (raw: string | undefined) => (raw !== undefined && Number.isFinite(Number(raw)) ? Number(raw) : undefined);
+		const page = await LimitsEndpoints.service.limits.listOverrides(LimitsEndpoints.#actor(ctx), {
+			subjectType: query.subjectType as QuotaSubjectType | undefined,
+			subjectId: query.subjectId,
+			limit: toNumber(query.limit),
+			offset: toNumber(query.offset),
+		});
+		return { overrides: page.items.map((o) => LimitsEndpoints.service.toOverrideDto(o)), total: page.total };
 	}
 
 	@RegisterEndpoint({

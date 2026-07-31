@@ -4,6 +4,7 @@ import { P } from "@common/types/Permissions.ts";
 import type IdentityManagerService from "../index.js";
 import * as OS from "./schemas/organizations.js";
 import { SuccessResponse, JobAcceptedResponse } from "./schemas/common.js";
+import { checkOrgSlug as checkSlugPolicy } from "@common/utils/name-policy.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
 
@@ -49,7 +50,7 @@ export class OrgEndpoints {
 	/**
 	 * Comprueba disponibilidad de un slug de organización.
 	 * Se declara antes de `:orgId` para que matchee como ruta específica.
-	 * `default` está reservado para contexto global.
+	 * La lista de reservados sale de la política de nombres (`checkOrgSlug`).
 	 */
 	@RegisterEndpoint({
 		method: "GET",
@@ -58,15 +59,18 @@ export class OrgEndpoints {
 		options: {
 			tag: "IdentityManagerService/Organizations",
 			summary: "Comprueba disponibilidad de un slug",
-			description: "`default` está reservado. El slug debe cumplir `^[a-z0-9-]+$`.",
+			description: "Los centinelas de la plataforma y los nombres reservados no están disponibles. El slug debe cumplir `^[a-z0-9-]+$`.",
 			schema: { params: OS.OrgSlugParams, response: { 200: OS.CheckSlugResponse } },
 		},
 	})
 	static async checkOrgSlug(ctx: EndpointCtx<{ slug: string }>) {
 		requireGlobalAccess(ctx);
 		const normalized = ctx.params.slug.toLowerCase().trim();
-		if (normalized === "default" || !/^[a-z0-9-]+$/.test(normalized)) {
-			return { available: false, reserved: normalized === "default" };
+		if (!/^[a-z0-9-]+$/.test(normalized)) {
+			return { available: false, reserved: false };
+		}
+		if (checkSlugPolicy(normalized)) {
+			return { available: false, reserved: true };
 		}
 		const existing = await OrgEndpoints.identity.organizations.getOrganization(normalized, ctx.token!);
 		return { available: !existing };

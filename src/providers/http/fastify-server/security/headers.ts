@@ -24,12 +24,16 @@ function getCspHeaderName(): string {
 }
 
 function getDefaultCsp(): string {
+	// En dev las apps viven en puertos distintos y se acceden tanto por `localhost`
+	// como por la IP de LAN (probar desde el móvil). La gramática CSP no admite
+	// comodines en hosts IP, así que fuera de producción se abren los esquemas
+	// `http:`/`ws:` completos en vez de enumerar orígenes.
 	const connectSrc = isRealProduction()
 		? "connect-src 'self' https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com"
-		: "connect-src 'self' http://localhost:* ws://localhost:* https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
+		: "connect-src 'self' http: ws: https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
 	const scriptSrc = isRealProduction()
 		? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh https://*.adigitalcafe.com"
-		: "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh http://localhost:* https://*.adigitalcafe.com";
+		: "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh http: https://*.adigitalcafe.com";
 	return [
 		"default-src 'self'",
 		"base-uri 'self'",

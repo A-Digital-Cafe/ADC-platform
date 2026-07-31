@@ -7,7 +7,12 @@ import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permission
 import { CRUDXAction } from "@common/types/Actions.ts";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
 import { escapeRegex } from "@common/utils/escape.ts";
+import { buildUpdateSet } from "@common/utils/mongo-update.ts";
+import { USER_UPDATABLE_FIELDS } from "../domain/user.js";
 import { type AccountTier, type TierGrant, isTierGrantActive } from "@common/types/tiers.ts";
+import { UNLIMITED } from "@common/types/plans/index.ts";
+import { IdentityError } from "@common/types/custom-errors/IdentityError.ts";
+import type { SeatGate } from "@common/types/plans/consumers.js";
 
 export type UserAuthenticationResult = Partial<User> | { id: string; isActive: boolean } | { id: string; wrongPassword: boolean } | null;
 
@@ -23,12 +28,16 @@ const MAX_LIST_LIMIT = 500;
 export class UserManager {
 	readonly #permissionChecker: PermissionChecker;
 
+	readonly #seatGate: SeatGate;
+
 	constructor(
 		private readonly userModel: Model<any>,
 		private readonly logger: ILogger,
-		getAuthVerifier: AuthVerifierGetter = () => null
+		getAuthVerifier: AuthVerifierGetter = () => null,
+		seatGate: SeatGate = async () => null
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "UserManager", RESOURCE_NAME);
+		this.#seatGate = seatGate;
 	}
 
 	/**
@@ -347,8 +356,8 @@ export class UserManager {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
 
 		try {
-			updates.updatedAt = new Date();
-			const updated = await this.userModel.findOneAndUpdate({ id: userId }, updates, { new: true });
+			const update = buildUpdateSet(updates, USER_UPDATABLE_FIELDS, { updatedAt: new Date() });
+			const updated = await this.userModel.findOneAndUpdate({ id: userId }, update, { new: true });
 			if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
 			return updated.toObject?.() || updated;
 		} catch (error) {
@@ -741,11 +750,38 @@ export class UserManager {
 	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
+	 * Tope de asientos: una organización no puede tener más miembros que asientos
+	 * pagos. Es el gate que evita inflar el pool de recursos metiendo gente
+	 * (los límites del eje org escalan con `paidSeats`).
+	 *
+	 * **Fail-open**: si `PlanService` no está cargado, el gate devuelve `null` y el
+	 * alta procede. Nunca se bloquea una operación de identidad por un servicio
+	 * de planes ausente.
+	 *
+	 * Re-agregar a alguien que ya es miembro no consume asiento (es idempotente).
+	 */
+	async #assertSeatAvailable(userId: string, orgId: string): Promise<void> {
+		const seats = await this.#seatGate(orgId);
+		if (!seats || seats.paidSeats === UNLIMITED) return;
+
+		const existing = await this.userModel.findOne({ id: userId, "orgMemberships.orgId": orgId }, { id: 1, _id: 0 }).lean();
+		if (existing) return;
+
+		if (seats.activeSeats >= seats.paidSeats) {
+			throw new IdentityError(403, "SEAT_LIMIT_REACHED", "La organización no tiene asientos disponibles", {
+				paidSeats: seats.paidSeats,
+				activeSeats: seats.activeSeats,
+			});
+		}
+	}
+
+	/**
 	 * Agrega membresía a una organización
 	 * @param token Token de autenticación (requerido para verificar permisos)
 	 */
 	async addOrgMembership(userId: string, orgId: string, roleIds: string[] = [], token?: string): Promise<User> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.WRITE, IdentityScopes.USERS | IdentityScopes.ORGANIZATIONS, orgId);
+		await this.#assertSeatAvailable(userId, orgId);
 
 		try {
 			const updated = await this.userModel.findOneAndUpdate(

@@ -135,6 +135,12 @@ Un servicio `A` puede invocar un método de un servicio `B` pidiéndoselo al `En
 
 Esto ofrece la **seguridad** de una llamada a un endpoint con la **velocidad** de una llamada de función local.
 
-### 6. Abstracción del Servidor HTTP
+### 6. Métricas por Endpoint
+
+El wrapper acumula `count`, latencia, bytes y errores por clave `"<METHOD> <url>"` en memoria (hot path sin I/O) y un flush periódico las vuelca al hash diario de Redis `epm:<YYYY-MM-DD>`. Se leen con `getEndpointMetrics(day?)` (hoy = memoria, otro día = Redis) y se limpian con `resetEndpointMetrics(key?)`; ambos implementan `IEndpointMetricsReader` de `@common/types/endpoints`. Se configura en `private.metrics` (`ENDPOINT_METRICS_ENABLED`, `_FLUSH_INTERVAL_MS`, `_RETENTION_DAYS`).
+
+> `GET /api/jobs/:jobId` y `GET /api/csrf-token` se registran directo contra el provider HTTP, **sin** el wrapper, así que quedan fuera de las métricas (y del rate limit y de la auditoría de authz).
+
+### 7. Abstracción del Servidor HTTP
 
 El `EndpointManagerService` no implementa un servidor HTTP por sí mismo. Delega esta tarea en un **Provider** (como `fastify-server`), lo que le permite centrarse en la lógica de gestión y ser independiente de la tecnología de servidor web subyacente.

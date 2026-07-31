@@ -5,6 +5,7 @@ import type { RatingStats } from "@common/ADC/types/community.js";
 import type { Block } from "@common/ADC/types/learning.js";
 import type { Comment, CommentDraft, CommentLabel, CommentsPage } from "@common/types/comments/Comment.js";
 import type { AttachmentDTO } from "@common/types/attachments/Attachment.js";
+import { createClientId } from "@common/utils/client-crypto.ts";
 
 export type { Comment, CommentDraft, CommentsPage, RatingStats };
 export { buildCommentsTree, type CommentTreeNode } from "@ui-library/utils/comments-tree";
@@ -81,7 +82,7 @@ export const socialApi = {
 		api
 			.post<{ success: boolean }>(`/articles/${slug}/rating`, {
 				body: { value },
-				idempotencyKey: crypto.randomUUID(),
+				idempotencyKey: createClientId(),
 			})
 			.then((r) => r.data?.success === true),
 };

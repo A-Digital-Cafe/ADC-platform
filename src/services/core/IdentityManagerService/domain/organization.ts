@@ -24,3 +24,6 @@ export const organizationSchema = new Schema<Organization>({
 organizationSchema.index({ status: 1, createdAt: -1 });
 organizationSchema.index({ approved: 1, createdAt: -1 });
 organizationSchema.index({ slug: 1 });
+
+/** Campos escribibles por `OrganizationManager.updateOrganization`. `tier` lo escribe SubscriptionService; `orgId` es la clave de búsqueda. */
+export const ORG_UPDATABLE_FIELDS = ["slug", "region", "status", "tier", "approved", "permissions", "metadata"] as const;

@@ -50,7 +50,9 @@ export async function runRspackWatcher(
 		}
 	});
 
-	context.logger?.logOk(`${module.uiConfig.name} [${namespace}] ${successLabel} iniciado. Logs: temp/logs/${logName}.log`);
+	context.logger?.logOk(
+		`${module.uiConfig.name} [${namespace}] ${successLabel} iniciado. Logs: ${path.relative(process.cwd(), logFile)}`
+	);
 
 	// Dar tiempo al servidor/build para arrancar
 	await new Promise((resolve) => setTimeout(resolve, 5000));

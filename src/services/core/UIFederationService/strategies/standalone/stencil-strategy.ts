@@ -5,7 +5,7 @@ import { BaseCLIStrategy } from "../base-strategy.js";
 import type { IBuildContext, IBuildResult } from "../types.js";
 import { getBinPath } from "../../utils/fs/path-resolver.js";
 import { runCommand } from "../../utils/fs/file-operations.js";
-import { generateAutoInit, regenerateReactJSX } from "../shared/stencil-output.js";
+import { generateAutoInit, regenerateReactJSX, cleanupStrayEmits } from "../shared/stencil-output.js";
 import { writeStencilConfig } from "./stencil-config.js";
 
 const BUILD_WAIT_MAX_MS = 30000;
@@ -58,7 +58,7 @@ export class StencilStrategy extends BaseCLIStrategy {
 			const output = data.toString();
 			if (output.includes("build finished")) {
 				context.logger?.logDebug(`Stencil build actualizado para ${module.uiConfig.name} [${namespace}]`);
-				Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger)]).catch((err) => {
+				Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger), cleanupStrayEmits(context.logger)]).catch((err) => {
 					context.logger?.logDebug(`Error en post-build: ${(err as Error).message}`);
 				});
 			}
@@ -80,7 +80,7 @@ export class StencilStrategy extends BaseCLIStrategy {
 		});
 
 		await this.waitForInitialBuild(outputDir, module.uiConfig.name, context.logger);
-		await Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger)]);
+		await Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger), cleanupStrayEmits(context.logger)]);
 
 		return { watcher, outputPath: outputDir };
 	}
@@ -97,7 +97,7 @@ export class StencilStrategy extends BaseCLIStrategy {
 		await runCommand(stencilBin, ["build"], module.appDir, context.logger);
 		module.outputPath = outputDir;
 
-		await Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger)]);
+		await Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger), cleanupStrayEmits(context.logger)]);
 		context.logger?.logOk(`Build Stencil completado para ${module.uiConfig.name}`);
 
 		return { outputPath: outputDir };

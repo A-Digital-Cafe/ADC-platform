@@ -60,7 +60,7 @@ export function resolvePublicPath(opts: {
 }
 
 /** Construye el bloque `devServer` (con proxy a i18n/sw del kernel). */
-export function buildDevServerBlock(devPort: number | undefined, hotReload: boolean, staticDirs: string): string {
+export function buildDevServerBlock(devPort: number | undefined, hotReload: boolean, staticDirs: string, namespace: string): string {
 	return `
     devServer: {
         host: '0.0.0.0',
@@ -76,7 +76,7 @@ export function buildDevServerBlock(devPort: number | undefined, hotReload: bool
         },
         proxy: [
             {
-                context: ['/adc-sw.js', '/adc-i18n.js', '/api/i18n'],
+                context: ['/${namespace}/adc-sw.js', '/${namespace}/adc-i18n.js', '/api/i18n'],
                 target: 'http://localhost:3000',
                 changeOrigin: true,
             },

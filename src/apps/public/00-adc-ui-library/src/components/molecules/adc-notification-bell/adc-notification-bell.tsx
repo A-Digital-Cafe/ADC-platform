@@ -8,7 +8,9 @@
  *
  * Degradación:
  * - Backend caído/deshabilitado (`NotificationService`): la sonda a
- *   `/unread-count` falla y la campana **no se muestra**.
+ *   `/unread-count` falla (404 de ruta inexistente / 503) y la campana **no se
+ *   muestra**. Ojo: sin notificaciones sin leer la sonda responde 204, que es
+ *   éxito — la disponibilidad se decide por `success`, no por el body.
  * - App `adc-notifications` caída (su `remoteEntry.js` no carga): la campana se
  *   muestra pero al abrirla avisa con un **toast** de no disponibilidad.
  *
@@ -61,12 +63,13 @@ export class AdcNotificationBell {
 		if (!session.authenticated) return;
 
 		// Sondea el backend: si la ruta no existe (preset ausente o servicio
-		// deshabilitado vía modules-manager) la campana no aparece.
+		// deshabilitado vía modules-manager) la campana no aparece. Un 204 (nada
+		// sin leer) es respuesta válida: el servicio está vivo y el badge va en 0.
 		const res = await api.get<{ unread: number }>("/unread-count", { silent: true });
-		if (!res.success || !res.data) return;
+		if (!res.success) return;
 
 		this.available = true;
-		this.unread = res.data.unread ?? 0;
+		this.unread = res.data?.unread ?? 0;
 		this.#setupSync();
 		this.#connectStream();
 	}

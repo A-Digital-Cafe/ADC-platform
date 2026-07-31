@@ -92,9 +92,10 @@ export class RoleEndpoints {
 		url: "/api/identity/roles",
 		permissions: [P.IDENTITY.ROLES.WRITE],
 		options: {
+			successStatus: 201,
 			tag: "IdentityManagerService/Roles",
 			summary: "Crea un rol",
-			schema: { body: RS.CreateRoleBody, response: { 200: RS.RoleResponse } },
+			schema: { body: RS.CreateRoleBody, response: { 201: RS.RoleResponse } },
 		},
 	})
 	static async createRole(

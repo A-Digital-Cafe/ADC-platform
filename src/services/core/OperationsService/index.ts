@@ -75,18 +75,20 @@ export default class OperationsService extends BaseService implements IOperation
 	 * Idempotency guard for HTTP mutations.
 	 * Blocks duplicate calls with the same `cmd+id` within a 2-minute window.
 	 * Deletes the key on failure so the client can retry with the same key.
+	 *
+	 * La reserva es un `SET NX` atómico (ver `RedisProvider.setIfAbsent`): con `exists()` +
+	 * `setex()` dos requests en vuelo verían la clave libre y ejecutarían las dos.
 	 */
 	async httpCheck<T>(cmd: string, id: string | number, method: () => Promise<T>): Promise<T> {
 		const redis = this.#redis!;
 		const key = `http:${cmd}:${id}`;
 
-		if (await redis.exists(key)) {
+		if (!(await redis.setIfAbsent(key, "running", HTTP_CHECK_TTL_SECONDS))) {
 			throw new IdempotencyError(409, "IDEMPOTENCY_RUNNING", "Operation already in progress or recently completed", {
 				retryAfterSeconds: HTTP_CHECK_TTL_SECONDS,
 			});
 		}
 
-		await redis.setex(key, HTTP_CHECK_TTL_SECONDS, "running");
 		try {
 			const result = await method();
 			await redis.setex(key, HTTP_CHECK_TTL_SECONDS, "completed");

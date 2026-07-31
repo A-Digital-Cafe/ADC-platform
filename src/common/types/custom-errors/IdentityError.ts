@@ -14,6 +14,8 @@ type IdentityErrorTypes =
 	| "CANNOT_MODIFY_SELF"
 	| "HIERARCHY_VIOLATION"
 	| "GLOBAL_ONLY_RESOURCE"
+	// Planes / asientos
+	| "SEAT_LIMIT_REACHED"
 	// Not found
 	| "USER_NOT_FOUND"
 	| "ROLE_NOT_FOUND"

@@ -1,13 +1,84 @@
 /**
  * Contratos compartidos del editor de imágenes (`adc-image-editor`) entre la
- * app UI y `ImageEditorService`. Solo tipos/constantes serializables; la lógica
- * de límites vive en `../tiers/image-editor.ts`.
+ * app UI y `ImageEditorService`.
+ *
+ * Contiene tipos, constantes serializables y el **piso `free`**: es lo que ve un
+ * usuario anónimo y el fallback sin motor de planes, así que es público por
+ * definición. Los límites de los tiers pagos NO viven en el código (ni llegan al
+ * bundle del front): la UI los recibe por `GET /api/image-editor/me/limits` y el
+ * servicio los resuelve contra `PlanService`.
  */
 
 import type { AccountTier } from "../tiers.ts";
-import type { ExportFormat, ImageEditorLimits, ImageEditorMetric } from "../tiers/image-editor.ts";
+import { UNLIMITED } from "../plans/catalog.ts";
 
-export type { ExportFormat, ImageEditorMetric } from "../tiers/image-editor.ts";
+/**
+ * Sentinela JSON-safe para un límite sin tope y sus helpers. Viven en
+ * `@common/types/plans/catalog.ts` (son transversales a todas las features, no
+ * propios del editor); se re-exportan acá para no romper a los consumidores.
+ */
+export { UNLIMITED, isUnlimited, remaining } from "../plans/catalog.ts";
+
+/** Familias de presets de blur disponibles según el tier. */
+export type BlurTier = "basic" | "full" | "advanced";
+
+/** Amplitud de la biblioteca de assets/stickers según el tier. */
+export type AssetLibraryTier = "basic" | "full";
+
+/** Formatos de exportación soportados por el editor. */
+export type ExportFormat = "jpg" | "png" | "webp";
+
+/** Métricas de uso medidas por ventana (día/mes) y enforce-adas server-side. */
+export type ImageEditorMetric = "export" | "bgRemoval" | "stickerGen";
+
+/** Límites concretos aplicables a un usuario según su tier. */
+export interface ImageEditorLimits {
+	/** Exportaciones por mes (`UNLIMITED` = sin tope). */
+	exportsPerMonth: number;
+	/** Exportaciones por día (`UNLIMITED` = sin tope). */
+	exportsPerDay: number;
+	/** Lado más largo máximo del export en px (720p=1280, 1080p=1920, 8K=7680). */
+	maxExportLongEdge: number;
+	/** Formatos permitidos (JPG no preserva transparencia). */
+	allowedFormats: readonly ExportFormat[];
+	/** Eliminaciones de fondo por mes (`UNLIMITED` = sin tope). */
+	bgRemovalPerMonth: number;
+	/** Eliminaciones de fondo por día (`UNLIMITED` = sin tope). */
+	bgRemovalPerDay: number;
+	/** Generaciones automáticas de sticker por mes. */
+	stickerGenPerMonth: number;
+	/** Capas máximas por proyecto (`UNLIMITED` = sin tope). */
+	maxLayers: number;
+	/** Profundidad del historial de undo/redo. */
+	undoDepth: number;
+	/** Familia de presets de blur/backdrop disponible. */
+	blur: BlurTier;
+	/** Amplitud de la biblioteca de assets. */
+	assets: AssetLibraryTier;
+}
+
+/**
+ * Piso del plan gratuito: la experiencia anónima del editor y el fallback si el
+ * motor de planes no responde.
+ */
+export const IMAGE_EDITOR_FREE_LIMITS: ImageEditorLimits = {
+	exportsPerMonth: 30,
+	exportsPerDay: 1,
+	maxExportLongEdge: 1280, // 720p
+	allowedFormats: ["jpg"], // sin transparencia en el plan gratuito
+	bgRemovalPerMonth: 10,
+	bgRemovalPerDay: UNLIMITED,
+	stickerGenPerMonth: 10,
+	maxLayers: 5,
+	undoDepth: 2,
+	blur: "basic",
+	assets: "basic",
+};
+
+/** `true` si exportar al `longEdge`/`format` pedidos está permitido por los límites dados. */
+export function canExportAt(limits: ImageEditorLimits, longEdge: number, format: ExportFormat): boolean {
+	return longEdge <= limits.maxExportLongEdge && limits.allowedFormats.includes(format);
+}
 
 /**
  * Mime del archivo de proyecto del editor, guardado en el Drive del usuario.

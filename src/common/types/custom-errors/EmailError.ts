@@ -18,6 +18,9 @@ type EmailErrorTypes =
 	| "ATTACHMENT_TOO_LARGE"
 	| "TOO_MANY_RECIPIENTS"
 	| "TOO_MANY_SCHEDULED"
+	// Política de entrega
+	| "EXTERNAL_SEND_DISABLED"
+	| "RECIPIENT_NOT_FOUND"
 	// Auth
 	| "INVALID_WEBHOOK_SECRET"
 	// Infra

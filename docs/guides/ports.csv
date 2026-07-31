@@ -3,6 +3,8 @@ port,app,notes
 3001,test/users-management,
 3002,test/home,sirve bajo sub-path (404 en /)
 3003,test/config,
+3004,test/web-layout,
+3005,test/web-layout-mobile,
 3006,test/home-mobile,
 3010,public/community-home,
 3012,public/adc-auth,
@@ -20,3 +22,4 @@ port,app,notes
 3036,public/adc-notifications,
 3038,public/adc-modules-manager,
 3040,public/adc-image-editor-mobile,
+3042,public/adc-subscriptions,preset adc-subscriptions (privado)

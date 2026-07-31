@@ -60,6 +60,17 @@ export const OverrideDto = Type.Object({
 
 export const OverridesListResponse = Type.Object({
 	overrides: Type.Array(OverrideDto),
+	total: Type.Integer({ description: "Conteo real del filtro, no de la página" }),
+});
+
+/** Los query params numéricos llegan como string: el validador no coerciona tipos. */
+export const OverridesQuery = Type.Object({
+	subjectType: Type.Optional(
+		Type.Union([Type.Literal("user"), Type.Literal("org"), Type.Literal("role"), Type.Literal("org-members-default")])
+	),
+	subjectId: Type.Optional(Type.String({ maxLength: 80 })),
+	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (clampeado en el servidor)" })),
+	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$` })),
 });
 
 export const UpsertOverrideBody = Type.Object({

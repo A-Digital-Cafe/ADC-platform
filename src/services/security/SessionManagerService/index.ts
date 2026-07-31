@@ -81,8 +81,13 @@ export default class SessionManagerService extends BaseService implements ISessi
 		return this.config.private?.defaultRedirectUrl || (IS_DEV ? "http://localhost:3000" : "https://adigitalcafe.com");
 	}
 
+	/**
+	 * Dominio de las cookies de sesión. En dev se devuelve "" a propósito: sin atributo `Domain` la
+	 * cookie queda *host-only* y vale tanto en `localhost` como entrando por la IP de LAN (probar
+	 * desde el móvil), mientras que con `Domain=localhost` el navegador descarta el Set-Cookie.
+	 */
 	get #cookieDomain(): string {
-		return this.config.private?.cookieDomain || (IS_DEV ? "localhost" : ".adigitalcafe.com");
+		return this.config.private?.cookieDomain || (IS_DEV ? "" : ".adigitalcafe.com");
 	}
 
 	/** Configuración custom interpolada desde config.json + .env */

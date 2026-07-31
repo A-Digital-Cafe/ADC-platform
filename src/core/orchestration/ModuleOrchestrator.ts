@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { safeParseJson } from "@common/utils/json-schema.ts";
+import { isInsideBase } from "@common/utils/path-containment.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry, ModuleType } from "../../utils/registry/ModuleRegistry.js";
@@ -10,7 +11,16 @@ import type { DependencyReloader } from "../modules/DependencyReloader.js";
 import type { DisabledEntry, DisabledRegistry } from "./DisabledRegistry.js";
 import type { ModuleDetector, ModuleDetectionEvent } from "../runtime/ModuleDetector.js";
 import { DependencyGraph } from "./DependencyGraph.js";
-import type { DisableOptions, FriendlyGroupState, ModuleSnapshotItem, OrchestratorLayer, PersistedStatusItem, ReloadTarget } from "./types.js";
+import type {
+	DisableOptions,
+	FriendlyGroupState,
+	ModuleSnapshotItem,
+	OrchestratorLayer,
+	PersistedStatusItem,
+	ReloadReport,
+	ReloadTarget,
+	TargetModules,
+} from "./types.js";
 import type { Capability } from "@common/security/Capability.ts";
 
 /**
@@ -304,20 +314,30 @@ export class ModuleOrchestrator {
 
 	// ── Recarga desde disco (git pull) ───────────────────────────────────────────
 
-	async reloadFromDisk(target: ReloadTarget): Promise<void> {
+	async reloadFromDisk(target: ReloadTarget): Promise<ReloadReport> {
 		// Los configs pudieron cambiar tras el git pull: reconstruir el grafo.
 		this.#invalidateGraph();
+		const report: ReloadReport = { reloaded: [], failed: [] };
+		const attempt = async (label: string, fn: () => Promise<unknown>): Promise<void> => {
+			try {
+				await fn();
+				report.reloaded.push(label);
+			} catch (e) {
+				report.failed.push({ name: label, error: (e as Error)?.message ?? String(e) });
+				this.#d.logger.logError(`[orchestrator] reload ${label}: ${e}`);
+			}
+		};
 		if ("type" in target) {
-			await this.#reloadModuleOrApp(target.type, target.name);
-			return;
+			await attempt(`${target.type}:${target.name}`, () => this.#reloadModuleOrApp(target.type, target.name));
+			return report;
 		}
 		const prefix = "preset" in target ? path.join(this.#d.presetsPath, target.preset) : path.resolve(process.cwd(), "src");
 		this.#d.logger.logInfo(`[orchestrator] reloadFromDisk: ${"preset" in target ? `preset ${target.preset}` : "core"} (${prefix})`);
 
 		for (const type of ["provider", "utility", "service"] as ModuleType[]) {
-			for (const moduleName of this.#moduleNamesUnderPath(type, prefix)) {
+			for (const moduleName of await this.#moduleNamesUnderPath(type, prefix)) {
 				if (this.#d.disabledRegistry.has(type, moduleName)) continue;
-				await this.#d.dependencyReloader.reloadByName(type, moduleName).catch((e) => this.#d.logger.logError(`reload ${type} ${moduleName}: ${e}`));
+				await attempt(`${type}:${moduleName}`, () => this.#d.dependencyReloader.reloadByName(type, moduleName));
 			}
 		}
 		// Recargar apps cuya fuente vive bajo el prefijo y no estén deshabilitadas.
@@ -325,13 +345,48 @@ export class ModuleOrchestrator {
 		for (const instanceName of this.#d.appLoader.instanceNames) {
 			if (this.#d.disabledRegistry.hasApp(instanceName)) continue;
 			const filePath = this.#d.appLoader.findFilePathByInstance(instanceName);
-			if (!filePath?.startsWith(prefix)) continue;
+			if (!filePath || !isInsideBase(prefix, filePath)) continue;
 			if (await this.#isLibraryApp(instanceName)) {
-				await this.rebuildLibrary(instanceName).catch((e) => this.#d.logger.logError(`rebuild library ${instanceName}: ${e}`));
+				await attempt(`app:${instanceName}`, async () => {
+					const res = await this.rebuildLibrary(instanceName);
+					if (!res.rebuilt) throw new Error(res.error ?? "rebuild falló");
+				});
 			} else {
-				await this.#d.appLoader.reloadAppByInstanceName(instanceName).catch((e) => this.#d.logger.logError(`reload app ${instanceName}: ${e}`));
+				await attempt(`app:${instanceName}`, () => this.#d.appLoader.reloadAppByInstanceName(instanceName));
 			}
 		}
+		return report;
+	}
+
+	/**
+	 * Módulos cuya fuente vive bajo un target de git (core o un preset): lo que una
+	 * recarga tras `git pull` tocaría. Sólo lectura (para previews de deploy).
+	 */
+	async modulesUnderTarget(target: { preset: string } | { core: true }): Promise<TargetModules> {
+		const prefix = "preset" in target ? path.join(this.#d.presetsPath, target.preset) : path.resolve(process.cwd(), "src");
+		const out: TargetModules = {
+			services: await this.#moduleNamesUnderPath("service", prefix),
+			providers: await this.#moduleNamesUnderPath("provider", prefix),
+			utilities: await this.#moduleNamesUnderPath("utility", prefix),
+			apps: [],
+			libraries: [],
+		};
+		for (const instanceName of this.#d.appLoader.instanceNames) {
+			const filePath = this.#d.appLoader.findFilePathByInstance(instanceName);
+			if (!filePath || !isInsideBase(prefix, filePath)) continue;
+			if (await this.#isLibraryApp(instanceName)) out.libraries.push(instanceName);
+			else out.apps.push(instanceName);
+		}
+		return out;
+	}
+
+	/**
+	 * Plan de corte en seco (dry-run): el módulo + todos los dependientes que caerían
+	 * en cascada, en orden de corte (`type:name`, dependientes primero). No muta nada.
+	 */
+	async previewDisable(type: OrchestratorLayer, name: string): Promise<string[]> {
+		const plan = await this.#buildStopPlan(type, name);
+		return plan.map((n) => `${n.type}:${n.name}`);
 	}
 
 	// ── Snapshot para la UI ──────────────────────────────────────────────────────
@@ -355,6 +410,7 @@ export class ModuleOrchestrator {
 					messageKey: entry?.messageKey,
 					cascadeRoot: entry?.cascadeRoot,
 					uiName: graph.uiNameOf(type, name),
+					pendingPreset: entry?.pending ? this.#presetOf(entry.filePath) : undefined,
 					dependents: await this.#collectDirectDependents(type, name),
 				});
 			}
@@ -374,6 +430,7 @@ export class ModuleOrchestrator {
 				messageKey: entry?.messageKey,
 				cascadeRoot: entry?.cascadeRoot,
 				uiName: graph.uiNameOf("app", name.split(":")[0]),
+				pendingPreset: entry?.pending ? this.#presetOf(entry.filePath) : undefined,
 				dependents: { apps: [], services: [] },
 			});
 		}
@@ -383,6 +440,14 @@ export class ModuleOrchestrator {
 	#stateOf(entry: DisabledEntry | undefined): ModuleSnapshotItem["state"] {
 		if (!entry) return "running";
 		return entry.pending ? "pending" : "disabled";
+	}
+
+	/** Preset del que proviene un path (primer segmento bajo `presets/`), o null (core). */
+	#presetOf(filePath?: string): string | null {
+		if (!filePath) return null;
+		const rel = path.relative(this.#d.presetsPath, filePath);
+		if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+		return rel.split(path.sep)[0] ?? null;
 	}
 
 	/**
@@ -644,20 +709,19 @@ export class ModuleOrchestrator {
 		await this.#d.dependencyReloader.reloadByName(type, name);
 	}
 
-	#moduleNamesUnderPath(type: ModuleType, prefix: string): string[] {
-		const fileMap = this.#d.registry.getFileToUniqueKeyMap(type);
-		const keyToName = new Map<string, string>();
-		for (const name of this.#d.registry.getModuleNames(type)) {
-			for (const key of this.#d.registry.getUniqueKeysByName(type, name)) keyToName.set(key, name);
-		}
-		const names = new Set<string>();
-		for (const [filePath, uniqueKey] of fileMap) {
-			if (filePath.startsWith(prefix)) {
-				const name = keyToName.get(uniqueKey);
-				if (name) names.add(name);
-			}
-		}
-		return [...names];
+	/**
+	 * Módulos CARGADOS de una capa cuya fuente vive bajo `prefix`. La ubicación sale del grafo y no
+	 * del `fileToUniqueKeyMap` del registry, que arranca vacío y deja fuera lo que levantó el boot
+	 * (ver `DependencyGraph.namesUnderPath`).
+	 */
+	async #moduleNamesUnderPath(type: ModuleType, prefix: string): Promise<string[]> {
+		const graph = await this.#ensureGraph();
+		const base = (name: string): string => (name.includes("/") ? name.split("/").pop()! : name);
+		// El grafo nombra al módulo por su carpeta; el registry, por los alias de sus consumidores
+		// (`mongo`, `object/mongo`, `mongo-provider`). Se cruzan por basename y se devuelve el
+		// nombre canónico del registry, que es el que entiende `reloadByName`.
+		const underPath = new Set(graph.namesUnderPath(type, prefix).map(base));
+		return this.#canonicalNamesByInstance(type).filter((name) => underPath.has(base(name)));
 	}
 
 	#endpointController(): EndpointUnavailabilityController | null {

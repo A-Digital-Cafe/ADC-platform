@@ -179,6 +179,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 	},
 	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org", iconTag: "adc-icon-app-org" },
 	{ id: "status", label: "Status", devPort: 3020, subdomain: "status", iconTag: "adc-icon-app-status" },
+	{ id: "subscription", label: "Suscripción", devPort: 3042, subdomain: "subscription" },
 ];
 
 function getRegistry(): PlatformLinkRegistry {
@@ -298,6 +299,11 @@ function decodeSegment(seg: string): string {
 export function isPlatformLink(rawUrl: string): boolean {
 	return resolvePlatformLink(rawUrl) !== null;
 }
+
+// Hook global para libs hermanas (ej: media-ui-library) que no pueden importar
+// esta fuente cross-lib: la lib principal siempre está cargada, así que publica
+// la función bajo un Symbol compartido (mismo patrón que el registry).
+(globalThis as Record<symbol, unknown>)[Symbol.for("adc.platform-links.isPlatformLink")] = isPlatformLink;
 
 /** Convierte un slug/segmento en un título legible: `mi-articulo` → `Mi articulo`. */
 function humanize(segment: string): string {

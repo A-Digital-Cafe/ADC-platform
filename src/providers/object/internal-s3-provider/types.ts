@@ -26,9 +26,17 @@ export interface PutObjectResult {
 	etag: string | null;
 }
 
+export interface GetObjectStreamInput {
+	bucket?: string;
+	key: string;
+	/** Rango de bytes del objeto, extremos inclusive (`Range: bytes=start-end`). */
+	range?: { start: number; end: number };
+}
+
 export interface GetObjectStreamResult {
 	stream: Readable;
 	contentType?: string;
+	/** Bytes del cuerpo devuelto: con `range`, el largo del tramo, no del objeto. */
 	size?: number;
 	etag?: string;
 }

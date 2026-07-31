@@ -19,7 +19,26 @@ export interface ModuleSnapshotItem {
 	cascadeRoot?: string;
 	/** Nombre amigable (grupo de status) declarado en config (`uiName`), si lo tiene. */
 	uiName?: string;
+	/** Para `pending`: preset del que proviene el módulo detectado, o null (core). */
+	pendingPreset?: string | null;
 	dependents: { apps: string[]; services: string[] };
+}
+
+/** Resultado de una recarga desde disco: qué módulos recargaron y cuáles fallaron. */
+export interface ReloadReport {
+	reloaded: string[];
+	failed: { name: string; error: string }[];
+}
+
+/** Módulos cuya fuente vive bajo un target de git (para previews de deploy). */
+export interface TargetModules {
+	services: string[];
+	providers: string[];
+	utilities: string[];
+	/** Instancias de apps normales (se recargan con blip breve). */
+	apps: string[];
+	/** Apps ui-library (se recompilan en su lugar, sin corte). */
+	libraries: string[];
 }
 
 /**

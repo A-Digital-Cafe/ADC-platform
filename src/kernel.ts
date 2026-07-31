@@ -16,7 +16,7 @@ interface ProvisionableModule {
 	setInfraToken?(token: Capability | symbol): void;
 }
 import { ILogger } from "./interfaces/utils/ILogger.js";
-import { DockerManager } from "./utils/system/DockerManager.ts";
+import { DockerManager, type DockerInspector } from "./utils/system/DockerManager.ts";
 import { AppLoader } from "./core/apps/AppLoader.js";
 import { ModuleRegistrar } from "./core/modules/ModuleRegistrar.js";
 import { KernelServiceLoader } from "./core/services/KernelServiceLoader.js";
@@ -24,6 +24,7 @@ import { ConfigWatcher, watchLayer, watchPresetTopic, watchPresetsRoot, type Lay
 import { ModuleDetector } from "./core/runtime/ModuleDetector.js";
 import { shutdownKernel } from "./core/runtime/KernelShutdown.js";
 import { loadLayerRecursive } from "./core/apps/LayerLoader.js";
+import { collectAppConfigs } from "./core/apps/AppConfigReader.js";
 import { DependencyReloader } from "./core/modules/DependencyReloader.js";
 import { DisabledRegistry } from "./core/orchestration/DisabledRegistry.js";
 import { ModuleOrchestrator } from "./core/orchestration/ModuleOrchestrator.js";
@@ -192,6 +193,21 @@ export class Kernel {
 	}
 
 	/**
+	 * Vista **sólo‑lectura** de la infra Docker (composes levantados y disponibilidad del binario),
+	 * para el bloque de contenedores del panel de módulos. Mismo gate que `getOrchestrator`; no se
+	 * entrega el `DockerManager`, que además puede levantar y bajar contenedores.
+	 */
+	public getDockerInspector(token: CapabilityToken): DockerInspector {
+		assertScope(token, Scope.Orchestrator, Kernel.#kernelKey);
+		const docker = this.#dockerManager;
+		return {
+			listComposeTargets: () => docker.listComposeTargets(),
+			dockerAvailable: () => docker.dockerAvailable(),
+			dockerPath: () => docker.dockerPath(),
+		};
+	}
+
+	/**
 	 * Vista **sólo‑lectura** del registry para resolver services/providers por nombre.
 	 * Sin gating por capability a propósito: la lógica de negocio de los módulos la
 	 * necesita desde su constructor (antes de recibir su token), y la frontera de
@@ -269,6 +285,16 @@ export class Kernel {
 
 		const excludeTests = process.env.ENABLE_TESTS !== "true" && !this.#isDevelopment;
 		const excludeList = excludeTests ? ["BaseApp.ts", "AppWithSeo.ts", "test"] : ["BaseApp.ts", "AppWithSeo.ts"];
+
+		// Las UI libraries de presets cargan antes que cualquier otra app: hosts de src o
+		// de otros presets pueden declararlas en uiDependencies, y la carga de presets es
+		// secuencial/alfabética (sin este pase, un host anterior espera 30s por la lib).
+		const presetUiLibs = await this.#collectPresetUiLibs(excludeList);
+		for (const lib of presetUiLibs) {
+			await loadLayerRecursive(lib.path, this.#appLoader.loadApp, excludeList, this.#fileExtension, this.#logger, () => this.#isShuttingDown);
+		}
+		const presetExcludeList = [...excludeList, ...presetUiLibs.map((lib) => lib.dirName)];
+
 		await loadLayerRecursive(
 			this.#appsPath,
 			this.#appLoader.loadApp,
@@ -281,7 +307,7 @@ export class Kernel {
 			await loadLayerRecursive(
 				presetAppsPath,
 				this.#appLoader.loadApp,
-				excludeList,
+				presetExcludeList,
 				this.#fileExtension,
 				this.#logger,
 				() => this.#isShuttingDown
@@ -305,6 +331,21 @@ export class Kernel {
 
 	#presetLayerPaths(layer: "apps" | "services" | "providers" | "utilities"): string[] {
 		return this.#presetTopics.map((topic) => path.resolve(this.#presetsPath, topic, layer));
+	}
+
+	/** UI libraries (Stencil con exports) presentes en las capas apps de los presets. */
+	async #collectPresetUiLibs(excludeList: string[]): Promise<{ path: string; dirName: string }[]> {
+		const libs: { path: string; dirName: string }[] = [];
+		for (const appsPath of this.#presetLayerPaths("apps")) {
+			try {
+				const entries = await fs.readdir(appsPath, { withFileTypes: true });
+				const configs = await collectAppConfigs(appsPath, entries, excludeList);
+				libs.push(...configs.filter((c) => c.isUILib).map((c) => ({ path: c.path, dirName: c.dirName })));
+			} catch {
+				/* preset sin capa apps */
+			}
+		}
+		return libs;
 	}
 
 	#startWatchers(): void {

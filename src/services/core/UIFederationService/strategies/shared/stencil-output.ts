@@ -92,6 +92,45 @@ export * from './loader/index.js';
 }
 
 /**
+ * Borra artefactos que Stencil emite JUNTO a fuentes compartidas fuera del árbol
+ * de la lib (ej: una lib en presets/ que importa tipos de `src/common` deja
+ * `learning.js`/`.js.map` al lado del `.ts`). Regla segura por convención del
+ * repo: bajo `src/` nunca conviven `X.ts` y `X.js` legítimos.
+ */
+export async function cleanupStrayEmits(logger?: any): Promise<void> {
+	const roots = [path.resolve(process.cwd(), "src/common"), path.resolve(process.cwd(), "src/apps/public/00-adc-ui-library/utils")];
+	for (const root of roots) {
+		await cleanupStrayEmitsIn(root, logger);
+	}
+}
+
+async function cleanupStrayEmitsIn(dir: string, logger?: any): Promise<void> {
+	let entries;
+	try {
+		entries = await fs.readdir(dir, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		const full = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			if (entry.name !== "node_modules") await cleanupStrayEmitsIn(full, logger);
+			continue;
+		}
+		if (!entry.name.endsWith(".js")) continue;
+		const tsTwin = full.slice(0, -3) + ".ts";
+		try {
+			await fs.access(tsTwin);
+		} catch {
+			continue; // .js legítimo (sin fuente .ts)
+		}
+		await fs.rm(full, { force: true });
+		await fs.rm(full + ".map", { force: true });
+		logger?.logDebug(`Artefacto stray eliminado: ${full}`);
+	}
+}
+
+/**
  * Regenera `utils/react-jsx.ts` con los tipos de los componentes Stencil (opt-in).
  */
 export async function regenerateReactJSX(module: any, logger?: any): Promise<void> {

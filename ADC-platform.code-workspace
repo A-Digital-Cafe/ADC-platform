@@ -11,7 +11,9 @@
 		{ "name": "📦 adc-email-backend", "path": "presets/adc-email-backend" },
 		{ "name": "📦 adc-email-frontend", "path": "presets/adc-email-frontend" },
 		{ "name": "📦 adc-image-editor", "path": "presets/adc-image-editor" },
+		{ "name": "📦 adc-media", "path": "presets/adc-media" },
 		{ "name": "📦 adc-modules-manager", "path": "presets/adc-modules-manager" },
+		{ "name": "📦 adc-subscriptions", "path": "presets/adc-subscriptions" },
 		{ "name": "📦 community-content", "path": "presets/community-content" },
 		{ "name": "📦 my-account", "path": "presets/my-account" },
 		{ "name": "📦 adc-notifications", "path": "presets/adc-notifications" },
@@ -19,12 +21,13 @@
 		{ "name": "📦 project-management", "path": "presets/project-management" },
 		{ "name": "📦 SEO", "path": "presets/SEO" },
 		{ "name": "📦 status", "path": "presets/status" },
+		{ "name": "💻 adc-drive-agent", "path": "desktop/adc-drive-agent" },
 	],
 	"settings": {
 		// Oculta .github/ y .sonarlint/ del árbol de cada carpeta del workspace.
 		"files.exclude": {
 			"**/.github": true,
-			"**/.sonarlint": true
+			"**/.sonarlint": true,
 		},
 		"files.watcherExclude": {
 			"**/node_modules/**": true,
@@ -56,6 +59,6 @@
 		"sonarlint.analyzerProperties": {
 			"sonar.javascript.node.maxspace": "4096",
 		},
-		"typescript.native-preview.tsdk": "node_modules/@typescript/native-preview",
+		"js/ts.tsdk.path": "node_modules/@typescript/native-preview",
 	},
 }

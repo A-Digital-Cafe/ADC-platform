@@ -124,9 +124,10 @@ export class GroupEndpoints {
 		url: "/api/identity/groups",
 		permissions: [P.IDENTITY.GROUPS.WRITE],
 		options: {
+			successStatus: 201,
 			tag: "IdentityManagerService/Groups",
 			summary: "Crea un grupo",
-			schema: { body: GS.CreateGroupBody, response: { 200: GS.GroupResponse } },
+			schema: { body: GS.CreateGroupBody, response: { 201: GS.GroupResponse } },
 		},
 	})
 	static async createGroup(

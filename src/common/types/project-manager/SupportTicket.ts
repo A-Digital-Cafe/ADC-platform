@@ -6,7 +6,7 @@
  * Contrato F/B: lo consumen el frontend de `status` (formulario) y el backend
  * del PM (creación del issue). Por eso vive en `@common`.
  */
-export type SupportTicketType = "complaint" | "suggestion" | "security" | "data";
+export type SupportTicketType = "complaint" | "suggestion" | "security" | "data" | "expansion";
 
 /** Label visible por tipo de ticket (usado por el form de `status` y el backend). */
 export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
@@ -14,6 +14,25 @@ export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
 	suggestion: "SUGERENCIA",
 	security: "SEGURIDAD",
 	data: "DATOS",
+	expansion: "AMPLIACIÓN",
+};
+
+/**
+ * Plantilla-guía por tipo de ticket: se precarga en la descripción al elegir el tipo
+ * y se limpia si el usuario cambia de tipo sin haberla tocado.
+ *
+ * La de `expansion` no es decorativa: la ampliación de una organización se otorga a
+ * criterio de la plataforma, y estos son los datos sobre los que se decide. Pedirlos
+ * en el formulario evita el ida y vuelta de "contame más".
+ */
+export const TICKET_TEMPLATES: Partial<Record<SupportTicketType, string>> = {
+	security: "Pasos de reproducción:\n1.\n2.\n\nImpacto (a quién/qué afecta):\n\nAlcance (URL/endpoint/componente):\n\nSeveridad estimada (CVSS si tenés):\n",
+	expansion:
+		"Organización (nombre y enlace, si tiene):\n\n" +
+		"A qué se dedica:\n\n" +
+		"Cantidad de personas y para qué usan la plataforma:\n\n" +
+		"Compromisos sociales o códigos de conducta que siguen:\n\n" +
+		"Qué límite se les queda corto y por qué:\n",
 };
 
 export interface CreateSupportTicketInput {

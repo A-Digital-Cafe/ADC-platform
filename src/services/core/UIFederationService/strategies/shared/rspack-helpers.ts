@@ -63,7 +63,8 @@ ${exposesEntries}
 export function getHostTemplateConfig(context: IBuildContext): string {
 	const { uiConfig } = context.module;
 	const injections: string[] = [];
-	if (uiConfig.i18n) injections.push(`<script src="/adc-i18n.js"></script>`);
+	// Ruta namespaceada (ver `utils/i18n-paths.ts`).
+	if (uiConfig.i18n) injections.push(`<script src="/${context.namespace}/adc-i18n.js"></script>`);
 	const redirect = buildResponsiveRedirectScript(uiConfig.responsive);
 	if (redirect) injections.push(redirect);
 

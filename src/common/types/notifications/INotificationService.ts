@@ -8,12 +8,13 @@ import type { CapabilityToken } from "../../security/Capability.ts";
  * nombre y dependiendo de esta interfaz, nunca de la clase concreta del preset:
  *
  * ```ts
- * const notifications = this.kernel.registry.getService<INotificationService>("NotificationService");
+ * const notifications = this.tryGetMyService<INotificationService>("NotificationService");
  * await notifications?.notify({ userId, topic: "drive.shared", title, body, link });
  * ```
  *
- * Como el preset es opcional, el productor debe degradar si no está cargado
- * (`hasModule("service", "NotificationService")` o `try/catch`).
+ * Como el preset es opcional, `tryGetMyService` es justamente la variante correcta: devuelve
+ * `undefined` en vez de lanzar si no está cargado. Requiere declararlo (con `optional: true`) en el
+ * `config.json` del productor.
  */
 export interface INotificationService {
 	/**
@@ -37,12 +38,18 @@ export interface INotificationService {
  * email sin romper. Mantiene a NotificationService desacoplado del preset de correo.
  */
 export interface INotificationEmailSender {
-	/** Envía un email transaccional del sistema (no-reply) a una dirección externa. */
+	/** Envía un email transaccional del sistema (no-reply) al usuario destinatario. */
 	sendSystemEmail(input: SystemEmailInput): Promise<void>;
 }
 
 export interface SystemEmailInput {
+	/** Dirección personal del usuario (la que conoce el IdentityManager). */
 	to: string;
+	/**
+	 * Usuario destinatario. Permite al `EmailService` resolver su buzón de la
+	 * plataforma cuando el envío a direcciones externas está deshabilitado.
+	 */
+	userId?: string;
 	subject: string;
 	html: string;
 	text?: string;

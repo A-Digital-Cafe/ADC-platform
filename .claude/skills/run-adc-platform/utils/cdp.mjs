@@ -3,16 +3,52 @@
 import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
 import { CHROME, DBG_PORT } from "./config.mjs";
 
 export function chromeArgs(extra) {
 	return ["--headless=new", "--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--disable-dev-shm-usage", ...extra];
 }
 
+// A per-launch profile dir keeps concurrent runs from sharing cookies/state.
+export function chromeProfileDir() {
+	return path.join(tmpdir(), `adc-chrome-${process.pid}-${Date.now()}`);
+}
+
+/** True if DBG_PORT already answers, i.e. some other Chrome owns it. */
+export async function debugPortBusy() {
+	try {
+		const r = await fetch(`http://127.0.0.1:${DBG_PORT}/json/version`, { signal: AbortSignal.timeout(700) });
+		return r.ok;
+	} catch {
+		return false;
+	}
+}
+
+/** Launch Chrome, failing if DBG_PORT is taken: attaching to a leaked browser yields stale screenshots. */
+export async function launchChromeChecked() {
+	if (await debugPortBusy()) {
+		throw new Error(
+			`Chrome debug port ${DBG_PORT} is already in use — a previous run leaked a browser. ` +
+				`Run \`node .claude/skills/run-adc-platform/driver.mjs stop\` first, or every screenshot will come from the stale browser.`
+		);
+	}
+	return launchChrome();
+}
+
 export function launchChrome() {
-	return spawn(CHROME, chromeArgs([`--remote-debugging-port=${DBG_PORT}`, "--remote-allow-origins=*", "--window-size=1366,900", "about:blank"]), {
-		stdio: ["ignore", "ignore", "ignore"],
-	});
+	return spawn(
+		CHROME,
+		chromeArgs([
+			`--remote-debugging-port=${DBG_PORT}`,
+			`--user-data-dir=${chromeProfileDir()}`,
+			"--remote-allow-origins=*",
+			"--window-size=1366,900",
+			"about:blank",
+		]),
+		{ stdio: ["ignore", "ignore", "ignore"] }
+	);
 }
 
 async function fetchJson(path) {

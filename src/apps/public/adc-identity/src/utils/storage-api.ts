@@ -41,9 +41,14 @@ export interface OrgUsageInfo {
 }
 
 export const storageAdminApi = {
-	listOverrides: async (): Promise<StorageOverride[]> => {
-		const r = await api.get<{ overrides: StorageOverride[] }>("/admin/overrides");
-		return r.data?.overrides ?? [];
+	/** Página de overrides (el servidor capa el listado): para ubicar uno puntual, filtrar por sujeto. */
+	listOverrides: async (
+		query: { subjectType?: QuotaSubjectType; subjectId?: string; limit?: number; offset?: number } = {}
+	): Promise<{ items: StorageOverride[]; total: number }> => {
+		const r = await api.get<{ overrides: StorageOverride[]; total: number }>("/admin/overrides", {
+			params: { subjectType: query.subjectType, subjectId: query.subjectId, limit: query.limit, offset: query.offset },
+		});
+		return { items: r.data?.overrides ?? [], total: r.data?.total ?? 0 };
 	},
 	upsertOverride: async (input: {
 		subjectType: QuotaSubjectType;

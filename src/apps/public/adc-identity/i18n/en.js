@@ -265,6 +265,7 @@ export default {
 			banners: "Banners & announcements",
 			schedule: "Scheduling",
 			audit: "Audit",
+			logs: "Process logs",
 		},
 		email: {
 			messages: "Messages",
@@ -273,6 +274,11 @@ export default {
 			attachments: "Attachments",
 			accounts: "Accounts",
 			settings: "Settings",
+		},
+		plans: {
+			catalog: "Plan catalog",
+			overrides: "Limit overrides",
+			subscriptions: "Subscriptions & seats",
 		},
 		toggleAll: "Toggle entire column",
 		toggleRow: "Toggle entire row",
@@ -314,6 +320,7 @@ export default {
 		email: "Email",
 		security: "Security (global)",
 		modules: "Platform modules (global)",
+		plans: "Plans & limits (global)",
 	},
 	errors: {
 		// Access / org isolation
@@ -326,6 +333,7 @@ export default {
 		CANNOT_MODIFY_SELF: "You cannot modify yourself with management permissions",
 		HIERARCHY_VIOLATION: "You cannot manage users or roles at or above your own hierarchy",
 		GLOBAL_ONLY_RESOURCE: "That resource can only be assigned on global roles",
+		SEAT_LIMIT_REACHED: "The organization has no seats available. Add seats to invite more members.",
 		CANNOT_DELETE_PREDEFINED: "Predefined roles cannot be deleted",
 		// Not found
 		USER_NOT_FOUND: "User not found",

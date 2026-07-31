@@ -7,6 +7,7 @@ import type { Capability } from "@common/security/Capability.ts";
 import * as US from "./schemas/users.js";
 import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
 import { assertCanManageUser, assertCanAssignRoles } from "../domain/hierarchy.js";
+import { checkUsername } from "@common/utils/name-policy.js";
 
 /**
  * CAMPOS DE USUARIO - MATRIZ DE MODIFICABILIDAD
@@ -80,8 +81,13 @@ async function validateImmutableFields(
 	updates: Partial<any>,
 	callerOrgId?: string
 ): Promise<void> {
-	// Username: validar unicidad si se intenta cambiar
+	// Username: validar política de nombres y unicidad si se intenta cambiar.
+	// Sin esto se esquivaría el filtro registrándose con un nombre limpio y
+	// renombrándose después (y con el username cambia su dirección de correo).
 	if (updates.username !== undefined && updates.username !== currentUser?.username) {
+		if (checkUsername(updates.username)) {
+			throw new AuthError(400, "FORBIDDEN_USERNAME", "Ese nombre de usuario no está disponible");
+		}
 		const existing = await identity.users.getUserByUsername(updates.username);
 		if (existing && existing.id !== currentUser?.id) {
 			throw new AuthError(409, "USERNAME_EXISTS", `El nombre de usuario '${updates.username}' ya está en uso`);
@@ -422,10 +428,11 @@ export class UserEndpoints {
 		url: "/api/identity/users",
 		permissions: [P.IDENTITY.USERS.WRITE],
 		options: {
+			successStatus: 201,
 			tag: "IdentityManagerService/Users",
 			summary: "Crea un usuario",
 			description: "El admin de org lo asocia automáticamente a su organización; el admin global puede indicar `orgId`.",
-			schema: { body: US.CreateUserBody, response: { 200: US.UserResponse } },
+			schema: { body: US.CreateUserBody, response: { 201: US.UserResponse } },
 		},
 	})
 	static async createUser(

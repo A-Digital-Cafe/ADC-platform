@@ -44,7 +44,14 @@ export interface IHttpServerProvider {
 	/**
 	 * Registra una ruta con un método HTTP específico
 	 */
-	registerRoute(method: string, path: string, handler: HttpHandler): void;
+	/**
+	 * Registra una ruta global. `owner` (el `ownerName` del módulo) es opcional pero recomendado:
+	 * habilita `unregisterRoutesByOwner`, y sin él la ruta sobrevive a la detención de su dueño.
+	 * Reemplaza en el lugar si ya existe una ruta con el mismo `method`+`path`.
+	 */
+	registerRoute(method: string, path: string, handler: HttpHandler, owner?: string): void;
+	/** Retira las rutas globales de un owner. Devuelve cuántas retiró. */
+	unregisterRoutesByOwner?(owner: string): number;
 
 	/**
 	 * Sirve archivos estáticos desde un directorio

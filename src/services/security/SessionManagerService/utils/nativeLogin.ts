@@ -47,6 +47,20 @@ export function requiresOrgSelection(user: User, orgId: string | undefined): boo
 	return Boolean(user.orgMemberships?.length && orgId === undefined);
 }
 
+/**
+ * El `orgId` del login lo elige el cliente, así que hay que contrastarlo con las
+ * membresías antes de emitir el token: ese valor viaja en la sesión como clave de
+ * tenant y media plataforma lo trata como frontera de aislamiento (buzones,
+ * cuotas, listados por organización). Sin token de org (`undefined`) es acceso
+ * personal, que siempre es legítimo.
+ */
+export function assertOrgMembership(user: User, orgId: string | undefined): void {
+	if (!orgId) return;
+	if (!user.orgMemberships?.some((m) => m.orgId === orgId)) {
+		throw new AuthError(403, "NOT_ORG_MEMBER", "No perteneces a esta organización");
+	}
+}
+
 async function handleWrongNativePassword(userId: string, loginTracker: LoginAttemptTracker, ipAddress: string): Promise<never> {
 	const blockStatus = await loginTracker.recordLoginAttempt(userId, false, ipAddress);
 

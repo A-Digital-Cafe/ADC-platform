@@ -21,3 +21,6 @@ export const groupSchema = new Schema<Group>(
 	},
 	{ id: false }
 );
+
+/** Campos escribibles por `GroupManager.updateGroup`. */
+export const GROUP_UPDATABLE_FIELDS = ["name", "description", "permissions", "roleIds", "orgId", "metadata"] as const;

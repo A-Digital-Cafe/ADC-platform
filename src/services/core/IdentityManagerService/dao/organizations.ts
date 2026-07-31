@@ -1,6 +1,9 @@
 import type { Model } from "mongoose";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId } from "@common/utils/crypto.ts";
+import { buildUpdateSet } from "@common/utils/mongo-update.ts";
+import { ORG_UPDATABLE_FIELDS } from "../domain/organization.js";
+import { checkOrgSlug } from "@common/utils/name-policy.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
@@ -57,8 +60,9 @@ export class OrgManager {
 		if (!/^[a-z0-9-]+$/.test(normalizedSlug)) {
 			throw new Error(`Slug inválido: ${slug}. Solo letras minúsculas, números y guiones`);
 		}
-		if (normalizedSlug === "default") {
-			throw new Error(`Slug reservado: 'default' está reservado para contexto global`);
+		const rejection = checkOrgSlug(normalizedSlug);
+		if (rejection) {
+			throw new Error(`Slug reservado: '${rejection.term}' está reservado por la plataforma`);
 		}
 
 		try {
@@ -138,7 +142,8 @@ export class OrgManager {
 			if (!regionInfo) throw new Error(`Región no existe: ${updates.region}`);
 		}
 
-		const org = await this.orgModel.findOneAndUpdate({ orgId }, { ...updates, updatedAt: new Date() }, { new: true, lean: true });
+		const update = buildUpdateSet(updates, ORG_UPDATABLE_FIELDS, { updatedAt: new Date() });
+		const org = await this.orgModel.findOneAndUpdate({ orgId }, update, { new: true, lean: true });
 
 		if (!org) throw new Error(`Organización no encontrada: ${orgId}`);
 

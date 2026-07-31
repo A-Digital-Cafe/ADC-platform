@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { safeParseJson } from "@common/utils/json-schema.ts";
+import { isInsideBase } from "@common/utils/path-containment.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import type { ModuleType } from "../../utils/registry/ModuleRegistry.js";
 
@@ -18,6 +19,12 @@ interface GraphNode {
 	 */
 	uiName?: string;
 }
+
+/**
+ * Podados del recorrido: dependencias y artefactos de build. Sin esto, el fallback a
+ * `package.json` convertiría cada paquete npm bajo `node_modules` en un "módulo".
+ */
+const SKIPPED_DIRS = new Set(["node_modules", ".git", "dist", "temp", "www", ".stencil", "coverage"]);
 
 const LAYER_FIELD: Record<Exclude<Layer, "app">, "providers" | "utilities" | "services"> = {
 	provider: "providers",
@@ -87,8 +94,9 @@ export class DependencyGraph {
 		}
 	}
 
-	/** Recorre un directorio de capa buscando módulos (carpetas con config.json/default.json). */
+	/** Recorre un directorio de capa buscando módulos (carpetas con config.json/default.json/package.json). */
 	async #scanLayer(layerDir: string, layer: Layer): Promise<void> {
+		if (SKIPPED_DIRS.has(path.basename(layerDir))) return;
 		let entries: import("node:fs").Dirent[];
 		try {
 			entries = await fs.readdir(layerDir, { withFileTypes: true });
@@ -98,6 +106,13 @@ export class DependencyGraph {
 		const config = await this.#readModuleConfig(layerDir);
 		if (config) {
 			await this.#addModule(layerDir, layer, config);
+			return;
+		}
+		// La mayoría de providers y utilities NO trae config propio: la declara quien los consume
+		// (`providers: [{ name: "mongo", custom: {...} }]`), y sin esto quedarían fuera del grafo.
+		// Misma regla de "raíz de módulo" que usa ModuleDetector: alcanza con package.json.
+		if (layer !== "app" && entries.some((e) => e.isFile() && e.name === "package.json")) {
+			await this.#addModule(layerDir, layer, {});
 			return;
 		}
 		for (const entry of entries) {
@@ -168,6 +183,20 @@ export class DependencyGraph {
 	/** Nombre amigable declarado por un módulo (`uiName`), o `undefined` si es interno. */
 	uiNameOf(layer: Layer, name: string): string | undefined {
 		return this.#nodes.get(this.#key(layer, name))?.uiName;
+	}
+
+	/**
+	 * Nombres de módulos de una capa cuyo directorio vive bajo `baseDir` (un target de git: el `src`
+	 * del core o `presets/<nombre>`). Sale del escaneo de configs en disco, la única fuente que
+	 * conoce la ubicación de TODOS los módulos: el registry sólo guarda el path de los cargados por
+	 * `registerByPath`, no de los que levantó el arranque.
+	 */
+	namesUnderPath(layer: Layer, baseDir: string): string[] {
+		const out: string[] = [];
+		for (const node of this.#nodes.values()) {
+			if (node.layer === layer && isInsideBase(baseDir, node.dir)) out.push(node.name);
+		}
+		return out;
 	}
 
 	/**

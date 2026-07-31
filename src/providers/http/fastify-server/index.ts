@@ -40,6 +40,12 @@ interface GlobalRoute {
 	handler: FastifyHandler;
 	/** Score de especificidad. Mayor = más específica. Se usa para ordenar la tabla de matching. */
 	specificity: number;
+	/**
+	 * Módulo dueño de la ruta (`ownerName` del endpoint), si lo declaró. Permite podarla cuando el
+	 * dueño se detiene: sin esto la tabla sólo crecía y el wrapper de una instancia ya destruida
+	 * seguía atendiendo.
+	 */
+	owner?: string;
 }
 
 /**
@@ -233,6 +239,13 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 		// Body parser para formularios
 		await this.app.register(fastifyFormbody);
+
+		// Binarios crudos: passthrough sin bufferizar (request.body = Readable).
+		// No aplica bodyLimit; los consumidores (ej. túnel de Drive) hacen pipe del
+		// stream y son responsables de sus propios límites.
+		this.app.addContentTypeParser("application/octet-stream", (_request, payload, done) => {
+			done(null, payload);
+		});
 
 		// Log de peticiones en desarrollo
 		if (this.isDev) {
@@ -482,20 +495,55 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		}, options);
 	}
 
-	registerRoute(method: string, path: string, handler: HttpHandler): void {
+	registerRoute(method: string, path: string, handler: HttpHandler, owner?: string): void {
 		const normalizedHandler = normalizeHandler(handler);
+		const upperMethod = method.toUpperCase();
 
-		this.globalRoutes.push({
-			method: method.toUpperCase(),
+		// Reemplazo en el lugar si ya existe `method+path`: con un push incondicional, tras un
+		// hot-reload el matcher (primera coincidencia) seguiría usando el wrapper de la instancia
+		// vieja y la tabla crecería sin techo.
+		const existing = this.globalRoutes.findIndex((r) => r.method === upperMethod && r.path === path);
+		const route: GlobalRoute = {
+			method: upperMethod,
 			path,
 			handler: normalizedHandler,
 			specificity: routeSpecificity(path),
-		});
+			owner,
+		};
+		if (existing >= 0) {
+			const previous = this.globalRoutes[existing];
+			this.globalRoutes[existing] = route;
+			this.logger.logDebug(
+				`Ruta global reemplazada: ${upperMethod} ${path}` + (previous.owner ? ` (owner previo: ${previous.owner})` : "")
+			);
+		} else {
+			this.globalRoutes.push(route);
+			this.logger.logDebug(`Ruta global registrada: ${upperMethod} ${path}${owner ? ` [${owner}]` : ""}`);
+		}
 		// Mantener invariante: tabla ordenada por especificidad descendente para
 		// que el matcher (orden de iteración) priorice rutas estáticas.
 		this.globalRoutes.sort((a, b) => b.specificity - a.specificity);
+	}
 
-		this.logger.logDebug(`Ruta global registrada: ${method.toUpperCase()} ${path}`);
+	/**
+	 * Retira las rutas globales de un owner. La invoca `EndpointManagerService` al desregistrar los
+	 * endpoints de un módulo, para que no queden apuntando a la instancia muerta.
+	 *
+	 * Match por igualdad estricta: los endpoints de managers (`Owner::Manager`) quedan fuera a
+	 * propósito, porque el orquestador los cubre con el gate de 503 de `setOwnerUnavailable`
+	 * —mantenimiento reintentable en vez de 404—. Acá sólo caen las rutas crudas (SSE, túnel),
+	 * que no pasan por ese gate.
+	 *
+	 * @returns Cuántas rutas se retiraron.
+	 */
+	unregisterRoutesByOwner(owner: string): number {
+		const before = this.globalRoutes.length;
+		for (let i = this.globalRoutes.length - 1; i >= 0; i--) {
+			if (this.globalRoutes[i].owner === owner) this.globalRoutes.splice(i, 1);
+		}
+		const removed = before - this.globalRoutes.length;
+		if (removed > 0) this.logger.logDebug(`Rutas globales retiradas de '${owner}': ${removed}`);
+		return removed;
 	}
 
 	/**

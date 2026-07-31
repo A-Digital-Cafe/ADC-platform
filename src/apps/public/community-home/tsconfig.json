@@ -10,10 +10,12 @@
 			"@providers/*": ["./../../../providers/*"],
 			"@utilities/*": ["./../../../utilities/*"],
 			"@interfaces/*": ["./../../../interfaces/*"],
+			"@media-ui-library/utils/*": ["./../../../../presets/adc-media/apps/media-ui-library/utils/*"],
+			"@media-ui-library/*": ["./../../../../presets/adc-media/apps/media-ui-library/src/*"],
 			"@ui-library/utils/*": ["./../00-adc-ui-library/utils/*"],
 			"@ui-library/*": ["./../00-adc-ui-library/src/*"],
 			"@common/*": ["./../../../common/*"]
 		}
 	},
-	"include": ["src/**/*", "*.ts", "./../00-adc-ui-library/utils/react-jsx.d.ts"]
+	"include": ["src/**/*", "*.ts", "./../00-adc-ui-library/utils/react-jsx.ts", "./../../../../presets/adc-media/apps/media-ui-library/utils/react-jsx.ts"]
 }

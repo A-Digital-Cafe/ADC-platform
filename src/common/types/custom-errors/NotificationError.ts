@@ -4,8 +4,7 @@ type NotificationErrorTypes =
 	// Validación
 	| "MISSING_FIELDS"
 	| "INVALID_FIELD"
-	// Recursos
-	| "NOTIFICATION_NOT_FOUND"
+	// Recursos: la bandeja no devuelve 404 — lo ausente responde 204 (ver docs/architecture/http-status.md)
 	// Auth
 	| "UNAUTHENTICATED"
 	// Infra

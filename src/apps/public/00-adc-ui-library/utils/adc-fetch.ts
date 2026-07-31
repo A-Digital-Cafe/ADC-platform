@@ -18,8 +18,17 @@ export { clearErrors } from "./error-handler.js";
 
 export interface AdcFetchResult<T = undefined> {
 	success: boolean;
+	/**
+	 * Cuerpo parseado. **Indefinido en un 204/205**: la respuesta fue exitosa pero
+	 * sin contenido (lista vacía, no-op idempotente). Comprobar `success` —y no la
+	 * presencia de `data`— para saber si la request salió bien.
+	 */
 	data?: T;
 	errorKey?: string;
+	/**
+	 * Mensaje de error del servidor. Sólo se rellena en modo `silent`.
+	 */
+	message?: string;
 	/** HTTP status code (undefined on network errors) */
 	status?: number;
 }
@@ -45,6 +54,12 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const CIRCUIT_BREAKER_THRESHOLD = 5;
+/**
+ * Respuestas exitosas SIN cuerpo. La plataforma usa 204 para "no hay contenido
+ * que devolver" (colección vacía, mutación que no cambió nada); 404 queda para
+ * "el recurso pedido por su identificador no existe".
+ */
+const NO_CONTENT_STATUSES: ReadonlySet<number> = new Set([204, 205]);
 
 /** Política única de credentials de la plataforma (ver AdcApiConfig.credentials). */
 export const DEFAULT_CREDENTIALS: RequestCredentials = IS_DEV ? "include" : "same-origin";
@@ -66,7 +81,7 @@ let circuitBreakerTriggeredSecond = -1;
  * que componentes reactivos (e.g. UserPicker) generen avalanchas. Cap: 8h.
  */
 const RATE_LIMIT_MAX_COOLDOWN_MS = 8 * 60 * 60 * 1000;
-const rateLimitCooldowns = new Map<string, number>();
+const rateLimitCooldowns = new Map<string, { until: number; errorKey: string }>();
 
 function rateLimitKey(method: HttpMethod, url: string): string {
 	const queryIdx = url.indexOf("?");
@@ -74,19 +89,20 @@ function rateLimitKey(method: HttpMethod, url: string): string {
 	return `${method}:${path}`;
 }
 
-function getRateLimitRemainingMs(method: HttpMethod, url: string): number {
+/** Cooldown vigente de un endpoint, con el motivo que lo originó (o `null`). */
+function getRateLimitCooldown(method: HttpMethod, url: string): { remainingMs: number; errorKey: string } | null {
 	const key = rateLimitKey(method, url);
-	const until = rateLimitCooldowns.get(key);
-	if (!until) return 0;
-	const remaining = until - Date.now();
+	const entry = rateLimitCooldowns.get(key);
+	if (!entry) return null;
+	const remaining = entry.until - Date.now();
 	if (remaining <= 0) {
 		rateLimitCooldowns.delete(key);
-		return 0;
+		return null;
 	}
-	return remaining;
+	return { remainingMs: remaining, errorKey: entry.errorKey };
 }
 
-function registerRateLimit(method: HttpMethod, url: string, response: Response, body?: { retryAfter?: number }): void {
+function registerRateLimit(method: HttpMethod, url: string, response: Response, body?: { retryAfter?: number; errorKey?: string }): void {
 	const headerVal = response.headers.get("Retry-After");
 	let seconds = 0;
 	if (headerVal) {
@@ -101,10 +117,12 @@ function registerRateLimit(method: HttpMethod, url: string, response: Response, 
 	const ms = Math.min(seconds * 1000, RATE_LIMIT_MAX_COOLDOWN_MS);
 	// Barrido perezoso: purgar entradas expiradas al insertar (evita crecimiento indefinido).
 	const now = Date.now();
-	for (const [key, until] of rateLimitCooldowns) {
-		if (until <= now) rateLimitCooldowns.delete(key);
+	for (const [key, entry] of rateLimitCooldowns) {
+		if (entry.until <= now) rateLimitCooldowns.delete(key);
 	}
-	rateLimitCooldowns.set(rateLimitKey(method, url), now + ms);
+	// El motivo se guarda junto al vencimiento para que los reintentos durante el cooldown
+	// muestren el mensaje real (un cupo mensual bloquea el endpoint durante horas).
+	rateLimitCooldowns.set(rateLimitKey(method, url), { until: now + ms, errorKey: body?.errorKey || "RATE_LIMIT_EXCEEDED" });
 }
 
 /**
@@ -275,9 +293,9 @@ async function handleRateLimitedResponse(
 	response: Response,
 	silent: boolean | undefined
 ): Promise<AdcFetchResult<never>> {
-	let parsedBody: { retryAfter?: number } | undefined;
+	let parsedBody: { retryAfter?: number; errorKey?: string; message?: string } | undefined;
 	try {
-		parsedBody = (await response.clone().json()) as { retryAfter?: number };
+		parsedBody = (await response.clone().json()) as { retryAfter?: number; errorKey?: string; message?: string };
 	} catch {
 		/* body opcional */
 	}
@@ -285,7 +303,51 @@ async function handleRateLimitedResponse(
 	if (!silent) {
 		await parseErrorResponse(response);
 	}
-	return { success: false, status: 429, errorKey: "RATE_LIMIT_EXCEEDED" };
+	// El `errorKey` del cuerpo manda: no cada 429 es un rate limit. Las cuotas de plan
+	// (`EGRESS_QUOTA_EXCEEDED`, `TRANSFER_LIMIT`, …) también responden 429, y el caller necesita
+	// distinguir "esperá unos segundos" de "se te acabó el cupo del mes".
+	return { success: false, status: 429, errorKey: parsedBody?.errorKey || "RATE_LIMIT_EXCEEDED", message: parsedBody?.message };
+}
+
+/**
+ * Traduce una respuesta HTTP ya recibida al `AdcFetchResult` del cliente.
+ * Con `silent` falso, los errores se propagan como `HttpError` (los captura
+ * `request` para disparar el toast); con `silent` se devuelven como resultado.
+ */
+async function toFetchResult<T>(method: HttpMethod, response: Response, silent?: boolean): Promise<AdcFetchResult<T>> {
+	if (!response.ok && !silent) {
+		await parseErrorResponse(response);
+	}
+
+	// HEAD has no body; other non-OK silent responses are returned as success:false with status.
+	if (method === "HEAD") {
+		return { success: response.ok, status: response.status };
+	}
+
+	if (!response.ok) {
+		// Silent path: `silent` suprime el toast, NO el error. Extraemos clave y
+		// mensaje de negocio para que el caller decida cómo mostrarlo.
+		let errorKey: string | undefined;
+		let message: string | undefined;
+		try {
+			const body = (await response.json()) as { errorKey?: string; message?: string };
+			errorKey = body?.errorKey;
+			message = body?.message;
+		} catch {
+			/* respuesta sin body JSON */
+		}
+		return { success: false, status: response.status, errorKey, message };
+	}
+
+	// Sin contenido (204/205): respuesta exitosa y sin body. `response.json()`
+	// reventaría con un cuerpo vacío, así que se resuelve como éxito con `data`
+	// indefinido (ver AdcFetchResult.data).
+	if (NO_CONTENT_STATUSES.has(response.status)) {
+		return { success: true, status: response.status };
+	}
+
+	const data = (await response.json()) as T;
+	return { success: true, data, status: response.status };
 }
 
 /**
@@ -343,9 +405,9 @@ export function createAdcApi(config: AdcApiConfig) {
 		if (effectiveSignal) fetchOptions.signal = effectiveSignal;
 
 		// Cortar avalanchas: si el endpoint está en cooldown por 429, no salir a la red.
-		const rlRemaining = getRateLimitRemainingMs(method, url);
-		if (rlRemaining > 0) {
-			return { success: false, status: 429, errorKey: "RATE_LIMIT_EXCEEDED" };
+		const cooldown = getRateLimitCooldown(method, url);
+		if (cooldown) {
+			return { success: false, status: 429, errorKey: cooldown.errorKey };
 		}
 
 		try {
@@ -355,28 +417,7 @@ export function createAdcApi(config: AdcApiConfig) {
 				return await handleRateLimitedResponse(method, url, response, options.silent);
 			}
 
-			if (!response.ok && !options.silent) {
-				await parseErrorResponse(response);
-			}
-
-			// HEAD has no body; other non-OK silent responses are returned as success:false with status.
-			if (method === "HEAD") {
-				return { success: response.ok, status: response.status };
-			}
-			if (!response.ok) {
-				// Silent path: `silent` suprime el toast, NO el errorKey. Extraemos la
-				// clave de negocio del body para que el caller pueda mapear el mensaje.
-				let errorKey: string | undefined;
-				try {
-					errorKey = ((await response.json()) as { errorKey?: string })?.errorKey;
-				} catch {
-					/* respuesta sin body JSON */
-				}
-				return { success: false, status: response.status, errorKey };
-			}
-
-			const data = (await response.json()) as T;
-			return { success: true, data, status: response.status };
+			return await toFetchResult<T>(method, response, options.silent);
 		} catch (err) {
 			// Detect network-level errors (connection refused, offline, etc.)
 			const { errorKey, httpStatus } = classifyRequestError(err);

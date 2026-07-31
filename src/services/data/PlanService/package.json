@@ -1,0 +1,11 @@
+{
+	"name": "plan-service",
+	"license": "ISC",
+	"author": "abbytec",
+	"version": "1.0.0",
+	"description": "Motor central de planes, features y límites por tier con overrides administrables",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"dependencies": {}
+}

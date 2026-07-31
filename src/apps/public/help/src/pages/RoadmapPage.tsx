@@ -103,6 +103,13 @@ const LAYERS: Array<{ id: string; name: string; description: string; items: Item
 		items: [
 			{ title: "SLA/SLO + Status Page", status: "futuro", notes: "Subdominio status/health con incidentes reales." },
 			{
+				title: "Degradación de límites ante caída del servicio de planes",
+				status: "done",
+				notes:
+					"Si el servicio interno de planes no responde, las apps siguen funcionando con los límites del plan gratuito en vez de liberar recursos sin control. Una cuenta paga puede ver límites menores de forma temporal; no se pierde el plan ni los datos.",
+				links: [{ label: "Cláusula de disponibilidad", href: "/terms#degradacion-de-planes" }],
+			},
+			{
 				title: "Publicidad en games",
 				status: "siguiente",
 				notes: "Decisión tomada; resta definir proveedor, modalidad técnica, consentimiento y documentación separada.",

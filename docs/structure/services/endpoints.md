@@ -175,12 +175,20 @@ return caller;
 
 Mapa sugerido:
 
-- `400`: input inválido.
+- `201`: creaste un recurso nuevo (`options.successStatus: 201`).
+- `204`: no hay contenido que devolver (colección vacía, mutación sin efecto). Se responde
+  devolviendo `undefined` del handler; **no** es un error.
+- `400`: input inválido (malformado).
 - `401`: token ausente o inválido.
 - `403`: permiso insuficiente.
-- `404`: recurso no encontrado.
+- `404`: el recurso pedido **por su identificador** no existe.
 - `409`: conflicto de unicidad o estado.
+- `422`: cuerpo bien formado, imposible por regla de negocio.
+- `429`/`503`: cuota o indisponibilidad — **siempre** con `retryAfter` (segundos) en el `data`.
 - `500`: error inesperado.
+
+Mapa completo (`201`, `202`, `206`, `304`, `410`, `423`…) y sus mecanismos declarativos en
+[architecture/http-status.md](../../architecture/http-status.md).
 
 ## Ejemplo mínimo
 

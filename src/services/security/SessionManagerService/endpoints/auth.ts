@@ -20,7 +20,8 @@ import { User } from "@common/types/identity/User.js";
 import type { Permission } from "@common/types/identity/Permission.js";
 import { SystemRole } from "../../../core/IdentityManagerService/defaults/systemRoles.js";
 import { assertEmailNotBanned, assertIpNotBanned, recordLoginAttemptIp, redirectIfRequestBanned } from "../utils/moderationGuards.js";
-import { requiresOrgSelection, resolveNativeLoginUser, validateNativeLoginBody, type NativeLoginBody } from "../utils/nativeLogin.js";
+import { assertOrgMembership, requiresOrgSelection, resolveNativeLoginUser, validateNativeLoginBody, type NativeLoginBody } from "../utils/nativeLogin.js";
+import { checkUsername } from "@common/utils/name-policy.js";
 
 /** Nombre de las cookies */
 const ACCESS_COOKIE_NAME = "access_token";
@@ -108,6 +109,11 @@ export class AuthEndpoints {
 			if (requiresOrgSelection(fullUser, orgId)) {
 				await AuthEndpoints.respondWithOrgSelection(fullUser);
 			}
+
+			// El orgId llega del cliente: sin esta comprobación cualquiera se emitiría
+			// un token con el contexto de una organización ajena (mismo chequeo que
+			// hace `switch-org`).
+			assertOrgMembership(fullUser, orgId);
 
 			// Construir usuario directamente desde profile (ya validado por authenticate)
 			const user = await AuthEndpoints.buildAuthenticatedUser("platform", fullUser, orgId);
@@ -401,10 +407,7 @@ export class AuthEndpoints {
 		if (newOrgId && AuthEndpoints.deps.internalIdentity) {
 			const user = await AuthEndpoints.deps.internalIdentity.users.getUser(userId);
 			if (!user) throw new AuthError(404, "USER_NOT_FOUND", "Usuario no encontrado");
-			const isMember = user.orgMemberships?.some((m) => m.orgId === newOrgId);
-			if (!isMember) {
-				throw new AuthError(403, "NOT_ORG_MEMBER", "No perteneces a esta organización");
-			}
+			assertOrgMembership(user, newOrgId);
 		}
 
 		// Re-construir usuario con nuevo orgId y permisos actualizados
@@ -526,6 +529,13 @@ export class AuthEndpoints {
 
 		if (username.length < 3 || username.length > 30) {
 			throw new AuthError(400, "INVALID_USERNAME", "El nombre de usuario debe tener entre 3 y 30 caracteres");
+		}
+
+		// Reservados y malas palabras (src/common/config/name-policy.json). Bloquear el username
+		// bloquea también su dirección de correo, que se deriva de él. El mensaje no distingue el
+		// motivo: publicar la lista no ayuda a elegir otro nombre.
+		if (checkUsername(username)) {
+			throw new AuthError(400, "FORBIDDEN_USERNAME", "Ese nombre de usuario no está disponible");
 		}
 
 		if (password.length < 8) {

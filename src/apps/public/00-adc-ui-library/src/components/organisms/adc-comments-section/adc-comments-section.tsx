@@ -1,6 +1,6 @@
 import { Component, Prop, Event, EventEmitter, State, JSX } from "@stencil/core";
 import type { CommentEntry } from "../../atoms/adc-comment-item/adc-comment-item";
-import type { Block } from "../adc-blocks-renderer/adc-blocks-renderer";
+import type { Block } from "@common/ADC/types/learning.js";
 
 export interface SessionLike {
 	authenticated: boolean;

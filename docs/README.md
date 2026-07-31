@@ -20,5 +20,11 @@ README enruta por categoría, no re-lista cada archivo).
   (models, daos, endpoints, service-shell, frontend, enterprise-apps).
 - **[multirepo.md](multirepo.md)** — Presets: instalación, creación, extracción y convenciones.
 - **[guides/](guides/)** — Guías operativas puntuales:
+  [desktop-clients](guides/desktop-clients.md) (clientes que se publican en npm),
   [discord-oauth](guides/discord-oauth.md), [email-dns-setup](guides/email-dns-setup.md),
+  [name-policy](guides/name-policy.md) (alias de correo y usernames prohibidos),
   [ports](guides/ports.csv), [security-ci](guides/security-ci.md).
+
+> La operación fiscal (monotributo/ARCA, facturación electrónica) y el modelo de precios
+> se documentan aparte, fuera de este repositorio: describen el flujo contable de quien
+> opera la plataforma, no cómo funciona la plataforma.

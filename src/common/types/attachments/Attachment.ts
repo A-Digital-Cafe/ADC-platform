@@ -15,15 +15,23 @@ export type AttachmentStatus = "pending" | "ready" | "retained";
 /**
  * Metadata de cifrado en reposo del objeto S3 (envelope encryption por usuario).
  * El binario en S3 es ciphertext AES-256-GCM; la DEK del usuario vive envuelta
- * por la master key de la plataforma. `size` sigue siendo el tamaño en claro
- * (GCM no expande; el auth tag se guarda aquí, no en el objeto).
+ * por la master key de la plataforma. `size` es siempre el tamaño EN CLARO.
+ *
+ * Dos esquemas conviven:
+ * - `aes-256-gcm` (legado): un solo GCM sobre el objeto entero. No admite lectura
+ *   parcial (hay que descifrar desde el byte 0); el auth tag va acá, no en el objeto.
+ * - `aes-256-gcm-chunked`: un GCM por chunk de `chunkSize` bytes en claro, cada uno
+ *   con su tag inline en el objeto (que por eso expande 16 B por chunk). Permite
+ *   servir `Range` descifrando sólo los chunks pedidos (ver `crypto/chunked.ts`).
  */
 export interface AttachmentEncryption {
-	scheme: "aes-256-gcm";
-	/** IV por objeto (base64, 12 bytes). */
+	scheme: "aes-256-gcm" | "aes-256-gcm-chunked";
+	/** `aes-256-gcm`: IV del objeto (base64, 12 bytes). `aes-256-gcm-chunked`: prefijo de IV (base64, 8 bytes); el IV de cada chunk es prefijo ‖ índice BE de 4 bytes. */
 	iv: string;
-	/** Auth tag GCM (base64, 16 bytes). */
-	authTag: string;
+	/** Auth tag GCM del objeto entero (base64, 16 bytes). Sólo `aes-256-gcm`; en chunked cada chunk lleva el suyo inline. */
+	authTag?: string;
+	/** Bytes en claro por chunk. Sólo `aes-256-gcm-chunked`. */
+	chunkSize?: number;
 	/** userId dueño de la DEK con la que se cifró. */
 	keyRef: string;
 }
@@ -52,6 +60,12 @@ export interface Attachment {
 	orgId: string | null;
 	createdAt: Date;
 	uploadedAt?: Date;
+	/**
+	 * Cuándo pasó a `retained`. Ordena la purga del pool de retención: los bytes
+	 * retenidos no cuentan cuota, así que sin un tope por antigüedad se acumularían
+	 * indefinidamente rotando subidas y borrados.
+	 */
+	retainedAt?: Date | null;
 }
 
 /**

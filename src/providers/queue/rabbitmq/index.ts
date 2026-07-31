@@ -4,6 +4,7 @@ import type { RabbitMQProviderConfig, TopologyOptions, ConsumerOptions, Operatio
 import { declareOperationTopology } from "./helpers/topology.js";
 import { publishToExchange, publishToRetryQueue } from "./helpers/publisher.js";
 import { createOperationConsumer } from "./helpers/consumer.js";
+import { redact } from "@common/utils/redact.ts";
 
 export type { RabbitMQProviderConfig, TopologyOptions, ConsumerOptions, OperationMessage } from "./types.js";
 
@@ -47,19 +48,21 @@ export default class RabbitMQProvider extends BaseProvider {
 		const url = this.#config.url || "amqp://guest:guest@localhost:5672";
 		this.#connection = new Connection(url);
 
+		// La URL AMQP lleva `user:password` embebidos y los errores del driver suelen
+		// repetirla entera: se redacta ANTES de escribir, no vaya a stdout ni al buffer.
 		this.#connection.on("error", (err: Error) => {
 			if (this.#stopping) {
-				this.logger.logDebug(`[RabbitMQ] connection error during shutdown (expected): ${err.message}`);
+				this.logger.logDebug(`[RabbitMQ] connection error during shutdown (expected): ${redact(err.message)}`);
 				return;
 			}
-			this.logger.logError(`[RabbitMQ] connection error: ${err.message}`);
+			this.logger.logError(`[RabbitMQ] connection error: ${redact(err.message)}`);
 		});
 		this.#connection.on("connection", () => {
 			this.logger.logOk("[RabbitMQ] connection established");
 		});
 
 		this.#publisher = this.#connection.createPublisher({ confirm: true, maxAttempts: 3 });
-		this.logger.logOk(`[RabbitMQ] provider started (${url})`);
+		this.logger.logOk(`[RabbitMQ] provider started (${redact(url)})`);
 	}
 
 	async stop(kernelKey: symbol): Promise<void> {

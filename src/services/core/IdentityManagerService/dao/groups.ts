@@ -2,6 +2,8 @@ import type { Model } from "mongoose";
 import type { Group, User } from "@common/types/identity/index.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { generateId } from "@common/utils/crypto.ts";
+import { buildUpdateSet } from "@common/utils/mongo-update.ts";
+import { GROUP_UPDATABLE_FIELDS } from "../domain/group.js";
 import { escapeRegex } from "@common/utils/escape.ts";
 import { forEachPage } from "@common/utils/batch.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
@@ -105,8 +107,8 @@ export class GroupManager {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.GROUPS);
 
 		try {
-			updates.updatedAt = new Date();
-			const updated = await this.groupModel.findOneAndUpdate({ id: groupId }, updates, { new: true });
+			const update = buildUpdateSet(updates, GROUP_UPDATABLE_FIELDS, { updatedAt: new Date() });
+			const updated = await this.groupModel.findOneAndUpdate({ id: groupId }, update, { new: true });
 			if (!updated) throw new Error(`Grupo ${groupId} no encontrado`);
 			this.logger.logDebug(`Grupo actualizado: ${groupId}`);
 			return updated.toObject?.() || updated;

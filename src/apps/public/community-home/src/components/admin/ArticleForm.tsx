@@ -4,7 +4,6 @@ import { getSession } from "@ui-library/utils/session";
 import { canPublish } from "../../utils/permissions";
 import { adminApi, type Article, type Block, type LearningPath, type PathItemLevel } from "../../utils/admin-api";
 import { contentAPI } from "../../utils/content-api";
-import { BlocksEditor } from "./BlocksEditor";
 
 interface Props {
 	readonly article?: Article | null;
@@ -144,11 +143,11 @@ export function ArticleForm({ article }: Props) {
 					className="p-2 rounded-xxl border border-alt bg-surface"
 				/>
 			</label>
-			<BlocksEditor
+			<adc-blocks-property-editor
 				value={form.blocksText}
-				onChange={(t, p) => {
-					update("blocksText", t);
-					if (p) setBlocks(p);
+				onadcBlocksChange={(ev) => {
+					update("blocksText", ev.detail.json);
+					setBlocks(ev.detail.blocks as Block[]);
 				}}
 			/>
 			{canPub && (

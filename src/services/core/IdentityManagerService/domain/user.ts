@@ -41,3 +41,22 @@ export const userSchema = new Schema<User>(
 	},
 	{ id: false }
 );
+
+/**
+ * Campos que el update genérico (`UserManager.updateUser`) puede escribir, vía `buildUpdateSet`.
+ *
+ * `passwordHash` y `lastLogin` quedan FUERA a propósito: tienen sus propios flujos. `id` y
+ * `createdAt` son inmutables.
+ */
+export const USER_UPDATABLE_FIELDS = [
+	"username",
+	"email",
+	"avatar",
+	"isActive",
+	"roleIds",
+	"groupIds",
+	"permissions",
+	"orgMemberships",
+	"linkedAccounts",
+	"metadata",
+] as const;

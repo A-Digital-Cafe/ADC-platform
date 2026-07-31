@@ -75,6 +75,12 @@ export class AdcContextMenu {
 		this.openSubmenu = index;
 	};
 
+	/** Alterna el submenú `index` (click/tap: sin hover no hay otra forma de abrirlo). */
+	private readonly toggleSub = (index: number) => {
+		if (this.openSubmenu === index) this.openSubmenu = null;
+		else this.openSub(index);
+	};
+
 	/** Cierra el submenú tras un breve delay (cancelable si el cursor vuelve). */
 	private readonly scheduleCloseSub = () => {
 		if (this.submenuTimeout) clearTimeout(this.submenuTimeout);
@@ -160,8 +166,13 @@ export class AdcContextMenu {
 		this.adcContextMenuClose.emit();
 	}
 
-	private readonly select = (item: ContextMenuItem) => {
-		if (item.children?.length) return;
+	private readonly select = (item: ContextMenuItem, index: number, inSubmenu: boolean) => {
+		// Un item con submenú no emite selección: al tocarlo (sin hover, en táctil)
+		// abre o cierra su submenú, que si no quedaría inalcanzable.
+		if (item.children?.length) {
+			if (!inSubmenu) this.toggleSub(index);
+			return;
+		}
 		this.adcContextMenuSelect.emit({ action: item.action ?? "", label: item.label });
 		this.close();
 	};
@@ -228,7 +239,7 @@ export class AdcContextMenu {
 					aria-haspopup={hasSubmenu ? "menu" : undefined}
 					aria-expanded={hasSubmenu ? String(expanded) : undefined}
 					class={`flex w-full items-center gap-2 px-3 py-2 rounded-lg text-left text-sm whitespace-nowrap cursor-pointer transition-colors ${tone}`}
-					onClick={() => this.select(item)}
+					onClick={() => this.select(item, index, inSubmenu)}
 				>
 					{item.iconSvg && (
 						<span class="flex items-center justify-center shrink-0 w-4 h-4" innerHTML={sanitizeSvg(item.iconSvg)}></span>
@@ -244,7 +255,7 @@ export class AdcContextMenu {
 				{hasSubmenu && (
 					<div
 						data-submenu
-						class={`absolute top-0 ${submenuSide} min-w-44 py-1 rounded-xl border border-surface bg-surface shadow-cozy text-text ${expanded ? "block" : "hidden"}`}
+						class={`absolute top-0 ${submenuSide} min-w-44 py-1 rounded-xl border border-surface bg-surface backdrop-blur-sm shadow-cozy text-text ${expanded ? "block" : "hidden"}`}
 						role="menu"
 					>
 						{children.map((child, i) => this.renderItem(child, i, true))}

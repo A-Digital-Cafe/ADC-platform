@@ -24,8 +24,18 @@ export async function buildUIModule(module: RegisteredUIModule, namespace: strin
 	const namespaceModules = ctx.registry.getNamespaceModules(namespace);
 	const namespaceOutputDir = path.join(ctx.uiOutputBaseDir, namespace);
 
+	// Modo "sólo kernel" (`ADC_NO_UI_SERVERS=true`, usado por `driver.mjs boot-check`): el módulo UI
+	// se registra pero no se compila ni levanta servidor, ahorrando ~27 hijos de bundler.
+	// El gate va acá y no en `shouldStartDevServer` porque devolver false cae a `buildStatic`, que
+	// igual spawnea watchers. Cortar acá cubre los tres frameworks sin alterar producción.
+	if (process.env.ADC_NO_UI_SERVERS === "true") {
+		module.buildStatus = "built";
+		ctx.logger.logWarn(`Build de ${module.name} [${namespace}] omitido: ADC_NO_UI_SERVERS=true (modo sólo kernel).`);
+		return;
+	}
+
 	if (framework !== "stencil") {
-		await waitForUILibraryBuild(namespaceModules, module.name, ctx.logger);
+		await waitForUILibraryBuild(module, namespaceModules, ctx.logger);
 	}
 	if (module.uiConfig.isHost ?? false) {
 		await waitForDeclaredRemotes(module, namespaceModules, ctx.logger);

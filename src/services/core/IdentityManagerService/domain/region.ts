@@ -12,3 +12,6 @@ export const regionSchema = new Schema<RegionInfo>({
 	createdAt: { type: Date, default: Date.now },
 	updatedAt: { type: Date, default: Date.now },
 });
+
+/** Campos escribibles por `RegionManager.updateRegion`. `path` es la clave de búsqueda, no un campo actualizable. */
+export const REGION_UPDATABLE_FIELDS = ["isGlobal", "isActive", "metadata"] as const;

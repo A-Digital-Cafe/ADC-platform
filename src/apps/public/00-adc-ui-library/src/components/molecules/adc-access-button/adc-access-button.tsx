@@ -1,5 +1,5 @@
 import { Component, Prop, State, Event, EventEmitter, Listen, Element } from "@stencil/core";
-import { isPrivateHost } from "@common/utils/url-utils.js";
+import { getUrl, isPrivateHost } from "@common/utils/url-utils.js";
 import {
 	authMarkerFor,
 	broadcastAuthChange,
@@ -170,7 +170,7 @@ export class AdcAccessButton {
 	}
 
 	private getDefaultAccountUrl(): string {
-		return isPrivateHost(globalThis.location?.hostname ?? "") ? "http://localhost:3016" : "https://my-account.adigitalcafe.com";
+		return getUrl(3016, "my-account.adigitalcafe.com");
 	}
 
 	private async checkSession() {

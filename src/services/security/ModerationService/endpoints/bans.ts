@@ -99,10 +99,11 @@ export class BanEndpoints {
 		url: "/api/moderation/bans",
 		permissions: [P.IDENTITY.USERS.UPDATE],
 		options: {
+			successStatus: 201,
 			tag: "ModerationService/Bans",
 			summary: "Crea un ban",
 			description: "Con `userId` orquesta el baneo completo (Identity + blocklist + permisos); con `emails`/`ips` agrega un ban raw.",
-			schema: { body: BS.CreateBanBody, response: { 200: BS.CreateBanResponse } },
+			schema: { body: BS.CreateBanBody, response: { 201: BS.CreateBanResponse } },
 		},
 	})
 	static async createBan(ctx: EndpointCtx<Record<string, string>, BanBody>) {

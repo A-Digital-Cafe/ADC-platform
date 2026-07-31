@@ -34,6 +34,8 @@ import type { QuotaTrackerGetter } from "@common/types/storage/quota.ts";
 import { forEachPage } from "@common/utils/batch.ts";
 import { createQuotaTrackerGetter } from "../../data/StorageQuotaService/index.js";
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.js";
+import { createSeatGate, type SeatGate } from "@common/types/plans/consumers.js";
+import type { IPlanService } from "@common/types/plans/IPlanService.js";
 
 /**
  * Espera antes de la primera corrida del purge de retención: da tiempo a que
@@ -131,11 +133,16 @@ export default class IdentityManagerService extends BaseService implements IIden
 	/** Tracker de cuota lazy: StorageQuotaService carga después (kernelMode mayor). */
 	readonly #getQuotaTracker: QuotaTrackerGetter;
 
+	/** Gate de asientos lazy: PlanService carga después (kernelMode mayor). */
+	readonly #seatGate: SeatGate;
+
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
 		// Excepción de ciclo: Identity NO puede declarar StorageQuotaService (StorageQuota
 		// depende de Identity), así que resuelve por nombre fijo vía el reader del kernel.
 		this.#getQuotaTracker = createQuotaTrackerGetter(() => kernel.getReadonlyRegistry().getService<IStorageQuotaService>("StorageQuotaService"));
+		// Mismo ciclo con PlanService (declara Identity): resolución perezosa por nombre.
+		this.#seatGate = createSeatGate(() => kernel.getReadonlyRegistry().getService<IPlanService>("PlanService"));
 		this.#mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
 		this.#operationsService = this.getMyService<IOperationsService>("OperationsService");
 	}
@@ -191,7 +198,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 
 			// Inicializar managers en orden de dependencia:
 			// UserManager (independiente) → GroupManager (→ UserManager) → RoleManager (→ UserManager, GroupManager) → OrgManager (→ todos)
-			this.#userManager = new UserManager(UserModel, this.logger, this.#getAuthVerifier);
+			// El gate de asientos va SOLO en el manager con auth: los managers internos sirven
+			// a infraestructura (sesiones, seeds) y no deben quedar bloqueados por un límite comercial.
+			this.#userManager = new UserManager(UserModel, this.logger, this.#getAuthVerifier, this.#seatGate);
 			this.#groupManager = new GroupManager(GroupModel, this.#userManager, this.logger, this.#getAuthVerifier);
 			this.#roleManager = new RoleManager(
 				RoleModel,

@@ -19,6 +19,11 @@
 			"readMax": "${ENDPOINT_RATE_LIMIT_READ_MAX:-600}",
 			"mutationMax": "${ENDPOINT_RATE_LIMIT_MUTATION_MAX:-120}",
 			"windowMs": "${ENDPOINT_RATE_LIMIT_WINDOW_MS:-60000}"
+		},
+		"metrics": {
+			"enabled": "${ENDPOINT_METRICS_ENABLED:-true}",
+			"flushIntervalMs": "${ENDPOINT_METRICS_FLUSH_INTERVAL_MS:-60000}",
+			"retentionDays": "${ENDPOINT_METRICS_RETENTION_DAYS:-7}"
 		}
 	},
 	"providers": [

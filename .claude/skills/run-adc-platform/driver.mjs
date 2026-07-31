@@ -8,8 +8,11 @@
 // viewport (mobile emulation), auth (dev login), commands (the verbs below).
 //
 // Usage:
-//   node driver.mjs boot-check [seconds]   # boot kernel directly; PASS/FAIL on clean start
-//   node driver.mjs ready [seconds]        # block until :3000 actually serves
+//   node driver.mjs boot-check [seconds]   # boot kernel directly (no UI servers); PASS/FAIL
+//   node driver.mjs up [seconds]           # launch `bun run dev` detached, wait until :3000 serves
+//   node driver.mjs ready [app|port] [s]   # block until the gateway (or one app) actually serves
+//   node driver.mjs port <app>             # resolve an app name to its dev port
+//   node driver.mjs logs <app> [n]         # tail that app's bundler log (temp/logs/)
 //   node driver.mjs smoke                  # curl every app port + screenshot key routes
 //   node driver.mjs shot <url> [name]      # one-shot screenshot
 //   node driver.mjs login <who> [url] [name]
@@ -25,7 +28,7 @@
 // full guide, gotchas and troubleshooting.
 import { BASE } from "./utils/config.mjs";
 import { resolveViewport } from "./utils/viewport.mjs";
-import { bootCheck, ready, smoke, shot, login, drive, stop } from "./utils/commands.mjs";
+import { bootCheck, ready, smoke, shot, login, drive, stop, port, logs, up } from "./utils/commands.mjs";
 
 function parseDrive(argv) {
 	const opts = { wait: null, waitTimeout: 15000, actions: [], settle: 800, login: null, mobile: false, device: null, viewport: null };
@@ -52,8 +55,11 @@ function parseDrive(argv) {
 const [cmd, ...args] = process.argv.slice(2);
 try {
 	if (cmd === "smoke") await smoke();
-	else if (cmd === "boot-check") await bootCheck(args[0]);
-	else if (cmd === "ready") await ready(args[0]);
+	else if (cmd === "boot-check") await bootCheck(args.find((a) => a !== "--with-ui"), { withUi: args.includes("--with-ui") });
+	else if (cmd === "up") await up(args[0]);
+	else if (cmd === "ready") await ready(args[0], args[1]);
+	else if (cmd === "port") await port(args[0]);
+	else if (cmd === "logs") await logs(args[0], args[1]);
 	else if (cmd === "stop") await stop();
 	else if (cmd === "shot") {
 		const { opts, rest } = parseDrive(args);
@@ -65,7 +71,9 @@ try {
 		const { opts, rest } = parseDrive(args);
 		await drive(rest[0] || BASE, rest[1] || "drive", opts);
 	} else {
-		console.log("usage: node driver.mjs <boot-check [s] | ready [s] | smoke | shot <url> [name] | login <who> [url] [name] | drive <url> [name] [flags]>");
+		console.log(
+			"usage: node driver.mjs <boot-check [s] [--with-ui] | up [s] | ready [app|port] [s] | port <app> | logs <app> [n] | smoke | shot <url> [name] | login <who> [url] [name] | drive <url> [name] [flags]>"
+		);
 		console.log("  flags: --login <who> --wait <sel> --wait-timeout <ms> --click <sel> --type <sel::text> --eval <expr> --settle <ms> --mobile --device <d> --viewport <WxH>");
 		process.exit(2);
 	}

@@ -18,6 +18,8 @@ export default {
 		UNHANDLED_ERROR: "Ha ocurrido un error inesperado",
 		UNKNOWN_ERROR: "Error desconocido",
 		CONNECTION_REFUSED: "No se pudo conectar con el servidor. Verifica tu conexión o inténtalo más tarde.",
+		// La emite el propio cliente HTTP al agotarse el límite del endpoint.
+		RATE_LIMIT_EXCEEDED: "Demasiadas solicitudes seguidas. Espera un momento antes de volver a intentar.",
 		// Errores genéricos de sesión/auth (authGenericErrors)
 		NO_SESSION: "No hay sesión activa",
 		INVALID_SESSION: "Sesión inválida",
@@ -28,6 +30,13 @@ export default {
 		// Errores de idempotencia
 		IDEMPOTENCY_RUNNING: "Esta operación ya está siendo procesada. Espere hasta 2 minutos antes de intentar nuevamente.",
 		IDEMPOTENCY_KEY_MISSING: "Se requiere una clave de idempotencia para esta operación.",
+		// Errores de contratación de planes. Los específicos del pedido
+		// (SEATS_OUT_OF_RANGE, PLAN_NOT_PURCHASABLE) NO se traducen a propósito: su
+		// mensaje del servidor lleva el dato concreto ("arranca en 4 asientos") y una
+		// traducción estática lo perdería.
+		CHECKOUT_FAILED: "No se pudo iniciar la contratación. Inténtalo de nuevo en unos minutos.",
+		GATEWAY_UNAVAILABLE: "No hay ninguna pasarela de pago disponible en este momento.",
+		GATEWAY_ERROR: "La pasarela de pago no respondió. Inténtalo de nuevo en unos minutos.",
 		// Errores de adjuntos
 		ATTACHMENT_BAD_INPUT: "Datos de adjunto inválidos",
 		ATTACHMENT_TOO_LARGE: "El archivo supera el tamaño máximo permitido",
@@ -48,7 +57,20 @@ export default {
 		COMMENT_BAD_ATTACHMENT: "Adjunto inválido o no autorizado",
 		COMMENT_ATTACHMENT_NOT_OWNED: "Solo puedes adjuntar archivos que tú hayas subido",
 		COMMENT_EDIT_WINDOW_CLOSED: "Ya no se puede editar este comentario",
-		COMMENT_BAD_EMOJI: "Emoji inválido"
+		COMMENT_BAD_EMOJI: "Emoji inválido",
+		// Errores de Drive: topes y cupos del plan. Van acá y no en el i18n de la app
+		// porque `adc-custom-error` (el toast global de `adc-layout`) resuelve por
+		// `errors.<clave>` contra este diccionario, igual que los de adjuntos y pasarela.
+		FILE_TOO_LARGE: "El archivo supera el tamaño máximo que permite tu plan.",
+		STORAGE_FULL: "Cuota de almacenamiento agotada. Liberá espacio o pasá a un plan con más lugar.",
+		EGRESS_QUOTA_EXCEEDED: "Alcanzaste el cupo de descarga mensual de tu plan. Se renueva al empezar el mes.",
+		TUNNEL_QUOTA_EXCEEDED: "Alcanzaste el cupo mensual de transferencia entre dispositivos. Se renueva al empezar el mes.",
+		DEVICE_LIMIT: "Llegaste al máximo de dispositivos vinculados de tu plan. Desvinculá uno para agregar otro.",
+		REMOTE_UNIT_LIMIT: "Llegaste al máximo de unidades remotas de tu plan.",
+		TRANSFER_LIMIT: "Ya tenés en curso todas las transferencias simultáneas que permite tu plan. Esperá a que termine una.",
+		ARCHIVE_EXPIRED: "Esa descarga comprimida expiró. Volvé a generarla desde la selección.",
+		ARCHIVE_NOT_FOUND: "Esa descarga comprimida no existe.",
+		LINK_UNAVAILABLE: "El enlace no está disponible en este momento. Probá más tarde."
 	},
 	footer: {
 		aria: "Enlaces de ayuda",

@@ -1,5 +1,5 @@
 import { Component, Prop, Event, EventEmitter, State } from "@stencil/core";
-import type { Block } from "../../organisms/adc-blocks-renderer/adc-blocks-renderer";
+import type { Block } from "@common/ADC/types/learning.js";
 import { buildAvatarUrl, fetchPublicProfile } from "../../../../utils/avatar.js";
 
 export interface AttachmentLite {

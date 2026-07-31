@@ -53,16 +53,20 @@ Every module directory follows npm workspace structure:
 
 ### Dependency Injection
 
-Access modules via Kernel methods, **not** direct imports. Providers are referenced by **name**, not by type:
+Access dependencies via the `BaseModule` methods, **not** direct imports. They are referenced by
+**name**, not by type. Same API in apps, services, providers and utilities:
 
 ```typescript
-// In Apps: Use getMyProvider() to get YOUR configured instance
 this.getMyProvider<MongoProvider>("mongo");
-
-// In Services/Providers: Use kernel directly
-this.kernel.getService<IdentityManagerService>("IdentityManagerService");
-this.kernel.getProvider<FileStorage>("file-storage");
+this.getMyService<IdentityManagerService>("IdentityManagerService");
+this.getMyUtility<AttachmentsUtility>("attachments-utility");
+this.tryGetMyService<INotificationService>("NotificationService"); // undefined if absent
 ```
+
+> ⚠️ These resolve **only what the module declared in its own `config.json`**. If the name is not in
+> that file's `providers`/`services`/`utilities`, the call fails even when the module is loaded.
+> There is no `this.kernel.getService()` / `this.kernel.getProvider()`. See
+> `docs/structure/kernel-access.md`.
 
 ### UI Apps Pattern (Module Federation)
 

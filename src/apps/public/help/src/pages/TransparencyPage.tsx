@@ -68,6 +68,14 @@ const REPORT_ITEMS: ReportItem[] = [
 		relatedLabel: "Ver roadmap de operaciones",
 	},
 	{
+		title: "Degradación de límites de plan",
+		status: "aplicado",
+		metric: "Incidencias del servicio de planes en las que las cuentas pagas quedaron temporalmente con los límites del plan gratuito.",
+		needed: "Si el servicio interno de planes no responde, las apps siguen funcionando con los límites del plan base en vez de liberar recursos sin control. Es una degradación deliberada y temporal, no una pérdida de plan.",
+		relatedHref: "/terms#degradacion-de-planes",
+		relatedLabel: "Ver la cláusula de disponibilidad",
+	},
+	{
 		title: "Seguridad y bug bounty",
 		status: "planificado",
 		metric: "Reportes de vulnerabilidades recibidos, estados y tiempos de respuesta en forma agregada.",

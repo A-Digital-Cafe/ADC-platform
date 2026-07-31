@@ -1,18 +1,19 @@
+import type { LogPage, LogQuery } from "@common/utils/log-buffer.ts";
+
 export interface LogManagerConfig {
-    retentionDays: number;
-    retentionCount?: number;
-    logsDir: string;
+	retentionDays: number;
+	retentionCount?: number;
+	logsDir: string;
 }
 
-export interface LogEntry {
-    timestamp: string;
-    level: string;
-    message: string;
-}
-
+/**
+ * Superficie del servicio de logs. Los archivos de `temp/logs` (dev-servers de UI) sólo se
+ * rotan; lo consultable es el buffer en memoria del proceso.
+ */
 export interface ILogManagerService {
-    queryLogs(appName: string, date?: string): Promise<string>;
-    cleanupLogs(): Promise<void>;
-    getLogsDir(): string;
+	/** Últimas líneas del proceso, filtradas y paginadas por `seq`. */
+	queryBuffer(filter: LogQuery): LogPage;
+	/** Borra archivos de log por antigüedad y por cantidad. */
+	cleanupLogs(): Promise<void>;
+	getLogsDir(): string;
 }
-

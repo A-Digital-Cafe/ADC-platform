@@ -5,6 +5,7 @@ import { StorageScopes, STORAGE_RESOURCE_NAME } from "@common/types/storage/perm
 import { SecurityScopes, SECURITY_RESOURCE_NAME } from "@common/types/security/permissions.ts";
 import { ModulesScopes, MODULES_RESOURCE_NAME } from "@common/types/modules/permissions.ts";
 import { EmailScopes, EMAIL_RESOURCE_NAME } from "@common/types/email/permissions.ts";
+import { PlanScopes, PLANS_RESOURCE_NAME } from "@common/types/plans/permissions.ts";
 import { BaseRole, RoleHierarchy } from "@common/types/identity/Role.ts";
 import { COMMUNITY_SCOPES_BITS, isGlobalOnlyResource } from "@common/types/resources.ts";
 
@@ -57,10 +58,12 @@ const BASE_MANAGEMENT_ROLES: Array<BaseRole> = [
 	},
 	{
 		name: SystemRole.DATA_MANAGER,
-		description: "Gestor de datos (cuotas de storage, recuperación de Drive, correo)",
+		description: "Gestor de datos (cuotas de storage, planes y límites, recuperación de Drive, correo)",
 		hierarchy: RoleHierarchy.MANAGER,
 		permissions: [
 			{ resource: STORAGE_RESOURCE_NAME, action: CRUDXAction.CRUD, scope: StorageScopes.ALL },
+			// Global-only: la oferta comercial (planes, límites, suscripciones) es de plataforma.
+			{ resource: PLANS_RESOURCE_NAME, action: CRUDXAction.CRUD, scope: PlanScopes.ALL },
 			// Recuperación admin de archivos purgados / legal hold en Drive.
 			{ resource: "drive", action: CRUDXAction.EXECUTE, scope: 1 },
 			// Administración de cuentas y settings de correo (cuando EmailService esté activo).
@@ -69,10 +72,11 @@ const BASE_MANAGEMENT_ROLES: Array<BaseRole> = [
 	},
 	{
 		name: SystemRole.APP_MANAGER,
-		description: "Gestor de aplicaciones (modules-manager: runtime, git, avisos, schedules, audit)",
+		description: "Gestor de aplicaciones (modules-manager: runtime, git, avisos, schedules, audit, logs)",
 		hierarchy: RoleHierarchy.MANAGER,
 		// Global-only: la gestión de módulos es de plataforma. ALL incluye EXECUTE
-		// (start/stop/reload, git pull, anuncios broadcast).
+		// (start/stop/reload, git pull, anuncios broadcast) y el bit LOGS.
+		// Admin/SYSTEM lo cubren por el comodín `*` con scope 0xffff.
 		permissions: [{ resource: MODULES_RESOURCE_NAME, action: CRUDXAction.ALL, scope: ModulesScopes.ALL }],
 	},
 	{

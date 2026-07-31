@@ -28,6 +28,8 @@ import {
 	type PendingLinkEntry,
 } from "../utils/pendingLinks.js";
 import * as OAS from "./schemas/oauth.js";
+import { checkUsername, generateRandomUsername } from "@common/utils/name-policy.js";
+import { isPrivateHost } from "@common/utils/url-utils.js";
 
 /** Nombre de las cookies */
 const STATE_COOKIE_NAME = "oauth_state";
@@ -566,6 +568,9 @@ export class OAuthEndpoints {
 			for (const allowed of ALLOWED_REDIRECT_DOMAINS) {
 				if (hostname === allowed || hostname.endsWith(`.${allowed}`)) return true;
 			}
+
+			// Solo en dev: IPs privadas de LAN (probar el OAuth desde el móvil contra `bun run dev`).
+			if (!isProd && isPrivateHost(hostname)) return true;
 		} catch {
 			// URL mal formada → rechazar
 		}
@@ -712,15 +717,29 @@ export class OAuthEndpoints {
 
 	/**
 	 * Genera un username único añadiendo sufijo aleatorio si hay colisión.
+	 *
+	 * Si el nombre que trae el proveedor está prohibido (reservado o con malas
+	 * palabras) NO se rechaza el login —la persona no eligió ese nombre acá—:
+	 * se le asigna uno generado del tipo `braveOtter482`.
 	 */
 	private static async generateUniqueUsername(
 		baseUsername: string,
 		users: { getUserByUsername: (username: string) => Promise<unknown> }
 	): Promise<string> {
+		const { randomBytes, randomInt } = await import("node:crypto");
+
+		if (checkUsername(baseUsername)) {
+			for (let i = 0; i < 5; i++) {
+				const candidate = generateRandomUsername((max) => randomInt(max));
+				const taken = await users.getUserByUsername(candidate);
+				if (!taken) return candidate;
+			}
+			return `${generateRandomUsername((max) => randomInt(max))}${randomBytes(2).toString("hex")}`;
+		}
+
 		const existing = await users.getUserByUsername(baseUsername);
 		if (!existing) return baseUsername;
 
-		const { randomBytes } = await import("node:crypto");
 		for (let i = 0; i < 5; i++) {
 			const suffix = randomBytes(3).toString("hex");
 			const candidate = `${baseUsername}_d${suffix}`;

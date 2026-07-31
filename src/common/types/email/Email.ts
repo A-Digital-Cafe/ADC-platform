@@ -46,8 +46,16 @@ export interface EmailMessage {
 	replyTo?: EmailAddress;
 
 	subject: string;
-	/** HTML saneado del cuerpo. */
+	/** HTML saneado del cuerpo. Vacío si el cuerpo se derramó a objetos (ver `bodyKey`). */
 	bodyHtml: string;
+	/**
+	 * Clave del objeto con el cuerpo HTML, cuando superó el umbral inline.
+	 *
+	 * Un GB en la base cuesta bastante más que un GB de objetos y el HTML es lo que más
+	 * crece; `bodyText` sí se queda en el documento porque lo usa la búsqueda. Es un
+	 * detalle de persistencia: la API siempre devuelve el cuerpo ya rehidratado.
+	 */
+	bodyKey?: string | null;
 	/** Texto plano alternativo. */
 	bodyText: string;
 
@@ -78,9 +86,20 @@ export interface EmailMessage {
 	updatedAt: Date;
 }
 
-/** Cuenta de correo de un usuario dentro de una organización. */
+/**
+ * Tenant de los buzones personales, que no cuelgan de ninguna organización.
+ *
+ * Los `orgId` reales son UUID, así que no puede colisionar, y mantiene `orgId` como `string`
+ * requerido en los schemas. Nunca se usa para resolver una organización: quien distingue el ámbito
+ * es `MailAccount.scope`. Además está reservado como slug (`checkOrgSlug`), porque la resolución de
+ * organizaciones acepta `orgId` **o** `slug`.
+ */
+export const PERSONAL_ORG_ID = "personal";
+
+/** Cuenta de correo de un usuario: personal o dentro de una organización. */
 export interface MailAccount {
 	id: string;
+	/** Organización dueña del buzón, o {@link PERSONAL_ORG_ID} si es personal. */
 	orgId: string;
 	userId: string;
 	/**
@@ -90,7 +109,10 @@ export interface MailAccount {
 	 * Por defecto `"org"` (compatibilidad con cuentas existentes).
 	 */
 	scope?: "user" | "org";
-	/** Dirección completa: `usuario@<orgSlug>.adigitalcafe.com`. */
+	/**
+	 * Dirección completa: `usuario@<orgSlug>.<raíz>` para buzones de organización,
+	 * `usuario@<raíz>` para los personales.
+	 */
 	address: string;
 	displayName: string;
 	/** Contador incremental de almacenamiento usado (bytes). */

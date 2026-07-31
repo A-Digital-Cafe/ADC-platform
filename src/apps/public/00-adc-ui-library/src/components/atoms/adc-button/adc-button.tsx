@@ -52,31 +52,42 @@ export class AdcButton {
 		);
 	}
 
-	private readonly baseClass =
-		"rounded-3xl shadow-cozy font-heading cursor-pointer hover:brightness-105 inline-block text-center font-semibold touch-manipulation";
+	private readonly baseClass = "rounded-3xl shadow-cozy font-heading inline-block text-center font-semibold touch-manipulation";
 
-	private getClass(): string {
+	private getClass(disabled: boolean): string {
 		const sizeClass = this.size === "small" ? "px-4 py-2 text-sm min-h-[36px] min-w-[36px]" : "px-8 py-4 min-h-[44px] min-w-[44px]";
+		// Los hovers se omiten cuando está deshabilitado: Tailwind resuelve el conflicto
+		// por orden en la hoja generada, no por orden en el atributo class.
+		const hover = disabled ? "" : " hover:brightness-105";
 		// border-2 (transparente en variantes rellenas) mantiene la misma caja que la
 		// variante outlined, para que alineen pixel-perfect lado a lado (footers de modal).
 		let variantClass = "border-2 border-transparent bg-primary text-tprimary";
 		if (this.variant === "accent") variantClass = "border-2 border-transparent bg-accent text-tprimary";
 		else if (this.variant === "danger") variantClass = "border-2 border-transparent bg-danger text-tdanger";
-		else if (this.variant === "accent-outlined") variantClass = "border-2 border-accent/50 bg-transparent text-accent hover:bg-accent/10";
-		else if (this.variant === "danger-outlined") variantClass = "border-2 border-danger bg-danger/70 text-tdanger hover:bg-danger/80";
-		return `${this.baseClass} ${sizeClass} ${variantClass}`;
+		else if (this.variant === "accent-outlined")
+			variantClass = `border-2 border-accent/50 bg-transparent text-accent${disabled ? "" : " hover:bg-accent/10"}`;
+		else if (this.variant === "danger-outlined")
+			variantClass = `border-2 border-danger bg-danger/70 text-tdanger${disabled ? "" : " hover:bg-danger/80"}`;
+		return `${this.baseClass}${hover} ${sizeClass} ${variantClass}`;
+	}
+
+	/** Estado visual: gris + cursor bloqueado al deshabilitar; spinner/espera al cargar. */
+	private stateClass(disabled: boolean): string {
+		if (this.loading) return " cursor-wait opacity-80";
+		return disabled ? " opacity-40 grayscale cursor-not-allowed" : " cursor-pointer";
 	}
 
 	render() {
 		const label = this.label ? this.label : <slot></slot>;
 		const content = this.loading ? [this.renderSpinner(), label] : label;
-		const className = `${this.getClass()}${this.loading ? " cursor-wait opacity-80" : ""}`;
-		const isDisabled = this.disabled || this.loading;
+		const isDisabled = Boolean(this.disabled) || Boolean(this.loading);
+		const className = `${this.getClass(isDisabled)}${this.stateClass(isDisabled)}`;
 
 		if (this.href) {
 			return (
 				<a
-					href={this.href}
+					// Sin href al estar deshabilitado: un <a> con aria-disabled navega igual.
+					href={isDisabled ? undefined : this.href}
 					target="_blank"
 					rel="noopener noreferrer"
 					class={className}

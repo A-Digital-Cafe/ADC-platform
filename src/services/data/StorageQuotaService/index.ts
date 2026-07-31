@@ -8,8 +8,8 @@ import { Kernel } from "@kernel";
 import type { QuotaTracker, QuotaTrackerGetter, StorageLimitOverride } from "@common/types/storage/quota.ts";
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.ts";
 import { StorageError } from "@common/types/custom-errors/StorageError.ts";
+import type { IPlanService } from "@common/types/plans/IPlanService.ts";
 import { storageUsageSchema, type StorageUsageDoc } from "./domain/usage.ts";
-import { storageLimitOverrideSchema } from "./domain/limitOverride.ts";
 import { QuotaManager, type RegisteredApp } from "./dao/QuotaManager.ts";
 import { LimitsManager } from "./dao/LimitsManager.ts";
 import { UsageEndpoints } from "./endpoints/usage.ts";
@@ -79,16 +79,15 @@ export default class StorageQuotaService extends BaseService implements IStorage
 		const internal = this.#internalIdentity;
 
 		const UsageModel = this.mongoProvider.createModel<StorageUsageDoc>("storage_usage", storageUsageSchema);
-		const OverrideModel = this.mongoProvider.createModel<StorageLimitOverride>("storage_limit_overrides", storageLimitOverrideSchema);
 
+		// Los límites y sus excepciones viven en PlanService: acá sólo se adaptan a bytes.
 		this.#limitsManager = new LimitsManager(
-			OverrideModel,
 			{
 				getUser: (userId) => internal.users.getUser(userId),
 				getOrganization: (orgIdOrSlug) => internal.organizations.getOrganization(orgIdOrSlug),
-				getRole: (roleId) => internal.roles.getRole(roleId),
 			},
-			this.logger
+			this.logger,
+			() => this.tryGetMyService<IPlanService>("PlanService")
 		);
 		this.#quotaManager = new QuotaManager(UsageModel, this.#limitsManager, this.logger);
 

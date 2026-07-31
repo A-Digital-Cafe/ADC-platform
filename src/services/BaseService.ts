@@ -166,6 +166,20 @@ export abstract class BaseService extends BaseModule implements IService {
 	}
 
 	/**
+	 * Espera a que un provider termine de conectar, con timeout duro.
+	 *
+	 * Un provider de infraestructura (mongo, redis) puede tardar en levantar: fallar
+	 * al primer intento haría depender el arranque del orden de los contenedores.
+	 */
+	protected async waitForProvider(provider: { isConnected(): boolean }, what = "El provider", maxWaitMs = 10_000): Promise<void> {
+		const startTime = Date.now();
+		while (!provider.isConnected() && Date.now() - startTime < maxWaitMs) {
+			await new Promise((resolve) => setTimeout(resolve, 500));
+		}
+		if (!provider.isConnected()) throw new Error(`${what} no pudo conectarse en el tiempo esperado`);
+	}
+
+	/**
 	 * Resuelve el directorio del service según el entorno
 	 */
 	protected getServiceDir(): string {

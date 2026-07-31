@@ -113,7 +113,8 @@ export default class RedisProvider extends BaseProvider {
 			this.logger.logError(`Error cerrando cliente Redis: ${err.message}`);
 		} finally {
 			SHARED_POOLS.delete(physicalKey);
-			this.logger.logOk(`RedisProvider pool cerrado (${physicalKey})`);
+			// La clave física ES la URL con credenciales: se loguea host:port, nunca la clave.
+			this.logger.logOk(`RedisProvider pool cerrado (${this.#config.host}:${this.#config.port})`);
 		}
 	}
 
@@ -148,6 +149,16 @@ export default class RedisProvider extends BaseProvider {
 			// Bun soporta argumentos estándar de Redis
 			await this.client.set(finalKey, value, "EX", ttlSeconds);
 		else await this.client.set(finalKey, value);
+	}
+
+	/**
+	 * `SET key value NX EX <ttl>`: escribe **sólo** si la clave no existe, en una única operación
+	 * del servidor. `exists()` + `setex()` no es equivalente (dos viajes, con carrera entre medio).
+	 * @returns `true` si esta llamada creó la clave; `false` si ya existía.
+	 */
+	async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+		const result = await this.client.set(this._k(key), value, "NX", "EX", String(ttlSeconds));
+		return result === "OK";
 	}
 
 	async del(key: string): Promise<void> {
@@ -189,6 +200,10 @@ export default class RedisProvider extends BaseProvider {
 
 	async hgetall(key: string): Promise<Record<string, string>> {
 		return this.client.hgetall(this._k(key));
+	}
+
+	async hincrby(key: string, field: string, increment: number): Promise<number> {
+		return this.client.hincrby(this._k(key), field, increment);
 	}
 
 	// === Operaciones con sets ===

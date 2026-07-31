@@ -32,6 +32,10 @@ export enum Scope {
 	UiRegister = "ui:register",
 	/** Registrarse como app consumidora en StorageQuotaService. */
 	StorageRegister = "storage:register",
+	/** Registrar features vendibles en PlanService (`registerFeatures`). */
+	PlanRegister = "plans:register",
+	/** Mutar el estado comercial de un plan (asientos pagos) desde el servicio de suscripciones. */
+	PlanAdmin = "plans:admin",
 	/** Anunciar a TODOS los usuarios (`NotificationService.broadcast`). Amplifica ×N: opt-in explícito. */
 	NotificationsBroadcast = "notifications:broadcast",
 	/**

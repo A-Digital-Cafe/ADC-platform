@@ -1,28 +1,27 @@
 import * as path from "node:path";
 import type { RegisteredUIModule } from "../../types.js";
 
-/** Busca la UI library (Stencil) declarada como dependencia del módulo. */
-export function findUILibrary(modules: Map<string, RegisteredUIModule>, targetModule: RegisteredUIModule): RegisteredUIModule | null {
+/** Busca todas las UI libraries (Stencil) declaradas como dependencia del módulo, en orden de declaración. */
+export function findUILibraries(modules: Map<string, RegisteredUIModule>, targetModule: RegisteredUIModule): RegisteredUIModule[] {
 	const uiDependencies = targetModule.uiConfig.uiDependencies || [];
+	const libraries: RegisteredUIModule[] = [];
 
 	for (const depName of uiDependencies) {
 		const depModule = modules.get(depName);
 		if (depModule?.uiConfig.framework === "stencil") {
-			return depModule;
+			libraries.push(depModule);
 		}
 	}
 
-	return null;
+	return libraries;
 }
 
-/** Inyecta los aliases de la UI library en el mapa proporcionado. */
-export function addUILibraryAliases(aliases: Record<string, string>, uiLibrary: RegisteredUIModule, uiOutputBaseDir: string): void {
+function addAliasesWithPrefix(aliases: Record<string, string>, uiLibrary: RegisteredUIModule, uiOutputBaseDir: string, prefix: string): void {
 	const exports = uiLibrary.uiConfig.exports || {};
-	const uiModuleName = uiLibrary.uiConfig.name;
-	const outputDir = path.resolve(uiOutputBaseDir, uiModuleName);
+	const outputDir = path.resolve(uiOutputBaseDir, uiLibrary.uiConfig.name);
 
 	for (const [exportName, exportPath] of Object.entries(exports)) {
-		const aliasKey = `@ui-library/${exportName}`;
+		const aliasKey = `${prefix}/${exportName}`;
 
 		if (exportName === "loader") {
 			aliases[aliasKey] = path.resolve(outputDir, exportPath);
@@ -31,12 +30,26 @@ export function addUILibraryAliases(aliases: Record<string, string>, uiLibrary: 
 		}
 	}
 
-	// @ui-library/styles -> CSS base de la UI library (para Tailwind)
-	aliases["@ui-library/styles"] = path.resolve(outputDir, "styles.css");
+	// <prefix>/styles -> CSS base de la UI library (para Tailwind)
+	aliases[`${prefix}/styles`] = path.resolve(outputDir, "styles.css");
 
-	// @ui-library -> init.js (auto-ejecuta loader + registra componentes)
-	// Debe ir DESPUÉS de subrutas específicas para que Rspack no capture @ui-library/styles con el alias base.
-	aliases["@ui-library"] = path.resolve(outputDir, "init.js");
+	// <prefix> -> init.js (auto-ejecuta loader + registra componentes)
+	// Debe ir DESPUÉS de subrutas específicas para que Rspack no capture <prefix>/styles con el alias base.
+	aliases[prefix] = path.resolve(outputDir, "init.js");
+}
+
+/**
+ * Inyecta los aliases de cada UI library en el mapa proporcionado.
+ * Cada lib obtiene aliases name-scoped (`@<name>`, `@<name>/utils`, ...); la primera
+ * conserva además los aliases legacy `@ui-library*`.
+ */
+export function addUILibraryAliases(aliases: Record<string, string>, uiLibraries: RegisteredUIModule[], uiOutputBaseDir: string): void {
+	uiLibraries.forEach((uiLibrary, index) => {
+		addAliasesWithPrefix(aliases, uiLibrary, uiOutputBaseDir, `@${uiLibrary.uiConfig.name}`);
+		if (index === 0) {
+			addAliasesWithPrefix(aliases, uiLibrary, uiOutputBaseDir, "@ui-library");
+		}
+	});
 }
 
 /** Indica si el módulo usa React (framework o sharedLib). */

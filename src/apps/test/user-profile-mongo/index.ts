@@ -8,6 +8,13 @@ import { IdentityScopes } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
 import crypto from "node:crypto";
 
+/**
+ * Margen bajo el TTL del access token del SessionManager (15m). Sin esto el token
+ * cacheado en `run()` ya está vencido cuando `stop()` corre horas después y la
+ * limpieza falla entera con "Token expirado".
+ */
+const SYSTEM_TOKEN_MAX_AGE_MS = 10 * 60_000;
+
 interface IdentityTestData {
 	userIds: string[];
 	roleIds: string[];
@@ -25,6 +32,7 @@ export default class UserProfileApp extends BaseApp {
 	private sessionManager!: ISessionManagerService;
 	#systemUser: User | null = null;
 	#systemToken: string | null = null;
+	#systemTokenAt = 0;
 	private testData: IdentityTestData = {
 		userIds: [],
 		roleIds: [],
@@ -267,10 +275,10 @@ export default class UserProfileApp extends BaseApp {
 	}
 
 	/**
-	 * Obtiene o reutiliza el token SYSTEM
+	 * Obtiene el token SYSTEM, reloguéandose si el cacheado ya se acerca al vencimiento.
 	 */
 	async #getSystemToken(): Promise<string> {
-		if (this.#systemToken) return this.#systemToken;
+		if (this.#systemToken && Date.now() - this.#systemTokenAt < SYSTEM_TOKEN_MAX_AGE_MS) return this.#systemToken;
 
 		const systemCredentials = this.identityManager.system.getSystemCredentials(this.getCapability());
 		const token = await this.sessionManager.loginProgrammatic(this.getCapability(), systemCredentials.username, systemCredentials.password);
@@ -278,6 +286,7 @@ export default class UserProfileApp extends BaseApp {
 			throw new Error("No se pudo obtener token para usuario SYSTEM");
 		}
 		this.#systemToken = token;
+		this.#systemTokenAt = Date.now();
 		return token;
 	}
 

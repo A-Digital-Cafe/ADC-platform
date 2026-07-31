@@ -134,6 +134,8 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 			...(seed.globalRoles?.length ? [`global:[${seed.globalRoles.join(", ")}]`] : []),
 			...(seed.orgRoles?.length ? [`${DEV_ORG_SLUG}:[${seed.orgRoles.join(", ")}]`] : []),
 		].join(" ");
-		logger.logOk(`[DevSeed] Usuario dev listo: ${seed.username} / ${password} → ${scopes || "sin roles"}`);
+		// La password NO se loguea: además de stdout, los logs quedan en un buffer en
+		// memoria consultable desde el panel. Quien la necesite la tiene en su `.env`.
+		logger.logOk(`[DevSeed] Usuario dev listo: ${seed.username} → ${scopes || "sin roles"}`);
 	}
 }

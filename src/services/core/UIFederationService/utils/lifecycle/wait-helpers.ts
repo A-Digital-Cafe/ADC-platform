@@ -5,11 +5,14 @@ const UI_LIBRARY_TIMEOUT_MS = 60000;
 const REMOTES_TIMEOUT_MS = 30000;
 const CHECK_INTERVAL_MS = 500;
 
-function findUILibrary(modules: Map<string, RegisteredUIModule>): RegisteredUIModule | null {
-	for (const mod of modules.values()) {
-		if (mod.uiConfig.framework === "stencil") return mod;
-	}
-	return null;
+function findUILibraries(module: RegisteredUIModule, modules: Map<string, RegisteredUIModule>): RegisteredUIModule[] {
+	const declared = (module.uiConfig.uiDependencies || [])
+		.map((name) => modules.get(name))
+		.filter((dep): dep is RegisteredUIModule => dep?.uiConfig.framework === "stencil");
+	if (declared.length > 0) return declared;
+
+	// Sin deps Stencil declaradas: esperar a todas las libs Stencil del namespace (comportamiento legacy).
+	return [...modules.values()].filter((mod) => mod.uiConfig.framework === "stencil");
 }
 
 async function waitUntilTerminal(mod: RegisteredUIModule, maxWaitMs: number): Promise<void> {
@@ -21,27 +24,29 @@ async function waitUntilTerminal(mod: RegisteredUIModule, maxWaitMs: number): Pr
 }
 
 /**
- * Espera a que la UI library (Stencil) del namespace termine de construirse.
+ * Espera a que las UI libraries (Stencil) que necesita el módulo terminen de construirse.
  */
 export async function waitForUILibraryBuild(
+	waitingModule: RegisteredUIModule,
 	namespaceModules: Map<string, RegisteredUIModule>,
-	waitingModuleName: string,
 	logger: ILogger
 ): Promise<void> {
-	const uiLibrary = findUILibrary(namespaceModules);
-	if (!uiLibrary || uiLibrary.buildStatus === "built") return;
-	if (uiLibrary.buildStatus !== "building" && uiLibrary.buildStatus !== "pending") return;
+	const waitingModuleName = waitingModule.name;
 
-	logger.logDebug(`${waitingModuleName} esperando a que ${uiLibrary.name} termine de construirse...`);
-	await waitUntilTerminal(uiLibrary, UI_LIBRARY_TIMEOUT_MS);
+	for (const uiLibrary of findUILibraries(waitingModule, namespaceModules)) {
+		if (uiLibrary.buildStatus !== "building" && uiLibrary.buildStatus !== "pending") continue;
 
-	const finalStatus = uiLibrary.buildStatus as RegisteredUIModule["buildStatus"];
-	if (finalStatus === "built") {
-		logger.logDebug(`${uiLibrary.name} listo, ${waitingModuleName} puede continuar`);
-	} else if (finalStatus === "error") {
-		logger.logWarn(`${uiLibrary.name} falló, ${waitingModuleName} continuará sin UI library`);
-	} else {
-		logger.logWarn(`Timeout esperando ${uiLibrary.name}, ${waitingModuleName} continuará de todas formas`);
+		logger.logDebug(`${waitingModuleName} esperando a que ${uiLibrary.name} termine de construirse...`);
+		await waitUntilTerminal(uiLibrary, UI_LIBRARY_TIMEOUT_MS);
+
+		const finalStatus = uiLibrary.buildStatus as RegisteredUIModule["buildStatus"];
+		if (finalStatus === "built") {
+			logger.logDebug(`${uiLibrary.name} listo, ${waitingModuleName} puede continuar`);
+		} else if (finalStatus === "error") {
+			logger.logWarn(`${uiLibrary.name} falló, ${waitingModuleName} continuará sin UI library`);
+		} else {
+			logger.logWarn(`Timeout esperando ${uiLibrary.name}, ${waitingModuleName} continuará de todas formas`);
+		}
 	}
 }
 

@@ -9,11 +9,12 @@ import type RedisProvider from "../../../../providers/queue/redis/index.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.d.ts";
 import { createHash } from "node:crypto";
 import type { Readable } from "node:stream";
-import { buffer as streamToBuffer } from "node:stream/consumers";
+import { pipeStreamToRaw } from "@common/utils/http-stream.ts";
 import { validateCsrf, type TokenSource } from "./csrf.js";
 import type { CsrfRuntimeConfig } from "./csrf-config.js";
 import { resolveRateLimit, type ResolvedRateLimits } from "./rate-limit.js";
-import { compileEndpointSchemas, validateEndpointInput } from "./schema.js";
+import { assertNoOperatorKeys, compileEndpointSchemas, validateEndpointInput } from "./schema.js";
+import { isRecording, record } from "./metrics.js";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const JOB_TTL_SECONDS = 600; // 10 min
@@ -46,6 +47,13 @@ function extractToken(req: FastifyRequest<any>, getSessionManager: () => ISessio
 	return { token: null, source: null };
 }
 
+/** Clave de idempotencia de la request, o 400 si el endpoint la exige y no vino. */
+function requireIdempotencyKey(req: FastifyRequest<any>): string {
+	const key = req.headers["idempotency-key"] as string | undefined;
+	if (!key) throw new IdempotencyError(400, "IDEMPOTENCY_KEY_MISSING", "Header Idempotency-Key is required for this operation");
+	return key;
+}
+
 export function createHttpWrapper(
 	endpoint: RegisteredEndpoint,
 	getSessionManager: () => ISessionVerifier | null,
@@ -67,92 +75,108 @@ export function createHttpWrapper(
 	const rl = resolveRateLimit(endpoint, rateLimits);
 	const rlTtlSeconds = rl ? Math.max(1, Math.ceil(rl.timeWindow / 1000)) : 0;
 	const rlKeyPrefix = rl ? `rl:${endpoint.method}:${endpoint.url}:` : "";
+	// Clave de métricas estable: el patrón de ruta, NO `endpoint.id` (se regenera en cada hot-reload).
+	const metricKey = `${endpoint.method} ${endpoint.url}`;
+	/** `cmd` del guard de idempotencia y etiqueta del job encolado: constante por endpoint. */
+	const idempotencyCmd = `${endpoint.method}:${endpoint.url}`;
 	// Schemas TypeBox compilados una sola vez por endpoint (S-11)
 	const compiledSchemas = compileEndpointSchemas(endpoint);
 
 	return async (req: FastifyRequest<any>, reply: FastifyReply<any>) => {
-		// ── Service Unavailable (módulo detenido por el modules-manager) ──
-		const unavailable = checkUnavailable();
-		if (unavailable) {
-			reply.header("Retry-After", "30");
-			reply.status(503).send({
-				error: "SERVICE_UNAVAILABLE",
-				message: unavailable.message || "Servicio temporalmente no disponible",
-			});
-			return;
-		}
-
-		// ── Rate limiting (Redis INCR + EXPIRE) ─────────────────────────
-		if (rl && redis) {
-			const key = rlKeyPrefix + req.ip;
-			const count = await redis.incr(key);
-			if (count === 1) await redis.expire(key, rlTtlSeconds);
-
-			reply.header("X-RateLimit-Limit", rl.max);
-			reply.header("X-RateLimit-Remaining", Math.max(0, rl.max - count));
-
-			if (count > rl.max) {
-				reply.header("Retry-After", rlTtlSeconds);
-				reply.status(429).send({
-					error: "RATE_LIMIT_EXCEEDED",
-					message: `Too many requests. Limit: ${rl.max} per ${rlTtlSeconds}s`,
+		const startedAt = performance.now();
+		let escapedStatus = 0;
+		try {
+			// ── Service Unavailable (módulo detenido por el modules-manager) ──
+			const unavailable = checkUnavailable();
+			if (unavailable) {
+				reply.header("Retry-After", "30");
+				reply.status(503).send({
+					error: "SERVICE_UNAVAILABLE",
+					message: unavailable.message || "Servicio temporalmente no disponible",
 				});
 				return;
 			}
-		}
 
-		// Extraer token si existe
-		const tokenInfo = extractToken(req, getSessionManager);
-		const token = tokenInfo.token;
+			// ── Rate limiting (Redis INCR + EXPIRE) ─────────────────────────
+			if (rl && redis) {
+				const key = rlKeyPrefix + req.ip;
+				const count = await redis.incr(key);
+				if (count === 1) await redis.expire(key, rlTtlSeconds);
 
-		// Obtener usuario si hay token (ya sea público o protegido)
-		let user: AuthenticatedUserInfo | null = null;
-		const sessionManager = getSessionManager();
-		if (token && sessionManager) {
-			const result = await sessionManager.verifyToken(token);
-			if (result.valid && result.session) {
-				user = result.session.user;
-			}
-		}
+				reply.header("X-RateLimit-Limit", rl.max);
+				reply.header("X-RateLimit-Remaining", Math.max(0, rl.max - count));
 
-		// Construir EndpointCtx
-		const ctx: EndpointCtx<any, any> = {
-			params: (req.params as Record<string, string>) || {},
-			query: (req.query as Record<string, string | undefined>) || {},
-			data: req.body,
-			user,
-			token,
-			cookies: ((req as any).cookies as Record<string, string | undefined>) || {},
-			headers: req.headers as Record<string, string | undefined>,
-			ip: req.ip,
-		};
-
-		try {
-			validateCsrf(endpoint, req, tokenInfo.source, csrfConfig);
-
-			// Validación declarativa de entrada (TypeBox) antes del handler
-			if (compiledSchemas) validateEndpointInput(compiledSchemas, ctx);
-
-			let result: unknown;
-
-			if (requiresIdempotency) {
-				const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
-
-				if (!idempotencyKey) {
-					throw new IdempotencyError(400, "IDEMPOTENCY_KEY_MISSING", "Header Idempotency-Key is required for this operation");
+				if (count > rl.max) {
+					reply.header("Retry-After", rlTtlSeconds);
+					reply.status(429).send({
+						error: "RATE_LIMIT_EXCEEDED",
+						message: `Too many requests. Limit: ${rl.max} per ${rlTtlSeconds}s`,
+					});
+					return;
 				}
+			}
 
-				const cmd = `${endpoint.method}:${endpoint.url}`;
+			// Extraer token si existe
+			const tokenInfo = extractToken(req, getSessionManager);
+			const token = tokenInfo.token;
+
+			// Obtener usuario si hay token (ya sea público o protegido)
+			let user: AuthenticatedUserInfo | null = null;
+			const sessionManager = getSessionManager();
+			if (token && sessionManager) {
+				const result = await sessionManager.verifyToken(token);
+				if (result.valid && result.session) {
+					user = result.session.user;
+				}
+			}
+
+			// Construir EndpointCtx
+			const ctx: EndpointCtx<any, any> = {
+				params: (req.params as Record<string, string>) || {},
+				query: (req.query as Record<string, string | undefined>) || {},
+				data: req.body,
+				user,
+				token,
+				cookies: ((req as any).cookies as Record<string, string | undefined>) || {},
+				headers: req.headers as Record<string, string | undefined>,
+				ip: req.ip,
+			};
+
+			try {
+				validateCsrf(endpoint, req, tokenInfo.source, csrfConfig);
+
+				// Claves de operador de Mongo: SIEMPRE, tenga schema o no. Dentro de
+				// `validateEndpointInput` quedarían sin cubrir los endpoints sin schema declarativo,
+				// que son los más expuestos.
+				assertNoOperatorKeys(ctx.data, "body");
+				assertNoOperatorKeys(ctx.query, "query");
+
+				// Validación declarativa de entrada (TypeBox) antes del handler
+				if (compiledSchemas) validateEndpointInput(compiledSchemas, ctx);
+
+				let result: unknown;
+
+				// La clave se exige sólo si el endpoint la pide. `const` (y no `let`) para que
+				// TypeScript la estreche a `string` dentro del closure de `guarded`.
+				const guardKey = requiresIdempotency ? requireIdempotencyKey(req) : undefined;
+
+				/**
+				 * Corre `op` bajo el guard de idempotencia, o directamente si el endpoint lo exime.
+				 * Mantiene **encolar e idempotencia independientes**: `skipIdempotency` no debe
+				 * desactivar `enqueue`.
+				 */
+				const guarded = <T>(op: () => Promise<T>): Promise<T> =>
+					guardKey === undefined ? op() : operationsService.httpCheck(idempotencyCmd, guardKey, op);
 
 				if (shouldEnqueue && redis) {
 					// ── Enqueue path: always respond 202 ──────────────────────────
-					result = await operationsService.httpCheck(cmd, idempotencyKey, async () => {
+					result = await guarded(async () => {
 						const jobId = crypto.randomUUID();
 
 						// Persist job status in Redis
 						const jobData = JSON.stringify({
 							status: "queued",
-							endpoint: `${endpoint.method}:${endpoint.url}`,
+							endpoint: idempotencyCmd,
 							userId: ctx.user?.id,
 							createdAt: new Date().toISOString(),
 						});
@@ -171,7 +195,7 @@ export function createHttpWrapper(
 							endpoint.methodName,
 							{
 								jobId,
-								endpoint: `${endpoint.method}:${endpoint.url}`,
+								endpoint: idempotencyCmd,
 								methodName: endpoint.methodName,
 								params: ctx.params,
 								data: ctx.data,
@@ -179,7 +203,9 @@ export function createHttpWrapper(
 								orgId: ctx.user?.orgId,
 							},
 							{
-								"x-idempotency-key": idempotencyKey,
+								// Informativa: hoy nadie la lee en el consumidor. Se omite si el
+								// endpoint no exige clave, en vez de mandar una vacía que mienta.
+								...(guardKey ? { "x-idempotency-key": guardKey } : {}),
 								"x-job-id": jobId,
 								"x-retry-count": "0",
 								"x-token-hash": tokenHash,
@@ -193,27 +219,108 @@ export function createHttpWrapper(
 					return;
 				}
 
-				// ── Synchronous path (default for mutative endpoints) ─────────
-				result = await operationsService.httpCheck(cmd, idempotencyKey, () => endpoint.handler(ctx));
-			} else {
-				result = await endpoint.handler(ctx);
-			}
+				result = await guarded(() => endpoint.handler(ctx));
 
-			// El handler devuelve datos, nosotros manejamos la respuesta HTTP
-			if (result === undefined || result === null) {
-				reply.status(204).send();
-			} else {
-				const cache = endpoint.options?.cache;
-				if (cache && endpoint.method === "GET") {
-					const swr = cache.staleWhileRevalidate ? `, stale-while-revalidate=${cache.staleWhileRevalidate}` : "";
-					reply.header("Cache-Control", `${cache.scope ?? "public"}, max-age=${cache.maxAge}${swr}`);
+				// El handler devuelve datos, nosotros manejamos la respuesta HTTP
+				if (result === undefined || result === null) {
+					reply.status(204).send();
+					return;
 				}
-				reply.status(200).send(result);
+				applyCacheHeaders(endpoint, reply);
+				if (sendNotModified(endpoint, ctx, reply, result)) return;
+				reply.status(endpoint.options?.successStatus ?? 200).send(result);
+			} catch (error: any) {
+				await handleEndpointError(error, endpoint, ctx, reply, logger);
 			}
-		} catch (error: any) {
-			await handleEndpointError(error, endpoint, ctx, reply, logger);
+		} catch (error) {
+			// Excepción que escapó de todo (p.ej. Redis caído en el rate limit, antes de armar el ctx):
+			// Fastify responde 500, así que la métrica no puede anotarla como el 200 que sigue en `reply`.
+			escapedStatus = 500;
+			throw error;
+		} finally {
+			// Métrica best-effort: pase lo que pase acá, la respuesta ya salió y no se puede romper.
+			try {
+				record(metricKey, endpoint.ownerName, performance.now() - startedAt, bodyBytes(reply), escapedStatus || reply.statusCode);
+			} catch {
+				/* las métricas nunca deben afectar a la request */
+			}
 		}
 	};
+}
+
+/**
+ * Bytes del cuerpo ya enviado, leídos del `content-length` que calculó Fastify. `send()` lo fija de
+ * forma SÍNCRONA, así que el dato ya está y no hay que re-serializar el payload para la métrica.
+ *
+ * `null` = no medido (204/304, respuestas hijackeadas, streams sin longitud), que NO es lo mismo
+ * que `0` bytes reales.
+ */
+function bodyBytes(reply: FastifyReply<any>): number | null {
+	if (!isRecording()) return null;
+	// Fallback a `raw`: quien escribe directo sobre el socket (SSE, túnel) no pasa por reply.header().
+	const raw = reply.getHeader("content-length") ?? (reply.raw as any)?.getHeader?.("content-length");
+	if (raw === undefined || raw === null || raw === "") return null;
+	const bytes = Number(raw);
+	return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
+}
+
+/** Cabeceras de cache declarativas (`options.cache`/`options.etag`). Sólo GET. */
+function applyCacheHeaders(endpoint: RegisteredEndpoint, reply: FastifyReply<any>): void {
+	if (endpoint.method !== "GET") return;
+	const cache = endpoint.options?.cache;
+	if (cache) {
+		const swr = cache.staleWhileRevalidate ? `, stale-while-revalidate=${cache.staleWhileRevalidate}` : "";
+		reply.header("Cache-Control", `${cache.scope ?? "public"}, max-age=${cache.maxAge}${swr}`);
+	} else if (endpoint.options?.etag) {
+		// Sin política de cache propia: el navegador guarda la copia pero revalida
+		// SIEMPRE contra el ETag, que es lo que habilita el 304.
+		reply.header("Cache-Control", "private, no-cache");
+	}
+}
+
+/** Cuerpo sin las claves volátiles declaradas en `options.etag.ignore`. */
+function stableBody(result: unknown, config: NonNullable<RegisteredEndpoint["options"]>["etag"]): unknown {
+	if (typeof config === "boolean" || !config?.ignore.length) return result;
+	if (typeof result !== "object" || result === null || Array.isArray(result)) return result;
+	const copy: Record<string, unknown> = { ...(result as Record<string, unknown>) };
+	for (const key of config.ignore) delete copy[key];
+	return copy;
+}
+
+/**
+ * ETag débil del cuerpo + `304 Not Modified` si el cliente ya tiene esa versión.
+ * Devuelve `true` si ya respondió (el caller no debe enviar cuerpo).
+ */
+function sendNotModified(endpoint: RegisteredEndpoint, ctx: EndpointCtx<any, any>, reply: FastifyReply<any>, result: unknown): boolean {
+	const config = endpoint.options?.etag;
+	if (!config || endpoint.method !== "GET") return false;
+
+	const etag = `W/"${createHash("sha1")
+		.update(JSON.stringify(stableBody(result, config)))
+		.digest("base64url")}"`;
+	reply.header("ETag", etag);
+
+	const ifNoneMatch = ctx.headers?.["if-none-match"];
+	if (!ifNoneMatch?.split(",").some((tag) => tag.trim() === etag)) return false;
+	reply.status(304).send();
+	return true;
+}
+
+/**
+ * `Retry-After` en respuestas reintentables. Sale de `data.retryAfter` o
+ * `data.retryAfterSeconds` (segundos) y, si no viene, 30s para los 503. Importa en las
+ * cuotas: sin el header el cliente asume 30s y machaca un límite que puede durar días.
+ *
+ * Los dos nombres conviven en el código: los errores tipados del core traen `retryAfterSeconds`
+ * y las cuotas de los presets usan `retryAfter`.
+ */
+function applyRetryAfter(error: ADCCustomError, reply: FastifyReply<any>): void {
+	const data = error.data as { retryAfter?: unknown; retryAfterSeconds?: unknown } | undefined;
+	const declared = typeof data?.retryAfter === "number" ? data.retryAfter : data?.retryAfterSeconds;
+	let seconds = null;
+	if (typeof declared === "number" && declared > 0) seconds = Math.ceil(declared);
+	else if (error.status === 503) seconds = 30;
+	if (seconds !== null) reply.header("Retry-After", String(seconds));
 }
 
 /** Maneja UncommonResponse, errores de negocio y errores inesperados de un endpoint. */
@@ -226,18 +333,22 @@ async function handleEndpointError(
 ): Promise<void> {
 	// Capturar UncommonResponse para respuestas especiales (cookies, redirects)
 	if (error instanceof UncommonResponse) {
-		await sendUncommonResponse(error, reply);
+		await sendUncommonResponse(error, reply, ctx.headers?.range, endpoint, logger);
 		return;
 	}
 
 	// Capturar ADCCustomError (HttpError, IdempotencyError y otros) para errores de negocio
 	if (error instanceof ADCCustomError) {
-		// Auditoría de denegaciones de authz/authn para detectar intentos de escalación
+		// Auditoría de denegaciones de authz/authn para detectar intentos de escalación.
+		// Un 401 sin ninguna credencial presentada no es un intento de escalación: es el
+		// caso normal de visitante anónimo (sondas tipo `GET /api/auth/session`), así que
+		// va a debug para no ahogar el log de auditoría con ruido.
 		if (error.status === 401 || error.status === 403) {
-			logger.logWarn(
-				`[AUTHZ-DENY] ${endpoint.method} ${endpoint.url} status=${error.status} user=${ctx.user?.id ?? "anon"} ip=${ctx.ip}`
-			);
+			const line = `[AUTHZ-DENY] ${endpoint.method} ${endpoint.url} status=${error.status} user=${ctx.user?.id ?? "anon"} ip=${ctx.ip}`;
+			if (error.status === 401 && !ctx.token && !ctx.user) logger.logDebug(line);
+			else logger.logWarn(line);
 		}
+		applyRetryAfter(error, reply);
 		reply.status(error.status).send(error.toJSON());
 		return;
 	}
@@ -248,15 +359,17 @@ async function handleEndpointError(
 	const stack = error.stack ? `\n${error.stack}` : "";
 	logger.logError(`[${correlationId}] Error en endpoint ${endpoint.method} ${endpoint.url}: ${error.message}` + stack);
 
-	reply.status(500).send({
-		error: "INTERNAL_ERROR",
-		message: "Error interno del servidor",
-		correlationId,
-	});
+	reply.status(500).send({ error: "INTERNAL_ERROR", message: "Error interno del servidor", correlationId });
 }
 
 /** Envía una UncommonResponse (cookies, headers custom, redirect, stream o JSON). */
-async function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply<any>): Promise<void> {
+async function sendUncommonResponse(
+	error: UncommonResponse,
+	reply: FastifyReply<any>,
+	range: string | undefined,
+	endpoint: RegisteredEndpoint,
+	logger: ILogger
+): Promise<void> {
 	const rep = reply as any;
 	for (const cookie of error.cookies) {
 		rep.setCookie(cookie.name, cookie.value, cookie.options || {});
@@ -270,19 +383,27 @@ async function sendUncommonResponse(error: UncommonResponse, reply: FastifyReply
 		return;
 	}
 	if (error.type === "stream") {
-		// Bun: `reply.send(Readable)` tras un request HTTP saliente (ej: leer de S3
-		// para descifrar al vuelo) entrega 0 bytes; enviar un `Buffer` es confiable.
-		// Bufferizamos el stream (acotado por el tamaño de archivo permitido). Ver
-		// el bug reproducible documentado en los tests de descarga del Drive.
-		let body: Buffer;
-		try {
-			body = await streamToBuffer(error.body as Readable);
-		} catch {
-			reply.status(502).send({ error: "STREAM_READ_FAILED", message: "No se pudo leer el contenido" });
-			return;
+		// Por el socket crudo, sin materializar el cuerpo (ver `pipeStreamToRaw`).
+		//
+		// `Range` es asunto del PRODUCTOR, no de esta capa: honrarlo acá exigiría materializar el
+		// cuerpo para cortarlo. Los endpoints que saben servir un tramo (contenido de Drive) empujan
+		// el rango hasta el origen y llegan acá con 206 y `Content-Range` ya armados; para el resto,
+		// responder 200 completo es válido. El log detecta endpoints donde el seek haría falta.
+		if (range && error.status !== 206) {
+			logger.logDebug(`Range ignorado en respuesta de stream (${endpoint.method} ${endpoint.url}): se envía 200 completo.`);
 		}
-		for (const [name, value] of Object.entries(error.headers)) reply.header(name, value);
-		reply.status(error.status).send(body);
+		// Tras `hijack()` nadie serializa los headers pendientes (cookies, `X-RateLimit-*`): se
+		// mergean a mano o se pierden en silencio.
+		const headers: Record<string, string | string[]> = {};
+		for (const [name, value] of Object.entries(rep.getHeaders?.() ?? {})) {
+			if (value !== undefined && value !== null) headers[name] = value as string | string[];
+		}
+		for (const [name, value] of Object.entries(error.headers)) headers[name] = String(value);
+		// `hijack()` ANTES de tocar el socket, o Fastify escribe sus headers sobre los ya enviados.
+		reply.hijack();
+		pipeStreamToRaw(error.body as Readable, reply.raw, error.status, headers, (e: unknown) =>
+			logger.logWarn(`Stream interrumpido en ${endpoint.method} ${endpoint.url}: ${e}`)
+		);
 		return;
 	}
 	for (const [name, value] of Object.entries(error.headers)) reply.header(name, value);

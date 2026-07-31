@@ -22,3 +22,6 @@ export const roleSchema = new Schema<Role>(
 	},
 	{ id: false } // Disable Mongoose virtual id getter to avoid conflicts with custom id field
 );
+
+/** Campos escribibles por `RoleManager.updateRole`. Incluye `orgId`, que el propio update lee para decidir si el rol pasa a global. */
+export const ROLE_UPDATABLE_FIELDS = ["name", "description", "hierarchy", "permissions", "orgId"] as const;

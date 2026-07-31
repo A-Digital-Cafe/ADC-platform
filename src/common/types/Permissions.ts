@@ -109,6 +109,12 @@ export const P = buildAllPermissions() as {
 		readonly BANNERS: ScopePermissions<"modules">;
 		readonly SCHEDULE: ScopePermissions<"modules">;
 		readonly AUDIT: ScopePermissions<"modules">;
+		readonly LOGS: ScopePermissions<"modules">;
+	};
+	readonly PLANS: {
+		readonly CATALOG: ScopePermissions<"plans">;
+		readonly OVERRIDES: ScopePermissions<"plans">;
+		readonly SUBSCRIPTIONS: ScopePermissions<"plans">;
 	};
 };
 

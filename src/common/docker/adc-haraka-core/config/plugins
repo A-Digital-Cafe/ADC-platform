@@ -5,7 +5,15 @@ process_title
 # en el contenedor no hay demonio syslog — los logs salen por stdout (docker logs).
 # log.syslog
 
-# Aceptación de destinatarios: solo dominios en host_list (dominio raíz y *.raíz)
+# SIN plugin de auth a propósito. El email-service entrega por el puerto 25, no
+# por 587, porque una conexión autenticada pasa a `relaying` y Haraka manda TODO
+# el mensaje —incluso a un destinatario local— por `queue_outbound` (búsqueda de
+# MX en internet), saltándose adc_inbound_webhook. Por 25 el correo local cae en
+# `hook_queue` → webhook → buzón, y el destinatario externo se rechaza acá mismo.
+# Al abrir el envío externo: añadir `auth/flat_file` y volver el relay a 587.
+
+# Aceptación de destinatarios: dominio raíz (host_list, match exacto) y sus
+# subdominios de organización (host_list_regex). Ambos los escribe el entrypoint.
 rcpt_to.in_host_list
 
 # Cabeceras y validaciones básicas
@@ -15,8 +23,9 @@ attachment
 # Antispam: reglas básicas (ver plugins/adc_basic_spam.js)
 adc_basic_spam
 
-# Firmado DKIM saliente (selector global)
-dkim_sign
+# Firmado DKIM saliente (selector global) + verificación del correo entrante.
+# `dkim` = haraka-plugin-dkim; el `dkim_sign` del core desapareció en Haraka 3.2.
+dkim
 
 # Entrega del correo entrante al email-service vía webhook HTTP
 adc_inbound_webhook

@@ -4,6 +4,8 @@ import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
+import { buildUpdateSet } from "@common/utils/mongo-update.ts";
+import { REGION_UPDATABLE_FIELDS } from "../domain/region.js";
 
 export class RegionManager {
 	readonly #regionsCache: Map<string, RegionInfo> = new Map();
@@ -149,7 +151,8 @@ export class RegionManager {
 			throw new Error(`Ya existe una región global: ${this.#globalRegion.path}`);
 		}
 
-		const region = await this.regionModel.findOneAndUpdate({ path }, { ...updates, updatedAt: new Date() }, { new: true });
+		const update = buildUpdateSet(updates, REGION_UPDATABLE_FIELDS, { updatedAt: new Date() });
+		const region = await this.regionModel.findOneAndUpdate({ path }, update, { new: true });
 
 		if (!region) throw new Error(`Región no encontrada: ${path}`);
 

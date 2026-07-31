@@ -32,6 +32,18 @@ export interface DriveLabel {
 	color: DriveLabelColor;
 }
 
+/**
+ * Configuración de "carpeta de transferencia": lo que se sube ahí se
+ * autodescarga en los dispositivos suscritos del dueño. Con `autoDelete`, el
+ * archivo se purga definitivamente (sin papelera, libera cuota) cuando todos
+ * los suscritos confirmaron la descarga, o al vencer `ttlHours` como respaldo.
+ */
+export interface DriveFolderTransferConfig {
+	enabled: boolean;
+	autoDelete: boolean;
+	ttlHours: number;
+}
+
 export interface DriveFolder {
 	id: string;
 	name: string;
@@ -52,6 +64,8 @@ export interface DriveFolder {
 	 * exige el PIN para crear enlaces públicos sobre ella o su contenido.
 	 */
 	pinHash?: string | null;
+	/** Carpeta de transferencia entre dispositivos (null = carpeta normal). */
+	transfer?: DriveFolderTransferConfig | null;
 	trashedAt?: Date | null;
 	/** parentId al momento de ir a papelera (para restaurar). */
 	trashedFromParentId?: string | null;
@@ -128,6 +142,8 @@ export interface DriveFolderDTO {
 	labels?: DriveLabel[];
 	/** True si la carpeta tiene PIN (el hash nunca sale del backend). */
 	hasPin?: boolean;
+	/** Configuración de carpeta de transferencia (solo visible para el dueño). */
+	transfer?: DriveFolderTransferConfig | null;
 	trashedAt?: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -225,3 +241,114 @@ export const DRIVE_PIN_MAX_LENGTH = 12;
 export const DRIVE_ARCHIVE_MAX_FILES = 200;
 export const DRIVE_ARCHIVE_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 export const DRIVE_ARCHIVE_TTL_MS = 60 * 60 * 1000; // 1 h
+
+// ── Túnel entre dispositivos (montajes + carpeta de transferencia) ─────────
+
+export type DriveDeviceKind = "browser" | "cli";
+
+/** Dispositivo registrado del usuario (agente del túnel). */
+export interface DriveDeviceDTO {
+	id: string;
+	name: string;
+	kind: DriveDeviceKind;
+	/** True si el dispositivo tiene su canal SSE conectado ahora mismo. */
+	online: boolean;
+	/** Carpetas locales montadas (anunciadas por el agente; solo si online). */
+	mounts: DriveMountDTO[];
+	/** Carpetas de transferencia a las que está suscrito. */
+	subscriptions: string[];
+	lastSeenAt: string | null;
+	createdAt: string;
+}
+
+/** Carpeta local montada por un agente (efímera: vive mientras el agente esté online). */
+export interface DriveMountDTO {
+	/** Id del montaje, único dentro del dispositivo (lo asigna el agente). */
+	id: string;
+	/** Nombre visible (típicamente el nombre de la carpeta local). */
+	name: string;
+	readOnly: boolean;
+}
+
+/** Entrada de un listado remoto de carpeta montada. */
+export interface DriveRemoteEntryDTO {
+	name: string;
+	type: "file" | "folder";
+	size: number;
+	/** Última modificación (epoch ms) si el agente la conoce. */
+	modifiedAt: number | null;
+}
+
+/** Entrega pendiente de una carpeta de transferencia para un dispositivo. */
+export interface DriveDeliveryDTO {
+	id: string;
+	fileId: string;
+	folderId: string;
+	fileName: string;
+	size: number;
+	mimeType: string;
+	createdAt: string;
+	expiresAt: string;
+}
+
+/** Evento del canal SSE del túnel (server → agente). */
+export interface DriveTunnelEvent {
+	type: "ready" | "rpc" | "delivery" | "device.revoked" | "webrtc";
+	/** rpc: id de correlación a responder vía POST /tunnel/rpc. */
+	id?: string;
+	/** rpc: comando (`fs.list`, `transfer.send`, `transfer.receive`, ...). */
+	cmd?: string;
+	payload?: unknown;
+	/** delivery / ready: entregas pendientes de autodescarga. */
+	deliveries?: DriveDeliveryDTO[];
+	/** webrtc: dispositivo emisor de la señal (offer/answer/candidate en payload). */
+	fromDeviceId?: string;
+}
+
+// ── Unidades remotas (S3 / WebDAV montadas por el cliente) ─────────────────
+
+export type DriveRemoteUnitType = "s3" | "webdav";
+/** dek = cifrada en reposo con la DEK del usuario; passphrase = blob E2E opaco. */
+export type DriveRemoteUnitEncMode = "dek" | "passphrase";
+
+/** Metadata pública de una unidad remota (los secretos NUNCA viajan en listados). */
+export interface DriveRemoteUnitDTO {
+	id: string;
+	name: string;
+	type: DriveRemoteUnitType;
+	encMode: DriveRemoteUnitEncMode;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** Config en claro de una unidad S3 (solo existe cifrada en reposo). */
+export interface DriveRemoteS3Config {
+	endpoint: string;
+	region: string;
+	bucket: string;
+	accessKey: string;
+	secretKey: string;
+	prefix?: string;
+	forcePathStyle?: boolean;
+}
+
+/** Config en claro de una unidad WebDAV/Nextcloud. */
+export interface DriveRemoteWebdavConfig {
+	baseUrl: string;
+	username: string;
+	password: string;
+}
+
+export const DRIVE_REMOTE_UNIT_NAME_MAX_LENGTH = 60;
+export const DRIVE_MAX_REMOTE_UNITS_PER_USER = 20;
+
+export const DRIVE_DEVICE_NAME_MAX_LENGTH = 60;
+export const DRIVE_MAX_DEVICES_PER_USER = 20;
+export const DRIVE_TUNNEL_RPC_TIMEOUT_MS = 15_000;
+/** Ventana para que ambos extremos de una transferencia se conecten. */
+export const DRIVE_TUNNEL_TRANSFER_MATCH_TIMEOUT_MS = 30_000;
+export const DRIVE_TUNNEL_MAX_TRANSFERS_PER_USER = 8;
+export const DRIVE_TUNNEL_PAIRING_TTL_MS = 10 * 60 * 1000;
+/** TTL de respaldo del autoborrado de entregas (horas). */
+export const DRIVE_TRANSFER_DEFAULT_TTL_HOURS = 48;
+export const DRIVE_TRANSFER_MAX_TTL_HOURS = 14 * 24;

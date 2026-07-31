@@ -5,8 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: adc-haraka-core
     ports:
-      - "127.0.0.1:25:25" # SMTP entrante
-      - "127.0.0.1:587:587" # Submission (envío autenticado desde email-service)
+      # 25: SMTP entrante y, mientras el envío sea interno, también la entrega
+      # del email-service (por 25 el correo local va al webhook, no a internet).
+      - "127.0.0.1:25:25"
+      # 587: submission autenticado, para cuando se abra el envío externo.
+      - "127.0.0.1:587:587"
     environment:
       # Hostname público del MTA (debe coincidir con el registro A y el PTR)
       HARAKA_ME: ${MAIL_HOSTNAME:-mail.adigitalcafe.com}
@@ -18,9 +21,11 @@ services:
       # DKIM selector global
       DKIM_SELECTOR: ${MAIL_DKIM_SELECTOR:-adcmail}
     volumes:
-      # Clave privada DKIM: openssl genrsa -out ./dkim/<dominio>/private 2048
-      # La pública (openssl rsa -in private -pubout) va en el TXT: adcmail._domainkey.<dominio>
-      - ./dkim:/app/config/dkim:ro
+      # Clave privada DKIM (gitignorada): openssl genrsa -out ./dkim/private 2048
+      # La pública (openssl rsa -in private -pubout) va en el TXT: adcmail._domainkey.<dominio>.
+      # Se monta como secreto y el entrypoint la copia al layout config/dkim/<dominio>/
+      # que espera el plugin (necesita escribir ahí el archivo `selector`).
+      - ./dkim:/app/secrets/dkim:ro
       - adc_haraka_queue:/app/queue
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -14,8 +14,10 @@ import { JobManager } from "./parts/JobManager.ts";
 import { registerCsrfEndpoint } from "./parts/csrf.js";
 import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
 import { resolveRateLimitConfig, type RateLimitConfig, type ResolvedRateLimits } from "./parts/rate-limit.js";
+import * as metrics from "./parts/metrics.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Scope, assertScope, Capability, type CapabilityToken } from "@common/security/Capability.ts";
+import type { EndpointMetricRow, IEndpointMetricsReader } from "@common/types/endpoints/IEndpointMetrics.ts";
 
 // Re-exportar decoradores para uso externo
 export { RegisterEndpoint, EnableEndpoints, DisableEndpoints, readEndpointMetadata, readEnableEndpointsConfig } from "./decorators.js";
@@ -39,7 +41,7 @@ export {
 /**
  * EndpointManagerService - Gestión centralizada de endpoints HTTP
  */
-export default class EndpointManagerService extends BaseService {
+export default class EndpointManagerService extends BaseService implements IEndpointMetricsReader {
 	public readonly name = "EndpointManagerService";
 
 	#httpProvider: IHostBasedHttpProvider | null = null;
@@ -52,6 +54,8 @@ export default class EndpointManagerService extends BaseService {
 	#rateLimits: ResolvedRateLimits | null = null;
 	/** Owners marcados como no disponibles (503). Mapea nombre→mensaje. */
 	readonly #unavailableOwners = new Map<string, string>();
+	#redis: RedisProvider | null = null;
+	#metricsTimer: ReturnType<typeof setInterval> | null = null;
 
 	static readonly JOB_TTL_SECONDS = JobManager.JOB_TTL_SECONDS;
 
@@ -65,6 +69,15 @@ export default class EndpointManagerService extends BaseService {
 
 		const rabbitmq = this.getMyProvider<RabbitMQProvider>("queue/rabbitmq");
 		const redis = this.getMyProvider<RedisProvider>("queue/redis");
+		this.#redis = redis;
+
+		// El hot path sólo toca el acumulador en memoria; el I/O de métricas pasa entero por este flush.
+		const metricsConfig = metrics.configureMetrics(this.config.metrics as metrics.MetricsConfig | undefined);
+		if (metricsConfig.enabled && redis) {
+			this.#metricsTimer = setInterval(() => {
+				metrics.flush(redis).catch((err) => this.logger.logDebug(`Flush de métricas falló: ${err?.message ?? err}`));
+			}, metricsConfig.flushIntervalMs);
+		}
 
 		this.#jobManager = new JobManager({
 			logger: this.logger,
@@ -85,8 +98,7 @@ export default class EndpointManagerService extends BaseService {
 
 		// Swagger UI (U-01): habilitado en dev por defecto; en producción requiere opt-in explícito.
 		const apiDocsEnabled = (this.config.apiDocs as { enabled?: string } | undefined)?.enabled;
-		const docsEnabled =
-			apiDocsEnabled === "true" || (process.env.NODE_ENV !== "production" && apiDocsEnabled !== "false");
+		const docsEnabled = apiDocsEnabled === "true" || (process.env.NODE_ENV !== "production" && apiDocsEnabled !== "false");
 		if (docsEnabled && this.#httpProvider?.registerApiDocs) {
 			try {
 				await this.#httpProvider.registerApiDocs(() => buildOpenApiDocument(this.#registry.getAllFull()));
@@ -151,8 +163,8 @@ export default class EndpointManagerService extends BaseService {
 			() => this.#checkOwnerUnavailable(config.ownerName)
 		);
 
-		// Registrar en Fastify
-		this.#httpProvider.registerRoute(config.method, config.url, wrappedHandler);
+		// El `ownerName` viaja para que `unregisterEndpointsByOwner` pueda retirar también la ruta.
+		this.#httpProvider.registerRoute(config.method, config.url, wrappedHandler, config.ownerName);
 
 		// ── Set up queue consumer if endpoint uses enqueue ──────────────────
 		const isMutative = ["POST", "PUT", "PATCH", "DELETE"].includes(config.method);
@@ -182,7 +194,11 @@ export default class EndpointManagerService extends BaseService {
 		// El owner se deriva de la capability del caller: un módulo sólo puede desregistrar
 		// SUS PROPIOS endpoints (no los de otro), sin depender de un token compartido.
 		if (!Capability.is(cap)) throw new Error("unregisterEndpointsByOwner: capability requerida");
-		return this.#registry.unregisterByOwner(cap.owner);
+		const removed = this.#registry.unregisterByOwner(cap.owner);
+		// También las rutas de Fastify: limpiar sólo el registro interno deja la tabla global
+		// sirviendo el wrapper de la instancia destruida.
+		this.#httpProvider?.unregisterRoutesByOwner?.(cap.owner);
+		return removed;
 	}
 
 	/**
@@ -208,6 +224,29 @@ export default class EndpointManagerService extends BaseService {
 		return null;
 	}
 
+	/**
+	 * Métricas agregadas por endpoint (clave `"<METHOD> <url>"`). Hoy sale del acumulador en
+	 * memoria del proceso; cualquier otro día, del hash diario de Redis.
+	 *
+	 * Sin gate de capability a propósito: son datos operativos de la propia capa de endpoints y
+	 * el control de acceso real lo hace el permiso del endpoint que las expone.
+	 */
+	async getEndpointMetrics(day?: string): Promise<{ day: string; endpoints: EndpointMetricRow[] }> {
+		const today = metrics.metricsDay();
+		const target = day ?? today;
+		if (target === today) return { day: target, endpoints: metrics.snapshot() };
+		if (!this.#redis) return { day: target, endpoints: [] };
+		// Un día recién cerrado puede tener delta todavía en memoria (el rollover no hace I/O):
+		// volcarlo antes de leer evita mostrar el día de ayer incompleto hasta el próximo tick.
+		await metrics.flush(this.#redis);
+		return { day: target, endpoints: await metrics.readDay(this.#redis, target) };
+	}
+
+	/** Limpia el acumulado en memoria de una clave (o de todas). Lo ya volcado a Redis no se toca. */
+	resetEndpointMetrics(key?: string): Promise<number> {
+		return Promise.resolve(metrics.reset(key));
+	}
+
 	// Obtiene información sobre los endpoints registrados
 	getRegisteredEndpoints = () => this.#registry.getAll();
 
@@ -216,6 +255,14 @@ export default class EndpointManagerService extends BaseService {
 
 	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
+		if (this.#metricsTimer) {
+			clearInterval(this.#metricsTimer);
+			this.#metricsTimer = null;
+		}
+		// Último volcado antes de soltar el provider: si Redis ya se cayó, `flush` lo absorbe.
+		if (this.#redis) await metrics.flush(this.#redis);
+		this.#redis = null;
+
 		// Graceful shutdown: drain all queue consumers first
 		if (this.#jobManager) {
 			await this.#jobManager.shutdown();

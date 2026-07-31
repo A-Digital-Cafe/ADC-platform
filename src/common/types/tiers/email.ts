@@ -1,16 +1,17 @@
 /**
- * Límites de correo por tier (personal y de organización).
+ * Tipos de límites de correo y su piso base.
  *
- * - Tier personal (`AccountTier`): cuotas por usuario.
- * - Tier de organización (`OrganizationTier`): cuotas agregadas del dominio de
- *   correo de la organización.
+ * Este archivo se queda en `@common` (y no en el preset) porque lo comparten
+ * DOS presets distintos: `adc-email-backend` (resolver y DAOs) y
+ * `adc-email-frontend` (tipos de `mail-api.ts`) — y los presets no pueden
+ * importarse entre sí. Sólo tipos y el piso `free`/`default`: las matrices de
+ * los tiers pagos viven en `plan_definitions` (motor de planes) y sus defaults
+ * de desarrollo en `adc-email-backend` (`utils/plan-features.ts`).
  *
- * El tier se resuelve fuera de aquí (ver `docs/structure/enterprise-apps.md`):
- * usuario → `user.metadata.accountTier`; org → `org.tier`.
+ * Los límites de **envío diario** se dimensionan por lo que manda una persona
+ * real, no por lo que aguanta el MTA: un tope alto es un vector de spam que
+ * puede hacer que bloqueen el dominio de correo entero.
  */
-
-import type { AccountTier } from "../tiers.ts";
-import type { OrganizationTier } from "../identity/Organization.ts";
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
@@ -39,52 +40,21 @@ export interface EmailOrgTierLimits {
 	orgDailySendLimit: number;
 }
 
-const USER_LIMITS: Record<AccountTier, EmailUserTierLimits> = {
-	free: {
-		storageBytes: 1 * GB,
-		dailySendLimit: 50,
-		maxAttachmentBytes: 25 * MB,
-		maxRecipientsPerMessage: 20,
-		maxScheduledMessages: 5,
-	},
-	pro: {
-		storageBytes: 10 * GB,
-		dailySendLimit: 500,
-		maxAttachmentBytes: 50 * MB,
-		maxRecipientsPerMessage: 100,
-		maxScheduledMessages: 50,
-	},
-	plus: {
-		storageBytes: 100 * GB,
-		dailySendLimit: 5000,
-		maxAttachmentBytes: 100 * MB,
-		maxRecipientsPerMessage: 500,
-		maxScheduledMessages: 500,
-	},
+/**
+ * Piso del plan gratuito: fallback sin `PlanService` (degradar al tier base es
+ * la convención de la plataforma) y default `free` que el backend registra.
+ */
+export const EMAIL_USER_BASE_LIMITS: EmailUserTierLimits = {
+	storageBytes: 250 * MB,
+	dailySendLimit: 20,
+	maxAttachmentBytes: 25 * MB,
+	maxRecipientsPerMessage: 20,
+	maxScheduledMessages: 5,
 };
 
-const ORG_LIMITS: Record<OrganizationTier, EmailOrgTierLimits> = {
-	default: {
-		maxMailAccounts: 5,
-		orgStorageBytes: 5 * GB,
-		orgDailySendLimit: 200,
-	},
-	team: {
-		maxMailAccounts: 50,
-		orgStorageBytes: 100 * GB,
-		orgDailySendLimit: 5000,
-	},
-	enterprise: {
-		maxMailAccounts: 1000,
-		orgStorageBytes: 1024 * GB,
-		orgDailySendLimit: 50000,
-	},
+/** Piso del tier `default` de organización. */
+export const EMAIL_ORG_BASE_LIMITS: EmailOrgTierLimits = {
+	maxMailAccounts: 3,
+	orgStorageBytes: 1 * GB,
+	orgDailySendLimit: 50,
 };
-
-export function getEmailUserTierLimits(tier: AccountTier = "free"): EmailUserTierLimits {
-	return USER_LIMITS[tier] ?? USER_LIMITS.free;
-}
-
-export function getEmailOrgTierLimits(tier: OrganizationTier = "default"): EmailOrgTierLimits {
-	return ORG_LIMITS[tier] ?? ORG_LIMITS.default;
-}

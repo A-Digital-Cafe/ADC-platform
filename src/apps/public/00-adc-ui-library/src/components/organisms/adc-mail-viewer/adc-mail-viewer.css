@@ -1,11 +1,12 @@
+/* Mismos tokens de tema que `adc-mail-composer` (ver global/tailwind.css). */
 .adc-mail-viewer__content {
-	color: var(--color-text, #1f1f1f);
+	color: var(--c-text);
 	line-height: 1.6;
 	word-break: break-word;
 }
 
 .adc-mail-viewer__content a {
-	color: var(--color-primary, #2563eb);
+	color: var(--c-primary);
 	text-decoration: underline;
 }
 
@@ -22,8 +23,8 @@
 .adc-mail-viewer__content blockquote {
 	margin: 0.5rem 0;
 	padding-left: 0.9rem;
-	border-left: 3px solid var(--color-border, rgba(0, 0, 0, 0.15));
-	color: var(--color-muted, #5f6368);
+	border-left: 3px solid color-mix(in srgb, var(--c-text) 15%, transparent);
+	color: var(--c-muted);
 }
 
 .adc-mail-viewer__content pre,

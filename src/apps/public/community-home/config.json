@@ -9,7 +9,7 @@
 		"isHost": true,
 		"isRemote": false,
 		"serviceWorker": true,
-		"uiDependencies": ["adc-ui-library"],
+		"uiDependencies": ["adc-ui-library", "media-ui-library"],
 		"devPort": 3010,
 		"sharedLibs": ["react", "tailwind"],
 		"i18n": true,

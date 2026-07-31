@@ -29,13 +29,13 @@ docs/                  # Documentación on-demand (índice: docs/README.md)
 | `bun run dev` | Desarrollo (hot reload) |
 | `bun run start:prodtests` | Simular producción + tests habilitados |
 | `bun run start` | Producción (puerto 80) |
-| `bun run typecheck` | TypeScript check + knip unused exports |
+| `bun run typecheck` | TypeScript check + knip unused exports — **sale 1 por baseline** (knip reporta exports sin usar); el exit code NO es señal de fallo, hay que leer la salida |
 | `bun run extra-checks` | Archivos grandes + knip dependencies sin usar |
-| `bun run lint` | ESLint (zero warnings) |
+| `bun run lint` | ESLint (zero warnings). Cubre **sólo `src`**: los presets se typechequean pero nunca se lintean |
 | `bun run lint:fix` | ESLint con auto-fix |
 | `bun run build:ui` | Compilar Stencil UI library |
 | `bun run proto:gen` | Generar código desde protobuf (buf) |
-| `bun run cleanup` | Limpiar procesos |
+| `bun run cleanup` | Limpiar procesos — ⚠️ **nunca desde el shell de un agente**: usa `pkill -f`, cuyo patrón está en el argv del propio shell, así que se mata a sí mismo. Usar `node .claude/skills/run-adc-platform/driver.mjs stop` |
 
 > `postinstall` corre automáticamente tras `bun install` y sincroniza presets (`scripts/sync-presets.mjs`).
 
@@ -100,16 +100,22 @@ Las apps soportan **múltiples instancias** vía archivos `config-*.json` (insta
 
 ## Dependency Injection
 
-Acceder a módulos via métodos del Kernel, **no** imports directos. Providers se referencian por **nombre**, no por tipo:
+Acceder a dependencias por los métodos heredados de `BaseModule`, **no** por imports directos.
+Se referencian por **nombre**, no por tipo. Igual en apps, services, providers y utilities:
 
 ```typescript
-// En Apps: getMyProvider() para obtener TU instancia configurada
 this.getMyProvider<MongoProvider>("mongo");
-
-// En Services/Providers: usar kernel directamente
-this.kernel.getService<IdentityManagerService>("IdentityManagerService");
-this.kernel.getProvider<FileStorage>("file-storage");
+this.getMyService<IdentityManagerService>("IdentityManagerService");
+this.getMyUtility<AttachmentsUtility>("attachments-utility");
+this.tryGetMyService<INotificationService>("NotificationService"); // undefined si no está
 ```
+
+> ⚠️ **Sólo resuelven lo que el módulo declaró en su propio `config.json`.** Si el nombre no está en
+> `providers`/`services`/`utilities` de ese archivo, la llamada falla aunque el módulo esté cargado:
+> agregar la dependencia al `config.json` es parte del cambio.
+>
+> No existe `this.kernel.getService()` / `this.kernel.getProvider()`. Detalle y casos privilegiados
+> en [docs/structure/kernel-access.md](docs/structure/kernel-access.md), que es la autoridad.
 
 ## Key Concepts
 
@@ -147,6 +153,7 @@ this.logger.logOk("Success");
 1. **Config vs Modules**: `config.json` declara dependencias, `package.json` declara paquetes npm
 2. **Global Providers**: Set `"global": true` en config del provider para compartir entre instancias
 3. **Provider Reference**: Acceder providers por **nombre** (ej: `"mongo"`, `"file-storage"`), no por tipo
+4. **Clone fresco**: `**/utils/react-jsx.ts` y `**/src/components.d.ts` son **generados y gitignored**, así que `bun run build:ui` es prerequisito del typecheck. Un `Cannot find module '@ui-library/utils/react-jsx'` es un build faltante, no un import roto
 
 > Gotchas específicos de UI (Stencil `shadow: false`, React 19 + custom elements, orden de imports) en [docs/architecture/ui-federation.md](docs/architecture/ui-federation.md).
 

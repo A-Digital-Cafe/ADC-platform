@@ -8,8 +8,16 @@ import type { AttachmentDoc } from "../schemas/attachment.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
 import { trimChar } from "../../../../common/utils/strings.ts";
 import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
-import type { QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
-import { ENCRYPTION_SCHEME, createObjectCipher, createObjectDecipher, type UserKeyStore } from "../crypto/userKeys.js";
+import { UNLIMITED_BYTES, type QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
+import { createObjectDecipher, type UserKeyStore } from "../crypto/userKeys.js";
+import {
+	CHUNKED_ENCRYPTION_SCHEME,
+	ENCRYPTION_CHUNK_SIZE,
+	chunkedCipherRange,
+	decryptChunkedRange,
+	encryptChunked,
+	type PlainByteRange,
+} from "../crypto/chunked.js";
 
 export type AttachmentAction = "upload" | "read" | "delete";
 
@@ -54,7 +62,12 @@ export interface S3Like {
 		contentType?: string;
 		contentLength?: number;
 	}): Promise<{ bucket: string; key: string; etag: string | null }>;
-	getObjectStream(input: { bucket?: string; key: string }): Promise<{ stream: Readable; contentType?: string; size?: number }>;
+	getObjectStream(input: {
+		bucket?: string;
+		key: string;
+		/** Rango de bytes del objeto, extremos inclusive; el stream vuelve ya cortado. */
+		range?: { start: number; end: number };
+	}): Promise<{ stream: Readable; contentType?: string; size?: number }>;
 }
 
 export interface SubPathContext extends AttachmentPermissionContext {
@@ -106,6 +119,18 @@ export interface PresignUploadResult {
 	bucket: string;
 	headers: Record<string, string>;
 	expiresAt: Date;
+}
+
+/**
+ * Valida un rango de descarga contra el tamaño en claro (el `416` ya lo respondió el caller HTTP:
+ * uno inválido acá es un bug del caller). El rango completo se normaliza a "sin rango".
+ */
+function normalizeDownloadRange(range: { start: number; end: number } | undefined, size: number): PlainByteRange | undefined {
+	if (!range) return undefined;
+	if (!Number.isInteger(range.start) || !Number.isInteger(range.end) || range.start < 0 || range.start > range.end || range.end >= size) {
+		throw new AttachmentError(416, "ATTACHMENT_RANGE_INVALID", "Rango fuera del adjunto", { size });
+	}
+	return range.start === 0 && range.end === size - 1 ? undefined : range;
 }
 
 const FILE_NAME_SAFE = /[^A-Za-z0-9._-]+/g;
@@ -366,25 +391,17 @@ export class AttachmentsManager {
 	}
 
 	/**
-	 * Re-escribe el objeto en claro como ciphertext AES-256-GCM bajo `<key>.enc`
-	 * y borra el original. Devuelve el `$set` con storageKey + metadata de cifrado.
-	 * GCM no expande el payload (el auth tag va al doc), así que ContentLength es
-	 * el tamaño en claro.
+	 * Re-escribe el objeto en claro como ciphertext por chunks (`aes-256-gcm-chunked`, ver
+	 * `crypto/chunked.ts`) bajo `<key>.enc` y borra el original. Devuelve el `$set` con storageKey +
+	 * metadata de cifrado.
 	 */
 	async #encryptObject(attachment: Attachment): Promise<Record<string, unknown>> {
 		const keyStore = this.#encryption!.keyStore;
 		const dek = await keyStore.getUserKey(attachment.uploadedBy);
-		const { iv, cipher } = createObjectCipher(dek);
 		const source = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey });
 
-		// Cifrado bufferizado y determinista: el auth tag de GCM SÓLO es válido tras
-		// `cipher.final()`. Hacerlo por streaming (pipe + `getAuthTag()` después del
-		// `putObject`) era una carrera: si el SDK resolvía antes del flush, el tag
-		// quedaba mal y el descifrado al vuelo fallaba → descarga de 0 bytes. El
-		// payload está acotado por el límite de subida (`#validateUploadInput`).
 		const plaintext = await streamToBuffer(source.stream);
-		const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-		const authTag = cipher.getAuthTag();
+		const { ivPrefix, ciphertext } = encryptChunked(dek, plaintext, ENCRYPTION_CHUNK_SIZE);
 		const encryptedKey = `${attachment.storageKey}.enc`;
 		try {
 			await this.#s3.putObject({
@@ -392,7 +409,7 @@ export class AttachmentsManager {
 				key: encryptedKey,
 				body: ciphertext,
 				contentType: "application/octet-stream",
-				contentLength: ciphertext.length, // GCM no expande: == tamaño en claro
+				contentLength: ciphertext.length,
 			});
 		} catch (e) {
 			await this.#s3.deleteObject({ bucket: attachment.bucket, key: encryptedKey }).catch(() => undefined);
@@ -402,9 +419,9 @@ export class AttachmentsManager {
 		return {
 			storageKey: encryptedKey,
 			encryption: {
-				scheme: ENCRYPTION_SCHEME,
-				iv: iv.toString("base64"),
-				authTag: authTag.toString("base64"),
+				scheme: CHUNKED_ENCRYPTION_SCHEME,
+				iv: ivPrefix.toString("base64"),
+				chunkSize: ENCRYPTION_CHUNK_SIZE,
 				keyRef: attachment.uploadedBy,
 			},
 		};
@@ -487,20 +504,62 @@ export class AttachmentsManager {
 	 * Stream de descarga del binario (descifrado al vuelo si está cifrado).
 	 * Mismo modelo de permisos que `getDownloadUrl`; pensado para que el servicio
 	 * lo proxyee por HTTP con sus propios headers de disposición.
+	 *
+	 * `opts.range` (tramo del CLARO, extremos inclusive, ya validado contra
+	 * `attachment.size` por el caller que responde el `206`) se honra siempre:
+	 * - Sin cifrar: el rango lo corta S3 (`Range` en el GET).
+	 * - `aes-256-gcm-chunked`: se piden a S3 sólo los chunks que cubren el tramo y
+	 *   se descifran al vuelo (memoria acotada a un chunk, tag por chunk verificado).
+	 * - `aes-256-gcm` (legado): el formato exige descifrar el objeto completo y recortar el tramo.
 	 */
-	async openDownloadStream(ctx: AttachmentPermissionContext, attachmentId: string): Promise<{ stream: Readable; attachment: Attachment }> {
+	async openDownloadStream(
+		ctx: AttachmentPermissionContext,
+		attachmentId: string,
+		opts: { range?: PlainByteRange } = {}
+	): Promise<{ stream: Readable; attachment: Attachment }> {
 		const attachment = await this.#getReadyForRead(ctx, attachmentId);
-		const object = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey });
-		if (!attachment.encryption) return { stream: object.stream, attachment };
+		const range = normalizeDownloadRange(opts.range, attachment.size);
+		const encryption = attachment.encryption;
+		if (!encryption) {
+			const object = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey, range });
+			return { stream: object.stream, attachment };
+		}
 		if (!this.#encryption) {
 			throw new AttachmentError(409, "ATTACHMENT_ENCRYPTED", "Adjunto cifrado pero el manager no tiene keyStore configurado");
 		}
-		// Descifrado bufferizado (no por streaming): robusto frente al tipo de stream
-		// del runtime —en Bun el `res.Body` del SDK puede no ser un Node `Readable`
-		// con `.pipe`, lo que rompía el proxy— y produce un `Readable` de longitud
-		// exacta para el `Content-Length`. El tamaño está acotado por el límite de subida.
-		const dek = await this.#encryption.keyStore.getUserKey(attachment.encryption.keyRef);
-		const decipher = createObjectDecipher(dek, attachment.encryption.iv, attachment.encryption.authTag);
+		const dek = await this.#encryption.keyStore.getUserKey(encryption.keyRef);
+
+		if (encryption.scheme === CHUNKED_ENCRYPTION_SCHEME) {
+			const chunkSize = encryption.chunkSize ?? 0;
+			if (chunkSize <= 0) {
+				throw new AttachmentError(500, "ATTACHMENT_DECRYPT_FAILED", "Metadata de cifrado por chunks corrupta (chunkSize)");
+			}
+			const wanted = range ?? { start: 0, end: attachment.size - 1 };
+			const object = await this.#s3.getObjectStream({
+				bucket: attachment.bucket,
+				key: attachment.storageKey,
+				range: chunkedCipherRange(wanted, attachment.size, chunkSize),
+			});
+			// Iteración async (no `.pipe`): funciona igual con el Body del SDK sea Node
+			// `Readable` o web stream, que en Bun varía según el camino.
+			const source = object.stream as AsyncIterable<Uint8Array> & { destroy?: () => void };
+			const plainSize = attachment.size;
+			const ivPrefix = encryption.iv;
+			async function* decrypted(): AsyncGenerator<Buffer> {
+				try {
+					yield* decryptChunkedRange(dek, ivPrefix, { plainSize, chunkSize, range: wanted }, source);
+				} finally {
+					// Si el consumidor corta antes (seek de video, pestaña cerrada), soltar la lectura de S3.
+					source.destroy?.();
+				}
+			}
+			return { stream: Readable.from(decrypted()), attachment };
+		}
+
+		// Esquema legado (GCM entero): descifrado bufferizado — el formato no admite lectura parcial
+		// y el tamaño lo acota el límite de subida.
+		const object = await this.#s3.getObjectStream({ bucket: attachment.bucket, key: attachment.storageKey });
+		const decipher = createObjectDecipher(dek, encryption.iv, encryption.authTag ?? "");
 		const ciphertext = await streamToBuffer(object.stream);
 		let plaintext: Buffer;
 		try {
@@ -508,15 +567,21 @@ export class AttachmentsManager {
 		} catch (e) {
 			throw new AttachmentError(500, "ATTACHMENT_DECRYPT_FAILED", `No se pudo descifrar el adjunto: ${(e as Error).message}`);
 		}
-		// `[plaintext]` (no `plaintext`): un Buffer es iterable de bytes; envuelto en
-		// array se emite como un único chunk Buffer en vez de números sueltos.
-		return { stream: Readable.from([plaintext]), attachment };
+		const body = range ? plaintext.subarray(range.start, range.end + 1) : plaintext;
+		// `[body]` (no `body`): un Buffer es iterable de bytes; envuelto en array se
+		// emite como un único chunk Buffer en vez de números sueltos.
+		return { stream: Readable.from([body]), attachment };
 	}
 
 	async #getReadyForRead(ctx: AttachmentPermissionContext, attachmentId: string): Promise<Attachment> {
 		const attachment = await this.getById(ctx, attachmentId);
 		if (!attachment) {
 			throw new AttachmentError(404, "ATTACHMENT_NOT_FOUND", "Adjunto no encontrado");
+		}
+		// `retained` no es "todavía no": el adjunto existe y está completo, pero una
+		// retención legal lo bloquea. 423 lo distingue del 409 de "sigue subiendo".
+		if (attachment.status === "retained") {
+			throw new AttachmentError(423, "ATTACHMENT_RETAINED", "Adjunto bloqueado por una retención legal");
 		}
 		if (attachment.status !== "ready") {
 			throw new AttachmentError(409, "ATTACHMENT_PENDING", "Adjunto aún no disponible");
@@ -555,6 +620,11 @@ export class AttachmentsManager {
 	 */
 	@OnlyKernel()
 	async forceDelete(_kernelKey: symbol, attachmentId: string): Promise<void> {
+		await this.#purge(attachmentId);
+	}
+
+	/** Purga real (objeto + documento + cuota si estaba activo), sin control de acceso. */
+	async #purge(attachmentId: string): Promise<void> {
 		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
 		if (!doc) return;
 		try {
@@ -576,8 +646,44 @@ export class AttachmentsManager {
 	async retain(_kernelKey: symbol, attachmentId: string): Promise<void> {
 		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
 		if (doc?.status !== "ready") return;
-		await this.#model.updateOne({ _id: attachmentId }, { $set: { status: "retained" } });
+		await this.#model.updateOne({ _id: attachmentId }, { $set: { status: "retained", retainedAt: new Date() } });
 		await this.#releaseQuota(doc.uploadedBy, doc.orgId ?? null, doc.size);
+		await this.#trimRetainedPool({ userId: doc.uploadedBy, orgId: doc.orgId ?? null });
+	}
+
+	/**
+	 * Mantiene acotado el pool de retención de un sujeto.
+	 *
+	 * Los bytes `retained` no cuentan cuota (el borrado tiene que liberar espacio de
+	 * verdad) pero siguen ocupando disco durante toda la retención legal. Sin un tope,
+	 * alcanza con rotar "subir y borrar" para almacenar un múltiplo del plan contratado
+	 * sin pagarlo. El tope es el propio límite del sujeto: se puede tener retenido, como
+	 * mucho, tanto como se puede tener activo. Al pasarse, se purgan de verdad los más
+	 * viejos — que son los que menos chance tienen de recuperarse.
+	 */
+	async #trimRetainedPool(subject: { userId: string; orgId: string | null }): Promise<void> {
+		if (!this.#quota) return;
+		try {
+			const tracker = this.#quota.getTracker();
+			if (!tracker) return;
+			const { effectiveLimit } = await tracker.checkAllowance(subject, this.#quota.appId, 0);
+			if (effectiveLimit === UNLIMITED_BYTES || effectiveLimit <= 0) return;
+
+			const retained = await this.#model
+				.find({ uploadedBy: subject.userId, orgId: subject.orgId, status: "retained" })
+				.sort({ retainedAt: 1, createdAt: 1 })
+				.lean<Array<AttachmentDoc & { _id: string }>>();
+
+			let total = retained.reduce((sum, d) => sum + d.size, 0);
+			for (const d of retained) {
+				if (total <= effectiveLimit) break;
+				await this.#purge(d._id);
+				total -= d.size;
+			}
+		} catch (e) {
+			// Best-effort: no dejar de retener porque falló la poda.
+			this.#logger?.logWarn(`Attachments(${this.#quota.appId}): poda del pool retenido falló (${(e as Error).message})`);
+		}
 	}
 
 	/**
@@ -589,7 +695,7 @@ export class AttachmentsManager {
 	async unretain(_kernelKey: symbol, attachmentId: string): Promise<void> {
 		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
 		if (doc?.status !== "retained") return;
-		await this.#model.updateOne({ _id: attachmentId }, { $set: { status: "ready" } });
+		await this.#model.updateOne({ _id: attachmentId }, { $set: { status: "ready", retainedAt: null } });
 		await this.#commitQuota({ userId: doc.uploadedBy, orgId: doc.orgId ?? null }, doc.size);
 	}
 

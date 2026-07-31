@@ -6,8 +6,8 @@ presets). La lógica vive una sola vez en el repo público
 *reusable workflow*; cada repo solo lleva un caller fino en
 `.github/workflows/security.yml`.
 
-> `adc-ci/` se clona aparte y está **gitignored** en root (como `presets/` y
-> `private/`). No se versiona desde el monorepo.
+> `adc-ci/` se clona aparte y está **gitignored** en root (como `presets/` y el
+> repo interno). No se versiona desde el monorepo.
 
 ## Herramientas
 

@@ -13,10 +13,10 @@ const DEV_CLEANUP = `
 			}
 		});`;
 
-const SW_REGISTRATION_TEMPLATE = `	// Registrar Service Worker
+const SW_REGISTRATION_TEMPLATE = `	// Registrar Service Worker (ruta namespaceada: ver i18n-sw-endpoints.ts)
 	if ('serviceWorker' in navigator) {
 		globalThis.addEventListener('load', () => {
-			navigator.serviceWorker.register('/adc-sw.js', { updateViaCache: 'none' })
+			navigator.serviceWorker.register('__SW_PATH__', { updateViaCache: 'none' })
 				.then((registration) => {
 					console.log('[SW] Service Worker registrado:', registration.scope);
 					// El SW se notificará cuando cada app cargue sus traducciones via loadTranslations
@@ -34,6 +34,11 @@ const SW_REGISTRATION_TEMPLATE = `	// Registrar Service Worker
 
 export const I18N_NO_SW_COMMENT = "// Service Worker deshabilitado para este módulo";
 
-export function buildSwRegistration(isDev: boolean): string {
-	return SW_REGISTRATION_TEMPLATE.replace("__DEV_CLEANUP__", isDev ? DEV_CLEANUP : "");
+/**
+ * `swPath` llega namespaceado (`/<namespace>/adc-sw.js`). El `Service-Worker-Allowed: /` que manda el
+ * endpoint permite que un SW servido bajo el namespace controle igual el scope raíz, y el
+ * `DEV_CLEANUP` sigue funcionando porque compara por substring `adc-sw.js`.
+ */
+export function buildSwRegistration(isDev: boolean, swPath: string): string {
+	return SW_REGISTRATION_TEMPLATE.replace("__DEV_CLEANUP__", isDev ? DEV_CLEANUP : "").replace("__SW_PATH__", swPath);
 }

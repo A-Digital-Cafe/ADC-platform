@@ -1,33 +1,38 @@
-import { randomUUID } from "node:crypto";
-import type { Model } from "mongoose";
 import type { ILogger } from "@interfaces/utils/ILogger.js";
 import { UNLIMITED_BYTES, type QuotaSubject, type QuotaSubjectType, type StorageLimitOverride } from "@common/types/storage/quota.ts";
 import {
 	STORAGE_USER_TIER_LIMITS,
 	STORAGE_ORG_TIER_LIMITS,
-	getOrgMemberDefaultBytes,
+	STORAGE_TOTAL_FEATURE,
 	type QuotaScope,
 } from "@common/types/tiers/storage.ts";
 import type { AccountTier } from "@common/types/tiers.ts";
 import type { OrganizationTier } from "@common/types/identity/Organization.ts";
 import { StorageError } from "@common/types/custom-errors/StorageError.ts";
-import LRUCache from "@adc/utils/performance/LRUCache.ts";
+import type { IPlanService } from "@common/types/plans/IPlanService.ts";
+import type { PlanOverride } from "@common/types/plans/index.ts";
 
-/** Fuente mínima de datos de identity (managers internos, sin auth). */
+/** Fuente mínima de datos de identity, sólo para el fallback sin `PlanService`. */
 export interface IdentitySource {
-	getUser(userId: string): Promise<{
-		roleIds?: string[];
-		metadata?: { accountTier?: string } | null;
-		orgMemberships?: Array<{ orgId: string; roleIds: string[] }>;
-	} | null>;
+	getUser(userId: string): Promise<{ metadata?: { accountTier?: string } | null } | null>;
 	getOrganization(orgIdOrSlug: string): Promise<{ orgId?: string; tier?: string } | null>;
-	getRole(roleId: string): Promise<{ orgId?: string | null } | null>;
 }
+
+/** Resolver perezoso del motor de planes; `undefined` = no está cargado. */
+export type PlanResolver = () => IPlanService | undefined;
 
 export interface UpsertOverrideInput {
 	subjectType: QuotaSubjectType;
 	subjectId: string;
 	limitBytes: number;
+}
+
+/** Filtros y paginación del listado administrativo (la feature ya está fijada a storage). */
+export interface StorageOverridesQuery {
+	subjectType?: QuotaSubjectType;
+	subjectId?: string;
+	limit?: number;
+	offset?: number;
 }
 
 /** Contexto del actor que administra overrides (derivado del token, nunca del body). */
@@ -43,249 +48,161 @@ export interface QuotaProfile {
 	scope: QuotaScope;
 }
 
-const CACHE_TTL_MS = 30_000;
-
-interface CachedProfile {
-	value: QuotaProfile;
-	expiresAt: number;
-}
-
 /**
- * Resolución del perfil de cuota (límite efectivo + tier del contexto) y
- * administración de overrides.
+ * Límite de almacenamiento de un sujeto y administración de sus excepciones.
  *
- * Precedencia con org activa: override de usuario (clamp ≤ org) → máximo de
- * overrides de sus roles en esa org (clamp ≤ org) → default por miembro
- * (override `org-members-default` ?? tier de la org; clamp ≤ org) → límite de
- * la org (override de org global ?? tier). Sin org: override global de usuario
- * → máximo de overrides de roles globales → tier de cuenta.
+ * **Adaptador, no resolver**: el límite es la feature `storage.total` del catálogo de
+ * `PlanService` y los overrides viven en `plan_overrides`; acá sólo se conserva la forma de la API
+ * de storage (bytes, `StorageLimitOverride`). La precedencia y el clamp los aplica
+ * `EntitlementsManager`.
  *
- * El clamp al límite de la org se aplica también en lectura: reducir el límite
- * de una org degrada automáticamente los overrides internos ya asignados.
+ * **Fail-open**: sin `PlanService` cae a las matrices de `@common/types/tiers/storage.ts` (sin
+ * overrides). La administración, en cambio, responde 503: no hay dónde escribirlos.
  */
 export class LimitsManager {
-	readonly #model: Model<StorageLimitOverride>;
 	readonly #identity: IdentitySource;
 	readonly #logger: ILogger;
-	readonly #cache = new LRUCache<string, CachedProfile>(2000);
+	readonly #plans: PlanResolver;
 
-	constructor(model: Model<StorageLimitOverride>, identity: IdentitySource, logger: ILogger) {
-		this.#model = model;
+	constructor(identity: IdentitySource, logger: ILogger, plans: PlanResolver) {
 		this.#identity = identity;
 		this.#logger = logger;
+		this.#plans = plans;
 	}
 
 	async resolveQuotaProfile(subject: QuotaSubject): Promise<QuotaProfile> {
 		const orgId = subject.orgId ?? null;
-		const cacheKey = `${subject.userId}|${orgId ?? ""}`;
-		const cached = this.#cache.get(cacheKey);
-		if (cached && cached.expiresAt > Date.now()) return cached.value;
-
-		let value: QuotaProfile;
-		try {
-			value = orgId ? await this.#resolveOrgScoped(subject.userId, orgId) : await this.#resolveGlobal(subject.userId);
-		} catch (e) {
-			// Tolerante a fallos: ante un error de identity, caer al tier base del contexto.
-			this.#logger.logWarn(`StorageQuota: error resolviendo límite de ${subject.userId}: ${(e as Error).message}`);
-			value = orgId
-				? { effectiveLimit: STORAGE_ORG_TIER_LIMITS.default, scope: { kind: "org", tier: "default" } }
-				: { effectiveLimit: STORAGE_USER_TIER_LIMITS.free, scope: { kind: "personal", tier: "free" } };
+		const plans = this.#tryPlans();
+		if (plans) {
+			try {
+				const dto = await plans.entitlements.get({ userId: subject.userId, orgId });
+				const limit = dto.features[STORAGE_TOTAL_FEATURE];
+				if (typeof limit === "number") {
+					const scope: QuotaScope =
+						dto.axis === "org" ? { kind: "org", tier: dto.tier as OrganizationTier } : { kind: "personal", tier: dto.tier as AccountTier };
+					return { effectiveLimit: limit, scope };
+				}
+			} catch (e) {
+				this.#logger.logWarn(`StorageQuota: PlanService falló resolviendo ${subject.userId}: ${(e as Error).message}`);
+			}
 		}
-		this.#cache.set(cacheKey, { value, expiresAt: Date.now() + CACHE_TTL_MS });
-		return value;
+		return this.#fallbackProfile(subject.userId, orgId);
 	}
 
-	/** Límite total de una organización (override global de org ?? tier). */
+	/** Límite total de una organización (el pool compartido, sin mirar a ningún miembro). */
 	async resolveOrgLimit(orgId: string): Promise<number> {
-		return (await this.#orgLimitAndTier(orgId)).limit;
+		const plans = this.#tryPlans();
+		if (plans) {
+			try {
+				const snapshot = await plans.orgSnapshot(orgId);
+				const value = snapshot.values[STORAGE_TOTAL_FEATURE];
+				if (typeof value === "number") return value;
+			} catch (e) {
+				this.#logger.logWarn(`StorageQuota: PlanService falló resolviendo la org ${orgId}: ${(e as Error).message}`);
+			}
+		}
+		const tier = await this.#orgTier(orgId);
+		return STORAGE_ORG_TIER_LIMITS[tier] ?? STORAGE_ORG_TIER_LIMITS.default;
 	}
 
-	/** Default por miembro de una org: tier, override y valor efectivo (para administración). */
+	/** Default por miembro de una org: valor del plan, override administrado y efectivo. */
 	async getOrgMemberDefault(orgId: string): Promise<{ orgLimit: number; tierBytes: number; overrideBytes: number | null; effectiveBytes: number }> {
-		const { limit: orgLimit, tier } = await this.#orgLimitAndTier(orgId);
-		const override = await this.#findOverride("org-members-default", orgId, orgId);
-		const tierBytes = getOrgMemberDefaultBytes(tier);
-		const base = override?.limitBytes ?? tierBytes;
-		const effectiveBytes = base === UNLIMITED_BYTES ? orgLimit : clampToOrg(base, orgLimit);
-		return { orgLimit, tierBytes, overrideBytes: override?.limitBytes ?? null, effectiveBytes };
-	}
+		const snapshot = await this.#requirePlans().orgSnapshot(orgId);
+		const orgLimit = numberOr(snapshot.values[STORAGE_TOTAL_FEATURE], STORAGE_ORG_TIER_LIMITS.default);
+		const effectiveBytes = numberOr(snapshot.memberDefaults[STORAGE_TOTAL_FEATURE], orgLimit);
+		const tierBytes = numberOr(snapshot.memberPlanDefaults[STORAGE_TOTAL_FEATURE], UNLIMITED_BYTES);
+		const override = snapshot.memberDefaultOverrides[STORAGE_TOTAL_FEATURE];
 
-	/** Tier y límite de la org en una sola resolución (el tier alimenta mins y defaults). */
-	async #orgLimitAndTier(orgId: string): Promise<{ limit: number; tier: OrganizationTier }> {
-		const org = await this.#identity.getOrganization(orgId);
-		if (!org) throw new StorageError(404, "ORG_NOT_FOUND", "Organización no encontrada");
-		const tier = (org.tier as OrganizationTier) ?? "default";
-		const orgOverride = await this.#findOverride("org", orgId, null);
-		const limit = orgOverride?.limitBytes ?? STORAGE_ORG_TIER_LIMITS[tier] ?? STORAGE_ORG_TIER_LIMITS.default;
-		return { limit, tier };
-	}
-
-	async #resolveOrgScoped(userId: string, orgId: string): Promise<QuotaProfile> {
-		const { limit: orgLimit, tier } = await this.#orgLimitAndTier(orgId);
-		const scope: QuotaScope = { kind: "org", tier };
-
-		const userOverride = await this.#findOverride("user", userId, orgId);
-		if (userOverride) return { effectiveLimit: clampToOrg(userOverride.limitBytes, orgLimit), scope };
-
-		const user = await this.#identity.getUser(userId);
-		const roleIds = user?.orgMemberships?.find((m) => m.orgId === orgId)?.roleIds ?? [];
-		const roleMax = await this.#maxRoleOverride(roleIds, orgId);
-		if (roleMax !== null) return { effectiveLimit: clampToOrg(roleMax, orgLimit), scope };
-
-		// Default por miembro: override de la org ?? tier; UNLIMITED = sin tope → límite org.
-		const memberDefault = await this.#findOverride("org-members-default", orgId, orgId);
-		const defaultBytes = memberDefault?.limitBytes ?? getOrgMemberDefaultBytes(tier);
-		if (defaultBytes !== UNLIMITED_BYTES) return { effectiveLimit: clampToOrg(defaultBytes, orgLimit), scope };
-
-		return { effectiveLimit: orgLimit, scope };
-	}
-
-	async #resolveGlobal(userId: string): Promise<QuotaProfile> {
-		const user = await this.#identity.getUser(userId);
-		const tier = (user?.metadata?.accountTier as AccountTier) ?? "free";
-		const scope: QuotaScope = { kind: "personal", tier };
-
-		const userOverride = await this.#findOverride("user", userId, null);
-		if (userOverride) return { effectiveLimit: userOverride.limitBytes, scope };
-
-		const roleMax = await this.#maxRoleOverride(user?.roleIds ?? [], null);
-		if (roleMax !== null) return { effectiveLimit: roleMax, scope };
-
-		return { effectiveLimit: STORAGE_USER_TIER_LIMITS[tier] ?? STORAGE_USER_TIER_LIMITS.free, scope };
-	}
-
-	/** Máximo de los overrides de una lista de roles; null si ninguno tiene override. */
-	async #maxRoleOverride(roleIds: string[], orgId: string | null): Promise<number | null> {
-		if (!roleIds.length) return null;
-		const overrides = await this.#model.find({ subjectType: "role", subjectId: { $in: roleIds }, orgId }).lean<StorageLimitOverride[]>();
-		if (!overrides.length) return null;
-		if (overrides.some((o) => o.limitBytes === UNLIMITED_BYTES)) return UNLIMITED_BYTES;
-		return Math.max(...overrides.map((o) => o.limitBytes));
-	}
-
-	async #findOverride(subjectType: QuotaSubjectType, subjectId: string, orgId: string | null): Promise<StorageLimitOverride | null> {
-		return this.#model.findOne({ subjectType, subjectId, orgId }).lean<StorageLimitOverride | null>();
+		return { orgLimit, tierBytes, overrideBytes: typeof override === "number" ? override : null, effectiveBytes };
 	}
 
 	// ─── Administración de overrides ─────────────────────────────────────────
 
-	async listOverrides(actor: OverrideActorCtx): Promise<StorageLimitOverride[]> {
-		// En contexto org, el filtro se fuerza server-side a esa org.
-		const filter = actor.orgId ? { orgId: actor.orgId } : {};
-		return this.#model.find(filter).sort({ createdAt: -1 }).limit(500).lean<StorageLimitOverride[]>();
+	/**
+	 * Página de overrides de storage (ver `PlanOverridePage`). Para ubicar uno puntual —el
+	 * `org-members-default` de una org— conviene filtrar por sujeto en vez de barrer páginas.
+	 */
+	async listOverrides(actor: OverrideActorCtx, query: StorageOverridesQuery = {}): Promise<{ items: StorageLimitOverride[]; total: number }> {
+		const page = await this.#requirePlans().overridesAdmin.list(actor, { ...query, featureKey: STORAGE_TOTAL_FEATURE });
+		return { items: page.items.map(toStorageOverride), total: page.total };
 	}
 
-	/**
-	 * Crea/actualiza un override validando la jerarquía:
-	 * - Actor org: solo subjects `user`/`role` de SU org o el `org-members-default`
-	 *   propio; `orgId` forzado, `limitBytes` ≤ límite de la org y nunca ilimitado.
-	 * - Actor global: cualquier subject, ilimitado permitido.
-	 * Para `org-members-default` el doc queda SIEMPRE scoped a la org subject
-	 * (también con actor global), para que la resolución org-scoped lo encuentre.
-	 */
 	async upsertOverride(actor: OverrideActorCtx, input: UpsertOverrideInput): Promise<StorageLimitOverride> {
-		this.#validateInput(input);
-		const actorOrgId = actor.orgId ?? null;
-		const isMembersDefault = input.subjectType === "org-members-default";
-		const docOrgId = isMembersDefault ? input.subjectId : actorOrgId;
-
-		if (isMembersDefault) {
-			await this.#validateMembersDefaultUpsert(actorOrgId, input);
-		} else if (actorOrgId) {
-			await this.#validateOrgActorUpsert(actorOrgId, input);
+		if (typeof input.limitBytes !== "number" || !Number.isInteger(input.limitBytes) || (input.limitBytes < 0 && input.limitBytes !== UNLIMITED_BYTES)) {
+			throw new StorageError(400, "INVALID_FIELD", "`limitBytes` debe ser un entero ≥ 0 o -1 (ilimitado)");
 		}
-
-		const now = new Date();
-		const doc = await this.#model.findOneAndUpdate(
-			{ subjectType: input.subjectType, subjectId: input.subjectId, orgId: docOrgId },
-			{
-				$set: { limitBytes: input.limitBytes, updatedAt: now },
-				$setOnInsert: { id: randomUUID(), createdBy: actor.userId, createdAt: now },
-			},
-			{ new: true, upsert: true }
-		);
-		this.#cache.clear();
-		return doc.toObject() as StorageLimitOverride;
+		const doc = await this.#requirePlans().overridesAdmin.upsert(actor, {
+			subjectType: input.subjectType,
+			subjectId: input.subjectId,
+			featureKey: STORAGE_TOTAL_FEATURE,
+			value: input.limitBytes,
+		});
+		return toStorageOverride(doc);
 	}
 
 	async deleteOverride(actor: OverrideActorCtx, overrideId: string): Promise<void> {
-		const doc = await this.#model.findOne({ id: overrideId }).lean<StorageLimitOverride | null>();
-		if (!doc) throw new StorageError(404, "OVERRIDE_NOT_FOUND", "Override no encontrado");
-		// Actor org: solo puede borrar overrides scoped a su org.
-		if (actor.orgId && doc.orgId !== actor.orgId) {
-			throw new StorageError(403, "ORG_ACCESS_DENIED", "No tienes acceso a este override");
-		}
-		await this.#model.deleteOne({ id: overrideId });
-		this.#cache.clear();
+		await this.#requirePlans().overridesAdmin.remove(actor, overrideId);
 	}
 
-	/** Validación del upsert de `org-members-default` (org actor: solo su org, sin ilimitado; clamp ≤ org). */
-	async #validateMembersDefaultUpsert(actorOrgId: string | null, input: UpsertOverrideInput): Promise<void> {
-		if (actorOrgId) {
-			if (input.subjectId !== actorOrgId) {
-				throw new StorageError(403, "ORG_ACCESS_DENIED", "Solo puedes ajustar el default de tu organización");
-			}
-			if (input.limitBytes === UNLIMITED_BYTES) {
-				throw new StorageError(403, "UNLIMITED_FORBIDDEN", "Una organización no puede asignar límites ilimitados");
-			}
-		}
-		// Valida existencia de la org y obtiene el límite para el clamp.
-		const orgLimit = await this.resolveOrgLimit(input.subjectId);
-		if (input.limitBytes !== UNLIMITED_BYTES && orgLimit !== UNLIMITED_BYTES && input.limitBytes > orgLimit) {
-			throw new StorageError(403, "LIMIT_EXCEEDS_ORG", "El límite supera el disponible de la organización", { orgLimit });
+	// ─── Internos ────────────────────────────────────────────────────────────
+
+	#tryPlans(): IPlanService | undefined {
+		try {
+			return this.#plans();
+		} catch {
+			return undefined;
 		}
 	}
 
-	/** Validación del upsert de un actor org sobre subjects user/role de su org. */
-	async #validateOrgActorUpsert(actorOrgId: string, input: UpsertOverrideInput): Promise<void> {
-		if (input.subjectType === "org") {
-			throw new StorageError(403, "GLOBAL_ONLY", "Los límites de organización se administran en contexto global");
-		}
-		if (input.limitBytes === UNLIMITED_BYTES) {
-			throw new StorageError(403, "UNLIMITED_FORBIDDEN", "Una organización no puede asignar límites ilimitados");
-		}
-		await this.#assertSubjectInOrg(input.subjectType, input.subjectId, actorOrgId);
-		const orgLimit = await this.resolveOrgLimit(actorOrgId);
-		if (orgLimit !== UNLIMITED_BYTES && input.limitBytes > orgLimit) {
-			throw new StorageError(403, "LIMIT_EXCEEDS_ORG", "El límite supera el disponible de la organización", { orgLimit });
-		}
+	/** Igual que `#tryPlans`, pero para operaciones que no tienen fallback posible. */
+	#requirePlans(): IPlanService {
+		const plans = this.#tryPlans();
+		if (!plans) throw new StorageError(503, "QUOTA_UNAVAILABLE", "El motor de planes no está disponible");
+		return plans;
 	}
 
-	#validateInput(input: UpsertOverrideInput): void {
-		if (!input.subjectId || typeof input.subjectId !== "string") {
-			throw new StorageError(400, "MISSING_FIELDS", "`subjectId` requerido");
+	/** Sin motor de planes: tier del contexto contra la matriz local, sin overrides. */
+	async #fallbackProfile(userId: string, orgId: string | null): Promise<QuotaProfile> {
+		if (orgId) {
+			const tier = await this.#orgTier(orgId);
+			return { effectiveLimit: STORAGE_ORG_TIER_LIMITS[tier] ?? STORAGE_ORG_TIER_LIMITS.default, scope: { kind: "org", tier } };
 		}
-		if (!["user", "org", "role", "org-members-default"].includes(input.subjectType)) {
-			throw new StorageError(400, "INVALID_FIELD", "`subjectType` debe ser user|org|role|org-members-default");
+		let tier: AccountTier = "free";
+		try {
+			tier = ((await this.#identity.getUser(userId))?.metadata?.accountTier as AccountTier) ?? "free";
+		} catch (e) {
+			this.#logger.logWarn(`StorageQuota: error resolviendo el tier de ${userId}: ${(e as Error).message}`);
 		}
-		if (
-			typeof input.limitBytes !== "number" ||
-			!Number.isFinite(input.limitBytes) ||
-			!Number.isInteger(input.limitBytes) ||
-			(input.limitBytes < 0 && input.limitBytes !== UNLIMITED_BYTES)
-		) {
-			throw new StorageError(400, "INVALID_FIELD", "`limitBytes` debe ser un entero ≥ 0 o -1 (ilimitado)");
-		}
+		return { effectiveLimit: STORAGE_USER_TIER_LIMITS[tier] ?? STORAGE_USER_TIER_LIMITS.free, scope: { kind: "personal", tier } };
 	}
 
-	/** Verifica que el subject (user/role) pertenezca a la org del actor. */
-	async #assertSubjectInOrg(subjectType: QuotaSubjectType, subjectId: string, orgId: string): Promise<void> {
-		if (subjectType === "user") {
-			const user = await this.#identity.getUser(subjectId);
-			const isMember = user?.orgMemberships?.some((m) => m.orgId === orgId) ?? false;
-			if (!isMember) throw new StorageError(403, "ORG_ACCESS_DENIED", "El usuario no pertenece a tu organización");
-			return;
-		}
-		// role: la fuente de verdad del scope del rol vive en Identity.
-		const role = await this.#identity.getRole(subjectId);
-		if (role?.orgId !== orgId) {
-			throw new StorageError(403, "ORG_ACCESS_DENIED", "El rol no pertenece a tu organización");
+	async #orgTier(orgId: string): Promise<OrganizationTier> {
+		try {
+			const org = await this.#identity.getOrganization(orgId);
+			if (!org) throw new StorageError(404, "ORG_NOT_FOUND", "Organización no encontrada");
+			return (org.tier as OrganizationTier) ?? "default";
+		} catch (e) {
+			if (e instanceof StorageError) throw e;
+			this.#logger.logWarn(`StorageQuota: error resolviendo la org ${orgId}: ${(e as Error).message}`);
+			return "default";
 		}
 	}
 }
 
-function clampToOrg(value: number, orgLimit: number): number {
-	if (orgLimit === UNLIMITED_BYTES) return value;
-	if (value === UNLIMITED_BYTES) return orgLimit;
-	return Math.min(value, orgLimit);
+/** Un override de plan visto como override de storage (la forma que espera la UI). */
+function toStorageOverride(doc: PlanOverride): StorageLimitOverride {
+	return {
+		id: doc.id,
+		subjectType: doc.subjectType,
+		subjectId: doc.subjectId,
+		orgId: doc.orgId,
+		limitBytes: typeof doc.value === "number" ? doc.value : 0,
+		createdBy: doc.createdBy,
+		createdAt: doc.createdAt,
+		updatedAt: doc.updatedAt,
+	};
+}
+
+function numberOr(value: unknown, fallback: number): number {
+	return typeof value === "number" ? value : fallback;
 }

@@ -12,6 +12,8 @@ import { FormModalFooter } from "../components/FormModalFooter.tsx";
 import { storageAdminApi, formatBytes, type StorageOverride, type OrgLimitsInfo, type OrgUsageInfo } from "../utils/storage-api.ts";
 
 const MB = 1024 * 1024;
+/** Tamaño de página del listado (server-side: el endpoint devuelve la página + total). */
+const PAGE_SIZE = 10;
 
 interface StorageViewProps {
 	readonly perms: Permission[];
@@ -22,6 +24,9 @@ interface StorageViewProps {
 export function StorageView({ perms, orgId }: StorageViewProps) {
 	const { t } = useTranslation({ namespace: "adc-identity", autoLoad: true });
 	const [overrides, setOverrides] = useState<StorageOverride[]>([]);
+	// Paginación server-side: el endpoint capa el listado y devuelve la página + total.
+	const [pageIndex, setPageIndex] = useState(1);
+	const [total, setTotal] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [deleteConfirm, setDeleteConfirm] = useState<StorageOverride | null>(null);
@@ -59,16 +64,19 @@ export function StorageView({ perms, orgId }: StorageViewProps) {
 
 	const loadData = useCallback(async () => {
 		setLoading(true);
-		const [list, limits, usageAgg] = await Promise.all([
-			storageAdminApi.listOverrides(),
+		const [page, limits, usageAgg] = await Promise.all([
+			storageAdminApi.listOverrides({ limit: PAGE_SIZE, offset: (pageIndex - 1) * PAGE_SIZE }),
 			orgId ? storageAdminApi.orgLimits(orgId) : Promise.resolve(null),
 			orgId && canReadUsage ? storageAdminApi.orgUsage(orgId) : Promise.resolve(null),
 		]);
-		setOverrides(list);
+		setOverrides(page.items);
+		setTotal(page.total);
+		// Si la última página quedó vacía tras un borrado, retroceder una.
+		if (page.items.length === 0 && pageIndex > 1) setPageIndex(pageIndex - 1);
 		setOrgLimits(limits);
 		setOrgUsage(usageAgg);
 		setLoading(false);
-	}, [orgId, canReadUsage]);
+	}, [orgId, canReadUsage, pageIndex]);
 
 	useEffect(() => {
 		void loadData();
@@ -137,7 +145,9 @@ export function StorageView({ perms, orgId }: StorageViewProps) {
 
 	const resetMemberDefault = async () => {
 		if (!orgId) return;
-		const override = overrides.find((o) => o.subjectType === "org-members-default" && o.subjectId === orgId);
+		// Se pide al server por sujeto: la lista visible es una página y puede no traerlo.
+		const { items } = await storageAdminApi.listOverrides({ subjectType: "org-members-default", subjectId: orgId, limit: 1 });
+		const override = items[0];
 		if (!override) return;
 		setSavingDefault(true);
 		await storageAdminApi.deleteOverride(override.id);
@@ -173,6 +183,10 @@ export function StorageView({ perms, orgId }: StorageViewProps) {
 				addLabel={t("storage.addOverride")}
 				keyExtractor={(o) => o.id}
 				emptyMessage={t("storage.noOverrides")}
+				pageSize={PAGE_SIZE}
+				total={total}
+				page={pageIndex}
+				onPageChange={setPageIndex}
 				actions={
 					updatable
 						? (o) => (

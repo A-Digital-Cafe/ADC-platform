@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import type { RegisteredUIModule } from "../../types.js";
-import { addUILibraryAliases, detectUsedFrameworks, findUILibrary, usesReact } from "./alias-helpers.js";
+import { addUILibraryAliases, detectUsedFrameworks, findUILibraries, usesReact } from "./alias-helpers.js";
 
 /**
  * Genera aliases dinámicos para bundlers basados en los exports de la ui-library
@@ -16,9 +16,9 @@ export default {
 	): Record<string, string> {
 		const aliases: Record<string, string> = {};
 
-		const uiLibrary = findUILibrary(registeredModules, targetModule);
-		if (uiLibrary) {
-			addUILibraryAliases(aliases, uiLibrary, uiOutputBaseDir);
+		const uiLibraries = findUILibraries(registeredModules, targetModule);
+		if (uiLibraries.length > 0) {
+			addUILibraryAliases(aliases, uiLibraries, uiOutputBaseDir);
 		}
 
 		if (usesReact(targetModule)) {

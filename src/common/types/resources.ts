@@ -1,6 +1,7 @@
 import { SecurityScopes } from "./security/permissions.js";
 import { ModulesScopes } from "./modules/permissions.js";
 import { EmailScopes } from "./email/permissions.js";
+import { PlanScopes } from "./plans/permissions.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scope definition
@@ -102,6 +103,7 @@ const MODULES_SCOPES: ScopeDef[] = [
 	{ key: "banners", value: ModulesScopes.BANNERS },
 	{ key: "schedule", value: ModulesScopes.SCHEDULE },
 	{ key: "audit", value: ModulesScopes.AUDIT },
+	{ key: "logs", value: ModulesScopes.LOGS },
 ];
 
 /** Email scopes — alineados con EmailScopes en types/email/permissions.ts (sin el bit SELF, que es modificador) */
@@ -112,6 +114,13 @@ const EMAIL_SCOPES: ScopeDef[] = [
 	{ key: "attachments", value: EmailScopes.ATTACHMENTS },
 	{ key: "accounts", value: EmailScopes.ACCOUNTS },
 	{ key: "settings", value: EmailScopes.SETTINGS },
+];
+
+/** Plans scopes — alineados con PlanScopes en types/plans/permissions.ts */
+const PLANS_SCOPES: ScopeDef[] = [
+	{ key: "catalog", value: PlanScopes.CATALOG },
+	{ key: "overrides", value: PlanScopes.OVERRIDES },
+	{ key: "subscriptions", value: PlanScopes.SUBSCRIPTIONS },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -127,6 +136,7 @@ export const RESOURCES: ResourceDef[] = [
 	{ id: "email", label: "resources.email", scopes: EMAIL_SCOPES },
 	{ id: "security", label: "resources.security", scopes: SECURITY_SCOPES, globalOnly: true },
 	{ id: "modules", label: "resources.modules", scopes: MODULES_SCOPES, globalOnly: true },
+	{ id: "plans", label: "resources.plans", scopes: PLANS_SCOPES, globalOnly: true },
 ];
 
 /**

@@ -60,9 +60,10 @@ export class RegionEndpoints {
 		url: "/api/identity/regions",
 		permissions: [P.IDENTITY.REGIONS.WRITE],
 		options: {
+			successStatus: 201,
 			tag: "IdentityManagerService/Regions",
 			summary: "Crea una región",
-			schema: { body: RGS.CreateRegionBody, response: { 200: RGS.RegionResponse } },
+			schema: { body: RGS.CreateRegionBody, response: { 201: RGS.RegionResponse } },
 		},
 	})
 	static async createRegion(ctx: EndpointCtx<Record<string, string>, { path: string; metadata: any; isGlobal?: boolean }>) {

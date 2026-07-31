@@ -138,8 +138,8 @@ function collectTypeImports(lines) {
  * (AccessMenuItem1 ≡ AccessMenuItem) hacia su nombre canónico.
  */
 function extractImportedTypeDefs(absLib, typeImports) {
-	/** @type {{typeAliases: Map<string,string>, typeDefs: Map<string,string>, extraDefs: string[]}} */
-	const acc = { typeAliases: new Map(), typeDefs: new Map(), extraDefs: [] };
+	/** @type {{typeAliases: Map<string,string>, typeDefs: Map<string,string>, extraDefs: string[], commonImports: Map<string,string>}} */
+	const acc = { typeAliases: new Map(), typeDefs: new Map(), extraDefs: [], commonImports: new Map() };
 	for (const [alias, { original, sourceRel }] of typeImports) {
 		extractOneImportedType(absLib, { alias, original, sourceRel }, acc);
 	}
@@ -152,6 +152,17 @@ function extractOneImportedType(absLib, { alias, original, sourceRel }, acc) {
 		if (alias !== original) acc.typeAliases.set(alias, original);
 	};
 
+	// Tipos compartidos de plataforma (src/common): components.d.ts los referencia con
+	// ruta relativa que escapa de la lib. Se emiten como import "@common/..." en el
+	// generado (fuente única de verdad) en vez de inlinearse.
+	// Cubre libs dentro de src/ (`../../../../common/...`) y en presets (`../../../../../src/common/...`).
+	const commonRel = /^(?:\.\.\/)+(?:src\/)?common\/(.+?)(?:\.js)?$/.exec(sourceRel);
+	if (commonRel) {
+		acc.commonImports.set(original, `@common/${commonRel[1]}.js`);
+		noteAlias();
+		return;
+	}
+
 	const srcFile = resolveSourceFile(absLib, sourceRel);
 	if (!srcFile) return;
 
@@ -162,6 +173,16 @@ function extractOneImportedType(absLib, { alias, original, sourceRel }, acc) {
 	}
 
 	const srcContent = readFileSync(srcFile, "utf-8");
+
+	// Tipo importado desde @common en la fuente (posiblemente re-exportado vía alias):
+	// se emite como import en el archivo generado en vez de inline (fuente única).
+	const commonMatch = srcContent.match(new RegExp(String.raw`import\s+type\s*\{[^}]*\b${original}\b[^}]*\}\s*from\s*"(@common/[^"]+)"`));
+	if (commonMatch) {
+		acc.commonImports.set(original, commonMatch[1]);
+		noteAlias();
+		return;
+	}
+
 	const def = extractInterface(srcContent, original);
 	if (def) {
 		acc.typeDefs.set(original, def);
@@ -173,8 +194,23 @@ function extractOneImportedType(absLib, { alias, original, sourceRel }, acc) {
 	const typeDef = extractExportedType(srcContent, original);
 	if (typeDef) {
 		acc.extraDefs.push(`export ${typeDef}`);
+		// El alias puede apoyarse en tipos de @common (ej: `type EditorBlock = DocumentBlock`):
+		// se emiten como import, igual que si el d.ts los referenciara directo.
+		addCommonRefsFrom(typeDef, srcContent, acc.commonImports);
 		noteAlias();
 	}
+}
+
+/** Registra como import los tipos de `@common` que aparecen en una definición. */
+function addCommonRefsFrom(def, srcContent, commonImports) {
+	let rm;
+	while ((rm = REF_REGEX.exec(def)) !== null) {
+		const ref = rm[1];
+		if (commonImports.has(ref)) continue;
+		const match = new RegExp(String.raw`import\s+type\s*\{[^}]*\b${ref}\b[^}]*\}\s*from\s*"(@common/[^"]+)"`).exec(srcContent);
+		if (match) commonImports.set(ref, match[1]);
+	}
+	REF_REGEX.lastIndex = 0;
 }
 
 const BUILT_INS = new Set([
@@ -186,19 +222,20 @@ const BUILT_INS = new Set([
 ]);
 const REF_REGEX = /(?<!\w)([A-Z][a-zA-Z0-9]+)(?=[\s;[\]|&,?>)}])/g;
 
-function isKnownType(ref, typeDefs, extraDefs) {
+function isKnownType(ref, typeDefs, extraDefs, commonImports) {
+	if (commonImports?.has(ref)) return true;
 	return BUILT_INS.has(ref) || typeDefs.has(ref) || extraDefs.some((d) => d.includes(`type ${ref} =`) || d.includes(`type ${ref}=`));
 }
 
 /** Resuelve recursivamente tipos referenciados que falten, buscando en el registry de exports. */
-function resolveReferencedTypes(typeDefs, extraDefs, exportRegistry) {
+function resolveReferencedTypes(typeDefs, extraDefs, exportRegistry, commonImports) {
 	const queue = [...typeDefs.entries()].map(([n, d]) => ({ name: n, def: d }));
 	while (queue.length > 0) {
 		const { def } = queue.shift();
 		let rm;
 		while ((rm = REF_REGEX.exec(def)) !== null) {
 			const ref = rm[1];
-			if (isKnownType(ref, typeDefs, extraDefs)) continue;
+			if (isKnownType(ref, typeDefs, extraDefs, commonImports)) continue;
 
 			// Try the registry: any exported interface/type in the lib
 			const regContent = exportRegistry.get(ref);
@@ -220,21 +257,21 @@ function resolveReferencedTypes(typeDefs, extraDefs, exportRegistry) {
 }
 
 /** Suma tipos locales NO exportados desde los archivos fuente de los imports originales. */
-function pullLocalTypes(absLib, typeImports, typeDefs, extraDefs) {
+function pullLocalTypes(absLib, typeImports, typeDefs, extraDefs, commonImports) {
 	for (const [, { sourceRel }] of typeImports) {
 		const srcFile = resolveSourceFile(absLib, sourceRel);
 		if (!srcFile) continue;
-		pullLocalTypesFromSource(readFileSync(srcFile, "utf-8"), typeDefs, extraDefs);
+		pullLocalTypesFromSource(readFileSync(srcFile, "utf-8"), typeDefs, extraDefs, commonImports);
 	}
 }
 
 /** Busca en un archivo fuente definiciones locales para referencias aún sin resolver. */
-function pullLocalTypesFromSource(srcContent, typeDefs, extraDefs) {
+function pullLocalTypesFromSource(srcContent, typeDefs, extraDefs, commonImports) {
 	for (const [, def] of typeDefs) {
 		let rm;
 		while ((rm = REF_REGEX.exec(def)) !== null) {
 			const ref = rm[1];
-			if (isKnownType(ref, typeDefs, extraDefs)) continue;
+			if (isKnownType(ref, typeDefs, extraDefs, commonImports)) continue;
 			const localDef = extractLocalType(srcContent, ref);
 			if (localDef) extraDefs.push(localDef);
 		}
@@ -397,7 +434,7 @@ function parseTagMap(nsBlock) {
 
 // ─── Output rendering ───
 
-function renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMap }) {
+function renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMap, commonImports }) {
 	let out = `/* eslint-disable @typescript-eslint/no-namespace */
 /**
  * AUTO-GENERATED by scripts/generate-react-jsx.mjs — Do not edit manually.
@@ -410,6 +447,19 @@ function renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMa
 
 import "react";
 `;
+
+	if (commonImports?.size) {
+		const bySpec = new Map();
+		for (const [name, spec] of commonImports) {
+			if (!bySpec.has(spec)) bySpec.set(spec, []);
+			bySpec.get(spec).push(name);
+		}
+		out += `\n// ─── Shared platform types (imported from @common, not inlined) ───\n\n`;
+		for (const [spec, names] of bySpec) {
+			const list = names.sort().join(", ");
+			out += `import type { ${list} } from "${spec}";\nexport type { ${list} } from "${spec}";\n`;
+		}
+	}
 
 	if (typeDefs.size > 0 || extraDefs.length > 0) {
 		out += `\n// ─── Custom types (inlined from Stencil component sources) ───\n\n`;
@@ -470,9 +520,9 @@ function generate(libPath) {
 	// 1. Tipos custom importados por el d.ts + resolución recursiva de referencias
 	const exportRegistry = buildExportRegistry(resolve(absLib, "src"));
 	const typeImports = collectTypeImports(content.split("\n"));
-	const { typeAliases, typeDefs, extraDefs } = extractImportedTypeDefs(absLib, typeImports);
-	resolveReferencedTypes(typeDefs, extraDefs, exportRegistry);
-	pullLocalTypes(absLib, typeImports, typeDefs, extraDefs);
+	const { typeAliases, typeDefs, extraDefs, commonImports } = extractImportedTypeDefs(absLib, typeImports);
+	resolveReferencedTypes(typeDefs, extraDefs, exportRegistry, commonImports);
+	pullLocalTypes(absLib, typeImports, typeDefs, extraDefs, commonImports);
 
 	// 2. Namespace LocalJSX → interfaces de componentes + mapa de tags
 	const nsMatch = content.match(/declare\s+namespace\s+LocalJSX\s*\{/);
@@ -485,7 +535,7 @@ function generate(libPath) {
 	const tagMap = parseTagMap(nsBlock);
 
 	// 3. Render + write
-	const out = renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMap });
+	const out = renderOutput(libPath, { typeDefs, extraDefs, componentInterfaces, tagMap, commonImports });
 	const outPath = resolve(absLib, "utils/react-jsx.ts");
 	writeFileSync(outPath, out, "utf-8");
 	console.log(`✅ Generated ${outPath}`);

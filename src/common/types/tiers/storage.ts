@@ -14,18 +14,31 @@ import { UNLIMITED_BYTES } from "../storage/quota.ts";
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
+/**
+ * Clave de la feature de almacenamiento en el catálogo de `PlanService`.
+ *
+ * `StorageQuotaService` dejó de tener resolución y overrides propios: su límite es
+ * esta feature del motor de planes, y estas matrices son sólo el seed y el fallback
+ * si el motor no está cargado.
+ */
+export const STORAGE_TOTAL_FEATURE = "storage.total";
+
 /** Límite total de almacenamiento por tier de cuenta personal. */
 export const STORAGE_USER_TIER_LIMITS: Record<AccountTier, number> = {
 	free: 250 * MB,
 	pro: 5 * GB,
-	plus: 20 * GB,
+	plus: 200 * GB,
 };
 
-/** Límite total de almacenamiento por tier de organización. */
+/**
+ * Límite total de almacenamiento por tier de organización. `team` equivale a 6 planes `pro` en el pool
+ * compartido; `enterprise` es sólo el punto de partida de la negociación (sus
+ * límites reales se fijan por override, cliente por cliente).
+ */
 export const STORAGE_ORG_TIER_LIMITS: Record<OrganizationTier, number> = {
 	default: 1 * GB,
-	team: 50 * GB,
-	enterprise: UNLIMITED_BYTES,
+	team: 30 * GB,
+	enterprise: 100 * GB,
 };
 
 /** Contexto de cuota resuelto: personal (tier de cuenta) u org (tier de la org). */

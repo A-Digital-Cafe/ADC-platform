@@ -9,6 +9,7 @@ export function PrivacyPage() {
 			subtitle="Datos personales, infraestructura y subprocesadores."
 			standards={["GDPR (compromiso)"]}
 			declaration="commitment"
+			lastUpdated="2026-07-16"
 			breadcrumb={[{ label: "Inicio", href: "/" }, { label: "Privacidad" }]}
 		>
 			<h2 id="responsable">1. Responsable</h2>
@@ -37,6 +38,17 @@ export function PrivacyPage() {
 				</li>
 				<li>Metadatos técnicos mínimos necesarios para autenticación, sesión y seguridad.</li>
 				<li>Contenido que decides publicar (artículos, comentarios, archivos adjuntos).</li>
+				<li>
+					<strong>Dispositivos vinculados a Drive</strong> (si usás la sección Dispositivos): nombre que les des, tipo
+					(navegador o agente CLI), fecha de última conexión y, para agentes CLI, un token de acceso del que sólo
+					almacenamos el hash. Podés renombrarlos o revocarlos cuando quieras.
+				</li>
+				<li>
+					<strong>Credenciales de unidades remotas</strong> (si conectás un S3 o WebDAV propio): se guardan únicamente{" "}
+					<em>cifradas</em> — con tu clave de usuario o, si elegís el modo passphrase, cifradas de punta a punta en tu
+					dispositivo de forma que ADC no puede leerlas. La plataforma nunca se conecta a esos servicios: la conexión la
+					inicia siempre tu dispositivo, y el contenido de esas unidades no se almacena en ADC.
+				</li>
 			</ul>
 
 			<h2 id="finalidades">3. Para qué usamos esos datos (base legal y finalidad)</h2>
@@ -74,6 +86,20 @@ export function PrivacyPage() {
 				automáticamente a los <strong>30 días</strong>. A partir de ahí entran en un período de retención de hasta <strong>3 meses</strong>{" "}
 				en el que ya no son accesibles para vos ni cuentan contra tu cuota, pero un administrador todavía puede restaurarlos ante un borrado
 				accidental o un incidente. Cumplido ese plazo —o al borrarse la cuenta— el binario se elimina de forma definitiva del almacenamiento.
+				Ese período de gracia tiene, además, una <strong>capacidad limitada</strong>: como no consume tu cuota, conservamos como mucho tanto
+				volumen retenido como espacio tenés contratado, y al superarlo se eliminan definitivamente los archivos retenidos más antiguos.
+				Es una salvaguarda de capacidad, no una retención más corta: <strong>no acorta los 3 meses de nada que puedas seguir usando</strong>.
+			</p>
+			<p>
+				<strong>Transferencias entre dispositivos (túnel de Drive):</strong> el contenido que movés en vivo entre tus
+				dispositivos (carpetas montadas y unidades remotas) <strong>no se almacena</strong> en la plataforma: el servidor sólo
+				lo retransmite en tránsito, y cuando la conexión es directa entre navegadores (P2P) ni siquiera pasa por nuestros
+				servidores — sólo intercambiamos la señalización para establecerla. De las <strong>carpetas de transferencia</strong>{" "}
+				guardamos el archivo (con las reglas normales de Drive) y un registro de qué dispositivos tuyos confirmaron la
+				descarga; si activás el <em>autoborrado</em>, el archivo se elimina <strong>definitivamente y sin pasar por la
+				papelera</strong> cuando todos tus dispositivos suscritos lo descargaron o al vencer el plazo que configures — es una
+				excepción, elegida por vos, a la retención descrita arriba. Los dispositivos vinculados, sus registros de entrega y
+				las unidades remotas se eliminan junto con la cuenta.
 			</p>
 			<p>
 				<strong>Cuentas baneadas o eliminadas:</strong> se conservan durante <strong>30 días</strong> desde el evento (ban o solicitud de
@@ -87,9 +113,10 @@ export function PrivacyPage() {
 
 			<h2 id="seguridad">6. Seguridad</h2>
 			<p>
-				Aplicamos hashing de contraseñas (PBKDF2), control de sesión basado en tokens, rate limiting, protección CSRF y cabeceras CSP. La
-				cobertura completa frente a OWASP ASVS y el detalle de controles forman parte del{" "}
-				<a href="/roadmap#capa-de-blindaje-seguridad">roadmap</a> público.
+				Aplicamos hashing de contraseñas (PBKDF2), control de sesión basado en tokens, rate limiting, protección CSRF y cabeceras CSP. Los
+				archivos de Drive y las credenciales de unidades remotas se cifran en reposo (AES-256-GCM con claves por usuario; en el modo
+				passphrase de unidades remotas el cifrado ocurre en tu dispositivo y ADC no puede descifrarlas). La cobertura completa frente a
+				OWASP ASVS y el detalle de controles forman parte del <a href="/roadmap#capa-de-blindaje-seguridad">roadmap</a> público.
 			</p>
 
 			<h2 id="infraestructura-y-subprocesadores">7. Infraestructura y subprocesadores</h2>
