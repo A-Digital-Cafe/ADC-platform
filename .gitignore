@@ -67,3 +67,5 @@ temp-ui
 
 # Material de clave DKIM del MTA: se genera por entorno, nunca se versiona.
 src/common/docker/adc-haraka-core/dkim/
+# Certificado STARTTLS del MTA (cert.pem/key.pem), también por entorno.
+src/common/docker/adc-haraka-core/tls/

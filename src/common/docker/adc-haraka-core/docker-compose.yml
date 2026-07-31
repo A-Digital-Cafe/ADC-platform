@@ -8,8 +8,9 @@ services:
       # 25: SMTP entrante y, mientras el envío sea interno, también la entrega
       # del email-service (por 25 el correo local va al webhook, no a internet).
       - "127.0.0.1:25:25"
-      # 587: submission autenticado, para cuando se abra el envío externo.
-      - "127.0.0.1:587:587"
+      # 587 (submission) no se publica ni se escucha hasta abrir el envío
+      # externo: hoy sería un segundo 25 sin AUTH, superficie gratis. Al
+      # habilitarlo: restaurar el listener en config/smtp.ini + auth + TLS.
     environment:
       # Hostname público del MTA (debe coincidir con el registro A y el PTR)
       HARAKA_ME: ${MAIL_HOSTNAME:-mail.adigitalcafe.com}
@@ -26,10 +27,20 @@ services:
       # Se monta como secreto y el entrypoint la copia al layout config/dkim/<dominio>/
       # que espera el plugin (necesita escribir ahí el archivo `selector`).
       - ./dkim:/app/secrets/dkim:ro
+      # Certificado STARTTLS (opcional, gitignorado): cert.pem + key.pem (con
+      # Let's Encrypt: fullchain.pem y privkey.pem renombrados). Si faltan, el
+      # entrypoint arranca sin TLS; es prerequisito para exponer el 25.
+      - ./tls:/app/secrets/tls:ro
       - adc_haraka_queue:/app/queue
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    logging:
+      # Retención local acotada: sin esto el json-file default crece sin tope.
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     networks:
       - adc-network
 

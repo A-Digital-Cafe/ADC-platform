@@ -33,7 +33,8 @@ RUN mkdir -p /app/queue \
 # Damos al binario de node la capacidad de enlazar puertos < 1024 para no necesitar root,
 # y le cedemos la propiedad de los directorios que el entrypoint reescribe en el arranque.
 
-EXPOSE 25 587
+# Sólo el 25 mientras no exista submission (el 587 se reabre con auth+TLS).
+EXPOSE 25
 
 USER node
 

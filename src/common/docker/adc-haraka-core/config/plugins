@@ -1,6 +1,26 @@
 # Plugins cargados por Haraka (orden importa).
+# Los plugins early_talker/limit/spf/headers/attachment vienen como
+# optionalDependencies del propio Haraka 3.2.1: no hay que instalarlos aparte.
 # Conexión / saludo
 process_title
+
+# STARTTLS. Deshabilitado por defecto: el entrypoint lo activa (descomenta la
+# línea) sólo si encuentra cert+key montados en /app/secrets/tls. Sin certs el
+# MTA arranca igual que siempre, en claro. Prerequisito para exponer el 25.
+# tls
+
+# Anti-abuso: rechaza clientes que hablan antes del banner (pausa 3s). Saltea
+# solo IPs locales/privadas (el email-service entra por la red docker) y whitelist.
+early_talker
+
+# Topes por sesión: errores, RCPT TO y comandos no reconocidos. Las secciones
+# rate_*/concurrency del plugin necesitan Redis y quedan apagadas (ver limit.ini).
+limit
+
+# SPF del correo entrante, sólo anotación (ningún deny activo; ver spf.ini).
+# Las IPs privadas se saltean solas: no toca el tráfico interno del email-service.
+spf
+
 # log.syslog: removido del core en Haraka 3.2 (hoy es haraka-plugin-syslog) y
 # en el contenedor no hay demonio syslog — los logs salen por stdout (docker logs).
 # log.syslog
@@ -10,14 +30,16 @@ process_title
 # el mensaje —incluso a un destinatario local— por `queue_outbound` (búsqueda de
 # MX en internet), saltándose adc_inbound_webhook. Por 25 el correo local cae en
 # `hook_queue` → webhook → buzón, y el destinatario externo se rechaza acá mismo.
-# Al abrir el envío externo: añadir `auth/flat_file` y volver el relay a 587.
+# Al abrir el envío externo: añadir `auth/flat_file`, volver el relay a 587 y
+# ofrecer AUTH sólo en ese puerto (los plugins aplican a todos los listeners).
 
 # Aceptación de destinatarios: dominio raíz (host_list, match exacto) y sus
 # subdominios de organización (host_list_regex). Ambos los escribe el entrypoint.
 rcpt_to.in_host_list
 
-# Cabeceras y validaciones básicas
-data.headers
+# Cabeceras y validaciones básicas. `headers` es el nombre actual del viejo
+# `data.headers` (mismo plugin vía mapa de deprecados, sin warning al boot).
+headers
 attachment
 
 # Antispam: reglas básicas (ver plugins/adc_basic_spam.js)

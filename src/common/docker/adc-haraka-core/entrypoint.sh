@@ -25,6 +25,21 @@ else
 	echo "[entrypoint] AVISO: no hay clave DKIM en /app/secrets/dkim/private; el correo saliente no se firmará" >&2
 fi
 
+# STARTTLS: el plugin `tls` sólo se habilita si hay certificado montado en
+# /app/secrets/tls (cert.pem + key.pem, p. ej. fullchain/privkey de Let's
+# Encrypt renombrados). Se copian al config dir con los nombres por defecto
+# del plugin y se descomenta su línea en config/plugins. Sin certs, el MTA
+# arranca en claro como siempre (la línea queda comentada).
+if [ -f /app/secrets/tls/cert.pem ] && [ -f /app/secrets/tls/key.pem ]; then
+	cp /app/secrets/tls/cert.pem /app/config/tls_cert.pem
+	cp /app/secrets/tls/key.pem /app/config/tls_key.pem
+	chmod 600 /app/config/tls_key.pem
+	sed -i 's/^# tls$/tls/' /app/config/plugins
+	echo "[entrypoint] TLS habilitado (STARTTLS) con el certificado montado"
+else
+	echo "[entrypoint] AVISO: sin certificado en /app/secrets/tls (cert.pem+key.pem); STARTTLS deshabilitado" >&2
+fi
+
 # Variables consumidas por el plugin de webhook (adc_inbound_webhook).
 {
 	echo "url=${INBOUND_WEBHOOK_URL:-http://host.docker.internal:3000/api/email/inbound}"

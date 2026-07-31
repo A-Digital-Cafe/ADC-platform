@@ -111,15 +111,31 @@ la mayoría de los destinos. Es la razón de peso para mantener
 
 ## 7. Puertos a abrir en el firewall
 
-| Puerto | Uso                                      |
-| ------ | ---------------------------------------- |
-| 25     | SMTP entrante (recepción)                |
-| 587    | Submission (envío desde `email-service`) |
+| Puerto | Uso                                                          |
+| ------ | ------------------------------------------------------------ |
+| 25     | SMTP entrante (recepción) y entrega interna del `email-service` |
+| 587    | Submission — **hoy cerrado**; se habilita con el envío externo (auth + TLS) |
 
-El `docker-compose.yml` publica ambos en `127.0.0.1`. Para recibir de fuera hay
-que exponer el 25 al exterior (cambiar el binding y redirigir el puerto en el
-router/firewall). El 25 **saliente** suele estar bloqueado por el ISP; con envío
-interno no molesta.
+El `docker-compose.yml` publica sólo el 25 en `127.0.0.1`. Para recibir de fuera
+hay que exponer el 25 al exterior (cambiar el binding y redirigir el puerto en
+el router/firewall). El 25 **saliente** suele estar bloqueado por el ISP; con
+envío interno no molesta.
+
+### STARTTLS (prerequisito para exponer el 25)
+
+El MTA arranca en claro si no hay certificado. Para habilitar STARTTLS, dejar en
+`src/common/docker/adc-haraka-core/tls/` (gitignorado) un certificado válido
+para `MAIL_HOSTNAME`:
+
+```bash
+# Con Let's Encrypt (renombrando al layout que espera el entrypoint):
+cp /etc/letsencrypt/live/mail.adigitalcafe.com/fullchain.pem tls/cert.pem
+cp /etc/letsencrypt/live/mail.adigitalcafe.com/privkey.pem  tls/key.pem
+```
+
+El entrypoint los detecta y activa el plugin `tls` solo; la renovación necesita
+reiniciar el contenedor (deploy-hook de certbot). Antes de exponer el puerto,
+activar también los límites con Redis comentados en `config/limit.ini`.
 
 ## 8. Checklist de verificación
 
