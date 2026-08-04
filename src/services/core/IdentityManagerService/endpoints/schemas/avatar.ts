@@ -1,7 +1,5 @@
 import { Type } from "@sinclair/typebox";
 
-// ── Params ───────────────────────────────────────────────────────────────
-
 export const AvatarAttachmentParams = Type.Object({
 	attachmentId: Type.String({ minLength: 1, description: "ID del adjunto subido" }),
 });
@@ -9,8 +7,6 @@ export const AvatarAttachmentParams = Type.Object({
 export const AvatarUserParams = Type.Object({
 	userId: Type.String({ minLength: 1, description: "ID del usuario" }),
 });
-
-// ── Body ─────────────────────────────────────────────────────────────────
 
 export const PresignAvatarBody = Type.Object({
 	fileName: Type.String({ minLength: 1 }),

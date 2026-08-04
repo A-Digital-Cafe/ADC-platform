@@ -10,27 +10,18 @@ import { assertCanManageUser, assertCanAssignRoles, assertCanGrantPermissions } 
 import { checkUsername } from "@common/utils/name-policy.js";
 
 /**
- * CAMPOS DE USUARIO - MATRIZ DE MODIFICABILIDAD
+ * Matriz de modificabilidad de los campos de usuario:
  *
- * NUNCA MODIFICABLES (sistema):
- * - id: Identificador único inmutable
- * - passwordHash: Solo via endpoint /change-password
- * - createdAt: Timestamp de creación
- *
- * MODIFICABLES CON RESTRICCIONES:
- * - username: Unicidad requerida, no puede duplicarse
- * - email: Unicidad requerida, no puede duplicarse
- * - isActive: Solo admin global (org admin no puede cambiar)
- * - roleIds: Solo roles del contexto del caller
- * - groupIds: Solo grupos del contexto del caller (si existen)
- * - permissions: Solo admin global
- *
- * MODIFICABLES SIN RESTRICCIONES:
- * - metadata: Datos personalizados por aplicación
- *
- * orgMemberships:
- * - Org admin: Puede editar roleIds de su propia membresía
- * - Global admin: Acceso irrestricto
+ * | Campo                       | Quién puede modificarlo                        |
+ * | --------------------------- | ---------------------------------------------- |
+ * | `id`, `createdAt`           | nadie (inmutables)                             |
+ * | `passwordHash`              | nadie; sólo vía `/change-password`             |
+ * | `isActive`, `permissions`   | sólo admin global                              |
+ * | `username`, `email`         | cualquiera con acceso, con unicidad            |
+ * | `roleIds`, `groupIds`       | sólo los del contexto del caller               |
+ * | `metadata`                  | libre (datos por aplicación)                   |
+ * | `orgMemberships`            | org admin: `roleIds` de su propia membresía;   |
+ * |                             | admin global: irrestricto                      |
  */
 
 /**

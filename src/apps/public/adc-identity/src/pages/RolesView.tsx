@@ -33,7 +33,6 @@ export function RolesView({ perms, orgId, organizations = [] }: RolesViewProps) 
 	const [deleteConfirm, setDeleteConfirm] = useState<Role | null>(null);
 	const orgMap = React.useMemo(() => new Map(organizations.map((o) => [o.orgId, o.slug])), [organizations]);
 
-	// Form state
 	const [formName, setFormName] = useState("");
 	const [formDescription, setFormDescription] = useState("");
 	const [formPermissions, setFormPermissions] = useState<Permission[]>([]);

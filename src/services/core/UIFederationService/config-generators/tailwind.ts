@@ -123,7 +123,6 @@ export async function generateTailwindConfig(
 
 	await fs.mkdir(configDir, { recursive: true });
 
-	// Generar tailwind.config.js
 	const themeConfigPath = path.join(configDir, "tailwind.config.js");
 	let themeContent: string;
 

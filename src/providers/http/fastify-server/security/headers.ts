@@ -1,14 +1,12 @@
+import { isRealProduction } from "@common/utils/runtime-env.ts";
+import { ensureCspNonce } from "./csp-nonce.js";
+
 type SecurityHeaders = Record<string, string>;
 
 interface HeaderReply {
 	header(name: string, value: string): unknown;
 	raw: { removeHeader?: (name: string) => void };
 	request?: { hostname?: string; headers?: Record<string, unknown> };
-}
-
-/** Producción real: NODE_ENV=production y NO el modo local de pruebas (start:prodtests usa PROD_PORT=3000). */
-function isRealProduction(): boolean {
-	return process.env.NODE_ENV === "production" && process.env.PROD_PORT !== "3000";
 }
 
 /**
@@ -30,7 +28,7 @@ function getCspHeaderName(): string {
 	return shouldEnforceCsp() ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only";
 }
 
-function getDefaultCsp(): string {
+function getDefaultCsp(nonce?: string): string {
 	// En dev las apps viven en puertos distintos y se acceden tanto por `localhost`
 	// como por la IP de LAN (probar desde el móvil). La gramática CSP no admite
 	// comodines en hosts IP, así que fuera de producción se abren los esquemas
@@ -44,12 +42,14 @@ function getDefaultCsp(): string {
 	// Function`. Si algún día se declaran remotes MF por *manifest*, `@module-federation/sdk`
 	// sí evalúa el `getPublicPath` del manifest y habría que revisarlo.
 	//
-	// `'unsafe-inline'` sigue: la plataforma inyecta scripts inline que no se pueden hashear —el
-	// import map que genera UIFederation y el HTML que se reescribe por request—. Quitarlo exige
-	// nonce por request, que es trabajo aparte.
+	// Inline: con nonce por request (`csp-nonce.ts` lo genera y lo sella sobre el HTML final en
+	// el último hook `onSend`). El `'unsafe-inline'` sólo queda como fallback cuando el nonce
+	// está apagado por env — mezclarlos no sirve: en cuanto hay un nonce, el navegador ignora
+	// `'unsafe-inline'`.
+	const inlineScript = nonce ? `'nonce-${nonce}'` : "'unsafe-inline'";
 	const scriptSrc = isRealProduction()
-		? "script-src 'self' 'unsafe-inline' https://esm.sh https://*.adigitalcafe.com"
-		: "script-src 'self' 'unsafe-inline' https://esm.sh http: https://*.adigitalcafe.com";
+		? `script-src 'self' ${inlineScript} https://esm.sh https://*.adigitalcafe.com`
+		: `script-src 'self' ${inlineScript} https://esm.sh http: https://*.adigitalcafe.com`;
 	return [
 		"default-src 'self'",
 		"base-uri 'self'",
@@ -97,9 +97,9 @@ function getResourcePolicy(host: string): string {
 	return isIpHost ? "cross-origin" : "same-site";
 }
 
-function buildDefaultSecurityHeaders(host: string): SecurityHeaders {
+function buildDefaultSecurityHeaders(host: string, nonce?: string): SecurityHeaders {
 	const headers: SecurityHeaders = {
-		[getCspHeaderName()]: getDefaultCsp(),
+		[getCspHeaderName()]: getDefaultCsp(nonce),
 		"Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()",
 		"Cross-Origin-Embedder-Policy": "unsafe-none",
 		"Cross-Origin-Opener-Policy": "same-origin",
@@ -121,8 +121,8 @@ function buildDefaultSecurityHeaders(host: string): SecurityHeaders {
 	return headers;
 }
 
-function mergeSecurityHeaders(host: string, overrides?: SecurityHeaders): SecurityHeaders {
-	const merged = { ...buildDefaultSecurityHeaders(host) };
+function mergeSecurityHeaders(host: string, nonce?: string, overrides?: SecurityHeaders): SecurityHeaders {
+	const merged = { ...buildDefaultSecurityHeaders(host, nonce) };
 	const cspOverride = overrides?.["Content-Security-Policy"];
 	if (cspOverride !== undefined) {
 		delete merged["Content-Security-Policy"];
@@ -135,7 +135,7 @@ function mergeSecurityHeaders(host: string, overrides?: SecurityHeaders): Securi
 	// en cada config.json — las apps solo declaran su delta (ej. "img-src https:").
 	const cspExtend = overrides?.["Content-Security-Policy-Extend"];
 	if (cspExtend && cspOverride === undefined) {
-		merged[getCspHeaderName()] = extendCsp(getDefaultCsp(), cspExtend);
+		merged[getCspHeaderName()] = extendCsp(getDefaultCsp(nonce), cspExtend);
 	}
 
 	for (const [name, value] of Object.entries(overrides ?? {})) {
@@ -169,7 +169,11 @@ function extendCsp(baseCsp: string, extension: string): string {
 
 export function applySecurityHeaders(reply: HeaderReply, overrides?: SecurityHeaders): void {
 	(reply.raw as any).removeHeader?.("X-Powered-By");
-	for (const [name, value] of Object.entries(mergeSecurityHeaders(getRequestHost(reply), overrides))) {
+	// El nonce se ancla a la request: `serveStaticFile` vuelve a llamar acá después del hook
+	// `onRequest`, y las dos veces tiene que salir el MISMO valor o el header final no
+	// coincidiría con el HTML sellado.
+	const nonce = ensureCspNonce(reply.request);
+	for (const [name, value] of Object.entries(mergeSecurityHeaders(getRequestHost(reply), nonce, overrides))) {
 		reply.header(name, value);
 	}
 }

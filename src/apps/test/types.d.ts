@@ -2,7 +2,6 @@
 // UI LIBRARY - Componentes compartidos
 // ============================================
 
-// Componentes individuales de UI Library
 declare module '@ui-library/components/Container.js' {
 	import React from 'react';
 	export const Container: React.FC<{ children?: React.ReactNode; className?: string }>;
@@ -33,7 +32,6 @@ declare module '@ui-library/components/StatCard.js' {
 	}>;
 }
 
-// Router de UI Library
 declare module '@ui-library/utils/router' {
 	export class Router {
 		navigate(path: string): void;
@@ -47,21 +45,18 @@ declare module '@ui-library/utils/router' {
 // MODULE FEDERATION - Apps remotas
 // ============================================
 
-// Home app
 declare module 'home/App' {
 	import React from 'react';
 	const App: React.FC;
 	export default App;
 }
 
-// Users Management app  
 declare module 'users-management/App' {
 	import React from 'react';
 	const App: React.FC;
 	export default App;
 }
 
-// Config app
 declare module 'config/App' {
 	import React from 'react';
 	const App: React.FC;

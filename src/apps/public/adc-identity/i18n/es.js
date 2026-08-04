@@ -336,7 +336,6 @@ export default {
 		GLOBAL_ONLY_RESOURCE: "Ese recurso sólo puede asignarse en roles globales",
 		SEAT_LIMIT_REACHED: "La organización no tiene asientos disponibles. Sumá asientos para agregar más miembros.",
 		CANNOT_DELETE_PREDEFINED: "Los roles predefinidos no se pueden eliminar",
-		// No encontrado
 		USER_NOT_FOUND: "Usuario no encontrado",
 		ROLE_NOT_FOUND: "Rol no encontrado",
 		GROUP_NOT_FOUND: "Grupo no encontrado",

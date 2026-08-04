@@ -194,16 +194,6 @@ async function loadRemoteEntry(url: string, name: string): Promise<void> {
  * Carga un componente remoto de forma LAZY (sin pre-declaración en rspack config).
  * Carga el remoteEntry.js dinámicamente y obtiene el módulo del contenedor.
  *
- * @example
- * ```typescript
- * const result = await lazyLoadRemoteComponent({
- *   remoteEntryUrl: 'http://localhost:3001/remoteEntry.js',
- *   remoteName: 'home',
- *   scope: './App',
- *   moduleName: 'home',
- *   framework: 'vanilla',
- * });
- * ```
  */
 export async function lazyLoadRemoteComponent(options: LazyLoadRemoteComponentOptions): Promise<RemoteComponentResult> {
 	const { remoteEntryUrl, remoteName, scope, moduleName, framework, errorComponent } = options;

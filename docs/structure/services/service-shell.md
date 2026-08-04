@@ -26,7 +26,13 @@ src/services/<layer>/<MyService>/
 		{
 			"name": "object/mongo",
 			"version": "latest",
-			"custom": { "uri": "mongodb://admin:password@localhost:27017/my-db?authSource=admin" }
+			"custom": {
+				"host": "${MONGO_HOST:-localhost:27017}",
+				"user": "${MONGO_USER:-admin}",
+				"password": "${MONGO_PASSWORD:-password}",
+				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"db": "adc-my-service"
+			}
 		}
 	],
 	"utilities": [{ "name": "attachments/attachments-utility", "version": "latest" }],
@@ -38,6 +44,8 @@ src/services/<layer>/<MyService>/
 }
 ```
 
+- **Mongo**: el clúster (`MONGO_HOST`/`USER`/`PASSWORD`/`OPTIONS`) se configura una sola vez en el `.env` de la raíz; el servicio sólo declara su `db`. Al inicio, todas las bases compartirán una única conexión física, así que una base por servicio no cuesta conexiones. Para un clúster externo o `mongodb+srv`, poner `uri` en el `custom` (gana sobre las partes).
+- Cada variable se documenta en **un solo** `.env.example`: las de infraestructura compartida en el de la raíz, las propias del servicio en el suyo. No repetir.
 - `${VAR}` y `${VAR:-default}` se interpolan desde el `.env` propio del servicio. La interpolación es de un solo nivel: **no** anidar (`${A:-${B}}` no funciona). Para fallbacks entre vars, declarar cada una como su propia clave en `private` y resolver la prioridad en código (ej. `config.supportTicketsProjectId || config.orgManagementProjectId`).
 - `private` es configuración interna accesible vía `this.config?.private`.
 - **Nunca leer `process.env` en el código del servicio** (DAOs, endpoints, index). Las variables de entorno se declaran en `config.json` (interpoladas en `private` o en `custom` de un provider) y se documentan en el `.env.example` del servicio. Excepción: flags de runtime de la plataforma (`NODE_ENV`, `PROD_PORT`) que maneja `BaseService`/el kernel, no el módulo.

@@ -24,8 +24,6 @@ export const GroupsPageResponse = Type.Object({
 	total: Type.Integer({ minimum: 0, description: "Total de grupos que matchean el filtro (para paginar)" }),
 });
 
-// ── Params ───────────────────────────────────────────────────────────────
-
 export const GroupIdParams = Type.Object({
 	groupId: Type.String({ minLength: 1, description: "ID del grupo" }),
 });
@@ -34,8 +32,6 @@ export const GroupUserParams = Type.Object({
 	groupId: Type.String({ minLength: 1, description: "ID del grupo" }),
 	userId: Type.String({ minLength: 1, description: "ID del usuario" }),
 });
-
-// ── Query ────────────────────────────────────────────────────────────────
 
 export const SearchGroupsQuery = Type.Object({
 	q: Type.Optional(Type.String({ description: "Texto de búsqueda (mín. 2 caracteres)" })),
@@ -48,8 +44,6 @@ export const ListGroupsQuery = Type.Object({
 	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (se clampa a 500)" })),
 	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
 });
-
-// ── Body ─────────────────────────────────────────────────────────────────
 
 export const CreateGroupBody = Type.Object({
 	name: Type.String({ minLength: 1, maxLength: 64 }),

@@ -64,20 +64,14 @@ export interface UseTranslationReturn {
 /**
  * React hook for accessing translations
  *
+ * `ready` es `false` hasta que el namespace terminó de cargar: renderizar antes
+ * devuelve la clave cruda en vez del texto traducido.
+ *
  * @example
  * ```tsx
- * function LoginForm() {
- *   const { t, ready } = useTranslation({ namespace: "adc-auth", autoLoad: true });
- *
- *   if (!ready) return <div>Loading...</div>;
- *
- *   return (
- *     <form>
- *       <h1>{t("login.title")}</h1>
- *       <input placeholder={t("login.username")} />
- *     </form>
- *   );
- * }
+ * const { t, ready } = useTranslation({ namespace: "adc-auth", autoLoad: true });
+ * if (!ready) return <Spinner />;
+ * return <h1>{t("login.title")}</h1>;
  * ```
  */
 export function useTranslation(options: UseTranslationOptions = {}): UseTranslationReturn {
@@ -146,7 +140,6 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 		[namespaces, translationsVersion]
 	);
 
-	// Set locale function
 	const setLocaleFn = useCallback((newLocale: string) => {
 		if (customThis.setLocale) {
 			customThis.setLocale(newLocale);

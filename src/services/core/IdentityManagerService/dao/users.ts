@@ -246,9 +246,7 @@ export class UserManager {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Linked Accounts (OAuth external providers)
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Busca usuario por linked account (provider + providerId con status "linked")
@@ -419,13 +417,7 @@ export class UserManager {
 	 * Si ya hay un grant vigente, preserva su `previousTier` original (para no
 	 * "congelar" un tier otorgado como base al revertir).
 	 */
-	async grantTemporaryTier(
-		userId: string,
-		tier: AccountTier,
-		days: number,
-		reason: string | undefined,
-		token?: string
-	): Promise<TierGrant> {
+	async grantTemporaryTier(userId: string, tier: AccountTier, days: number, reason: string | undefined, token?: string): Promise<TierGrant> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
 
 		if (!Number.isFinite(days) || days <= 0) throw new Error("`days` debe ser un entero positivo");
@@ -774,9 +766,7 @@ export class UserManager {
 		return meta.customAvatar?.attachmentId ?? null;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Métodos de membresía por organización
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Tope de asientos: una organización no puede tener más miembros que asientos
@@ -857,9 +847,7 @@ export class UserManager {
 		}
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Operaciones bulk / cascade (usadas por otros managers vía delegación)
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Remueve la membresía de una organización de TODOS los usuarios.
@@ -909,9 +897,7 @@ export class UserManager {
 		await this.userModel.updateMany({ groupIds: groupId }, { $pull: { groupIds: groupId } });
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Operaciones de membresía a grupo (usadas por GroupManager vía delegación)
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Agrega un groupId al array groupIds de un usuario.

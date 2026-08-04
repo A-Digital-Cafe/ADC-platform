@@ -189,7 +189,6 @@ export class JobManager {
 		const ctx = JobManager.#buildConsumerCtx(body, verification.token, msg.headers);
 
 		try {
-			// Execute under circuit breaker
 			const result = await operationsService.circuitBreaker.execute(consumerKey, () => endpoint.handler(ctx as any));
 			await this.#storeJobStatus(
 				jobId,

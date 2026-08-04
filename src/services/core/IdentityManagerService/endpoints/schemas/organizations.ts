@@ -23,8 +23,6 @@ export const OrganizationResponse = Type.Object({
 export const OrganizationsListResponse = Type.Array(OrganizationResponse);
 export const OrgMembersResponse = Type.Array(UserResponse);
 
-// ── Params ───────────────────────────────────────────────────────────────
-
 export const OrgIdParams = Type.Object({
 	orgId: Type.String({ minLength: 1, description: "ID de la organización" }),
 });
@@ -37,8 +35,6 @@ export const OrgMemberParams = Type.Object({
 	orgId: Type.String({ minLength: 1, description: "ID de la organización" }),
 	userId: Type.String({ minLength: 1, description: "ID del usuario" }),
 });
-
-// ── Body ─────────────────────────────────────────────────────────────────
 
 export const CreateOrgBody = Type.Object({
 	slug: Type.String({ minLength: 1, maxLength: 64, pattern: "^[a-z0-9-]+$" }),

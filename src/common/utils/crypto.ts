@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import { isRealProduction } from "./runtime-env.ts";
 
 export function generateId(): string {
 	return crypto.randomUUID();
@@ -56,9 +57,7 @@ export function sha256Bytes(input: string): Uint8Array {
 	return new Uint8Array(crypto.createHash("sha256").update(input, "utf8").digest());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Cifrado en reposo (AES-256-GCM)
-// ─────────────────────────────────────────────────────────────────────────────
 
 const AT_REST_SCHEME = "aes-256-gcm" as const;
 const AT_REST_KEY_LENGTH = 32;
@@ -68,10 +67,18 @@ const AT_REST_IV_LENGTH = 12;
  * Master key (KEK) de cifrado en reposo de la plataforma: `ADC_STORAGE_MASTER_KEY`
  * (32 bytes en hex o base64).
  *
- * Sin la env var se deriva una clave **determinística** de desarrollo y se avisa. Que sea
- * determinística y no aleatoria es la propiedad importante: una clave efímera por proceso
- * dejaría indescifrable cuanto ya estuviera guardado en cada reinicio o recarga en caliente,
- * y sería directamente inservible con más de una réplica.
+ * Fuera de producción real, sin la env var se deriva una clave **determinística** de
+ * desarrollo y se avisa. Que sea determinística y no aleatoria es la propiedad importante:
+ * una clave efímera por proceso dejaría indescifrable cuanto ya estuviera guardado en cada
+ * reinicio o recarga en caliente, y sería directamente inservible con más de una réplica.
+ *
+ * **En producción real la ausencia es un error de arranque, no una degradación.** La clave
+ * de desarrollo es pública (está en este archivo) y no sella sólo adjuntos: vía
+ * `createAtRestSealer` sella claves de sesión JWE, refresh tokens, la caché de permisos, el
+ * OAuth pendiente y los tokens de los jobs encolados. Con el Redis por defecto sin
+ * autenticación, degradar en silencio equivale a guardar esos secretos en claro; y como el
+ * envelope es determinístico por clave, un despliegue que arrancó sin ella no se "arregla"
+ * configurándola después. Es la misma política que ya declara `.env.example`.
  *
  * Es una de las dos excepciones de `process.env` en el árbol (junto con `NODE_ENV`): es un
  * secreto de plataforma, no configuración de un módulo, y lo comparten consumidores que no
@@ -84,6 +91,12 @@ export function resolveAtRestMasterKey(logger?: { logWarn(msg: string): void }):
 		const b64 = Buffer.from(raw, "base64");
 		if (b64.length === AT_REST_KEY_LENGTH) return b64;
 		throw new Error("ADC_STORAGE_MASTER_KEY inválida: se esperan 32 bytes en hex (64 chars) o base64");
+	}
+	if (isRealProduction()) {
+		throw new Error(
+			"ADC_STORAGE_MASTER_KEY no configurada: es obligatoria en producción. " +
+				"Generar con `openssl rand -hex 32` y mantenerla ESTABLE entre reinicios y réplicas."
+		);
 	}
 	logger?.logWarn(
 		"ADC_STORAGE_MASTER_KEY no configurada: usando una master key de desarrollo derivada. " +

@@ -39,17 +39,64 @@ function addAliasesWithPrefix(aliases: Record<string, string>, uiLibrary: Regist
 }
 
 /**
- * Inyecta los aliases de cada UI library en el mapa proporcionado.
- * Cada lib obtiene aliases name-scoped (`@<name>`, `@<name>/utils`, ...); la primera
- * conserva además los aliases legacy `@ui-library*`.
+ * Qué UI library se queda con los aliases legacy `@ui-library*` cuando el módulo declara
+ * más de una. **Nunca por posición en el array**: `adc-ui-library` y `media-ui-library`
+ * exportan las dos un dir `utils` (con su `react-jsx.ts`), así que reordenar
+ * `uiDependencies` cambiaba silenciosamente a qué library resuelve `@ui-library/utils` —
+ * mismo alias, otro archivo, cero errores hasta el runtime.
+ *
+ * Orden de decisión (siempre declarativo, nunca posicional):
+ *  1. `uiLibraryAlias` del consumidor (por nombre);
+ *  2. la única library declarada, si hay una sola;
+ *  3. la que se declare `isPrimaryUILibrary` (la raíz de su namespace);
+ *  4. la primera, avisando: la ambigüedad queda en el log en vez de resolverse en secreto.
  */
-export function addUILibraryAliases(aliases: Record<string, string>, uiLibraries: RegisteredUIModule[], uiOutputBaseDir: string): void {
-	uiLibraries.forEach((uiLibrary, index) => {
+function resolveLegacyAliasOwner(
+	uiLibraries: RegisteredUIModule[],
+	targetModule: RegisteredUIModule,
+	logger?: { logWarn(msg: string): void }
+): RegisteredUIModule {
+	const requested = targetModule.uiConfig.uiLibraryAlias;
+	if (requested) {
+		const match = uiLibraries.find((lib) => lib.uiConfig.name === requested || lib.name === requested);
+		if (match) return match;
+		logger?.logWarn(
+			`[aliases] ${targetModule.name}: uiLibraryAlias="${requested}" no está entre sus UI libraries ` +
+				`(${uiLibraries.map((l) => l.uiConfig.name).join(", ")}); se ignora.`
+		);
+	}
+	if (uiLibraries.length === 1) return uiLibraries[0];
+
+	const primaries = uiLibraries.filter((lib) => lib.uiConfig.isPrimaryUILibrary);
+	if (primaries.length === 1) return primaries[0];
+
+	logger?.logWarn(
+		`[aliases] ${targetModule.name} declara ${uiLibraries.length} UI libraries ` +
+			`(${uiLibraries.map((l) => l.uiConfig.name).join(", ")}) y ninguna resuelve el alias legacy de forma unívoca: ` +
+			`@ui-library* apunta a "${uiLibraries[0].uiConfig.name}" por orden de declaración. ` +
+			`Marcá una con "isPrimaryUILibrary": true o fijala con "uiLibraryAlias".`
+	);
+	return uiLibraries[0];
+}
+
+/**
+ * Inyecta los aliases de cada UI library en el mapa proporcionado.
+ * Cada lib obtiene aliases name-scoped (`@<name>`, `@<name>/utils`, ...); la elegida por
+ * {@link resolveLegacyAliasOwner} conserva además los aliases legacy `@ui-library*`.
+ */
+export function addUILibraryAliases(
+	aliases: Record<string, string>,
+	uiLibraries: RegisteredUIModule[],
+	uiOutputBaseDir: string,
+	targetModule: RegisteredUIModule,
+	logger?: { logWarn(msg: string): void }
+): void {
+	for (const uiLibrary of uiLibraries) {
 		addAliasesWithPrefix(aliases, uiLibrary, uiOutputBaseDir, `@${uiLibrary.uiConfig.name}`);
-		if (index === 0) {
-			addAliasesWithPrefix(aliases, uiLibrary, uiOutputBaseDir, "@ui-library");
-		}
-	});
+	}
+	// El legacy va DESPUÉS de los name-scoped: si la elegida no fuera la primera, escribir
+	// antes dejaría que su propio bloque name-scoped pisara claves compartidas.
+	addAliasesWithPrefix(aliases, resolveLegacyAliasOwner(uiLibraries, targetModule, logger), uiOutputBaseDir, "@ui-library");
 }
 
 /** Indica si el módulo usa React (framework o sharedLib). */

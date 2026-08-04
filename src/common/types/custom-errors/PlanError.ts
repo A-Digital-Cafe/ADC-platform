@@ -5,7 +5,6 @@ type ExpectedPlanErrorTypes =
 	| "GLOBAL_ONLY"
 	| "ORG_ACCESS_DENIED"
 	| "NOT_AUTHENTICATED"
-	// Not found
 	| "PLAN_NOT_FOUND"
 	| "FEATURE_NOT_FOUND"
 	| "OVERRIDE_NOT_FOUND"

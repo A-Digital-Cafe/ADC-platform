@@ -1,10 +1,9 @@
 import { parseDurationSeconds } from "@common/utils/duration.js";
+import { isRealProduction } from "@common/utils/runtime-env.ts";
 import type { TokenVerificationResult, IJWTProviderMultiKey, TokenPayload } from "@interfaces/modules/providers/IJWT.js";
 import type { AuthenticatedUser, SessionData } from "../../types.js";
 import type { KeyStore } from "../keys/KeyStore.js";
 import type { RefreshTokenRepository, StoredRefreshToken } from "./RefreshTokenRepository.js";
-
-const isProd = process.env.NODE_ENV === "production";
 
 /** Fallback si `accessTokenTtl` viniera con un formato no parseable (15 min). */
 const DEFAULT_ACCESS_TTL_SECONDS = 15 * 60;
@@ -13,7 +12,7 @@ const DEFAULT_ACCESS_TTL_SECONDS = 15 * 60;
  * Secure cookies require HTTPS. In start:prodtests (NODE_ENV=production over HTTP)
  * secure must be false, otherwise the browser silently rejects the cookies.
  */
-const useSecureCookies = isProd && process.env.PROD_PORT != "3000";
+const useSecureCookies = isRealProduction();
 
 /**
  * Par de tokens retornado en login
@@ -92,7 +91,6 @@ export class TokenService {
 		country: string | null,
 		userAgent: string
 	): Promise<TokenPair> {
-		// Crear Access Token
 		const accessPayload: TokenPayload = {
 			userId: user.id,
 			permissions: user.permissions,
@@ -109,7 +107,6 @@ export class TokenService {
 		const currentKey = this.#keyStore.getCurrentKeyBytes();
 		const accessToken = await this.#jwtProvider.encryptWithKey(accessPayload, currentKey, this.#config.accessTokenTtl);
 
-		// Crear Refresh Token
 		const refreshToken = await this.#refreshTokenRepo.create({
 			userId: user.id,
 			deviceId,

@@ -95,6 +95,20 @@ export interface UIModuleConfig {
 	serviceWorker?: boolean;
 	/** Exports que este módulo expone globalmente (ej: { "loader": "./loader", "utils": "./utils" }) */
 	exports?: Record<string, string>;
+	/**
+	 * Sólo UI libraries (Stencil con `exports`): declara que ESTA es la library raíz de su
+	 * namespace, la que se queda con los aliases legacy `@ui-library*` en los módulos que
+	 * declaran más de una. Sin esto el dueño del alias sería el primer elemento de
+	 * `uiDependencies`, y reordenar el array cambiaría a qué library resuelve
+	 * `@ui-library/utils` sin ningún error (ambas exportan un dir `utils`).
+	 */
+	isPrimaryUILibrary?: boolean;
+	/**
+	 * Sólo consumidores: fija por NOMBRE qué UI library se queda con los aliases legacy
+	 * `@ui-library*`. Gana sobre `isPrimaryUILibrary`. Sirve para el caso raro de un módulo
+	 * que quiere apuntar el alias legacy a una library secundaria.
+	 */
+	uiLibraryAlias?: string;
 	/** Exposes para Module Federation (ej: { "./App": "./src/App.tsx", "./Header": "./src/Header.tsx" }) */
 	federationExposes?: Record<string, string>;
 	/** Configuración de hosting para producción (dominios/subdominios) */

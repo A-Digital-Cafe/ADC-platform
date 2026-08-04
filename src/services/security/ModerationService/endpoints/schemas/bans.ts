@@ -2,16 +2,12 @@ import { Type } from "@sinclair/typebox";
 
 /** Schemas TypeBox para los endpoints de moderación (bans) de ModerationService. */
 
-// ── Query ────────────────────────────────────────────────────────────────
-
 export const ListBansQuery = Type.Object({
 	activeOnly: Type.Optional(Type.String({ description: '"false" para incluir bans inactivos (por defecto solo activos)' })),
 	q: Type.Optional(Type.String({ description: "Filtro (mín. 2 chars) por userId/reason/source/externalId/email enmascarado; nunca por hashes" })),
 	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Tamaño de página (máx. 500, por defecto 200)" })),
 	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
 });
-
-// ── Body ─────────────────────────────────────────────────────────────────
 
 export const CreateBanBody = Type.Object(
 	{

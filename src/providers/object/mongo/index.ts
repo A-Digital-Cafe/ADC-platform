@@ -2,6 +2,7 @@ import mongoose, { Connection, Model, Schema } from "mongoose";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Logger } from "../../../utils/logger/Logger.js";
+import { buildMongoUri, hasMongoUriParts, redactMongoUri, splitMongoUri, type MongoUriParts } from "./uri.js";
 
 interface IMongoConfig {
 	uri: string;
@@ -12,6 +13,12 @@ interface IMongoConfig {
 	socketTimeout?: number;
 	autoReconnect?: boolean;
 	reconnectInterval?: number;
+	/**
+	 * Límites del pool. Ojo: el pool es COMPARTIDO por todos los módulos que apuntan al mismo
+	 * host+credenciales, así que estos números no son "por módulo" y los fija quien abre primero.
+	 */
+	maxPoolSize?: number;
+	minPoolSize?: number;
 }
 
 interface MultiDbStats {
@@ -19,8 +26,41 @@ interface MultiDbStats {
 		uri: string;
 		databases: string[];
 		connected: boolean;
-		poolSize: number;
+		/** Instancias de provider que hoy comparten este pool. */
+		refCount: number;
+		/** Límites con los que se abrió (no son por módulo: ver {@link IMongoConfig}). */
+		maxPoolSize: number;
+		minPoolSize: number;
+		/** Sockets vivos y en uso, medidos con los eventos CMAP del driver. */
+		openConnections: number;
+		inUseConnections: number;
 	}>;
+}
+
+/** El `MongoClient` que hay debajo de la conexión, sin importar `mongodb` (dep transitiva). */
+type MongoClient = ReturnType<Connection["getClient"]>;
+
+/** Contadores CMAP del pool físico (ver {@link attachPoolCounters}). */
+interface PoolCounters {
+	created: number;
+	closed: number;
+	checkedOut: number;
+	checkedIn: number;
+}
+
+/**
+ * Cómo una instancia del provider se entera de lo que le pasa al pool que comparte.
+ *
+ * Los listeners del pool son de la CONEXIÓN, no de quien la abrió: si capturaran `this`,
+ * el `disconnected` sólo reprogramaría la reconexión de la instancia que ganó la carrera
+ * de creación (y la retendría viva aunque se la detuviera), dejando a las demás sin
+ * reconexión y sin `lastError`. Por eso el pool notifica a un conjunto de suscriptores.
+ */
+interface PoolSubscriber {
+	/** El pool se cayó: cada instancia decide si reprograma su reconexión. */
+	onDisconnected(): void;
+	/** Error del pool: cada instancia lo guarda para su `getStats()`. */
+	onError(message: string): void;
 }
 
 interface SharedPoolEntry {
@@ -28,6 +68,12 @@ interface SharedPoolEntry {
 	refCount: number;
 	listenersAttached: boolean;
 	dbViews: Map<string, Connection>;
+	/** Instancias vivas que comparten este pool (ver {@link PoolSubscriber}). */
+	subscribers: Set<PoolSubscriber>;
+	/** Límites reales con los que se abrió este pool, para reportarlos sin inventar. */
+	maxPoolSize: number;
+	minPoolSize: number;
+	counters: PoolCounters;
 }
 
 // El kernel recarga el módulo con cache-busting (?v=timestamp) en cada loadProvider,
@@ -44,18 +90,60 @@ const INFLIGHT_POOLS: Map<string, Promise<SharedPoolEntry>> = ((globalThis as an
 	Promise<SharedPoolEntry>
 >());
 
-function computePhysicalKey(uri: string): { physicalKey: string; dbName: string } {
-	try {
-		const u = new URL(uri);
-		const dbName = decodeURIComponent(u.pathname.replace(/^\//, "")) || "test";
-		u.pathname = "/";
-		const sorted = [...u.searchParams.entries()].sort(([a], [b]) => a.localeCompare(b));
-		u.search = new URLSearchParams(sorted).toString();
-		return { physicalKey: u.toString(), dbName };
-	} catch {
-		return { physicalKey: uri, dbName: "test" };
-	}
+/**
+ * Listeners del pool físico. Función de módulo y no método: así no puede capturar una
+ * instancia del provider (ver {@link PoolSubscriber}). Se atan una sola vez por entry.
+ */
+function attachPoolListeners(entry: SharedPoolEntry, physicalKey: string): void {
+	const { physical } = entry;
+	const where = () => `${physical.host}:${physical.port}`;
+
+	physical.on("connected", () => {
+		Logger.ok(`[MongoProvider] Pool conectado: ${where()}`);
+	});
+
+	physical.on("disconnected", () => {
+		// El entry se relee del mapa: tras un cierre por refcount ya no está y no hay a
+		// quién avisar (ni a quién reconectar).
+		const current = SHARED_POOLS.get(physicalKey);
+		if (!current || current.refCount <= 0) return;
+		Logger.warn(`[MongoProvider] Pool desconectado: ${where()}`);
+		for (const subscriber of [...current.subscribers]) subscriber.onDisconnected();
+	});
+
+	physical.on("error", (error: any) => {
+		Logger.error(`[MongoProvider] Error de conexión: ${error.message}`);
+		for (const subscriber of [...(SHARED_POOLS.get(physicalKey)?.subscribers ?? [])]) subscriber.onError(error.message);
+	});
+
+	physical.on("reconnected", () => {
+		Logger.ok(`[MongoProvider] Pool reconectado: ${where()}`);
+	});
 }
+
+/**
+ * Contabilidad real de sockets del pool.
+ *
+ * El driver emite estos eventos CMAP siempre (no hay que habilitar monitoring) y son la única
+ * forma pública de saber cuántas conexiones hay abiertas: `MongoClient` no expone el tamaño de
+ * su pool. En un replica set llegan de todos los servidores, así que los contadores son del
+ * conjunto.
+ *
+ * Hay que atarlos ANTES de que el pool termine de abrir: `minPoolSize` crea sus sockets durante
+ * el connect, y suscribirse después pierde esos `connectionCreated` — los `connectionClosed`
+ * sí llegan todos, y el resultado es un `openConnections` que se va a negativo al cerrar.
+ */
+function attachPoolCounters(client: MongoClient, counters: PoolCounters): void {
+	client.on("connectionCreated", () => counters.created++);
+	client.on("connectionClosed", () => counters.closed++);
+	client.on("connectionCheckedOut", () => counters.checkedOut++);
+	client.on("connectionCheckedIn", () => counters.checkedIn++);
+	// No hace falta tratar `connectionPoolCleared` (un primary que cambió, p. ej.): los sockets
+	// que se descartan emiten igual su `connectionClosed`, así que los contadores se equilibran
+	// solos. Ponerlos a cero ahí sería peor: los cierres posteriores dejarían `closed > created`.
+}
+
+const computePhysicalKey = splitMongoUri;
 
 /**
  * MongoProvider - Pool físico compartido entre instancias.
@@ -82,11 +170,24 @@ export default class MongoProvider extends BaseProvider {
 	readonly #dbViewsCache: Map<string, Connection> = new Map();
 	#connectPromise: Promise<void> | null = null;
 
+	/** Cuántas veces ESTA instancia tomó cada pool (main + `getOrCreateConnection`). */
+	readonly #holds: Map<string, number> = new Map();
+
+	/** Lo que esta instancia hace cuando el pool compartido avisa (ver {@link PoolSubscriber}). */
+	readonly #subscriber: PoolSubscriber = {
+		onDisconnected: () => {
+			if (this.isDisconnecting || !this.config.autoReconnect) return;
+			this.#scheduleReconnect();
+		},
+		onError: (message: string) => {
+			this.lastError = message;
+		},
+	};
+
 	constructor(options?: any) {
 		super();
-		const hasExplicitUri = options && Object.hasOwn(options, "uri");
 		this.config = {
-			uri: hasExplicitUri ? options.uri : process.env.MONGODB_URI || "mongodb://localhost:27017/adc-platform",
+			uri: MongoProvider.#resolveUri(options),
 			maxRetries: options?.maxRetries ?? 5,
 			retryDelay: options?.retryDelay ?? 5000,
 			connectionTimeout: options?.connectionTimeout ?? 10000,
@@ -94,9 +195,22 @@ export default class MongoProvider extends BaseProvider {
 			socketTimeout: options?.socketTimeout ?? 45000,
 			autoReconnect: options?.autoReconnect ?? true,
 			reconnectInterval: options?.reconnectInterval ?? 10000,
+			maxPoolSize: options?.maxPoolSize ?? 10,
+			minPoolSize: options?.minPoolSize ?? 5,
 		};
 		mongoose.set("strict", true);
 		mongoose.set("strictQuery", false);
+	}
+
+	/**
+	 * `uri` explícita → clúster externo o `mongodb+srv`. `host` → se compone con el `db` del
+	 * módulo (el caso normal). Ninguno → el default histórico, para el módulo que declara
+	 * `object/mongo` sin `custom`.
+	 */
+	static #resolveUri(options?: MongoUriParts): string {
+		if (options?.uri?.trim()) return options.uri.trim();
+		if (hasMongoUriParts(options)) return buildMongoUri(options!);
+		return process.env.MONGODB_URI || "mongodb://localhost:27017/adc-platform";
 	}
 
 	async #acquirePhysical(physicalKey: string): Promise<SharedPoolEntry> {
@@ -108,18 +222,44 @@ export default class MongoProvider extends BaseProvider {
 			if (!inflight) {
 				inflight = (async () => {
 					try {
-						const physical = await mongoose
-							.createConnection(physicalKey, {
-								connectTimeoutMS: this.config.connectionTimeout,
-								serverSelectionTimeoutMS: this.config.serverSelectionTimeout,
-								socketTimeoutMS: this.config.socketTimeout,
-								retryWrites: true,
-								retryReads: true,
-								maxPoolSize: 10,
-								minPoolSize: 5,
-							})
-							.asPromise();
-						const fresh: SharedPoolEntry = { physical, refCount: 0, listenersAttached: false, dbViews: new Map() };
+						const maxPoolSize = this.config.maxPoolSize!;
+						const minPoolSize = this.config.minPoolSize!;
+						const counters: PoolCounters = { created: 0, closed: 0, checkedOut: 0, checkedIn: 0 };
+
+						// Sin `await`: mongoose deja el `MongoClient` en la conexión antes de llamar a
+						// su `connect()`, así que este es el único punto donde se puede contar desde el
+						// primer socket (ver {@link attachPoolCounters}).
+						const pending = mongoose.createConnection(physicalKey, {
+							connectTimeoutMS: this.config.connectionTimeout,
+							serverSelectionTimeoutMS: this.config.serverSelectionTimeout,
+							socketTimeoutMS: this.config.socketTimeout,
+							retryWrites: true,
+							retryReads: true,
+							maxPoolSize,
+							minPoolSize,
+						});
+						try {
+							attachPoolCounters(pending.getClient(), counters);
+						} catch (error: any) {
+							// El pool sirve igual; sólo se pierde la métrica.
+							Logger.warn(`[MongoProvider] Sin contadores de pool para ${redactMongoUri(physicalKey)}: ${error.message}`);
+						}
+						const physical = await pending.asPromise();
+						// Un pool caído se reemplaza, pero sus tenedores siguen existiendo: se
+						// arrastran refCount y suscriptores o quedan sin reconexión y el pool
+						// nuevo se cerraría al primer release de una instancia ajena.
+						const stale = SHARED_POOLS.get(physicalKey);
+						const fresh: SharedPoolEntry = {
+							physical,
+							refCount: stale?.refCount ?? 0,
+							listenersAttached: false,
+							dbViews: new Map(),
+							subscribers: new Set(stale?.subscribers),
+							maxPoolSize,
+							minPoolSize,
+							// Contadores del cliente nuevo: el viejo se fue con sus sockets.
+							counters,
+						};
 						SHARED_POOLS.set(physicalKey, fresh);
 						Logger.ok(`[MongoProvider] Pool físico abierto: ${physical.host}:${physical.port}`);
 						return fresh;
@@ -132,9 +272,19 @@ export default class MongoProvider extends BaseProvider {
 			entry = await inflight;
 		}
 
+		// El pool ya existía: sus límites los fijó quien lo abrió primero. Avisar en vez de
+		// dejar que `getMultiDbStats` muestre un número que este módulo no pidió.
+		if (entry.maxPoolSize !== this.config.maxPoolSize)
+			Logger.warn(
+				`[MongoProvider] El pool ${redactMongoUri(physicalKey)} ya estaba abierto con maxPoolSize=${entry.maxPoolSize}; ` +
+					`se ignora el maxPoolSize=${this.config.maxPoolSize} de este módulo.`
+			);
+
 		entry.refCount++;
+		entry.subscribers.add(this.#subscriber);
+		this.#holds.set(physicalKey, (this.#holds.get(physicalKey) ?? 0) + 1);
 		if (!entry.listenersAttached) {
-			this.#setupConnectionListeners(entry.physical, physicalKey);
+			attachPoolListeners(entry, physicalKey);
 			entry.listenersAttached = true;
 		}
 		return entry;
@@ -144,12 +294,22 @@ export default class MongoProvider extends BaseProvider {
 		const entry = SHARED_POOLS.get(physicalKey);
 		if (!entry) return;
 
+		// La suscripción se corta cuando esta instancia suelta su ÚLTIMA toma del pool: una
+		// sola instancia puede tenerlo dos veces (la conexión principal y una extra por
+		// `getOrCreateConnection`), y cortarla en la primera la dejaría sin reconexión.
+		const holds = (this.#holds.get(physicalKey) ?? 1) - 1;
+		if (holds > 0) this.#holds.set(physicalKey, holds);
+		else {
+			this.#holds.delete(physicalKey);
+			entry.subscribers.delete(this.#subscriber);
+		}
+
 		entry.refCount--;
 		if (entry.refCount > 0) return;
 
 		try {
 			await entry.physical.close();
-			Logger.ok(`[MongoProvider] Pool físico cerrado: ${physicalKey}`);
+			Logger.ok(`[MongoProvider] Pool físico cerrado: ${redactMongoUri(physicalKey)}`);
 		} catch (error: any) {
 			Logger.error(`[MongoProvider] Error cerrando pool físico: ${error.message}`);
 		} finally {
@@ -213,29 +373,6 @@ export default class MongoProvider extends BaseProvider {
 		}
 	}
 
-	#setupConnectionListeners(physical: Connection, physicalKey: string): void {
-		physical.on("connected", () => {
-			Logger.ok(`[MongoProvider] Pool conectado: ${physical.host}:${physical.port}`);
-		});
-
-		physical.on("disconnected", () => {
-			const entry = SHARED_POOLS.get(physicalKey);
-			if (!this.isDisconnecting) Logger.warn(`[MongoProvider] Pool desconectado: ${physical.host}:${physical.port}`);
-			if (this.config.autoReconnect && !this.isDisconnecting && entry && entry.refCount > 0) {
-				this.#scheduleReconnect();
-			}
-		});
-
-		physical.on("error", (error: any) => {
-			this.lastError = error.message;
-			Logger.error(`[MongoProvider] Error de conexión: ${error.message}`);
-		});
-
-		physical.on("reconnected", () => {
-			Logger.ok(`[MongoProvider] Pool reconectado: ${physical.host}:${physical.port}`);
-		});
-	}
-
 	#scheduleReconnect(): void {
 		if (this.reconnectTimer) return;
 
@@ -287,7 +424,8 @@ export default class MongoProvider extends BaseProvider {
 	getStats(): { connected: boolean; connectionString: string; retries: number; lastError?: string } {
 		return {
 			connected: this.connection?.readyState === 1,
-			connectionString: this.config.uri,
+			// Sin la contraseña: esto sale por el panel de módulos y por logs.
+			connectionString: redactMongoUri(this.config.uri),
 			retries: this.retryCount,
 			lastError: this.lastError,
 		};
@@ -342,11 +480,18 @@ export default class MongoProvider extends BaseProvider {
 	getMultiDbStats(): MultiDbStats {
 		const connections: MultiDbStats["connections"] = [];
 		for (const [physicalKey, entry] of SHARED_POOLS) {
+			const { counters } = entry;
 			connections.push({
-				uri: physicalKey,
+				uri: redactMongoUri(physicalKey),
 				databases: [...entry.dbViews.keys()],
 				connected: entry.physical.readyState === 1,
-				poolSize: 10,
+				refCount: entry.refCount,
+				maxPoolSize: entry.maxPoolSize,
+				minPoolSize: entry.minPoolSize,
+				// Los contadores sólo crecen, pero un cierre puede llegar antes que su creación
+				// en el orden de eventos: el piso en 0 evita reportar negativos.
+				openConnections: Math.max(0, counters.created - counters.closed),
+				inUseConnections: Math.max(0, counters.checkedOut - counters.checkedIn),
 			});
 		}
 		return { connections };

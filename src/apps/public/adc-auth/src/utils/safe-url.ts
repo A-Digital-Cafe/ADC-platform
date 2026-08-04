@@ -1,7 +1,7 @@
 import { getUrl } from "@common/utils/url-utils.js";
 
 /** URL base del sitio principal según entorno (destino por defecto tras login/registro). */
-export const DEFAULT_RETURN_URL = getUrl(3011, "community.adigitalcafe.com");
+export const DEFAULT_RETURN_URL = getUrl(3024, "adigitalcafe.com");
 
 /** Hostnames permitidos para redirección (allow-list estricta). */
 const ALLOWED_HOSTS = new Set<string>(["adigitalcafe.com"]);

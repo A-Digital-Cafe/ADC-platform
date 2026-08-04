@@ -231,13 +231,11 @@ export default class LangManagerService extends BaseService implements ILangMana
 			return ns.translations[locale];
 		}
 
-		// Intentar con locale base
 		const baseLocale = locale.split("-")[0];
 		if (ns.translations[baseLocale]) {
 			return ns.translations[baseLocale];
 		}
 
-		// Fallback
 		return ns.translations[this.fallbackLocale] || {};
 	}
 

@@ -6,7 +6,6 @@ type ExpectedDriveErrorTypes =
 	| "DRIVE_FORBIDDEN"
 	| "SHARE_NOT_ALLOWED"
 	| "ORG_ACCESS_DENIED"
-	// Not found
 	| "FOLDER_NOT_FOUND"
 	| "FILE_NOT_FOUND"
 	| "SHARE_NOT_FOUND"

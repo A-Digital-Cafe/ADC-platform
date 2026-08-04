@@ -19,9 +19,12 @@ import {
 	createCorsOriginGuard,
 	getAllowHeader,
 	getBodyLimitBytes,
+	getCspNonce,
 	getRawBodyLimitBytes,
 	isAllowedHttpMethod,
+	isCspNonceEnabled,
 	isSafeStaticPath,
+	stampCspNonce,
 	resolveSafeStaticPath,
 } from "./security/index.js";
 
@@ -340,7 +343,6 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 			const matchResult = this.matchPath(route.path, urlPath);
 			if (matchResult.matched) {
-				// Inyectar params en la request
 				(request.params as any) = { ...(request.params as any), ...matchResult.params };
 				return route.handler(request, reply);
 			}
@@ -689,6 +691,38 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		return true;
 	}
 
+	/**
+	 * Sella con el nonce CSP los `<script>` inline del HTML servido. Va acá y no en
+	 * `setupMiddleware` a propósito: los hooks `onSend` corren en orden de registro y fastify
+	 * no admite ninguno después de `listen()`, así que registrarlo justo antes de escuchar lo
+	 * deja ÚLTIMO — ve el HTML final, con el import map del archivo en disco más lo que
+	 * inyectaron SEOService y el modules-manager. Registrado antes, esas inyecciones
+	 * posteriores quedarían sin sellar y el navegador las bloquearía.
+	 */
+	#installCspNonceSealer(): void {
+		if (!isCspNonceEnabled()) return;
+		this.app.addHook("onSend", (request, reply, payload, done) => {
+			try {
+				const nonce = getCspNonce(request);
+				if (!nonce) return done(null, payload);
+				const contentType = String(reply.getHeader("content-type") ?? "");
+				if (!contentType.includes("text/html")) return done(null, payload);
+				// String o Buffer: los archivos estáticos se sirven con `readFileSync` (Buffer)
+				// salvo que un inyector previo (SEO, modules-manager) ya lo haya pasado a string.
+				// Los streams se dejan pasar: no hay ninguna respuesta HTML que los use.
+				let html: string;
+				if (typeof payload === "string") html = payload;
+				else if (Buffer.isBuffer(payload)) html = payload.toString("utf8");
+				else return done(null, payload);
+				return done(null, stampCspNonce(html, nonce));
+			} catch {
+				// Nunca romper una respuesta por el sellado: sin nonce el navegador bloquea los
+				// inline, pero un 500 acá tiraría la página entera.
+				return done(null, payload);
+			}
+		});
+	}
+
 	async listen(port: number): Promise<void> {
 		if (this.isListening) {
 			this.logger.logWarn("El servidor ya está escuchando");
@@ -696,6 +730,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		}
 
 		try {
+			this.#installCspNonceSealer();
 			// Esperar a que el middleware esté listo antes de iniciar
 			await this.app.listen({ port, host: "0.0.0.0" });
 			this.isListening = true;

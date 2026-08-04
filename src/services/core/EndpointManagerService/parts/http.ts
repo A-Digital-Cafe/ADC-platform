@@ -135,7 +135,6 @@ export function createHttpWrapper(
 				}
 			}
 
-			// Construir EndpointCtx
 			const ctx: EndpointCtx<any, any> = {
 				params: (req.params as Record<string, string>) || {},
 				query: (req.query as Record<string, string | undefined>) || {},

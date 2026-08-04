@@ -32,7 +32,6 @@ export interface BlockedErrorData {
 const api = createAdcApi({
 	basePath: "/api/auth",
 	devPort: 3000,
-	credentials: process.env.NODE_ENV === "development" ? "include" : "same-origin",
 });
 
 export const authApi = {

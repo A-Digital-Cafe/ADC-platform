@@ -1,8 +1,6 @@
 import type { Permission } from "@common/types/identity/Permission.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Bitfield helpers (resource.scope.action)
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function buildBitfieldMap(permissions: Permission[]): Map<string, number> {
 	const map = new Map<string, number>();

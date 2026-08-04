@@ -1,18 +1,12 @@
 /**
- * Toast manager component that handles global toast notifications.
- * Listens for 'adc-toast' custom events and displays them using inline rendered items.
+ * Toasts globales. Se monta una vez en el layout (`<adc-toast-manager />`) y
+ * escucha el evento `adc-toast`, así cualquier módulo emite sin importarlo:
  *
- * Usage in layout:
- * <adc-toast-manager></adc-toast-manager>
- *
- * Dispatch from anywhere:
- * globalThis.dispatchEvent(new CustomEvent('adc-toast', {
- *   detail: {
- *     message: 'Success!',
- *     variant: 'success',
- *     duration: 3000
- *   }
+ * ```ts
+ * globalThis.dispatchEvent(new CustomEvent("adc-toast", {
+ *   detail: { message: "Success!", variant: "success", duration: 3000 },
  * }));
+ * ```
  */
 
 import { Component, State, Element } from "@stencil/core";

@@ -68,3 +68,42 @@ export async function collectAppConfigs(dir: string, entries: Dirent[], exclude:
 	}
 	return results;
 }
+
+async function isExistingFile(filePath: string): Promise<boolean> {
+	try {
+		return (await fs.stat(filePath)).isFile();
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Todas las apps bajo una capa, bajando por los grupos igual que `loadLayerRecursive`:
+ * un directorio con `index<ext>` ES una app; cualquier otro es un grupo por el que hay que
+ * seguir bajando.
+ *
+ * `collectAppConfigs` es plano y eso alcanza para el cargador (que recurre por su cuenta),
+ * pero no para razonar sobre el árbol entero: sobre `src/apps` devolvería `public` y `test`
+ * —los grupos— en vez de las apps. Lo usa el allowlist de carga, que necesita el conjunto
+ * completo para cerrar `uiDependencies` a través de capas.
+ */
+export async function collectAppConfigsRecursive(dir: string, exclude: string[], fileExtension: string): Promise<AppLoadInfo[]> {
+	let entries: Dirent[];
+	try {
+		entries = await fs.readdir(dir, { withFileTypes: true });
+	} catch {
+		return []; // capa inexistente (preset sin `apps/`)
+	}
+
+	const results: AppLoadInfo[] = [];
+	for (const entry of entries) {
+		if (!entry.isDirectory() || exclude.includes(entry.name)) continue;
+		const subDir = path.join(dir, entry.name);
+		if (await isExistingFile(path.join(subDir, `index${fileExtension}`))) {
+			results.push(await readAppConfig(subDir, entry.name));
+		} else {
+			results.push(...(await collectAppConfigsRecursive(subDir, exclude, fileExtension)));
+		}
+	}
+	return results;
+}

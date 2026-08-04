@@ -88,7 +88,6 @@ export default class HomeApp {
 	 * Método para desmontar la aplicación
 	 */
 	unmount() {
-		// Limpiar listener de i18n
 		if (this.i18nListener) {
 			globalThis.removeEventListener('adc:i18n:loaded', this.i18nListener);
 			this.i18nListener = null;

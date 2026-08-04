@@ -5,7 +5,6 @@ type ExpectedProjectManagerErrorTypes =
 	| "ORG_ACCESS_DENIED"
 	| "PROJECT_ACCESS_DENIED"
 	| "FORBIDDEN_FIELD"
-	// Not found
 	| "PROJECT_NOT_FOUND"
 	| "ISSUE_NOT_FOUND"
 	| "SPRINT_NOT_FOUND"
@@ -25,7 +24,6 @@ type ExpectedProjectManagerErrorTypes =
 	// Tier / quota
 	| "TIER_LIMIT_REACHED"
 
-	// Comments
 	| "COMMENT_REQUIRED_ON_FINAL"
 
 	// Issue description

@@ -8,8 +8,14 @@ export interface ModuleSnapshotItem {
 	type: OrchestratorLayer;
 	/** App: instanceName; resto: nombre lógico. */
 	name: string;
-	/** `pending`: módulo nuevo detectado en runtime, nunca ejecutado; requiere lanzamiento manual. */
-	state: "running" | "disabled" | "pending";
+	/**
+	 * - `pending`: módulo nuevo detectado en runtime, nunca ejecutado; requiere lanzamiento manual.
+	 * - `dormant`: excluido de la carga de ESTE arranque por `ADC_LOAD_APPS` (boot dirigido).
+	 *   Está configurado y sano; simplemente no se cargó. No es una caída ni una baja manual.
+	 *   En apps sale del allowlist; en services es por arrastre (sus consumidores requeridos
+	 *   están todos dormidos, así que nadie lo pidió).
+	 */
+	state: "running" | "disabled" | "pending" | "dormant";
 	/** Para services deshabilitados: sus endpoints responden 503. */
 	unavailable?: boolean;
 	/** App que es ui-library Stencil: no se detiene, se recompila (rebuild). */

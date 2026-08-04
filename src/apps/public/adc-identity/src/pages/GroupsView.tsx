@@ -37,7 +37,6 @@ export function GroupsView({ perms, orgId, organizations = [] }: GroupsViewProps
 	const [membersModal, setMembersModal] = useState<Group | null>(null);
 	const orgMap = React.useMemo(() => new Map(organizations.map((o) => [o.orgId, o.slug])), [organizations]);
 
-	// Form state
 	const [formName, setFormName] = useState("");
 	const [formDescription, setFormDescription] = useState("");
 	const [formRoleIds, setFormRoleIds] = useState<string[]>([]);

@@ -54,7 +54,6 @@ export class VanillaViteStrategy extends ViteBaseStrategy {
 		const viteBin = getBinPath("vite");
 
 		if (isDevelopment) {
-			// Watch mode
 			context.logger?.logDebug(`Iniciando Vite build en watch mode para ${module.uiConfig.name} [${namespace}]`);
 
 			const spawnOptions: any = {

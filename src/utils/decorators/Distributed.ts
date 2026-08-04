@@ -14,35 +14,10 @@ const IS_DISTRIBUTED = Symbol("isDistributed");
 
 /**
  * @public
- * Decorador @Distributed para clases que soportan ejecución distribuida.
+ * Decorador `@Distributed` — ver [architecture/README.md](../../../docs/architecture/README.md#ejecución-distribuida-distributed).
  *
- * Este decorador permite que los métodos de una clase se ejecuten en workers
- * para procesamiento paralelo. El ExecutionManagerService asigna workers
- * dinámicamente según la carga del sistema.
- *
- * **Funcionalidad:**
- * - Si la instancia tiene un worker asignado, los métodos se ejecutan en ese worker
- * - El worker puede cambiar en runtime (asignación dinámica)
- * - Si no hay worker, los métodos se ejecutan localmente
- *
- * **Preparado para clusterización:**
- * - El sistema de mensajería es compatible con comunicación remota
- * - En el futuro, los "workers" pueden ser nodos remotos
- *
- * @example
- * ```typescript
- * @Distributed
- * class MyService extends BaseService {
- *   async heavyComputation(data: any): Promise<any> {
- *     // Este método puede ejecutarse en un worker si hay uno asignado
- *     return processData(data);
- *   }
- * }
- *
- * // El ExecutionManagerService asigna workers automáticamente
- * const service = await kernel.getService("my-service");
- * await service.heavyComputation(data); // Se ejecuta donde el manager decida
- * ```
+ * El worker se asigna en runtime y puede cambiar: si la instancia no tiene uno,
+ * los métodos corren localmente sin que el llamador note la diferencia.
  */
 export function Distributed<T extends new (...args: any[]) => any>(constructor: T): T {
 	// Verificar que no se aplique el decorador dos veces
@@ -58,7 +33,6 @@ export function Distributed<T extends new (...args: any[]) => any>(constructor: 
 		constructor(...args: any[]) {
 			super(...args);
 
-			// Inicializar el worker como null
 			(this as any)[WORKER_INSTANCE] = null;
 
 			// Crear el proxy para interceptar las llamadas

@@ -16,14 +16,12 @@ const LEVEL_TITLES: Record<Level, string> = {
 	opcional: "Opcional",
 };
 
-// Colores para artículos
 const ARTICLE_LEVEL_COLORS: Record<Level, string> = {
 	critico: "bg-amber-400 text-black",
 	importante: "bg-amber-200 text-black",
 	opcional: "bg-amber-100 text-black",
 };
 
-// Colores para paths
 const PATH_LEVEL_COLORS: Record<Level, string> = {
 	critico: "bg-violet-500 text-white",
 	importante: "bg-violet-300 text-black",
@@ -115,7 +113,6 @@ export function PathPage({ slug }: { readonly slug: string }) {
 		return "md:grid-cols-3";
 	}
 
-	// URL para compartir
 	const shareUrl = globalThis.location?.href ?? "";
 
 	if (loading) {

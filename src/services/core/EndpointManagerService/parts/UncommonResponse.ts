@@ -1,6 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // UncommonResponse - For responses requiring cookies, redirects, or custom headers
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface CookieOptions {
 	httpOnly?: boolean;

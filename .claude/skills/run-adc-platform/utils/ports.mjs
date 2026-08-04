@@ -21,12 +21,19 @@ export function loadPorts() {
 	const rows = [];
 	const text = readFileSync(CSV, "utf8");
 	for (const line of text.split(/\r?\n/)) {
-		if (!line.trim() || /^port\s*,/i.test(line)) continue; // skip blanks + header
+		if (!line.trim() || /^\s*#/.test(line) || /^port\s*,/i.test(line)) continue; // skip blanks + comments + header
 		const r = parseRow(line);
 		const n = Number(r?.port);
-		if (Number.isInteger(n)) rows.push({ port: n, app: r.app || `:${n}`, notes: r.notes });
+		if (Number.isInteger(n)) rows.push({ port: n, app: r.app || `:${n}`, notes: r.notes, shot: /\bsmoke-shot\b/.test(r.notes) });
 	}
 	return rows;
+}
+
+// Rows flagged `smoke-shot` in the notes column: the user-facing entry pages `smoke`
+// screenshots. The flag lives in ports.csv so adding an app to the smoke set is a CSV
+// edit, not a code edit — the port numbers were hardcoded here and silently drifted.
+export function shotEntries() {
+	return loadPorts().filter((p) => p.shot);
 }
 
 // [label, port] pairs for health-check output ("public/adc-drive (3032)").

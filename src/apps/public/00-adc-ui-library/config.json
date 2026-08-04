@@ -3,6 +3,7 @@
 		"name": "adc-ui-library",
 		"uiNamespace": "adc-platform",
 		"framework": "stencil",
+		"isPrimaryUILibrary": true,
 		"outputDir": "dist-ui",
 		"i18n": true,
 		"exports": {

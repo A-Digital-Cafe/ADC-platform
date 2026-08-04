@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isRealProduction } from "@common/utils/runtime-env.ts";
 
 export interface CsrfOptions {
 	enabled?: boolean | string;
@@ -28,7 +29,7 @@ function parseTtl(value: number | string | undefined): number {
 }
 
 function defaultSecureCookie(): boolean {
-	return process.env.NODE_ENV === "production" && process.env.PROD_PORT !== "3000";
+	return isRealProduction();
 }
 
 export function resolveCsrfConfig(options: CsrfOptions = {}): CsrfRuntimeConfig {

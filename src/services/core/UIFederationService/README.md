@@ -24,7 +24,9 @@ Cada watcher espera readiness real (`strategies/shared/readiness.ts`), no un sle
 
 Caché persistente de rspack en `temp/rspack-cache/<ns>/<módulo>` (`ADC_RSPACK_CACHE=false` la
 apaga; `POST /api/modules/ui-cache/clear` la vacía). `ADC_NO_UI_SERVERS=true` omite todo build;
-`ADC_UI_APPS=a,b` lo acota a esas apps (las UI libraries se compilan siempre). Detalle:
+`ADC_UI_APPS=a,b` lo acota a esas apps (las UI libraries se compilan siempre) — pero las demás se
+cargan igual; para que ni se carguen está `ADC_LOAD_APPS` (kernel, cierre transitivo de
+`uiDependencies` + estado `dormant`). Detalle:
 [boot-performance](../../../../docs/architecture/boot-performance.md).
 
 ## Seguridad UI

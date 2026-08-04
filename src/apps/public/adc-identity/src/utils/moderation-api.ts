@@ -10,7 +10,6 @@ import { createAdcApi } from "@ui-library/utils/adc-fetch";
 const api = createAdcApi({
 	basePath: "/api/moderation",
 	devPort: 3000,
-	credentials: process.env.NODE_ENV === "development" ? "include" : "same-origin",
 });
 
 /** Ban saneado (sin hashes completos de email/IP; contadores + máscaras + prefijos). */

@@ -4,7 +4,6 @@ import type { QuotaSubjectType, StorageAppInfo, StorageUsageSnapshot } from "@co
 const api = createAdcApi({
 	basePath: "/api/storage",
 	devPort: 3000,
-	credentials: process.env.NODE_ENV === "development" ? "include" : "same-origin",
 });
 
 export interface StorageOverride {

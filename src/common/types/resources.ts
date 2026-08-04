@@ -3,9 +3,7 @@ import { ModulesScopes } from "./modules/permissions.js";
 import { EmailScopes } from "./email/permissions.js";
 import { PlanScopes } from "./plans/permissions.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Scope definition
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ScopeDef {
 	/** Unique key (used for i18n: `permissions.{key}`) */
@@ -14,9 +12,7 @@ export interface ScopeDef {
 	value: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Resource definition
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ResourceDef {
 	/** Resource identifier (matches Permission.resource) */
@@ -34,9 +30,7 @@ export interface ResourceDef {
 	globalOnly?: boolean;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Scope presets
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** Identity-specific scopes (matches IdentityScope from identity.ts) */
 const IDENTITY_SCOPES: ScopeDef[] = [
@@ -73,9 +67,7 @@ const STORAGE_SCOPES: ScopeDef[] = [
 ];
 
 /** Drive scopes — `recover` habilita la recuperación admin de "eliminados permanentemente". */
-const DRIVE_SCOPES: ScopeDef[] = [
-	{ key: "recover", value: 1 },
-];
+const DRIVE_SCOPES: ScopeDef[] = [{ key: "recover", value: 1 }];
 
 /** Project Manager scopes — alineados con PMScopes en types/project-manager/permissions.ts */
 const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
@@ -123,9 +115,7 @@ const PLANS_SCOPES: ScopeDef[] = [
 	{ key: "subscriptions", value: PlanScopes.SUBSCRIPTIONS },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Resource registry — only resources that have real endpoints
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const RESOURCES: ResourceDef[] = [
 	{ id: "identity", label: "resources.identity", scopes: IDENTITY_SCOPES },

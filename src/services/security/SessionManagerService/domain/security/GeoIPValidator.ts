@@ -78,7 +78,6 @@ export class GeoIPValidator {
 	}
 
 	#isValidIP(ip: string): boolean {
-		// IPv4
 		const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
 		if (ipv4Regex.test(ip)) {
 			const parts = ip.split(".").map(Number);

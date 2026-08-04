@@ -94,9 +94,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 		return (this.config?.custom || {}) as SessionManagerConfig;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Lifecycle
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	@EnableEndpoints({
 		managers: () => [AuthEndpoints, OAuthEndpoints, SessionAdminEndpoints],
@@ -152,14 +150,12 @@ export default class SessionManagerService extends BaseService implements ISessi
 		// RefreshTokenRepository (30 días)
 		this.#refreshTokenRepo = new RefreshTokenRepository(30 * 24 * 60 * 60, this.#redis || undefined, this.logger);
 
-		// TokenService
 		this.#tokenService = new TokenService(this.#keyStore, this.#jwtProvider!, this.#refreshTokenRepo, {
 			accessTokenTtl: "15m",
 			refreshTokenTtlSeconds: 30 * 24 * 60 * 60,
 			cookieDomain: this.#cookieDomain,
 		});
 
-		// LoginAttemptTracker
 		this.#loginTracker = new LoginAttemptTracker(this.#redis || undefined);
 		this.#loginTracker.setCallbacks(
 			async (userId, blocked) => {
@@ -188,7 +184,6 @@ export default class SessionManagerService extends BaseService implements ISessi
 			stateExpiration: 10 * 60 * 1000,
 		});
 
-		// OAuth providers
 		this.#oauthRegistry = new OAuthProviderRegistry();
 		this.#oauthRegistry.register(
 			new PlatformAuthProvider(async (username, password) => {
@@ -329,7 +324,11 @@ export default class SessionManagerService extends BaseService implements ISessi
 
 			if (this.#redis) {
 				try {
-					await this.#redis.set(cacheKey, sealPermissions(userId, orgKey, permissionStrings, this.logger), PERMISSION_FINGERPRINT_TTL_SECONDS);
+					await this.#redis.set(
+						cacheKey,
+						sealPermissions(userId, orgKey, permissionStrings, this.logger),
+						PERMISSION_FINGERPRINT_TTL_SECONDS
+					);
 				} catch {
 					/* cache best-effort */
 				}

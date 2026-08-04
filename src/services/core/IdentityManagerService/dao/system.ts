@@ -27,7 +27,6 @@ export class SystemManager {
 			const { username, password } = generateRandomCredentials();
 			this.#systemCredentials = { username, password };
 
-			// Obtener role SYSTEM
 			const systemRole = await this.roleModel.findOne({ name: SystemRole.SYSTEM });
 			const systemRoleId = systemRole?.id || generateId();
 

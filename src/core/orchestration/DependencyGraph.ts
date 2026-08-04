@@ -180,6 +180,17 @@ export class DependencyGraph {
 		return { apps, services };
 	}
 
+	/**
+	 * Todos los nombres declarados en una capa, estén cargados o no: el grafo sale del escaneo de
+	 * configs en disco, así que ve también lo que este arranque no levantó. `friendlyGroups()` no
+	 * sirve para eso — deja fuera a los módulos sin `uiName`.
+	 */
+	names(layer: Layer): string[] {
+		const out: string[] = [];
+		for (const node of this.#nodes.values()) if (node.layer === layer) out.push(node.name);
+		return out;
+	}
+
 	/** Nombre amigable declarado por un módulo (`uiName`), o `undefined` si es interno. */
 	uiNameOf(layer: Layer, name: string): string | undefined {
 		return this.#nodes.get(this.#key(layer, name))?.uiName;

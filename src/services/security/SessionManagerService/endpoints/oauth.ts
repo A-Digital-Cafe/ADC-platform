@@ -241,7 +241,6 @@ export class OAuthEndpoints {
 				clearCookies,
 			});
 		} catch (err: any) {
-			// Si ya es un UncommonResponse o AuthError, re-lanzar
 			if (err instanceof UncommonResponse || err instanceof AuthError) throw err;
 
 			OAuthEndpoints.deps.logger.logError(`Error en callback de ${provider}: ${err.message}`);
@@ -290,7 +289,6 @@ export class OAuthEndpoints {
 		// Éxito → consumir token (one-time use)
 		await OAuthEndpoints.deletePendingLink(pendingToken);
 
-		// Vincular external account
 		await users.linkExternalAccount(existingUser.id, {
 			provider: pendingData.provider,
 			providerId: pendingData.providerId,

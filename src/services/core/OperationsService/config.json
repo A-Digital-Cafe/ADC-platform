@@ -22,7 +22,11 @@
 			"version": "latest",
 			"language": "typescript",
 			"custom": {
-				"uri": "mongodb://admin:password@localhost:27017/adc-core?authSource=admin",
+				"host": "${MONGO_HOST:-localhost:27017}",
+				"user": "${MONGO_USER:-admin}",
+				"password": "${MONGO_PASSWORD:-password}",
+				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"db": "adc-operations",
 				"maxRetries": 5,
 				"retryDelay": 5000
 			}

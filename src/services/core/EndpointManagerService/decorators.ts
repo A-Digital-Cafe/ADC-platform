@@ -96,32 +96,8 @@ function getPermissionValidator(instance: object): PermissionValidator | null {
  *
  * @param config - Configuración del endpoint (method, url, permissions, options)
  *
- * @example
- * ```typescript
- * class ContentService extends BaseService {
- *   @RegisterEndpoint({
- *     method: "GET",
- *     url: "/api/articles/:slug",
- *     permissions: [], // público
- *   })
- *   async getArticle(ctx: EndpointCtx<{ slug: string }>) {
- *     const article = await this.findBySlug(ctx.params.slug);
- *     if (!article) throw new HttpError(404, "NOT_FOUND", "Article not found");
- *     return article;
- *   }
- *
- *   @RegisterEndpoint({
- *     method: "POST",
- *     url: "/api/articles",
- *     permissions: [P.COMMUNITY.CONTENT.WRITE],
- *     options: { successStatus: 201 }, // crea recurso nuevo
- *   })
- *   async createArticle(ctx: EndpointCtx<{}, CreateArticleDTO>) {
- *     // ctx.user garantizado no-null porque permissions no vacío
- *     return await this.create(ctx.data, ctx.user!.id);
- *   }
- * }
- * ```
+ * Ejemplos y criterio de `permissions` vs `deferAuth` en
+ * [structure/services/endpoints.md](../../../../docs/structure/services/endpoints.md).
  */
 export function RegisterEndpoint(config: Omit<EndpointConfig, "handler">): MethodDecorator {
 	return function (target: object, propertyKey: string | symbol, descriptor: PropertyDescriptor) {
@@ -131,7 +107,6 @@ export function RegisterEndpoint(config: Omit<EndpointConfig, "handler">): Metho
 		const deferAuth = config.deferAuth === true;
 		const requireAuth = config.requireAuth === true;
 
-		// Guardar metadata del endpoint
 		const endpoints = getEndpointMetadata(target);
 		endpoints.push({
 			method: config.method,

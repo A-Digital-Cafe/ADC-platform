@@ -29,7 +29,6 @@ export function OrganizationsView({ perms }: { readonly perms: Permission[] }) {
 	const [deleteConfirm, setDeleteConfirm] = useState<Organization | null>(null);
 	const [membersModal, setMembersModal] = useState<Organization | null>(null);
 
-	// Form state
 	const [formSlug, setFormSlug] = useState("");
 	const [formRegion, setFormRegion] = useState("");
 	const [formTier, setFormTier] = useState("");

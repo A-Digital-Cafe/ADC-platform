@@ -12,13 +12,14 @@ export default {
 	generate(
 		registeredModules: Map<string, RegisteredUIModule>,
 		uiOutputBaseDir: string,
-		targetModule: RegisteredUIModule
+		targetModule: RegisteredUIModule,
+		logger?: { logWarn(msg: string): void }
 	): Record<string, string> {
 		const aliases: Record<string, string> = {};
 
 		const uiLibraries = findUILibraries(registeredModules, targetModule);
 		if (uiLibraries.length > 0) {
-			addUILibraryAliases(aliases, uiLibraries, uiOutputBaseDir);
+			addUILibraryAliases(aliases, uiLibraries, uiOutputBaseDir, targetModule, logger);
 		}
 
 		if (usesReact(targetModule)) {
@@ -32,8 +33,13 @@ export default {
 	},
 
 	/** Genera aliases formateados para configuración de Rspack (escapando backslashes) */
-	generateForRspack(registeredModules: Map<string, RegisteredUIModule>, uiOutputBaseDir: string, targetModule: RegisteredUIModule): string {
-		const aliases = this.generate(registeredModules, uiOutputBaseDir, targetModule);
+	generateForRspack(
+		registeredModules: Map<string, RegisteredUIModule>,
+		uiOutputBaseDir: string,
+		targetModule: RegisteredUIModule,
+		logger?: { logWarn(msg: string): void }
+	): string {
+		const aliases = this.generate(registeredModules, uiOutputBaseDir, targetModule, logger);
 
 		if (Object.keys(aliases).length === 0) {
 			return "{}";

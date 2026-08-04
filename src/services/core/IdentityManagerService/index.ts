@@ -25,17 +25,19 @@ import type { IOperationsService } from "@common/types/operations/IOperationsSer
 import type { Step } from "../OperationsService/index.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
-import { UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints } from "./endpoints/index.js";
+import {
+	UserEndpoints,
+	RoleEndpoints,
+	GroupEndpoints,
+	OrgEndpoints,
+	RegionEndpoints,
+	StatsEndpoints,
+	AvatarEndpoints,
+} from "./endpoints/index.js";
 import type AttachmentsUtility from "../../../utilities/attachments/attachments-utility/index.js";
 import type { AttachmentsManager } from "../../../utilities/attachments/attachments-utility/index.js";
 import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
-import {
-	buildInternalApi,
-	buildDiscordApi,
-	type IdentityInternalApi,
-	type IdentityAvatarApi,
-	type IdentityDiscordApi,
-} from "./internal.js";
+import { buildInternalApi, buildDiscordApi, type IdentityInternalApi, type IdentityAvatarApi, type IdentityDiscordApi } from "./internal.js";
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
@@ -62,34 +64,25 @@ interface UserDataPurger {
 	run: (userId: string) => Promise<void>;
 }
 
-/**
- * IdentityManagerService - Gestión centralizada de identidades, usuarios, roles y grupos
- *
- * **Modo Kernel:**
- * Este servicio se ejecuta en modo kernel (global: true en config.json),
- * lo que significa que está disponible para toda la plataforma.
- *
- * **Persistencia:**
- * Requiere MongoDB para persistir datos. Si no hay un MongoProvider configurado,
- * el servicio lanzará un error.
- *
- * **Multi-tenant:**
- * Soporta múltiples organizaciones con bases de datos aisladas.
- * Usa forOrg(slug, mode) para obtener managers con scope de organización.
- *
- * **Autenticación:**
- * Los managers aceptan un parámetro `token` opcional en cada método.
- * Si se proporciona, se verifican los permisos del usuario antes de ejecutar.
- */
+import type { IIdentityManagerService, PublicUserManager } from "@common/types/identity/IIdentityManagerService.ts";
+
 /**
  * Vista **pública** del UserManager: excluye las primitivas de credenciales pre-auth
  * (`authenticate`, `verifyUserPassword`), que no deben estar en la superficie que se
  * pasa libremente entre módulos (oráculo de password). Quedan accesibles sólo vía
  * `_internal(kernelKey)` para la infraestructura de auth (SessionManager, login).
  */
-import type { IIdentityManagerService, PublicUserManager } from "@common/types/identity/IIdentityManagerService.ts";
 export type { PublicUserManager };
 
+/**
+ * Gestión centralizada de identidades, usuarios, roles y grupos.
+ *
+ * Requiere un MongoProvider configurado; sin él el arranque falla. Es multi-tenant:
+ * cada organización vive en una base aislada y se accede vía `forOrg(slug, mode)`.
+ *
+ * Los managers aceptan un `token` opcional por método: si viene, verifican los
+ * permisos del usuario antes de ejecutar; si no, la llamada va sin autorizar.
+ */
 export default class IdentityManagerService extends BaseService implements IIdentityManagerService {
 	public readonly name = "IdentityManagerService";
 
@@ -162,7 +155,6 @@ export default class IdentityManagerService extends BaseService implements IIden
 	#initialPurgeTimer: ReturnType<typeof setTimeout> | null = null;
 	#tierGrantTimer: ReturnType<typeof setInterval> | null = null;
 
-	// MongoDB provider
 	readonly #mongoProvider: MongoProvider;
 
 	// IOperationsService for stepper support in cascade DAOs
@@ -181,7 +173,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 		super(kernel, options);
 		// Excepción de ciclo: Identity NO puede declarar StorageQuotaService (StorageQuota
 		// depende de Identity), así que resuelve por nombre fijo vía el reader del kernel.
-		this.#getQuotaTracker = createQuotaTrackerGetter(() => kernel.getReadonlyRegistry().getService<IStorageQuotaService>("StorageQuotaService"));
+		this.#getQuotaTracker = createQuotaTrackerGetter(() =>
+			kernel.getReadonlyRegistry().getService<IStorageQuotaService>("StorageQuotaService")
+		);
 		// Mismo ciclo con PlanService (declara Identity): resolución perezosa por nombre.
 		this.#seatGate = createSeatGate(() => kernel.getReadonlyRegistry().getService<IPlanService>("PlanService"));
 		this.#mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
@@ -228,13 +222,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			const defaultRegionObjectUri =
 				(this.config?.private as { defaultRegionObjectUri?: string } | undefined)?.defaultRegionObjectUri ||
 				"mongodb://localhost:27017/adc-platform";
-			this.#regionManager = new RegionManager(
-				RegionModel,
-				OrganizationModel,
-				this.logger,
-				defaultRegionObjectUri,
-				this.#getAuthVerifier
-			);
+			this.#regionManager = new RegionManager(RegionModel, OrganizationModel, this.logger, defaultRegionObjectUri, this.#getAuthVerifier);
 			await this.#regionManager.initialize();
 
 			// Inicializar managers en orden de dependencia:
@@ -322,8 +310,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 						roleModel: RoleModel,
 						orgModel: OrganizationModel,
 						roles: this.#roleManager,
-						passwords:
-							(this.config?.private as { devUserPasswords?: Record<string, string> } | undefined)?.devUserPasswords ?? {},
+						passwords: (this.config?.private as { devUserPasswords?: Record<string, string> } | undefined)?.devUserPasswords ?? {},
 						logger: this.logger,
 					});
 					this.#permissionManager.invalidateAll();
@@ -376,10 +363,15 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// Destinatarios de alertas de seguridad: Admins + Security Managers GLOBALES
 			// (roles con orgId nulo; el lookup por nombre a secas podría matchear roles de org).
 			this.#notifyManager.setSecurityRecipientsResolver(async () => {
-				const roles = await RoleModel.find({ name: { $in: [SystemRole.ADMIN, SystemRole.SECURITY_MANAGER] }, orgId: null }, { id: 1 }).lean();
+				const roles = await RoleModel.find(
+					{ name: { $in: [SystemRole.ADMIN, SystemRole.SECURITY_MANAGER] }, orgId: null },
+					{ id: 1 }
+				).lean();
 				const roleIds = roles.map((r) => r.id);
 				if (!roleIds.length) return [];
-				const users = await UserModel.find({ roleIds: { $in: roleIds } }, { id: 1 }).limit(200).lean();
+				const users = await UserModel.find({ roleIds: { $in: roleIds } }, { id: 1 })
+					.limit(200)
+					.lean();
 				return users.map((u) => u.id);
 			});
 
@@ -461,11 +453,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 		};
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Acceso interno para infraestructura, **separado por scope** (least‑privilege).
 	// Implementación en `./internal.ts` para no inflar este shell. Durante la transición
 	// `assertScope` acepta también la master key (`this.#kernelKey`); el flip la retira.
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/** Managers de users/orgs/roles SIN auth (pre‑auth: login/registro/OAuth). Scope `identity:internal`. */
 	_internal(token: CapabilityToken): IdentityInternalApi {
@@ -489,9 +479,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 		return buildDiscordApi(this.#discordGuildConfigModel, configPrivate);
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Getters para acceso a managers globales
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	get users(): PublicUserManager {
 		if (!this.#userManager) throw new Error("UserManager not initialized");
@@ -538,9 +526,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 		return this.#permissionManager;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Operaciones con scope de organización
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Obtiene managers con scope de organización
@@ -630,9 +616,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 		return managers;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Métodos de servicio
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	async getStats(token?: string): Promise<IdentityStats> {
 		const baseStats = await this.#systemManager!.getStats();

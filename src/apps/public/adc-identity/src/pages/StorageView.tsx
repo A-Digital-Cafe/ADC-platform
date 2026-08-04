@@ -31,7 +31,6 @@ export function StorageView({ perms, orgId }: StorageViewProps) {
 	const [modalOpen, setModalOpen] = useState(false);
 	const [deleteConfirm, setDeleteConfirm] = useState<StorageOverride | null>(null);
 
-	// Form state
 	const [formSubjectType, setFormSubjectType] = useState<QuotaSubjectType>("user");
 	const [formSubjectId, setFormSubjectId] = useState("");
 	const [formLimitMb, setFormLimitMb] = useState("");

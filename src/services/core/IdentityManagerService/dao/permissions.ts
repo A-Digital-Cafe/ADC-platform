@@ -54,9 +54,7 @@ export class PermissionManager {
 		this.#cacheTTL = cacheTTL;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Chequeo de permisos
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Verifica si un usuario tiene un permiso específico
@@ -141,10 +139,12 @@ export class PermissionManager {
 	async #rolesById(roleIds: string[]): Promise<Map<string, Role>> {
 		if (!roleIds.length) return new Map();
 		const docs = await this.roleModel.find({ id: { $in: roleIds } });
-		return new Map(docs.map((d) => {
-			const role = asPlain<Role>(d) as Role;
-			return [role.id, role];
-		}));
+		return new Map(
+			docs.map((d) => {
+				const role = asPlain<Role>(d) as Role;
+				return [role.id, role];
+			})
+		);
 	}
 
 	/** Permisos base de la organización (nivel "org"). */
@@ -221,9 +221,7 @@ export class PermissionManager {
 		return perms;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Jerarquía de roles
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Jerarquía máxima de un usuario en un contexto (mayor = más autoridad; 0 = sin roles).
@@ -280,9 +278,7 @@ export class PermissionManager {
 		return max;
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────────
 	// Invalidación de cache
-	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Invalida cache para un usuario específico

@@ -96,6 +96,13 @@ export class ModuleOrchestrator {
 	readonly #absentSince = new Map<string, number>();
 	/** Fin del margen de arranque para la detección de fallos (se fija en la 1ª consulta). */
 	#failureGraceUntil = 0;
+	/**
+	 * Apps (nombre BASE) que este arranque decidió no cargar (`ADC_LOAD_APPS`). Sin esto,
+	 * `memberState` las ve "configuradas pero no cargadas" y pasada la gracia de 3 minutos
+	 * las declara caídas: la status page pública se pondría roja por una decisión de
+	 * arranque local. Lo fija el kernel una vez, antes de cargar apps.
+	 */
+	readonly #dormantApps = new Set<string>();
 
 	constructor(deps: ModuleOrchestratorDeps) {
 		this.#d = Object.freeze({ ...deps });
@@ -159,6 +166,79 @@ export class ModuleOrchestrator {
 	setPrivilegeApprovals(approvals: ReadonlyMap<string, readonly string[]> | null, gateEnabled: boolean): void {
 		this.#d.privilegeLedger.setApprovals(approvals, gateEnabled);
 		this.#d.logger.logInfo(`[orchestrator] baseline de privilegios instalado (gate ${gateEnabled ? "ACTIVO" : "sólo auditoría"}).`);
+	}
+
+	/**
+	 * Declara qué apps quedaron **dormidas** en este arranque: configuradas y sanas, pero
+	 * fuera del allowlist de carga (`ADC_LOAD_APPS`). Se llama una sola vez desde el kernel,
+	 * antes de cargar las capas de apps.
+	 *
+	 * Sin esto, un boot dirigido rompe la status page: las apps ausentes no son ni una baja
+	 * manual (no están en el disabled-set) ni un `pending` (no son nuevas), así que
+	 * `memberState` las cuenta como FALLO pasada la gracia y el modules-manager llega a abrir
+	 * incidentes automáticos por ellas.
+	 */
+	setDormantApps(bases: Iterable<string>): void {
+		this.#dormantApps.clear();
+		for (const base of bases) this.#dormantApps.add(base);
+		if (this.#dormantApps.size > 0) {
+			this.#d.logger.logInfo(`[orchestrator] ${this.#dormantApps.size} app(s) dormidas por el allowlist de carga (no cuentan como caída).`);
+		}
+	}
+
+	/** `true` si la app (nombre base o `base:config`) quedó fuera del allowlist de carga. */
+	isAppDormant(name: string): boolean {
+		return this.#dormantApps.has(name.split(":")[0]);
+	}
+
+	/**
+	 * Services que quedaron dormidos **por arrastre**: `ADC_LOAD_APPS` sólo nombra apps, pero un
+	 * service se carga porque alguien lo declara, así que dejar dormida a la única app que lo
+	 * consume hace que nunca se cargue. Sin esto, {@link setDormantApps} protege a las apps y el
+	 * boot dirigido igual abre incidentes automáticos por sus backs (`service:...`).
+	 *
+	 * Un service cuenta como dormido cuando tiene consumidores y TODOS están dormidos. Los que no
+	 * tienen ninguno se cargan por su cuenta (`kernelMode`) y su ausencia sí es una caída.
+	 *
+	 * Se resuelve por punto fijo creciente porque la dormancia se propaga en cadena (app dormida →
+	 * su service → el service que sólo aquél consumía). Partir del conjunto vacío y sólo agregar
+	 * deja fuera un ciclo de services que se consumieran entre sí; es deliberado: el cargador no
+	 * puede resolver ese ciclo, así que ahí la ausencia es un fallo de verdad y hay que reportarla.
+	 *
+	 * @param candidates services bajo evaluación (los miembros de los grupos amigables).
+	 */
+	async #resolveDormantServices(candidates: Iterable<string>): Promise<Set<string>> {
+		const dormant = new Set<string>();
+		if (this.#dormantApps.size === 0) return dormant;
+
+		const graph = await this.#ensureGraph();
+		const loaded = new Set(this.#d.registry.getModuleNames("service"));
+		// Un service cargado no es dormido aunque sus consumidores lo estén: está ahí, y si más
+		// tarde desaparece es una caída real.
+		const pending = [...candidates].filter((svc) => !loaded.has(svc));
+
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (const svc of pending) {
+				if (dormant.has(svc)) continue;
+					// Sólo consumidores REQUERIDOS: quien lo declaró `optional` funciona sin él por
+				// definición, así que su presencia no convierte la ausencia en caída. Sin esto,
+				// un service que sólo consume de verdad una app dormida sigue reportándose caído
+				// porque algún kernelMode lo declara opcionalmente (EmailService ← Identity /
+				// Notification). Mismo criterio que usa la cascada de `disable`.
+				const { apps, services } = graph.directDependents("service", svc, { includeOptional: false });
+				const consumers = apps.length + services.filter((s) => s !== svc).length;
+				if (consumers === 0) continue;
+				const appsDormant = apps.every((app) => this.#dormantApps.has(app.split(":")[0]));
+				const servicesDormant = services.every((s) => s === svc || dormant.has(s));
+				if (appsDormant && servicesDormant) {
+					dormant.add(svc);
+					changed = true;
+				}
+			}
+		}
+		return dormant;
 	}
 
 	availabilitySnapshot(): Record<string, { messageKey?: string; since?: number }> {
@@ -465,12 +545,16 @@ export class ModuleOrchestrator {
 			// provider (mismo objeto), no dos módulos distintos. Se muestra uno solo.
 			const canonicalByInstance = this.#canonicalNamesByInstance(type);
 			const disabledNames = this.#d.disabledRegistry.list().filter((e) => e.type === type).map((e) => e.name);
-			for (const name of new Set([...canonicalByInstance, ...disabledNames])) {
+			// Un service dormido por arrastre no está cargado ni deshabilitado, así que no aparece
+			// por ninguna de las dos vías: sin agregarlo, el panel lo omite y parece que el módulo
+			// desapareció del árbol. Es el mismo motivo por el que se agregan las apps dormidas.
+			const dormantServices = type === "service" ? await this.#resolveDormantServices(graph.names("service")) : new Set<string>();
+			for (const name of new Set([...canonicalByInstance, ...disabledNames, ...dormantServices])) {
 				const entry = this.#d.disabledRegistry.get(type, name);
 				items.push({
 					type,
 					name,
-					state: this.#stateOf(entry),
+					state: this.#stateOf(entry, dormantServices.has(name)),
 					unavailable: type === "service" && !!entry && !entry.pending,
 					messageKey: entry?.messageKey,
 					cascadeRoot: entry?.cascadeRoot,
@@ -484,13 +568,16 @@ export class ModuleOrchestrator {
 		const appNames = new Set([
 			...this.#d.appLoader.instanceNames,
 			...this.#d.disabledRegistry.list().filter((e) => e.type === "app").map((e) => e.name),
+			// Las dormidas no están en `instanceNames` (no se cargaron): sin agregarlas, el panel
+			// no las mostraría y parecerían haber desaparecido del árbol.
+			...this.#dormantApps,
 		]);
 		for (const name of appNames) {
 			const entry = this.#d.disabledRegistry.getApp(name);
 			items.push({
 				type: "app",
 				name,
-				state: this.#stateOf(entry),
+				state: this.#stateOf(entry, this.#dormantApps.has(name.split(":")[0])),
 				library: await this.#isLibraryApp(name),
 				messageKey: entry?.messageKey,
 				cascadeRoot: entry?.cascadeRoot,
@@ -502,9 +589,9 @@ export class ModuleOrchestrator {
 		return items;
 	}
 
-	#stateOf(entry: DisabledEntry | undefined): ModuleSnapshotItem["state"] {
-		if (!entry) return "running";
-		return entry.pending ? "pending" : "disabled";
+	#stateOf(entry: DisabledEntry | undefined, dormant = false): ModuleSnapshotItem["state"] {
+		if (entry) return entry.pending ? "pending" : "disabled";
+		return dormant ? "dormant" : "running";
 	}
 
 	/** Preset del que proviene un path (primer segmento bajo `presets/`), o null (core). */
@@ -558,8 +645,13 @@ export class ModuleOrchestrator {
 			if (now - since < ABSENCE_CONFIRM_MS) return "unknown";
 			return graceOver || this.#everLoaded.has(member) ? "failed" : "unknown";
 		};
+		const groups = graph.friendlyGroups();
+		// Los candidatos son los backs de los grupos: es exactamente el conjunto que este chequeo
+		// puede llegar a declarar caído.
+		const dormantServices = await this.#resolveDormantServices([...groups.values()].flatMap((m) => m.services));
+
 		const out: FriendlyGroupState[] = [];
-		for (const [name, members] of graph.friendlyGroups()) {
+		for (const [name, members] of groups) {
 			const hasFront = members.apps.length > 0;
 			const failed: string[] = [];
 			const unknown: string[] = [];
@@ -571,6 +663,13 @@ export class ModuleOrchestrator {
 			for (const svc of members.services) {
 				const svcEntry = this.#d.disabledRegistry.get("service", svc);
 				if (svcEntry?.pending) continue;
+				// Dormido por arrastre de una app dormida: su ausencia es una decisión local de
+				// este arranque, no una caída. Mismo trato (y mismo olvido del reloj de ausencia)
+				// que las apps dormidas más abajo.
+				if (!loadedServices.has(svc) && dormantServices.has(svc)) {
+					this.#absentSince.delete(`service:${svc}`);
+					continue;
+				}
 				// Baja manual: su ausencia es intencional, así que se olvida el reloj de ausencia
 				// (al re-habilitarlo vuelve a contar desde cero, no arrastra el tiempo apagado).
 				if (svcEntry) {
@@ -587,6 +686,14 @@ export class ModuleOrchestrator {
 			for (const base of members.apps) {
 				// Pendiente de lanzamiento: nunca fue parte de la plataforma, no cuenta como caída/fallo.
 				if (this.#d.disabledRegistry.getApp(base)?.pending) continue;
+				// Dormida por el allowlist de carga de este arranque: su ausencia es una
+				// decisión local, no una caída. Se olvida el reloj de ausencia por el mismo
+				// motivo que en la baja manual (un boot completo posterior no arrastra el tiempo
+				// que estuvo fuera).
+				if (this.#dormantApps.has(base)) {
+					this.#absentSince.delete(`app:${base}`);
+					continue;
+				}
 				if (disabledAppBases.has(base)) {
 					downFronts++;
 					this.#absentSince.delete(`app:${base}`);

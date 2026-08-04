@@ -58,6 +58,13 @@ node .claude/skills/run-adc-platform/driver.mjs ready 150    # or wait separatel
 node .claude/skills/run-adc-platform/driver.mjs ready drive  # wait for ONE app's port
 ```
 
+**Iterating on ONE app?** `ADC_LOAD_APPS=adc-drive bun run dev` loads only that app — it
+expands on its own to the transitive closure of `uiDependencies` plus the UI libraries, so
+naming the app under test is enough. The apps left out report as `dormant`, not down, so the
+status page stays green. `ADC_UI_APPS` is the weaker, build-only sibling: those apps still
+load and open their providers, they just skip their bundler. Both in
+[boot-performance](docs/architecture/boot-performance.md).
+
 **Drive it** (screenshots land in `/tmp/adc-shots/`):
 
 ```bash
@@ -95,7 +102,7 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ hom
 | `ready [app\|port] [s]` | block until the target actually serves (HTTP < 500, redirects count), not just the log marker. No arg → gateway. An app substring or a port listed in ports.csv selects that app; anything else is a budget in seconds |
 | `port <app>` | resolve an app substring to its dev port (`port drive` → 3032) |
 | `logs <app> [n]` | tail `temp/logs/<ns>-<app>.log` — the **only** place bundler/compile errors exist |
-| `smoke` | curl gateway + every app port (status < 500 = OK), screenshot home/auth/community-home; non-zero on any problem |
+| `smoke` | curl gateway + every app port (status < 500 = OK), then screenshot the ports.csv rows flagged `smoke-shot` in their notes column (today home/auth/community-home); non-zero on any problem |
 | `shot <url> [name]` | one-shot screenshot → `/tmp/adc-shots/<name>.png`. Accepts `--mobile`/`--device d`/`--viewport WxH` |
 | `login <who> [url] [name]` | log in (`admin`\|`orgadmin`\|`'user::pass[::orgId]'`), navigate, screenshot. Accepts viewport flags. Dev only |
 | `drive <url> [name]` | CDP session: `--login who`, `--wait sel`, `--wait-timeout ms`, `--click sel`, `--type "sel::text"`, `--eval expr`, `--settle ms`, `--mobile`/`--device d`/`--viewport WxH`. Ends in a screenshot + prints `document.title` and the real text of any console errors / exceptions |
@@ -103,7 +110,8 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ hom
 
 > To register a new port or seed another dev user: add the port to
 > [docs/guides/ports.csv](docs/guides/ports.csv) (`port,app,notes` — picked up
-> automatically) and the user to
+> automatically; poner `smoke-shot` en `notes` la suma a las capturas de `smoke`)
+> and the user to
 > `src/services/core/IdentityManagerService/defaults/devUsers.ts`, mirroring the
 > credentials in `utils/config.mjs`'s `DEV_USERS` for a login preset.
 

@@ -4,7 +4,6 @@ type ModerationErrorTypes =
 	// Validation
 	| "MISSING_TARGET"
 	| "INVALID_REASON"
-	// Not found
 	| "USER_NOT_FOUND"
 	// Access
 	| "FORBIDDEN";

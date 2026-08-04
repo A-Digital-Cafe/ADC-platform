@@ -62,7 +62,18 @@ const CIRCUIT_BREAKER_THRESHOLD = 5;
  */
 const NO_CONTENT_STATUSES: ReadonlySet<number> = new Set([204, 205]);
 
-/** Política única de credentials de la plataforma (ver AdcApiConfig.credentials). */
+/**
+ * Política única de credentials de la plataforma (ver AdcApiConfig.credentials).
+ *
+ * Se decide en **runtime** por el host desde el que se sirvió la página (`IS_DEV`), no en
+ * build: es la misma señal con la que `createAdcApi` elige `baseUrl` (`getDevUrl(devPort)`
+ * vs. `basePath`), y las dos tienen que coincidir o la request sale cross-origin sin
+ * cookies. Los clientes solían pasar `process.env.NODE_ENV === "development" ? …`, que
+ * rspack resuelve en build: un bundle de producción abierto por IP de LAN pegaba al
+ * gateway `:3000` (cross-origin, porque `IS_DEV` sí es true ahí) con `same-origin`, y el
+ * navegador descartaba la cookie de sesión. No reintroducir el ternario: si un cliente
+ * necesita otra política, que la pase explícita en `AdcApiConfig.credentials`.
+ */
 export const DEFAULT_CREDENTIALS: RequestCredentials = IS_DEV ? "include" : "same-origin";
 
 /** Timeout por defecto de cada request (evita requests colgadas indefinidamente). */
@@ -361,21 +372,9 @@ async function toFetchResult<T>(method: HttpMethod, response: Response, silent?:
  *
  * @example
  * ```ts
- * // Create API instance
- * const authApi = createAdcApi({
- *   basePath: "/api/auth",
- *   devPort: 3000,
- *   credentials: "same-origin"
- * });
- *
- * // Use it
- * const result = await authApi.post<AuthResponse>("/login", {
- *   body: { username, password }
- * });
- *
- * if (result.success) {
- *   console.log(result.data.user);
- * }
+ * const authApi = createAdcApi({ basePath: "/api/auth", devPort: 3000 });
+ * const result = await authApi.post<AuthResponse>("/login", { body: { username, password } });
+ * if (result.success) console.log(result.data.user);
  * ```
  */
 export function createAdcApi(config: AdcApiConfig) {

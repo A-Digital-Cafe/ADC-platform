@@ -66,5 +66,18 @@ export function scaffoldModule({ label, command, baseDir, indexTemplate, withCon
 
 	fs.writeFileSync(path.join(dir, 'index.ts'), indexTemplate(toPascalCase(name), name));
 
+	// README por módulo: es requisito de la plataforma (CLAUDE.md, máx 15 líneas). Sin este
+	// esqueleto, cada módulo nuevo arranca incumpliéndolo y el checklist de la capa se
+	// descubre recién en review.
+	fs.writeFileSync(
+		path.join(dir, 'README.md'),
+		`# ${name}\n\n` +
+			`_(completar)_ qué hace este ${label.toLowerCase()} y qué expone (máx. 15 líneas).\n\n` +
+			`- Dependencias: declararlas en \`config.json\` (\`providers\`/\`utilities\`/\`services\`); ` +
+			`se resuelven por nombre con \`getMyProvider\`/\`getMyService\`/\`getMyUtility\`.\n` +
+			`- Paquetes npm: \`package.json\` de este directorio (workspace propio).\n`
+	);
+
 	console.log(`✅ ${label} "${name}" created at ${path.relative(process.cwd(), dir)}`);
+	console.log(`   Siguiente paso: leer docs/structure/README.md (plantilla + checklist de la capa) y completar README.md.`);
 }

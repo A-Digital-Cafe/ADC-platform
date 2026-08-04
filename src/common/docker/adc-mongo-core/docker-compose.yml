@@ -5,8 +5,11 @@ services:
     ports:
       - "127.0.0.1:27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      # Mismas `MONGO_USER`/`MONGO_PASSWORD` con las que se conecta la plataforma (`.env`
+      # de la raíz): un solo par, sin drift. Ojo: `MONGO_INITDB_*` sólo se aplica al
+      # INICIALIZAR el volumen; cambiarlas después no rota nada.
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
       MONGO_INITDB_DATABASE: adc-core
     volumes:
       - adc_mongo_core_data:/data/db

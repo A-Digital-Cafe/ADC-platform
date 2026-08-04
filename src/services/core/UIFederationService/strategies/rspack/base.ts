@@ -29,7 +29,7 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 		const isProduction = process.env.NODE_ENV === "production";
 		const safeName = this.getSafeName(module.uiConfig.name);
 		const usedFrameworks = aliasGenerator.detectUsedFrameworks(registeredModules, module);
-		const aliasesObject = aliasGenerator.generateForRspack(registeredModules, context.uiOutputBaseDir, module);
+		const aliasesObject = aliasGenerator.generateForRspack(registeredModules, context.uiOutputBaseDir, module, context.logger);
 
 		let postcssConfigPath = "";
 		let tailwindCssPath = "";

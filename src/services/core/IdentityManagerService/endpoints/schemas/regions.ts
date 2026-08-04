@@ -17,13 +17,9 @@ export const RegionResponse = Type.Object({
 
 export const RegionsListResponse = Type.Array(RegionResponse);
 
-// ── Params ───────────────────────────────────────────────────────────────
-
 export const RegionPathParams = Type.Object({
 	path: Type.String({ minLength: 1, description: "Path único de la región" }),
 });
-
-// ── Body ─────────────────────────────────────────────────────────────────
 
 export const CreateRegionBody = Type.Object({
 	path: Type.String({ minLength: 1 }),

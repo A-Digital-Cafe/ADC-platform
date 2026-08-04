@@ -26,7 +26,7 @@ export abstract class ViteBaseStrategy extends BaseFrameworkStrategy {
 		const isHost = config.isHost ?? false;
 
 		const plugins = await this.getVitePlugins(context, isDev);
-		const dynamicAliases = aliasGenerator.generate(registeredModules, uiOutputBaseDir, module);
+		const dynamicAliases = aliasGenerator.generate(registeredModules, uiOutputBaseDir, module, context.logger);
 
 		// Módulos federados: excluidos del optimizeDeps y marcados como externals.
 		const federatedModules: string[] = [];

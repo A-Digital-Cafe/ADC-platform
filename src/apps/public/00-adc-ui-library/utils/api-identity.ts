@@ -19,7 +19,6 @@ const api = createAdcApi({
 // ── API methods ──────────────────────────────────────────────────────────────
 
 export const identityApi = {
-	// Users
 	/**
 	 * Página de usuarios + roles referenciados + `total` (para paginar).
 	 * `q` (mín. 2 chars) filtra por username/email sobre TODA la colección (server-side).
@@ -44,7 +43,6 @@ export const identityApi = {
 	deleteUser: (userId: string, orgId?: string) =>
 		api.delete(`/users/${assertSafeId(userId, "userId")}`, { params: { orgId }, idempotencyData: { userId, orgId: orgId ?? null } }),
 
-	// Roles
 	/**
 	 * Página de roles + `total` (para paginar). `q` (mín. 2 chars) filtra por
 	 * nombre/descripción sobre TODA la colección; con `orgId`, `ownOnly` excluye
@@ -61,7 +59,6 @@ export const identityApi = {
 		api.put<Role>(`/roles/${assertSafeId(roleId, "roleId")}`, { body: data, idempotencyData: { roleId, data } }),
 	deleteRole: (roleId: string) => api.delete(`/roles/${assertSafeId(roleId, "roleId")}`, { idempotencyKey: roleId }),
 
-	// Groups
 	/**
 	 * Página de grupos + `total` (para paginar). `q` (mín. 2 chars) filtra por
 	 * nombre/descripción sobre TODA la colección (server-side).
@@ -88,7 +85,6 @@ export const identityApi = {
 			idempotencyData: { groupId, userId, orgId: orgId ?? null },
 		}),
 
-	// Organizations
 	listOrganizations: () => api.get<Organization[]>("/organizations"),
 	getOrganization: (orgId: string) => api.get<Organization>(`/organizations/${assertSafeId(orgId, "orgId")}`),
 	createOrganization: (data: { slug: string; region?: string; metadata?: Record<string, any> }) =>
@@ -107,7 +103,6 @@ export const identityApi = {
 			idempotencyData: { orgId, userId },
 		}),
 
-	// Regions
 	listRegions: () => api.get<RegionInfo[]>("/regions"),
 	createRegion: (data: { path: string; metadata: Record<string, any>; isGlobal?: boolean }) =>
 		api.post<RegionInfo>("/regions", { body: data, idempotencyData: data }),
@@ -115,7 +110,6 @@ export const identityApi = {
 		api.put<RegionInfo>(`/regions/${encodeURIComponent(path)}`, { body: data, idempotencyData: { path, data } }),
 	deleteRegion: (path: string) => api.delete(`/regions/${encodeURIComponent(path)}`, { idempotencyKey: path }),
 
-	// Stats
 	getStats: () =>
 		api.get<{ totalUsers: number; totalRoles: number; totalGroups: number; totalOrganizations: number; totalRegions: number }>("/stats"),
 };

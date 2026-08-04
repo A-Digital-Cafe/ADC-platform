@@ -55,7 +55,6 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		user: null,
 	});
 
-	// Form state
 	const [formUsername, setFormUsername] = useState("");
 	const [formPassword, setFormPassword] = useState("");
 	const [formEmail, setFormEmail] = useState("");

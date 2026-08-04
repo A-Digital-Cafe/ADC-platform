@@ -18,7 +18,6 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 	const [editingRegion, setEditingRegion] = useState<RegionInfo | null>(null);
 	const [deleteConfirm, setDeleteConfirm] = useState<RegionInfo | null>(null);
 
-	// Form state
 	const [formPath, setFormPath] = useState("");
 	const [formIsGlobal, setFormIsGlobal] = useState(false);
 	const [formIsActive, setFormIsActive] = useState(true);

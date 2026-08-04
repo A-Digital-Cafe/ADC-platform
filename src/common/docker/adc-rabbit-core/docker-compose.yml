@@ -5,8 +5,11 @@ services:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: password
+      # Defaults de desarrollo; en un despliegue real se definen en el `.env` de la raíz
+      # junto con `RABBITMQ_URL`, que es de donde las lee la plataforma. Igual que en Mongo,
+      # `RABBITMQ_DEFAULT_*` sólo aplica al inicializar el volumen.
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-password}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:

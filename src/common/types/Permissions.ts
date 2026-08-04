@@ -1,9 +1,7 @@
 import { CRUDXAction } from "./Actions.js";
 import { RESOURCES, RESOURCE_MAP, type ResourceDef, type ScopeDef } from "./resources.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Typed permission builder
-// ─────────────────────────────────────────────────────────────────────────────
 
 type ScopePermissions<R extends string> = {
 	readonly READ: `${R}.${number}.${typeof CRUDXAction.READ}`;
@@ -35,9 +33,7 @@ function buildResourcePermissions(resource: ResourceDef) {
 	return result;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Generated permission constants
-// ─────────────────────────────────────────────────────────────────────────────
 
 function buildAllPermissions() {
 	const result: Record<string, ReturnType<typeof buildResourcePermissions>> = {};
@@ -154,9 +150,7 @@ export function hasPermissionString(userPerms: readonly string[], required: stri
 	return false;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Human-readable permission descriptions
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** Acciones atómicas (bit → nombre) para descomponer el bitfield de acción. */
 const ATOMIC_ACTIONS: ReadonlyArray<readonly [number, string]> = [

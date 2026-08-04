@@ -18,7 +18,6 @@ type IdentityErrorTypes =
 	| "PERMISSION_ESCALATION"
 	// Planes / asientos
 	| "SEAT_LIMIT_REACHED"
-	// Not found
 	| "USER_NOT_FOUND"
 	| "ROLE_NOT_FOUND"
 	| "GROUP_NOT_FOUND"

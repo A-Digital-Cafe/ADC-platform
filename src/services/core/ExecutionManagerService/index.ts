@@ -7,33 +7,11 @@ import type { WorkerInfo, SystemLoad, IExecutionManager } from "./types.js";
 import crypto from "node:crypto";
 
 /**
- * ExecutionManagerService - Gestiona la ejecución distribuida de módulos
+ * Ejecución distribuida de módulos — ver
+ * [architecture/README.md](../../../../docs/architecture/README.md#ejecución-distribuida-distributed).
  *
- * **Modo Kernel:**
- * Este servicio se ejecuta en modo kernel (global: true en config.json),
- * lo que significa que está disponible para toda la plataforma.
- *
- * **Funcionalidades:**
- * - Administra un pool de workers dinámico
- * - Mide la carga del sistema (CPU, memoria)
- * - Distribuye la ejecución de métodos entre workers según la carga
- * - Balancea la carga entre workers disponibles
- *
- * **Preparado para clusterización futura:**
- * - La arquitectura está diseñada para soportar nodos remotos
- * - Los "workers" pueden ser reemplazados por conexiones a otros dispositivos
- * - El sistema de asignación es agnóstico al tipo de ejecutor (worker/remoto)
- *
- * @example
- * ```typescript
- * const execManager = kernel.getService<IExecutionManager>("execution-manager");
- *
- * // Asignar worker óptimo a un servicio distribuido
- * await execManager.assignOptimalWorker(myService);
- *
- * // El servicio ahora ejecutará métodos en el worker asignado
- * await myService.heavyComputation(); // Se ejecuta en worker
- * ```
+ * La asignación es agnóstica al tipo de ejecutor: un "worker" puede pasar a ser una
+ * conexión a otro nodo sin cambiar a los llamadores.
  */
 export default class ExecutionManagerService extends BaseService implements IExecutionManager {
 	public readonly name = "ExecutionManagerService";
@@ -190,7 +168,6 @@ export default class ExecutionManagerService extends BaseService implements IExe
 			optimalWorker = this.#createWorker();
 		}
 
-		// Asignar el worker
 		optimalWorker.taskCount++;
 		assignWorker(instance, optimalWorker.worker);
 

@@ -6,17 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { CHROME, DBG_PORT, SHOTS } from "./config.mjs";
-import { portEntries, loadPorts } from "./ports.mjs";
+import { portEntries, loadPorts, shotEntries } from "./ports.mjs";
 import { captureScreenshot, chromeArgs, connectCDP, launchChromeChecked, printPageErrors, waitForSelector } from "./cdp.mjs";
 import { resolveViewport, applyViewport } from "./viewport.mjs";
 import { loginSession } from "./auth.mjs";
-
-// Routes worth a screenshot in `smoke` — the user-facing entry pages.
-const SMOKE_SHOTS = [
-	["http://localhost:3024/", "home"],
-	["http://localhost:3012/", "auth"],
-	["http://localhost:3010/", "community-home"],
-];
 
 async function curlStatus(port) {
 	try {
@@ -57,23 +50,63 @@ export async function shot(url, name = "shot", vp = null) {
 }
 
 // ---- smoke --------------------------------------------------------------
-export async function smoke() {
-	console.log("== port health ==");
+
+// One line per ports.csv row. Returns the healthy ports plus the failure count.
+// El árbol `apps/test` sólo levanta con `bun run dev:tests` (ENABLE_TESTS): un puerto
+// test/* apagado es la configuración por defecto, no una falla — pero si responde, se
+// valida igual.
+async function portHealth() {
+	const healthy = new Set();
 	let bad = 0;
 	for (const [label, port] of portEntries()) {
 		const s = await curlStatus(port);
 		const ok = typeof s === "number" && s < 500;
-		// El árbol `apps/test` sólo levanta con `bun run dev:tests` (ENABLE_TESTS): un puerto
-		// test/* apagado es la configuración por defecto, no una falla — pero si responde,
-		// se valida igual.
+		if (ok) healthy.add(port);
 		const optional = !ok && label.startsWith("test/");
 		if (!ok && !optional) bad++;
-		console.log(`  ${ok ? "OK " : optional ? "-- " : "XX "} ${String(s).padEnd(8)} ${label}${optional ? " (sin ENABLE_TESTS)" : ""}`);
+		let mark = "XX ";
+		if (ok) mark = "OK ";
+		else if (optional) mark = "-- ";
+		console.log(`  ${mark} ${String(s).padEnd(8)} ${label}${optional ? " (sin ENABLE_TESTS)" : ""}`);
 	}
+	return { healthy, bad };
+}
+
+// Screenshots the ports.csv rows flagged `smoke-shot`. The list used to hardcode
+// 3024/3012/3010, so renumbering an app left `smoke` capturing whatever now answered on
+// the old port — under the old app's screenshot name.
+async function smokeShots(healthy) {
+	const shots = shotEntries();
+	if (shots.length === 0) {
+		console.log("  (ninguna fila de ports.csv marcada `smoke-shot`)");
+		return 0;
+	}
+	let bad = 0;
+	for (const row of shots) {
+		// El nombre del archivo sale del label (`public/adc-home` -> `adc-home`): renombrar
+		// la app renombra su captura en vez de dejar una con el nombre viejo.
+		const name = row.app.replace(/^.*\//, "");
+		// Un puerto que ya falló en el health check no se vuelve a contar como problema:
+		// sería el mismo fallo dos veces, y chrome tarda 8 s en confirmarlo.
+		if (!healthy.has(row.port)) {
+			console.log(`  SKIP ${name} (:${row.port} no responde)`);
+			continue;
+		}
+		try {
+			await shot(`http://localhost:${row.port}/`, name);
+		} catch (e) {
+			bad++;
+			console.log(`  FAIL ${name}: ${e.message}`);
+		}
+	}
+	return bad;
+}
+
+export async function smoke() {
+	console.log("== port health ==");
+	const { healthy, bad: healthBad } = await portHealth();
 	console.log("== screenshots ==");
-	for (const [url, name] of SMOKE_SHOTS) {
-		try { await shot(url, name); } catch (e) { bad++; console.log(`  FAIL ${name}: ${e.message}`); }
-	}
+	const bad = healthBad + (await smokeShots(healthy));
 	console.log(bad ? `\nsmoke: ${bad} problem(s)` : "\nsmoke: all good");
 	process.exit(bad ? 1 : 0);
 }

@@ -1,4 +1,5 @@
 port,app,notes
+# `smoke-shot` en notes = `driver.mjs smoke` le saca screenshot (páginas de entrada).
 3000,gateway,API gateway — redirige a la app por defecto
 3001,test/users-management,
 3002,test/home,sirve bajo sub-path (404 en /)
@@ -6,14 +7,14 @@ port,app,notes
 3004,test/web-layout,
 3005,test/web-layout-mobile,
 3006,test/home-mobile,
-3010,public/community-home,
-3012,public/adc-auth,
+3010,public/community-home,smoke-shot
+3012,public/adc-auth,smoke-shot
 3014,public/adc-identity,
 3016,public/my-account,
 3018,public/adc-project-manager,
 3020,public/status,
 3022,public/help,
-3024,public/adc-home,
+3024,public/adc-home,smoke-shot
 3026,public/adc-error,
 3028,public/adc-org-requests,
 3030,public/adc-email-frontend,

@@ -28,7 +28,8 @@ import { shutdownKernel } from "./core/runtime/KernelShutdown.js";
 import { loadLayerRecursive, type LayerLoadOptions } from "./core/apps/LayerLoader.js";
 import { LoadSemaphore } from "./utils/system/LoadSemaphore.ts";
 import { MemoryProbe } from "./utils/system/MemoryProbe.ts";
-import { collectAppConfigs } from "./core/apps/AppConfigReader.js";
+import { collectAppConfigs, collectAppConfigsRecursive, type AppLoadInfo } from "./core/apps/AppConfigReader.js";
+import { parseLoadAppsEnv, resolveLoadAllowlist } from "./core/apps/LoadAllowlist.js";
 import { DependencyReloader } from "./core/modules/DependencyReloader.js";
 import { DisabledRegistry } from "./core/orchestration/DisabledRegistry.js";
 import { ModuleOrchestrator } from "./core/orchestration/ModuleOrchestrator.js";
@@ -359,6 +360,11 @@ export class Kernel {
 		const excludeTests = process.env.ENABLE_TESTS !== "true";
 		const excludeList = excludeTests ? ["BaseApp.ts", "AppWithSeo.ts", "test"] : ["BaseApp.ts", "AppWithSeo.ts"];
 
+		// Boot dirigido a nivel CARGA (`ADC_LOAD_APPS`), no sólo de build: lo que queda fuera
+		// se suma al exclude —así ni se lee su config— y se le declara dormido al orquestador,
+		// que si no lo contaría como caída pasados los 3 min de gracia.
+		excludeList.push(...(await this.#applyLoadAllowlist(excludeList)));
+
 		// Las UI libraries de presets cargan antes que cualquier otra app: hosts de src o
 		// de otros presets pueden declararlas en uiDependencies, y la carga de presets es
 		// secuencial/alfabética (sin este pase, un host anterior espera 30s por la lib).
@@ -417,6 +423,33 @@ export class Kernel {
 
 	#presetLayerPaths(layer: "apps" | "services" | "providers" | "utilities"): string[] {
 		return this.#presetTopics.map((topic) => path.resolve(this.#presetsPath, topic, layer));
+	}
+
+	/**
+	 * Aplica `ADC_LOAD_APPS`: devuelve los directorios de app a EXCLUIR de la carga y se los
+	 * declara dormidos al orquestador. Vacío (el default) = se cargan todas, como siempre.
+	 *
+	 * El allowlist se resuelve sobre TODAS las capas de una (src + presets) porque el cierre
+	 * transitivo de `uiDependencies` cruza repos: pedir `adc-drive` (preset) tiene que
+	 * arrastrar `adc-ui-library` (src). Ver `LoadAllowlist.ts`.
+	 */
+	async #applyLoadAllowlist(excludeList: string[]): Promise<string[]> {
+		const requested = parseLoadAppsEnv(process.env.ADC_LOAD_APPS);
+		if (requested.length === 0) return [];
+
+		const layers = [this.#appsPath, ...this.#presetLayerPaths("apps")];
+		const apps: AppLoadInfo[] = [];
+		for (const layerPath of layers) {
+			apps.push(...(await collectAppConfigsRecursive(layerPath, excludeList, this.#fileExtension)));
+		}
+
+		const { load, dormant, unknown } = resolveLoadAllowlist(apps, requested);
+		if (unknown.length > 0) {
+			this.#logger.logWarn(`ADC_LOAD_APPS: sin coincidencia para ${unknown.join(", ")} (¿nombre de app o de directorio mal escrito?).`);
+		}
+		this.#logger.logInfo(`Boot dirigido (ADC_LOAD_APPS): ${load.size} app(s) a cargar, ${dormant.size} dormida(s).`);
+		this.#orchestrator.setDormantApps(dormant);
+		return [...dormant];
 	}
 
 	/** UI libraries (Stencil con exports) presentes en las capas apps de los presets. */

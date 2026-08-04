@@ -48,8 +48,6 @@ export const UsersListResponse = Type.Object({
 /** Array de usuarios (búsqueda, miembros, etc.). */
 export const UsersArrayResponse = Type.Array(UserResponse);
 
-// ── Params ───────────────────────────────────────────────────────────────
-
 export const UserIdParams = Type.Object({
 	userId: Type.String({ minLength: 1, description: "ID del usuario" }),
 });
@@ -57,8 +55,6 @@ export const UserIdParams = Type.Object({
 export const UsernameParams = Type.Object({
 	username: Type.String({ minLength: 1, description: "Nombre de usuario" }),
 });
-
-// ── Query ────────────────────────────────────────────────────────────────
 
 export const ListUsersQuery = Type.Object({
 	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
@@ -75,8 +71,6 @@ export const SearchUsersQuery = Type.Object({
 export const AvatarsQuery = Type.Object({
 	ids: Type.Optional(Type.String({ description: "IDs de usuario separados por coma" })),
 });
-
-// ── Body ─────────────────────────────────────────────────────────────────
 
 export const ChangePasswordBody = Type.Object({
 	currentPassword: Type.String({ minLength: 1, description: "Contraseña actual" }),

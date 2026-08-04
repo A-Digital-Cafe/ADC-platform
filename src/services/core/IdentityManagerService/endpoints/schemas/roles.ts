@@ -21,8 +21,6 @@ export const RolesListResponse = Type.Object({
 	total: Type.Integer({ minimum: 0, description: "Total de roles que matchean el filtro (para paginar)" }),
 });
 
-// ── Query ────────────────────────────────────────────────────────────────
-
 export const ListRolesQuery = Type.Object({
 	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
 	q: Type.Optional(Type.String({ description: "Filtro por nombre/descripción (mín. 2 caracteres; busca sobre toda la colección)" })),
@@ -30,8 +28,6 @@ export const ListRolesQuery = Type.Object({
 	offset: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "Desplazamiento (para paginar)" })),
 	ownOnly: Type.Optional(Type.String({ description: "Con orgId: `true` excluye los predefinidos globales de referencia" })),
 });
-
-// ── Params ───────────────────────────────────────────────────────────────
 
 export const RoleIdParams = Type.Object({
 	roleId: Type.String({ minLength: 1, description: "ID del rol" }),

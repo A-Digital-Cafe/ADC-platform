@@ -31,7 +31,6 @@ export default class ExpressServerProvider extends BaseProvider implements IHttp
 	#setupMiddleware(): void {
 		this.app.use(cors()); // CORS para permitir peticiones cross-origin
 
-		// Body parser para JSON y URL encoded
 		this.app.use(bodyParser.json());
 		this.app.use(bodyParser.urlencoded({ extended: true }));
 

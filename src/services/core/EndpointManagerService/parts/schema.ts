@@ -11,22 +11,7 @@ import type { RegisteredEndpoint, EndpointCtx } from "../types.js";
  * y se validan en cada request ANTES de ejecutar el handler (400 homogéneo).
  * Los mismos schemas (JSON Schema estándar) alimentan el documento OpenAPI.
  *
- * @example
- * import { Type } from "@sinclair/typebox";
- *
- * @RegisterEndpoint({
- *   method: "POST",
- *   url: "/api/auth/register",
- *   permissions: [],
- *   options: {
- *     schema: {
- *       body: Type.Object({
- *         username: Type.String({ minLength: 3, maxLength: 32 }),
- *         email: Type.String({ format: "email" }),
- *       }),
- *     },
- *   },
- * })
+ * @example options: { schema: { body: Type.Object({ email: Type.String({ format: "email" }) }) } }
  */
 
 export interface CompiledEndpointSchemas {

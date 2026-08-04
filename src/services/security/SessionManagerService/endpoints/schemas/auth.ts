@@ -5,8 +5,6 @@ import { Type } from "@sinclair/typebox";
  * Alimentan la validación de entrada (runtime) y el doc OpenAPI en `/api/docs`.
  */
 
-// ── Body ─────────────────────────────────────────────────────────────────
-
 export const LoginBody = Type.Object({
 	username: Type.String({ minLength: 1 }),
 	password: Type.String({ minLength: 1 }),

@@ -1,4 +1,3 @@
-// Re-export response classes
 export { UncommonResponse, type CookieOptions, type SetCookie, type ClearCookie } from "./parts/UncommonResponse.js";
 
 /** HTTP methods supported */

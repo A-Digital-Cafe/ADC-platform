@@ -84,13 +84,44 @@ el efecto se ve en el próximo arranque del proceso.
 | --- | --- |
 | `ENABLE_TESTS=true` (`bun run dev:tests`) | carga `src/apps/test`: 8 apps más, un bundler cada una. Apagado por default, también en desarrollo |
 | `ADC_UI_APPS=adc-home,adc-drive` | compila **sólo** esas apps. Las UI libraries (Stencil) van siempre: son la dependencia contra la que bundlean los hosts |
+| `ADC_LOAD_APPS=adc-drive` | **no carga** el resto: nivel de carga, no de build (ver abajo) |
 | `ADC_NO_UI_SERVERS=true` | ningún build ni servidor; los módulos UI se registran igual. Lo usa `driver.mjs boot-check` |
+
+### `ADC_UI_APPS` vs `ADC_LOAD_APPS`
+
+Son dos niveles distintos y se pueden usar por separado:
+
+- `ADC_UI_APPS` es de **build**: las apps fuera de la lista se cargan, registran y abren sus
+  providers igual; sólo se saltea su bundler. Sirve para recortar la flota de hijos.
+- `ADC_LOAD_APPS` es de **carga**: las apps fuera de la lista ni se leen. Es el boot dirigido de
+  verdad (iterar sobre una app sin pagar el árbol entero).
+
+`ADC_LOAD_APPS` se expande sola al **cierre transitivo de `uiDependencies`** e incluye siempre las
+UI libraries, así que alcanza con nombrar la app bajo prueba: sin eso, el host quedaría esperando
+remotes que nunca se registran y el timeout de 30 s haría el boot dirigido *más lento* que el
+completo. Un nombre que no matchea ninguna app se avisa por log en vez de recortar en silencio.
+
+Lo que queda afuera se le declara **dormido** al `ModuleOrchestrator` (`setDormantApps`). Es la
+pieza sin la cual esto no se puede activar: `memberState` considera FALLO a cualquier app
+configurada-pero-no-cargada pasada la gracia de 3 min, así que un boot dirigido pondría roja la
+status page pública y el modules-manager abriría incidentes automáticos. Dormido no es ni baja
+manual ni `pending`: aparece como tal en el panel y no cuenta para la disponibilidad.
+
+La dormancia **se arrastra a los services**: la env var sólo nombra apps, pero un service se carga
+porque alguien lo declara, así que dejar dormida a la app que lo consume hace que nunca cargue. El
+orquestador los deriva en `friendlyAvailability` (un service sin cargar cuyos consumidores
+**requeridos** están todos dormidos también lo está, en cadena). Se miran sólo los requeridos: quien
+lo declaró `optional` funciona sin él, y si contara, un `kernelMode` que lo declara opcionalmente
+—`EmailService` ← Identity/Notification— bastaría para seguir reportándolo caído. Un service sin
+consumidores requeridos se carga por su cuenta y su ausencia sí es un fallo.
 
 ## Lo que NO se hace, y por qué
 
-- **Apps dormidas + stub de puerto**: en dev `serveModule` no registra hosts (retorna en cuanto hay
-  `devPort`), así que el hook del gateway es inalcanzable y el diseño colapsa en un listener que debe
-  desocupar el puerto antes de que `rspack serve` lo tome: un TOCTOU con `EADDRINUSE` por hidratación.
+- **Hidratación on-demand de apps dormidas + stub de puerto**: `ADC_LOAD_APPS` deja la app sin
+  cargar hasta el próximo arranque; levantarla *a demanda* es otra cosa. En dev `serveModule` no
+  registra hosts (retorna en cuanto hay `devPort`), así que el hook del gateway donde colgar la
+  hidratación es inalcanzable y el diseño colapsa en un listener que debe desocupar el puerto antes
+  de que `rspack serve` lo tome: un TOCTOU con `EADDRINUSE` por hidratación.
 - **Planificador topológico global**: ninguna app de preset depende de otra app de preset. Sería
   código nuevo que debe reproducir un recorrido que ya funciona, a cambio de cero ganancia medida.
 - **Builds en workers de `ExecutionManagerService`**: los worker threads comparten espacio de

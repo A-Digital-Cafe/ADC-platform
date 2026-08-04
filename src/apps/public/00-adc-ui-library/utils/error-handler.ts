@@ -23,18 +23,8 @@ export interface ShowErrorOptions {
  *
  * @example
  * ```ts
- * import { showError } from "@adc-ui-library/utils/error-handler";
- *
- * // Simple error
  * showError({ errorKey: "INVALID_CREDENTIALS", message: "Invalid credentials" });
- *
- * // With severity
- * showError({
- *   errorKey: "ACCOUNT_BLOCKED",
- *   message: "Account blocked",
- *   severity: "warning",
- *   data: { blockedUntil: "2024-01-15" }
- * });
+ * showError({ errorKey: "ACCOUNT_BLOCKED", message: "Account blocked", severity: "warning", data: { blockedUntil } });
  * ```
  */
 export function showError(options: ShowErrorOptions): void {

@@ -37,7 +37,7 @@
 			"version": "latest",
 			"language": "typescript",
 			"custom": {
-				"url": "amqp://admin:password@localhost:5672",
+				"url": "${RABBITMQ_URL:-amqp://admin:password@localhost:5672}",
 				"defaultPrefetch": 10,
 				"defaultConcurrency": 5,
 				"maxRetries": 4,

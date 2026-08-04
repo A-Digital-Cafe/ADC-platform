@@ -5,7 +5,6 @@ type ExpectedSubscriptionErrorTypes =
 	| "NOT_AUTHENTICATED"
 	| "ORG_ACCESS_DENIED"
 	| "FORBIDDEN"
-	// Not found
 	| "PLAN_NOT_FOUND"
 	// Validation
 	| "MISSING_FIELDS"
