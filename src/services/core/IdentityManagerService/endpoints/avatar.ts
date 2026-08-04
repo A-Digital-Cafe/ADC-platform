@@ -2,6 +2,7 @@ import { RegisterEndpoint, type EndpointCtx, UncommonResponse } from "../../Endp
 import { AuthError } from "@common/types/custom-errors/AuthError.js";
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
 import { buildDicebearAvatar } from "@common/utils/avatar.js";
+import { hostnameFromHostHeader } from "@common/utils/url-utils.js";
 import type { AttachmentsManager } from "../../../../utilities/attachments/attachments-utility/index.js";
 import type IdentityManagerService from "../index.js";
 import type { UserAvatarEndpointCtx } from "../permissions/userAvatarAttachments.js";
@@ -159,6 +160,9 @@ export class AvatarEndpoints {
 			fileName: body.fileName,
 			mimeType: body.mimeType,
 			size: body.size,
+			// Con un S3 local la URL se firma contra el host por el que entró el navegador,
+			// para que subir el avatar funcione también desde otro dispositivo de la red.
+			publicHost: hostnameFromHostHeader(ctx.headers.host),
 		});
 	}
 
@@ -325,6 +329,7 @@ export class AvatarEndpoints {
 		const callerId = ctx.user?.id ?? "";
 		const { url } = await AvatarEndpoints.#manager().getDownloadUrl(AvatarEndpoints.#ctxFor(callerId, targetUserId), attachmentId, {
 			inline: true,
+			publicHost: hostnameFromHostHeader(ctx.headers.host),
 		});
 		throw UncommonResponse.redirect(url, { status: 302 });
 	}

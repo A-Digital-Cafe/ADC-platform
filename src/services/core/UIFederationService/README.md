@@ -18,6 +18,15 @@ Stencil, React, Vue, Vite, Astro
 2. Remotes por dependencias - paralelo por nivel
 3. Hosts - al final
 
+Cada watcher espera readiness real (`strategies/shared/readiness.ts`), no un sleep fijo.
+
+## Caché y flags de build
+
+Caché persistente de rspack en `temp/rspack-cache/<ns>/<módulo>` (`ADC_RSPACK_CACHE=false` la
+apaga; `POST /api/modules/ui-cache/clear` la vacía). `ADC_NO_UI_SERVERS=true` omite todo build;
+`ADC_UI_APPS=a,b` lo acota a esas apps (las UI libraries se compilan siempre). Detalle:
+[boot-performance](../../../../docs/architecture/boot-performance.md).
+
 ## Seguridad UI
 
 En `config.json` de cada app:

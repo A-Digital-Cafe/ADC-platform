@@ -5,6 +5,27 @@ import { getStrategy } from "../../strategies/index.js";
 import type { UIFederationContext } from "../types/context.js";
 import { copyPublicFiles } from "../fs/file-operations.js";
 import { waitForDeclaredRemotes, waitForUILibraryBuild } from "./wait-helpers.js";
+import { bootTimeline } from "../../../../../utils/system/BootTimeline.ts";
+
+/**
+ * Allowlist de módulos UI a compilar (`ADC_UI_APPS=adc-home,adc-drive`). Vacía = todos,
+ * que es el default. Es la variante **por app** del interruptor global
+ * `ADC_NO_UI_SERVERS`: permite iterar sobre una app sin pagar los ~27 hijos de bundler
+ * del árbol completo.
+ *
+ * Las UI libraries (Stencil) nunca se saltean aunque no estén en la lista: son la
+ * dependencia compartida contra la que bundlean los hosts, y omitirlas dejaría a la app
+ * elegida compilando contra un `init.js`/`styles.css` ajeno a esta corrida.
+ */
+function isUIModuleEnabled(module: RegisteredUIModule): boolean {
+	const allowList = (process.env.ADC_UI_APPS ?? "")
+		.split(",")
+		.map((name) => name.trim())
+		.filter(Boolean);
+	if (allowList.length === 0) return true;
+	if (module.uiConfig.framework === "stencil") return true;
+	return allowList.includes(module.name) || allowList.includes(module.uiConfig.name);
+}
 
 function applyBuildResult(module: RegisteredUIModule, namespace: string, result: any, ctx: UIFederationContext): void {
 	if (result.watcher) {
@@ -33,6 +54,11 @@ export async function buildUIModule(module: RegisteredUIModule, namespace: strin
 		ctx.logger.logWarn(`Build de ${module.name} [${namespace}] omitido: ADC_NO_UI_SERVERS=true (modo sólo kernel).`);
 		return;
 	}
+	if (!isUIModuleEnabled(module)) {
+		module.buildStatus = "built";
+		ctx.logger.logWarn(`Build de ${module.name} [${namespace}] omitido: fuera de ADC_UI_APPS.`);
+		return;
+	}
 
 	if (framework !== "stencil") {
 		await waitForUILibraryBuild(module, namespaceModules, ctx.logger);
@@ -54,7 +80,7 @@ export async function buildUIModule(module: RegisteredUIModule, namespace: strin
 			isDevelopment: process.env.NODE_ENV === "development",
 		};
 
-		const result = await strategy.build(buildCtx);
+		const result = await bootTimeline.measure(`build:${module.name}`, () => strategy.build(buildCtx));
 		applyBuildResult(module, namespace, result, ctx);
 		module.buildStatus = "built";
 

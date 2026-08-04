@@ -11,6 +11,7 @@ import {
 	type AvatarUpdatePayload,
 } from "../../../../utils/auth-sync.js";
 import { DEFAULT_CREDENTIALS } from "../../../../utils/adc-fetch.js";
+import { noteSessionExpiry, refreshSession, startSessionRefresh } from "../../../../utils/auth-refresh.js";
 import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
 import { appendCsrfHeader } from "../../../../utils/csrf.js";
 import { buildAvatarUrl } from "../../../../utils/avatar.js";
@@ -149,6 +150,9 @@ export class AdcAccessButton {
 	}
 
 	componentWillLoad() {
+		// La campana de acceso está en el header de todas las apps: es el punto que
+		// garantiza la renovación proactiva incluso donde no se usa `createAdcApi`.
+		startSessionRefresh();
 		this.checkSession();
 		this.teardownAuthSync = setupAuthSync(() => {
 			globalThis.location?.reload();
@@ -173,18 +177,26 @@ export class AdcAccessButton {
 		return getUrl(3016, "my-account.adigitalcafe.com");
 	}
 
+	private fetchSession(): Promise<Response> {
+		return fetch(this.getApiUrl(this.sessionApiUrl), { method: "GET", credentials: DEFAULT_CREDENTIALS });
+	}
+
 	private async checkSession() {
 		let authenticatedUserId: string | null = null;
 		try {
-			const response = await fetch(this.getApiUrl(this.sessionApiUrl), {
-				method: "GET",
-				credentials: DEFAULT_CREDENTIALS,
-			});
+			let response = await this.fetchSession();
+
+			// Un 401 puede ser sesión terminada o sólo el access token vencido: se intenta
+			// renovar una vez antes de dar al usuario por deslogueado.
+			if (response.status === 401 && (await refreshSession(true))) {
+				response = await this.fetchSession();
+			}
 
 			// Si no hay sesión (401) o hay error, marcar como no autenticado
 			if (!response.ok) {
 				this.isAuthenticated = false;
 				this.user = null;
+				noteSessionExpiry(null);
 				return;
 			}
 
@@ -192,6 +204,7 @@ export class AdcAccessButton {
 
 			this.isAuthenticated = data.authenticated;
 			this.user = data.user || null;
+			noteSessionExpiry(data.authenticated ? data.expiresAt : null);
 			if (data.authenticated && data.user?.id) {
 				authenticatedUserId = data.user.id;
 			}

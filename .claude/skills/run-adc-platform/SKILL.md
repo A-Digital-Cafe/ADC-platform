@@ -115,10 +115,13 @@ node .claude/skills/run-adc-platform/driver.mjs stop
 
 ## Test
 
-No standalone unit-test runner. In dev (`ENABLE_TESTS=true`, set by `bun run
-dev`) several modules self-test on boot — e.g. `user-profile-mongo` logs
-`PRUEBAS COMPLETADAS` after exercising the identity/permissions flow. `boot-check`
-surfaces exactly those lines and exits 0/1, so it's the fastest "boots clean +
+No standalone unit-test runner. With `ENABLE_TESTS=true` several modules self-test
+on boot — e.g. `user-profile-mongo` logs `PRUEBAS COMPLETADAS` after exercising the
+identity/permissions flow. **`bun run dev` no longer sets it** (the `src/apps/test`
+tree costs 8 apps and one bundler each): use `bun run dev:tests` for those, which is
+also why ports 3001-3006 are free on a normal dev boot and `smoke` reports them as
+`--` instead of a failure. `boot-check` sets it explicitly, so it still
+surfaces those lines and exits 0/1 — the fastest "boots clean +
 self-test passed + no capability errors" check. Static: `bun run typecheck`
 (**exits 1 by baseline** from knip unused-export reporting — read the output, the
 exit code is not a failure) and `bun run lint` (zero-warnings, src only).

@@ -1,4 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import { isPrivateHost } from "@common/utils/url-utils.js";
+import { StorageError } from "@common/types/custom-errors/StorageError.ts";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 import { ensureBucket } from "./bucket.js";
 import { putObject, getObjectStream, headObject, deleteObject } from "./objects.js";
@@ -46,14 +48,35 @@ export default class InternalS3Provider extends BaseProvider {
 	#client: S3Client | null = null;
 	#sharedKey: string | null = null;
 	#initialized = false;
+	/**
+	 * Clientes con los que se **firman** las URLs para el navegador, uno por endpoint. Van
+	 * aparte del cliente compartido por dos motivos:
+	 *
+	 * 1. `requestChecksumCalculation: "WHEN_REQUIRED"`. Con el default (`WHEN_SUPPORTED`) el SDK
+	 *    calcula el CRC32 del cuerpo al serializar el PUT, y al presignar el cuerpo está vacío:
+	 *    firma `x-amz-checksum-crc32=AAAAAA==` (CRC32 de cero bytes) en la query. Después el
+	 *    navegador sube el archivo real, el servidor valida ese checksum contra el cuerpo y
+	 *    rechaza el PUT (`XAmzContentChecksumMismatch`). MinIO hoy lo ignora, S3 real no. En las
+	 *    llamadas server-side el checksum sí aporta (integridad en tránsito), así que el cliente
+	 *    compartido conserva el default.
+	 * 2. `publicHost`: hay que firmar contra el host por el que entró el navegador (ver
+	 *    `PresignUploadInput`). Sólo aplica en desarrollo con endpoint local.
+	 *
+	 * Firmar no abre conexiones: estos clientes son objetos de configuración. Se destruyen con
+	 * el provider.
+	 */
+	readonly #presignClients = new Map<string, S3Client>();
 
 	constructor(options?: any) {
 		super();
 		this.#config = {
 			endpoint: options?.endpoint || process.env.S3_ENDPOINT || "http://localhost:9000",
 			region: options?.region || process.env.S3_REGION || "us-east-1",
-			accessKey: options?.accessKey || process.env.S3_ACCESS_KEY || "adcadmin",
-			secretKey: options?.secretKey || process.env.S3_SECRET_KEY || "adcpassword",
+			// Cuenta de servicio acotada a los buckets `adc-*`, NO el root de MinIO: la firma de
+			// cada URL presignada publica este access key, y con el root de por medio una fuga del
+			// secreto entrega el servidor entero. La provisiona `adc-minio-core/docker-compose.yml`.
+			accessKey: options?.accessKey || process.env.S3_ACCESS_KEY || "adc-platform",
+			secretKey: options?.secretKey || process.env.S3_SECRET_KEY || "adc-platform-dev",
 			forcePathStyle: options?.forcePathStyle ?? true,
 			defaultBucket: options?.defaultBucket || process.env.S3_BUCKET || "adc-default",
 			presignTtl: options?.presignTtl ?? 900,
@@ -128,13 +151,63 @@ export default class InternalS3Provider extends BaseProvider {
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		this.#releaseSharedClient();
+		for (const client of this.#presignClients.values()) {
+			try {
+				client.destroy();
+			} catch {
+				/* ignorar */
+			}
+		}
+		this.#presignClients.clear();
 		this.#client = null;
 		this.#initialized = false;
 	}
 
 	#getClient(): S3Client {
-		if (!this.#client) throw new Error("InternalS3Provider no inicializado");
+		// Tipado y 503, no un `Error` pelado: el provider puede no estar listo todavía (arranque)
+		// o ya haberse parado (recarga), y eso es indisponibilidad reintentable, no un bug. Sin
+		// tipar, el wrapper HTTP lo saneaba a un 500 `INTERNAL_ERROR` opaco.
+		if (!this.#client) throw new StorageError(503, "S3_UNAVAILABLE", "El almacenamiento de objetos no está disponible");
 		return this.#client;
+	}
+
+	/**
+	 * Endpoint contra el que firmar para `publicHost`, o `null` si hay que usar el configurado.
+	 * Reescribe sólo entre hosts privados: en producción (S3/CDN real) nunca aplica.
+	 */
+	#publicEndpointFor(publicHost?: string): string | null {
+		if (!publicHost || !isPrivateHost(publicHost)) return null;
+		let url: URL;
+		try {
+			url = new URL(this.#config.endpoint);
+		} catch {
+			return null;
+		}
+		if (!isPrivateHost(url.hostname) || url.hostname === publicHost) return null;
+		url.hostname = publicHost;
+		return url.origin;
+	}
+
+	/** Cliente con el que firmar una URL destinada al navegador (ver `#presignClients`). */
+	#getPresignClient(publicHost?: string): S3Client {
+		// Tipado y 503, no un `Error` pelado: el provider puede no estar listo todavía (arranque)
+		// o ya haberse parado (recarga), y eso es indisponibilidad reintentable, no un bug. Sin
+		// tipar, el wrapper HTTP lo saneaba a un 500 `INTERNAL_ERROR` opaco.
+		if (!this.#client) throw new StorageError(503, "S3_UNAVAILABLE", "El almacenamiento de objetos no está disponible");
+		const endpoint = this.#publicEndpointFor(publicHost) ?? this.#config.endpoint;
+		let client = this.#presignClients.get(endpoint);
+		if (!client) {
+			client = new S3Client({
+				endpoint,
+				region: this.#config.region,
+				credentials: { accessKeyId: this.#config.accessKey, secretAccessKey: this.#config.secretKey },
+				forcePathStyle: this.#config.forcePathStyle,
+				requestChecksumCalculation: "WHEN_REQUIRED",
+			});
+			this.#presignClients.set(endpoint, client);
+			this.logger?.logDebug?.(`[InternalS3Provider] Firmando URLs de navegador @ ${endpoint}`);
+		}
+		return client;
 	}
 
 	#bucket(b?: string): string {
@@ -161,9 +234,9 @@ export default class InternalS3Provider extends BaseProvider {
 		return deleteObject(this.#getClient(), input, this.#bucket(input.bucket));
 	}
 	getPresignedUploadUrl(input: PresignUploadInput): Promise<PresignUploadResult> {
-		return getPresignedUploadUrl(this.#getClient(), input, this.#bucket(input.bucket), this.#config.presignTtl);
+		return getPresignedUploadUrl(this.#getPresignClient(input.publicHost), input, this.#bucket(input.bucket), this.#config.presignTtl);
 	}
 	getPresignedDownloadUrl(input: PresignDownloadInput): Promise<string> {
-		return getPresignedDownloadUrl(this.#getClient(), input, this.#bucket(input.bucket), this.#config.presignTtl);
+		return getPresignedDownloadUrl(this.#getPresignClient(input.publicHost), input, this.#bucket(input.bucket), this.#config.presignTtl);
 	}
 }

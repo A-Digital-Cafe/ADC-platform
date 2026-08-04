@@ -34,7 +34,9 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
 
 - **Rotación de claves**: cada 24h, `SECRET_PREVIOUS = SECRET_CURRENT` y se genera nueva clave
 - **Access Token**: JWT cifrado, 15 min, cookie `access_token`
-- **Refresh Token**: opaco, 30 días, cookie HttpOnly en `/api/auth/refresh`
+- **Refresh Token**: opaco, 30 días, cookie HttpOnly en `/api/auth/refresh`; rotación de un solo uso con
+  ventana de gracia de 60s (el token recién rotado devuelve el par vigente: pestañas de orígenes distintos
+  no pueden coordinarse entre sí). `/api/auth/refresh` devuelve `expiresAt` para renovar antes de vencer
 - **Rate limiting**: 3 fallos login/día = bloqueo 1h; post-desbloqueo fallo = bloqueo permanente
 - **Geo-validation**: cambio de país invalida sesión
 - **Moderación**: integra `ModerationService` (opcional, vía `IModerationService`) para bloquear logins baneados;

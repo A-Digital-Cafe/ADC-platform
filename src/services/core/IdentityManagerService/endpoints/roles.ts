@@ -6,7 +6,7 @@ import type { Capability } from "@common/security/Capability.ts";
 import type { Role } from "@common/types/identity/Role.ts";
 import * as RS from "./schemas/roles.js";
 import { JobAcceptedResponse } from "./schemas/common.js";
-import { assertCanManageRole } from "../domain/hierarchy.js";
+import { assertCanGrantPermissions, assertCanManageRole } from "../domain/hierarchy.js";
 
 /**
  * Verifica que un rol sea custom y accesible para el caller. Devuelve el rol.
@@ -109,6 +109,9 @@ export class RoleEndpoints {
 		// Jerarquía: el rol nuevo debe quedar estrictamente por debajo del actor
 		const hierarchy = ctx.data.hierarchy ?? 100;
 		await assertCanManageRole(RoleEndpoints.identity.permissions, ctx.user?.id, { hierarchy }, ctx.user?.orgId);
+		// Contenido: no se puede meter en el rol un permiso que el actor no tiene. Sin esto la
+		// jerarquía sola deja crear un rol 499 con `*` y asignárselo a un usuario títere.
+		await assertCanGrantPermissions(RoleEndpoints.identity.permissions, ctx.user?.id, ctx.data.permissions, ctx.user?.orgId);
 		const role = await RoleEndpoints.identity.roles.createRole(
 			ctx.data.name,
 			ctx.data.description || "",
@@ -138,6 +141,14 @@ export class RoleEndpoints {
 		const current = await assertRoleOrgAccess(RoleEndpoints.identity, ctx.params.roleId, ctx.user?.orgId, ctx.token!);
 		// Jerarquía: sólo roles estrictamente por debajo del actor; ídem la nueva jerarquía
 		await assertCanManageRole(RoleEndpoints.identity.permissions, ctx.user?.id, current, ctx.user?.orgId, ctx.data?.hierarchy);
+		// Ídem createRole; `current.permissions` deja pasar lo que el rol ya tenía.
+		await assertCanGrantPermissions(
+			RoleEndpoints.identity.permissions,
+			ctx.user?.id,
+			ctx.data?.permissions,
+			ctx.user?.orgId,
+			current.permissions
+		);
 		const role = await RoleEndpoints.identity.roles.updateRole(ctx.params.roleId, ctx.data || {}, ctx.token!);
 		RoleEndpoints.identity.permissions.invalidateRole(ctx.params.roleId);
 		void RoleEndpoints.identity.notifications(RoleEndpoints.cap).securityEvent({

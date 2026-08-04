@@ -17,10 +17,11 @@ Habilitar con `HTTP2_ENABLED=true`. Requiere certificados SSL:
 
 ## Hardening HTTP
 
-- Security headers por defecto, incluyendo CSP report-only, HSTS condicional y protección contra clickjacking/sniffing.
+- Security headers por defecto. La CSP se **enforcea en producción real** y sale como report-only fuera de ella (`SECURITY_CSP_ENFORCE` fuerza el modo); sin `unsafe-eval` y con `script-src-attr 'none'`. HSTS condicional y protección contra clickjacking/sniffing.
+- `Cross-Origin-Resource-Policy: same-site`, salvo **fuera de producción real** cuando se entra por IP: ahí no hay sitio que comparar y el navegador bloquearía todo subrecurso servido desde otro puerto, así que degrada a `cross-origin`. En producción no degrada nunca, para que pedir por la IP de origen no sea una forma de saltear CORP.
 - CSP centralizada: las apps NO duplican la política completa; declaran solo su delta con el header `Content-Security-Policy-Extend` (ej. `"img-src https:; frame-src https://www.youtube.com"`) y el provider lo fusiona sobre la CSP por defecto (que ya distingue dev/prod). `Content-Security-Policy` explícito sigue funcionando como override total.
 - CORS usa hosts registrados y `CORS_ALLOWED_ORIGINS`/`ADC_CORS_ALLOWED_ORIGINS` para orígenes extra.
-- `bodyLimit` se configura con `HTTP_BODY_LIMIT_BYTES`/`ADC_HTTP_BODY_LIMIT_BYTES`.
+- `bodyLimit` se configura con `HTTP_BODY_LIMIT_BYTES`/`ADC_HTTP_BODY_LIMIT_BYTES`. Los bodies `application/octet-stream` llegan como stream y NO pasan por él: su techo es `HTTP_RAW_BODY_LIMIT_BYTES`/`ADC_HTTP_RAW_BODY_LIMIT_BYTES` (413 al excederlo).
 - Los métodos HTTP se limitan a GET, POST, PUT, PATCH, DELETE, HEAD y OPTIONS.
 
 ## API Docs (Swagger UI)

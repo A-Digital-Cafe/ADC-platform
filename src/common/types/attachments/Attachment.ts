@@ -89,7 +89,9 @@ export const ATTACHMENT_DEFAULT_ALLOWED_MIMES = [
 	"image/jpeg",
 	"image/gif",
 	"image/webp",
-	"image/svg+xml",
+	// image/svg+xml queda FUERA: un SVG es XML y puede traer <script>, que corre con el origen
+	// que sirve la descarga. Ningún consumidor del árbol sube SVG (Drive ya lo rechaza aparte).
+	// Un módulo que realmente lo necesite puede pasar su propia `allowedMimeTypes`.
 	"application/pdf",
 	"application/zip",
 	"application/json",

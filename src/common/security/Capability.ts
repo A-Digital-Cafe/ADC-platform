@@ -26,6 +26,12 @@ export enum Scope {
 	IdentitySystem = "identity:system",
 	/** Login programático con credenciales (`SessionManager.loginProgrammatic`). Mintea sesión sin flujo interactivo. */
 	SessionProgrammatic = "session:programmatic",
+	/**
+	 * Revocar TODAS las sesiones de un usuario (`SessionManager.revokeUserSessions`). Sólo
+	 * denegatorio (nunca mintea sesión), pero es un cierre de sesión forzado para terceros:
+	 * opt-in explícito para que lo tenga sólo quien desactiva cuentas (IdentityManager).
+	 */
+	SessionRevoke = "session:revoke",
 	/** Obtener la instancia cruda del servidor HTTP (fastify `getApp`). */
 	HttpRaw = "http:raw",
 	/** Registrar/desregistrar un módulo UI en UIFederation. */

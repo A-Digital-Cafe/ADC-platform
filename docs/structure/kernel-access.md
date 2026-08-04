@@ -25,8 +25,38 @@ const identity = this.getMyService<IdentityManagerService>("IdentityManagerServi
 const email = this.tryGetMyService<EmailService>("EmailService");
 ```
 
-- **Nunca** uses `getMutableRegistry()` ni `getModuleLoader()` en lógica de negocio: son `protected`
-  exclusivos de la maquinaria base (cargar/registrar sub‑dependencias declaradas).
+- El registry **mutable** y el `ModuleLoader` no son alcanzables desde un módulo: viven detrás de
+  campos privados de `BaseModule` y sólo los usa su bootstrap, que además consume la infraCap al
+  terminar. Si necesitás cargar algo, declaralo en tu `config.json`.
+
+### Resolvé al usar, no guardes la instancia
+
+`getMy*` es un lookup barato (busca la dependencia declarada y la pide al registry). **Llamalo en
+cada uso**; no guardes el resultado en un campo. Una instancia guardada en `start()` queda atada a
+ese momento: si el kernel recarga ese módulo —editar su archivo en dev, un deploy desde el panel—
+te quedás hablándole a una instancia ya detenida, y no se recupera ni recargando tu propio módulo,
+sólo reiniciando el kernel.
+
+```ts
+// ❌ atado al start(): una recarga del provider lo deja muerto para siempre
+const s3 = this.getMyProvider<InternalS3Provider>("object/internal-s3-provider");
+this.#manager = createManager({ s3Provider: s3 });
+
+// ✅ getter: cada llamada usa la instancia vigente
+this.#manager = createManager({ s3Provider: () => this.getMyProvider<InternalS3Provider>("object/internal-s3-provider") });
+```
+
+Si le pasás la dependencia a un colaborador de vida larga (un manager, un DAO), pasale **el getter**,
+no la instancia: es el caso donde más duele, porque el colaborador sobrevive a la recarga.
+Referencias: `AttachmentsManager` (`S3Resolver`) y `AttachmentsQuotaOptions.getTracker`.
+
+Con `optional: true` esto no es endurecimiento, es lo que hace que "opcional" signifique algo: una
+dependencia que no estaba al arrancar **nunca** va a aparecer si la resolviste una sola vez, ni
+cuando se lance más tarde desde el modules-manager. Resolvela por llamada y bancate el `undefined`
+en cada una (`tryGetMyService`), no sólo la primera.
+
+Lo que **no** arregla: el estado que derivás al arrancar (endpoints registrados, suscripciones,
+conexiones abiertas). Eso sigue atado al `start()` y sólo se rehace recargando tu módulo.
 
 ### Excepción: ciclos de dependencia
 
@@ -60,6 +90,12 @@ Se validan en runtime y **nunca** conceden scopes de infraestructura. Ejemplos r
 `adc-modules-manager` → `["orchestrator","http:raw"]`, `SEO` → `["http:raw"]`, servicios que registran
 consumo de almacenamiento → `["storage:register"]`.
 
+**Cambiarlos deja rastro.** El kernel anota lo concedido a cada módulo en cada provisión; si una
+recarga desde disco (deploy git, watcher de dev, lanzamiento de un pendiente) trae un `config.json`
+que pide scopes nuevos, queda un `logWarn`, una entrada `privileges-change` en el audit log del
+gestor de módulos y un aviso al equipo de seguridad. Con `MODULES_PRIVILEGE_GATE=true` esos scopes
+además **no se conceden** hasta aprobarlos (`POST /api/modules/privileges/approve`).
+
 ## Scopes y defaults por tier
 
 Por defecto un módulo sólo recibe `lifecycle` (y las apps, además, `ui:register`). **Todo lo demás es
@@ -85,4 +121,5 @@ opt‑in**: se declara en `config.json` → `privileges`.
       o `tryGetMyService` (opcional)? No referencio `kernel.registry` ni `Kernel.moduleLoader`.
 - [ ] ¿Guardo el token de `start()` sólo en un campo `#privado` y reenvío con `getCapability()`?
 - [ ] ¿Mi módulo necesita `orchestrator`/`http:raw`/`storage:register`? → lo declaré en `config.json`.
-- [ ] No llamo a `getMutableRegistry()`/`getModuleLoader()` desde lógica de negocio.
+- [ ] No intento alcanzar el registry mutable ni el `ModuleLoader`: no son accesibles desde un módulo
+      (`BaseModule` los mantiene privados y consume la infraCap al terminar el bootstrap).

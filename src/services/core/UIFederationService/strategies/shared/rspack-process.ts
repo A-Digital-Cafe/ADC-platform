@@ -3,6 +3,8 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import type { IBuildContext, IBuildResult } from "../types.js";
 import { getBinPath, getLogsDir } from "../../utils/fs/path-resolver.js";
+import { waitForRspackReady } from "./readiness.js";
+import { bootTimeline } from "../../../../../utils/system/BootTimeline.ts";
 
 /**
  * Lanza rspack con un set de argumentos y retorna el watcher.
@@ -30,7 +32,9 @@ export async function runRspackWatcher(
 	const spawnOptions: any = { cwd: module.appDir, stdio: "pipe", shell: false };
 	if (process.platform !== "win32") spawnOptions.detached = true;
 
+	const spawnedAt = Date.now();
 	const watcher = spawn(rspackBin, args, spawnOptions);
+	bootTimeline.trackChild(watcher.pid, `rspack:${module.uiConfig.name}`);
 
 	const appendSafe = (data: any) => fs.appendFile(logFile, data).catch(() => {});
 	watcher.stdout?.on("data", appendSafe);
@@ -54,8 +58,20 @@ export async function runRspackWatcher(
 		`${module.uiConfig.name} [${namespace}] ${successLabel} iniciado. Logs: ${path.relative(process.cwd(), logFile)}`
 	);
 
-	// Dar tiempo al servidor/build para arrancar
-	await new Promise((resolve) => setTimeout(resolve, 5000));
+	// Readiness real, no un sleep fijo: sería a la vez demasiado (un compile caliente
+	// termina antes) y demasiado poco (uno frío no llega, y el host que depende de este
+	// módulo bundlea contra un output a medias).
+	// `serve` es el único modo que abre puerto; `build --watch` sólo escribe a disco.
+	const devPort = args[0] === "serve" ? module.uiConfig.devPort : undefined;
+	const end = bootTimeline.phase(`ready:${module.uiConfig.name}`);
+	const arm = await waitForRspackReady({ watcher, devPort, outputPath, spawnedAt });
+	end();
+	const elapsed = Date.now() - spawnedAt;
+	if (arm === "timeout") {
+		context.logger?.logWarn(`${module.uiConfig.name} [${namespace}] no reportó readiness en ${elapsed}ms; se continúa igual.`);
+	} else {
+		context.logger?.logDebug(`${module.uiConfig.name} [${namespace}] listo en ${elapsed}ms (brazo: ${arm}).`);
+	}
 
 	return { watcher, outputPath };
 }

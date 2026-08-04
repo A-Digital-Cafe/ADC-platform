@@ -8,6 +8,7 @@ import { ReadonlyModuleRegistry } from "./utils/registry/ReadonlyModuleRegistry.
 import { Scope, assertScope, CapabilityIssuer, type Capability, type CapabilityToken } from "./common/security/Capability.ts";
 import { setLifecycleRoot } from "./utils/decorators/OnlyKernel.ts";
 import { policyScopes, INFRA_CAP_SCOPES, type ModuleKind } from "./core/security/capabilityPolicy.ts";
+import { PrivilegeLedger, type PrivilegeChange } from "./core/security/PrivilegeLedger.ts";
 
 /** Superficie que el kernel usa para inyectar capabilities en un módulo recién construido. */
 interface ProvisionableModule {
@@ -17,13 +18,16 @@ interface ProvisionableModule {
 }
 import { ILogger } from "./interfaces/utils/ILogger.js";
 import { DockerManager, type DockerInspector } from "./utils/system/DockerManager.ts";
+import { bootTimeline } from "./utils/system/BootTimeline.ts";
 import { AppLoader } from "./core/apps/AppLoader.js";
 import { ModuleRegistrar } from "./core/modules/ModuleRegistrar.js";
 import { KernelServiceLoader } from "./core/services/KernelServiceLoader.js";
 import { ConfigWatcher, watchLayer, watchPresetTopic, watchPresetsRoot, type LayerEventHandlers } from "./core/runtime/ConfigWatcher.js";
 import { ModuleDetector } from "./core/runtime/ModuleDetector.js";
 import { shutdownKernel } from "./core/runtime/KernelShutdown.js";
-import { loadLayerRecursive } from "./core/apps/LayerLoader.js";
+import { loadLayerRecursive, type LayerLoadOptions } from "./core/apps/LayerLoader.js";
+import { LoadSemaphore } from "./utils/system/LoadSemaphore.ts";
+import { MemoryProbe } from "./utils/system/MemoryProbe.ts";
 import { collectAppConfigs } from "./core/apps/AppConfigReader.js";
 import { DependencyReloader } from "./core/modules/DependencyReloader.js";
 import { DisabledRegistry } from "./core/orchestration/DisabledRegistry.js";
@@ -47,6 +51,13 @@ export class Kernel {
 	 * La presenta sólo el kernel; nunca se entrega a módulos.
 	 */
 	readonly #securityNotifyCap: Capability = this.#issuer.mint("kernel", "infra", [Scope.IdentityInternal]);
+	/**
+	 * Registro de los privilegios concedidos a cada módulo. `provisionModule` es el único
+	 * punto por el que pasan el boot, el hot-reload y la recarga tras un `git pull`, así que
+	 * es donde se detecta que un módulo se amplió los privilegios entre una provisión y la
+	 * siguiente. La persistencia/aprobación las pone el gestor de módulos por el orquestador.
+	 */
+	readonly #privilegeLedger = new PrivilegeLedger();
 	/** Secreto de arranque: lo posee sólo el bootstrap (`index.ts`), nunca un módulo. */
 	#bootToken?: symbol;
 	#isStartingUp = true;
@@ -125,6 +136,7 @@ export class Kernel {
 		this.#detector.onDetected((e) => {
 			if (e.kind === "detected") this.#notifyModuleDetected(e);
 		});
+		this.#privilegeLedger.onChange((change) => this.#onPrivilegeChange(change));
 		this.#orchestrator = new ModuleOrchestrator({
 			registry: this.#registry,
 			appLoader: this.#appLoader,
@@ -135,6 +147,7 @@ export class Kernel {
 			logger: this.#logger,
 			kernelKey: Kernel.#kernelKey,
 			platformCap: this.#platformCap,
+			privilegeLedger: this.#privilegeLedger,
 			presetsPath: this.#presetsPath,
 			srcPath: this.#basePath,
 		});
@@ -150,15 +163,65 @@ export class Kernel {
 		interface IdentityNotifier {
 			notifications(token: CapabilityToken): { moduleFailure(event: { module: string; error: string }): Promise<void> };
 		}
-		try {
-			const identity = this.#registry.getService<IdentityNotifier>("IdentityManagerService");
-			void identity
-				.notifications(this.#securityNotifyCap)
-				.moduleFailure({ module: moduleName, error })
-				.catch((e: unknown) => this.#logger.logDebug(`Alerta de fallo de módulo no emitida: ${e}`));
-		} catch {
+		// Por identidad pinneada, no por nombre: acá se entrega `identity:internal`, y la
+		// resolución por nombre la puede ganar un módulo registrado bajo ese nombre.
+		const identity = this.#registry.getPlatformService<IdentityNotifier>("IdentityManagerService");
+		if (!identity) {
 			this.#logger.logDebug(`Alerta de fallo de módulo no emitida (IdentityManagerService no disponible): ${moduleName}`);
+			return;
 		}
+		void identity
+			.notifications(this.#securityNotifyCap)
+			.moduleFailure({ module: moduleName, error })
+			.catch((e: unknown) => this.#logger.logDebug(`Alerta de fallo de módulo no emitida: ${e}`));
+	}
+
+	/**
+	 * Un módulo cambió sus privilegios entre una provisión y la siguiente. El caso que importa
+	 * es `added`/`withheld` tras una recarga desde disco: el `config.json` que trajo el deploy
+	 * pide más de lo que el módulo tenía. Se deja rastro en el log y se avisa al equipo de
+	 * seguridad por el mismo canal que los fallos de módulo.
+	 *
+	 * El alta (`first`) no se notifica: es todo el árbol en cada arranque. La excepción es un alta
+	 * con `withheld`: en arranque en frío el módulo se provisiona DESPUÉS de que el gestor instale
+	 * el baseline, así que la primera provisión del proceso es justo donde el gate actúa, y sin
+	 * esta salida la retención no dejaría más rastro que un warn de `capabilityPolicy`.
+	 */
+	#onPrivilegeChange(change: PrivilegeChange): void {
+		const { grant, removed, withheld, first } = change;
+		// En un alta no hay provisión anterior contra la cual diffear: `added` es el set entero
+		// del módulo, no una ampliación. Reportarlo como pedido nuevo sería mentira.
+		const added = first ? [] : change.added;
+		if (first && withheld.length === 0) {
+			this.#logger.logDebug(`Privilegios de ${grant.kind}:${grant.name}: [${grant.scopes.join(", ")}]`);
+			return;
+		}
+		const parts = [added.length ? `+[${added.join(", ")}]` : "", removed.length ? `-[${removed.join(", ")}]` : ""].filter(Boolean).join(" ");
+		if (withheld.length) {
+			const delta = parts ? ` ${parts}` : ""; // en un alta no hay delta: la retención va sola
+			this.#logger.logWarn(`Privilegios de ${grant.kind}:${grant.name}: RETENIDOS [${withheld.join(", ")}] por falta de aprobación.${delta}`);
+		} else {
+			this.#logger.logWarn(`Privilegios de ${grant.kind}:${grant.name} cambiaron: ${parts} (origen: ${grant.path})`);
+		}
+		if (added.length === 0 && withheld.length === 0) return; // perder privilegios no es un incidente
+
+		interface IdentityNotifier {
+			notifications(token: CapabilityToken): {
+				modulePrivilegesChanged(event: {
+					module: string;
+					layer: string;
+					filePath: string;
+					added: string[];
+					withheld: string[];
+				}): Promise<void>;
+			};
+		}
+		const identity = this.#registry.getPlatformService<IdentityNotifier>("IdentityManagerService");
+		if (!identity?.notifications) return;
+		void identity
+			.notifications(this.#securityNotifyCap)
+			.modulePrivilegesChanged({ module: grant.name, layer: grant.kind, filePath: grant.path, added, withheld })
+			.catch((err: unknown) => this.#logger.logDebug(`Alerta de cambio de privilegios no emitida: ${err}`));
 	}
 
 	/**
@@ -171,15 +234,16 @@ export class Kernel {
 				moduleDetected(event: { module: string; layer: string; filePath: string; preset: string | null }): Promise<void>;
 			};
 		}
-		try {
-			const identity = this.#registry.getService<IdentityNotifier>("IdentityManagerService");
-			void identity
-				.notifications(this.#securityNotifyCap)
-				.moduleDetected({ module: e.name, layer: e.type, filePath: e.filePath, preset: e.preset })
-				.catch((err: unknown) => this.#logger.logDebug(`Alerta de módulo detectado no emitida: ${err}`));
-		} catch {
+		// Ídem `#notifyModuleFailure`: identidad pinneada antes de entregar la capability.
+		const identity = this.#registry.getPlatformService<IdentityNotifier>("IdentityManagerService");
+		if (!identity) {
 			this.#logger.logDebug(`Alerta de módulo detectado no emitida (IdentityManagerService no disponible): ${e.name}`);
+			return;
 		}
+		void identity
+			.notifications(this.#securityNotifyCap)
+			.moduleDetected({ module: e.name, layer: e.type, filePath: e.filePath, preset: e.preset })
+			.catch((err: unknown) => this.#logger.logDebug(`Alerta de módulo detectado no emitida: ${err}`));
 	}
 
 	/**
@@ -257,7 +321,12 @@ export class Kernel {
 		// módulo. El caller lo usa para `start(token)`; el stop va por `stopBoundModule`.
 		const lifecycleToken = Symbol(`lifecycle:${opts.name}`);
 		instance.setKernelKey(lifecycleToken);
-		const businessCap = this.#issuer.mint(opts.name, opts.kind, policyScopes(opts));
+		// Privilegios: se calculan contra el baseline aprobado (si hay gate activo) y se anota
+		// lo concedido, para que una ampliación entre provisiones no pase inadvertida.
+		const withheld = this.#privilegeLedger.withheldFor(opts.kind, opts.name, opts.declared ?? []);
+		const scopes = policyScopes({ ...opts, withheld });
+		const businessCap = this.#issuer.mint(opts.name, opts.kind, scopes);
+		this.#privilegeLedger.record({ kind: opts.kind, name: opts.name, path: opts.path, scopes, at: Date.now() }, withheld);
 		const infraCap = this.#issuer.mint(opts.name, "infra", INFRA_CAP_SCOPES);
 		instance.setCapability?.(businessCap);
 		instance.setInfraToken?.(infraCap);
@@ -280,44 +349,61 @@ export class Kernel {
 		}
 		Kernel.#moduleLoader.setPresetTopics(this.#presetTopics);
 
-		await this.#dockerManager.loadCommonDockerCompose(path.resolve(this.#basePath, "common", "docker"));
-		await this.#kernelServiceLoader.loadAll([this.#servicesPath, ...this.#presetLayerPaths("services")]);
+		await bootTimeline.measure("docker:compose", () => this.#dockerManager.loadCommonDockerCompose(path.resolve(this.#basePath, "common", "docker")));
+		await bootTimeline.measure("services:kernel", () =>
+			this.#kernelServiceLoader.loadAll([this.#servicesPath, ...this.#presetLayerPaths("services")])
+		);
 
-		const excludeTests = process.env.ENABLE_TESTS !== "true" && !this.#isDevelopment;
+		// `ENABLE_TESTS` manda también en desarrollo: el árbol `apps/test` son 8 apps que
+		// nadie usa para iterar sobre features y que cuestan su propio hijo de bundler.
+		const excludeTests = process.env.ENABLE_TESTS !== "true";
 		const excludeList = excludeTests ? ["BaseApp.ts", "AppWithSeo.ts", "test"] : ["BaseApp.ts", "AppWithSeo.ts"];
 
 		// Las UI libraries de presets cargan antes que cualquier otra app: hosts de src o
 		// de otros presets pueden declararlas en uiDependencies, y la carga de presets es
 		// secuencial/alfabética (sin este pase, un host anterior espera 30s por la lib).
 		const presetUiLibs = await this.#collectPresetUiLibs(excludeList);
-		for (const lib of presetUiLibs) {
-			await loadLayerRecursive(lib.path, this.#appLoader.loadApp, excludeList, this.#fileExtension, this.#logger, () => this.#isShuttingDown);
-		}
-		const presetExcludeList = [...excludeList, ...presetUiLibs.map((lib) => lib.dirName)];
+		const semaphore = new LoadSemaphore({ maxParallel: LoadSemaphore.defaultMaxParallel(), probe: new MemoryProbe(), logger: this.#logger });
+		const layerOptions = this.#layerLoadOptions(excludeList, semaphore);
+		try {
+			// Las UI libs van en serie y sin gate: son el cuello del que todos cuelgan.
+			await bootTimeline.measure("apps:preset-uilibs", async () => {
+				for (const lib of presetUiLibs) {
+					await loadLayerRecursive(lib.path, { ...layerOptions, gate: undefined });
+				}
+			});
+			const presetExcludeList = [...excludeList, ...presetUiLibs.map((lib) => lib.dirName)];
 
-		await loadLayerRecursive(
-			this.#appsPath,
-			this.#appLoader.loadApp,
-			excludeList,
-			this.#fileExtension,
-			this.#logger,
-			() => this.#isShuttingDown
-		);
-		for (const presetAppsPath of this.#presetLayerPaths("apps")) {
-			await loadLayerRecursive(
-				presetAppsPath,
-				this.#appLoader.loadApp,
-				presetExcludeList,
-				this.#fileExtension,
-				this.#logger,
-				() => this.#isShuttingDown
-			);
+			await bootTimeline.measure("apps:src", () => loadLayerRecursive(this.#appsPath, layerOptions));
+			await bootTimeline.measure("apps:presets", async () => {
+				const presetOptions = this.#layerLoadOptions(presetExcludeList, semaphore);
+				await Promise.all(this.#presetLayerPaths("apps").map((appsPath) => loadLayerRecursive(appsPath, presetOptions)));
+			});
+			this.#logger.logDebug(`[boot] techo de carga ${semaphore.stats.ceiling} (freno: ${semaphore.stats.brake})`);
+		} finally {
+			semaphore.dispose();
 		}
 
 		this.#startWatchers();
 		await this.#refreshUiImportMaps();
 		this.#scheduleStartupReady();
 		this.#scheduleStatusInterval();
+	}
+
+	/**
+	 * Opciones de carga de una capa de apps. El `gate` es el MISMO semáforo para todas las
+	 * ramas (capas de `src` y de cada preset): si cada rama trajera el suyo, el techo sería
+	 * por rama y el pico real se multiplicaría por la cantidad de ramas en vuelo.
+	 */
+	#layerLoadOptions(excludeList: string[], semaphore: LoadSemaphore): LayerLoadOptions {
+		return {
+			loader: this.#appLoader.loadApp,
+			exclude: excludeList,
+			fileExtension: this.#fileExtension,
+			logger: this.#logger,
+			isShuttingDown: () => this.#isShuttingDown,
+			gate: (label, fn) => semaphore.run(label, fn),
+		};
 	}
 
 	async #discoverPresetTopics(): Promise<string[]> {
@@ -356,7 +442,9 @@ export class Kernel {
 			const dir = { provider: this.#providersPath, utility: this.#utilitiesPath, service: this.#servicesPath }[type] as string;
 			watchLayer(dir, this.#fileExtension, this.#layerEventHandlers(type), { isStartingUp });
 		}
-		watchLayer(this.#appsPath, this.#fileExtension, this.#layerEventHandlers("app"), {
+		// Un único árbol chokidar sobre `src/apps`: lo comparten el router de `index.ts` y el
+		// ConfigWatcher (`.json`), en vez de montar dos árboles idénticos sobre los mismos directorios.
+		const appsWatcher = watchLayer(this.#appsPath, this.#fileExtension, this.#layerEventHandlers("app"), {
 			isStartingUp,
 			exclude: ["BaseApp.ts", "AppWithSeo.ts"],
 		});
@@ -379,6 +467,7 @@ export class Kernel {
 			reloadAppInstance: this.#appLoader.reloadAppInstance,
 			onNewAppConfig: (appFile) => this.#onNewAppConfig(appFile),
 			isPendingPath: (p) => this.#disabledRegistry.isPendingPath(p),
+			watcher: appsWatcher,
 		}).start();
 
 		// Presets agregados en runtime: se adoptan (watcher de topic) pero sus módulos
@@ -459,7 +548,9 @@ export class Kernel {
 
 	async #refreshUiImportMaps(): Promise<void> {
 		try {
-			const uiFederation = this.#registry.getService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
+			// Por identidad pinneada: `refreshAllImportMaps` recibe `platform:infra`.
+			const uiFederation =
+				this.#registry.getPlatformService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
 			if (uiFederation) await uiFederation.refreshAllImportMaps(this.#platformCap);
 			else this.#logger.logWarn("UIFederationService no encontrado");
 		} catch (error: any) {
@@ -471,6 +562,8 @@ export class Kernel {
 		setTimeout(() => {
 			this.#isStartingUp = false;
 			this.#logger.logInfo("HMR está activo.");
+			// Acá el arranque terminó de verdad (los builds que siguen corriendo son watchers, no boot).
+			bootTimeline.finish();
 		}, 10000);
 	}
 

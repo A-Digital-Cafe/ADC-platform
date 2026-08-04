@@ -16,7 +16,6 @@ import { mergeAppConfigs, readBaseConfig } from "../core/apps/AppConfigMerger.js
 export abstract class BaseApp extends BaseModule implements IApp {
 	protected readonly appDir: string;
 	private uiModuleRegistered = false;
-	readonly #kernel: Kernel;
 
 	constructor(
 		kernel: Kernel,
@@ -25,7 +24,6 @@ export abstract class BaseApp extends BaseModule implements IApp {
 		_appFilePath?: string
 	) {
 		super(kernel, config);
-		this.#kernel = kernel;
 		if (_appFilePath) {
 			this.appDir = path.dirname(_appFilePath);
 		} else {
@@ -97,14 +95,15 @@ export abstract class BaseApp extends BaseModule implements IApp {
 
 	/**
 	 * Carga los módulos de la app después de combinar las configuraciones. Es operación
-	 * privilegiada (instancia código, registra módulos): usa la infraCap contenida.
+	 * privilegiada (instancia código, registra módulos): la delega en `BaseModule`, que
+	 * usa la infraCap contenida y la consume al terminar.
 	 * El kernel debe haber provisionado la app (`provisionModule`) antes de llamarla.
 	 */
 	public async loadModulesFromConfig(): Promise<void> {
 		try {
 			await this.#mergeModuleConfigs();
 			if (this.config) {
-				await this.getModuleLoader().loadAllModulesFromDefinition(this.config, this.#kernel);
+				await this.loadDefinitionModules();
 			}
 		} catch (error) {
 			this.logger.logError(`Error procesando la configuración de módulos: ${error}`);

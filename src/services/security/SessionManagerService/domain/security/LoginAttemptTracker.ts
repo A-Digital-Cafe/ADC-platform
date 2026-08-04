@@ -174,12 +174,10 @@ export class LoginAttemptTracker {
 
 	async #incrementLoginAttempts(userId: string): Promise<number> {
 		if (this.#redis) {
-			const key = `${REDIS_PREFIX.LOGIN_ATTEMPTS}${userId}`;
-			const count = await this.#redis.incr(key);
-			if (count === 1) {
-				await this.#redis.expire(key, TTL.LOGIN_ATTEMPTS);
-			}
-			return count;
+			// `incrWithTtl` y no `incr` + `expire`: acá el contador bloquea una CUENTA, así que una
+			// clave que quede sin TTL (corte entre ambos comandos) es un bloqueo permanente del
+			// usuario. El script además repara las que ya hayan quedado así.
+			return this.#redis.incrWithTtl(`${REDIS_PREFIX.LOGIN_ATTEMPTS}${userId}`, TTL.LOGIN_ATTEMPTS);
 		}
 
 		const current = this.#loginAttempts.get(userId) || 0;
@@ -197,12 +195,8 @@ export class LoginAttemptTracker {
 
 	async #incrementRefreshAttempts(userId: string): Promise<number> {
 		if (this.#redis) {
-			const key = `${REDIS_PREFIX.REFRESH_ATTEMPTS}${userId}`;
-			const count = await this.#redis.incr(key);
-			if (count === 1) {
-				await this.#redis.expire(key, TTL.REFRESH_ATTEMPTS);
-			}
-			return count;
+			// Ídem `#incrementLoginAttempts`: TTL atómico o la sesión queda bloqueada para siempre.
+			return this.#redis.incrWithTtl(`${REDIS_PREFIX.REFRESH_ATTEMPTS}${userId}`, TTL.REFRESH_ATTEMPTS);
 		}
 
 		const current = this.#refreshAttempts.get(userId) || 0;

@@ -60,6 +60,26 @@ export interface TokenExchangeResult {
 }
 
 /**
+ * Perfil que un proveedor OAuth devuelve tras el intercambio de código.
+ *
+ * `emailVerified` es la parte que importa para seguridad: el `email` lo elige quien crea
+ * la cuenta en el proveedor, así que sin el flag de verificación no dice nada sobre a quién
+ * pertenece. Sólo un email verificado puede usarse para emparejar con una cuenta existente
+ * o para persistirse en el alta (ver `getOrCreateUser`).
+ */
+export interface ProviderUserProfile {
+	id: string;
+	username: string;
+	/** Email declarado por el proveedor. **No confiable** sin `emailVerified`. */
+	email?: string;
+	/** El proveedor confirma que el email está verificado. Ausente = no verificado. */
+	emailVerified?: boolean;
+	avatar?: string;
+	/** Payload crudo del proveedor */
+	metadata?: Record<string, any>;
+}
+
+/**
  * Interface para proveedores OAuth (Strategy Pattern)
  */
 export interface IOAuthProvider {

@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
-import type { ModuleRegistry, ModuleType } from "../../utils/registry/ModuleRegistry.js";
+import type { Module, ModuleRegistry, ModuleType } from "../../utils/registry/ModuleRegistry.js";
 import type { ModuleRegistrar } from "./ModuleRegistrar.js";
 import type { AppLoader } from "../apps/AppLoader.js";
 
@@ -28,7 +28,7 @@ export class DependencyReloader {
 		try {
 			const dependents = this.#collectDependentsByFile(moduleType, filePath);
 			await this.registry.unloadModule(moduleType, this.kernelKey, filePath);
-			await this.registrar.registerByPath(moduleType, filePath);
+			this.#repin(moduleType, path.basename(path.dirname(filePath)), await this.registrar.registerByPath(moduleType, filePath));
 			await this.#reloadApps(dependents, `${moduleType}@${path.basename(path.dirname(filePath))}`);
 		} catch (error: any) {
 			this.logger.logError(`Error recargando ${moduleType} desde ${filePath}: ${error.message ?? error}`);
@@ -44,10 +44,24 @@ export class DependencyReloader {
 	reloadByName = async (moduleType: ModuleType, name: string, version: string = "latest", language: string = "typescript"): Promise<void> => {
 		const dependents = this.registry.getDependentAppNamesByModuleName(moduleType, name);
 		await this.registry.unloadModulesByName(moduleType, this.kernelKey, name);
-		await this.registrar.register(moduleType, { name, version, language });
+		this.#repin(moduleType, name, await this.registrar.register(moduleType, { name, version, language }));
 		this.logger.logOk(`${moduleType} '${name}' (${version}) recargado.`);
 		await this.#reloadApps(dependents, `${moduleType}:${name}@${version}`);
 	};
+
+	/**
+	 * Re-apunta el pin de un servicio de plataforma a la instancia recién cargada. Sin esto,
+	 * el kernel y el orquestador seguirían hablándole a la instancia detenida tras cada
+	 * enable/disable o recarga en caliente.
+	 *
+	 * Sólo re-pinnea nombres que YA estaban pinneados en el boot: un módulo nuevo no puede
+	 * colarse como servicio de plataforma por esta vía.
+	 */
+	#repin(moduleType: ModuleType, name: string, instance: Module | undefined): void {
+		if (moduleType !== "service" || !instance) return;
+		if (!this.registry.isPlatformService(name)) return;
+		this.registry.pinPlatformService(name, instance, this.kernelKey);
+	}
 
 	#collectDependentsByFile(moduleType: ModuleType, filePath: string): string[] {
 		const uniqueKey = this.registry.getFileToUniqueKeyMap(moduleType).get(filePath);

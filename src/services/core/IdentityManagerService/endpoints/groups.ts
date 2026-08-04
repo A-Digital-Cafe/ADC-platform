@@ -7,7 +7,7 @@ import type IdentityManagerService from "../index.js";
 import * as GS from "./schemas/groups.js";
 import { UsersArrayResponse } from "./schemas/users.js";
 import { SuccessResponse } from "./schemas/common.js";
-import { assertCanAssignRoles, assertCanManageUser } from "../domain/hierarchy.js";
+import { assertCanAssignRoles, assertCanGrantPermissions, assertCanManageUser } from "../domain/hierarchy.js";
 
 /**
  * Verifica que un grupo sea accesible para el caller.
@@ -172,6 +172,19 @@ export class GroupEndpoints {
 	) {
 		const callerOrgId = ctx.user?.orgId;
 		await assertGroupOrgAccess(GroupEndpoints.identity, ctx.params.groupId, callerOrgId, ctx.token!);
+		// El body acepta `permissions` y `GROUP_UPDATABLE_FIELDS` los persiste: sin este guard
+		// sería un camino de escritura de permisos sin control de contenido, alcanzable desde
+		// un caller con contexto de organización.
+		if (ctx.data?.permissions?.length) {
+			const currentGroup = await GroupEndpoints.identity.groups.getGroup(ctx.params.groupId, ctx.token!);
+			await assertCanGrantPermissions(
+				GroupEndpoints.identity.permissions,
+				ctx.user?.id,
+				ctx.data.permissions,
+				callerOrgId,
+				currentGroup?.permissions
+			);
+		}
 		if (ctx.data?.roleIds?.length) {
 			await validateRoleIdsContext(GroupEndpoints.identity, ctx.data.roleIds, callerOrgId, ctx.token!);
 			// Jerarquía: sólo roles agregados (los existentes ya estaban en el grupo)

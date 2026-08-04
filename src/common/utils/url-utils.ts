@@ -9,6 +9,19 @@ export function isPrivateHost(hostname: string): boolean {
 	return false;
 }
 
+/**
+ * Hostname del header `Host` (`192.168.1.152:3000` → `192.168.1.152`), o `undefined` si
+ * viene vacío o mal formado. IPv6 conserva los corchetes, igual que `URL.hostname`.
+ */
+export function hostnameFromHostHeader(host: string | undefined): string | undefined {
+	if (!host) return undefined;
+	try {
+		return new URL(`http://${host}`).hostname || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Dev mode: localhost, 127.0.0.1 or private/LAN IP */
 export const IS_DEV = isPrivateHost(globalThis.location?.hostname ?? "");
 

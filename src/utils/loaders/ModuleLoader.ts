@@ -6,12 +6,13 @@ import type { BaseProvider } from "../../providers/BaseProvider.ts";
 import type { IUtility } from "../../utilities/BaseUtility.ts";
 import type { BaseService } from "../../services/BaseService.ts";
 import { Kernel } from "../../kernel.js";
-import type { ModuleRegistry } from "../registry/ModuleRegistry.js";
+import { moduleKeyConfig, type ModuleRegistry } from "../registry/ModuleRegistry.js";
 import { Logger } from "../logger/Logger.js";
 import { VersionResolver } from "../VersionResolver.js";
 import { safeParseJson, parseJsonOrThrow } from "@common/utils/json-schema.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import { isInsideAnyBase } from "@common/utils/path-containment.ts";
+import { runDevCleanup } from "@common/utils/dev-cleanup.ts";
 
 export class ModuleLoader {
 	readonly #basePath = path.resolve(process.cwd(), "src");
@@ -184,6 +185,28 @@ export class ModuleLoader {
 		}
 	}
 
+	/**
+	 * Construcciones en vuelo, por clave de módulo. Existe porque el patrón
+	 * `hasModule() → await loadX() → register()` tiene un `await` en el medio: con dos apps
+	 * cargando a la vez, ambas pasan el chequeo, ambas construyen y el registry descarta una
+	 * **después** de que abrió su conexión (Mongo/S3/RabbitMQ), dejándola viva y sin dueño.
+	 * Con single-flight la segunda espera a la primera en vez de construir en paralelo.
+	 */
+	readonly #inFlight = new Map<string, Promise<void>>();
+
+	/**
+	 * Corre `task` una sola vez por `key` mientras esté en vuelo. Los que llegan tarde
+	 * comparten la misma promesa —incluido su rechazo—, así que cada llamador conserva su
+	 * propio manejo de error (`failOnError`) alrededor de esta llamada.
+	 */
+	#loadOnce(key: string, task: () => Promise<void>): Promise<void> {
+		const pending = this.#inFlight.get(key);
+		if (pending) return pending;
+		const run = task().finally(() => this.#inFlight.delete(key));
+		this.#inFlight.set(key, run);
+		return run;
+	}
+
 	/** Lanza (envolviendo `error`) si la definición pide failOnError; si no, degrada a warn. */
 	static #failOrWarn(failOnError: boolean | undefined, message: string, error: unknown): void {
 		if (failOnError) throw new Error(message, { cause: error });
@@ -198,11 +221,19 @@ export class ModuleLoader {
 		}
 	}
 
-	/** Registra la utility y, si su nombre contiene "/", también el nombre base como alias. */
+	/**
+	 * Registra la utility y, si el nombre del config trae ruta ("attachments/attachments-utility"),
+	 * también el nombre base como alias.
+	 *
+	 * El alias se omite cuando ya coincide con `utility.name` —el caso normal, porque la clase
+	 * se auto-declara con el nombre de su carpeta—: sería registrar la MISMA instancia bajo la
+	 * MISMA `uniqueKey`, que cae en la rama `alreadyExists` del registry y duplica su log y su
+	 * refCount.
+	 */
 	#registerUtilityWithAlias(registry: ModuleRegistry, utility: IUtility, config: IModuleConfig, appName?: string | null): void {
 		registry.registerUtility(utility.name, utility, config, appName);
-		if (config.name.includes("/")) {
-			const baseName = config.name.split("/").pop()!;
+		const baseName = config.name.includes("/") ? config.name.split("/").pop()! : null;
+		if (baseName && baseName !== utility.name) {
 			registry.registerUtility(baseName, utility, config, appName);
 		}
 	}
@@ -223,13 +254,16 @@ export class ModuleLoader {
 				Logger.debug(`[ModuleLoader] Provider opcional ${config.name} omitido (uri vacía)`);
 				continue;
 			}
-			if (registry.hasModule("provider", config.name, config.config)) {
-				Logger.debug(`[ModuleLoader] Provider global ${config.name} ya existe, saltando`);
-				continue;
-			}
+			const keyConfig = moduleKeyConfig(config);
 			try {
-				const provider = await this.loadProvider(config);
-				this.#registerProviderBothNames(registry, provider, config, null);
+				await this.#loadOnce(`provider|${registry.getUniqueKey(config.name, keyConfig)}`, async () => {
+					if (registry.hasModule("provider", config.name, keyConfig)) {
+						Logger.debug(`[ModuleLoader] Provider global ${config.name} ya existe, saltando`);
+						return;
+					}
+					const provider = await this.loadProvider(config);
+					this.#registerProviderBothNames(registry, provider, config, null);
+				});
 			} catch (error) {
 				ModuleLoader.#failOrWarn(modulesConfig.failOnError, `Error cargando provider ${providerConfig.name}`, error);
 			}
@@ -245,8 +279,7 @@ export class ModuleLoader {
 				continue;
 			}
 			try {
-				const utility = await this.loadUtility(utilityConfig);
-				this.#registerUtilityWithAlias(registry, utility, utilityConfig, null);
+				await this.loadAndRegisterUtility(registry, utilityConfig, null);
 			} catch (error) {
 				ModuleLoader.#failOrWarn(modulesConfig.failOnError, `Error cargando utility ${utilityConfig.name}`, error);
 			}
@@ -264,7 +297,13 @@ export class ModuleLoader {
 			try {
 				await this.#loadServiceFromDefinition(serviceConfig, modulesConfig, kernel, registry);
 			} catch (error) {
-				ModuleLoader.#failOrWarn(modulesConfig.failOnError, `Error cargando service ${serviceConfig.name}`, error);
+				// `optional: true` declara que la ausencia del servicio es un escenario previsto
+				// (el consumidor lo resuelve con `tryGetMyService`, que devuelve undefined), así
+				// que una integración opcional caída no aborta al padre ni con `failOnError: true`.
+				// Misma semántica que `#shouldSkipOptionalProvider` y el grafo de dependencias
+				// (`DependencyGraph.#addReverse`).
+				const fatal = modulesConfig.failOnError && !serviceConfig.optional;
+				ModuleLoader.#failOrWarn(fatal, `Error cargando service ${serviceConfig.name}`, error);
 			}
 		}
 	}
@@ -289,35 +328,46 @@ export class ModuleLoader {
 		// Config que define el uniqueKey del servicio
 		const serviceUniqueConfig = { ...serviceConfig.config, __providers: finalProviders };
 
-		if (registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
-			Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya existe, reutilizando instancia`);
-			registry.addModuleDependency("service", serviceConfig.name, serviceUniqueConfig);
-			return;
-		}
+		// Single-flight por NOMBRE de servicio, no por uniqueKey: el sistema ya sostiene una
+		// instancia por nombre (ver el reuso de más abajo), y es lo que impide que dos apps
+		// cargando en paralelo construyan el mismo servicio —con sus providers— por duplicado.
+		await this.#loadOnce(`service|${serviceConfig.name}`, async () => {
+			if (registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
+				Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya existe, reutilizando instancia`);
+				return;
+			}
 
-		// Reutilizar instancia kernel-mode (registrada con su propio uniqueKey) si existe
-		if (registry.getUniqueKeysByName("service", serviceConfig.name).length > 0) {
-			Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya cargado (kernel-mode u otro), reutilizando`);
-			registry.addModuleDependency("service", serviceConfig.name);
-			return;
-		}
+			// Reutilizar instancia kernel-mode (registrada con su propio uniqueKey) si existe
+			if (registry.getUniqueKeysByName("service", serviceConfig.name).length > 0) {
+				Logger.debug(`[ModuleLoader] Servicio ${serviceConfig.name} ya cargado (kernel-mode u otro), reutilizando`);
+				return;
+			}
 
-		await this.#loadServiceScopedProviders(mutableServiceConfig, serviceConfig.name, serviceEnvVars, modulesConfig, registry);
-		await this.#loadServiceScopedUtilities(mutableServiceConfig, serviceConfig.name, modulesConfig, registry);
+			await this.#loadServiceScopedProviders(mutableServiceConfig, serviceConfig.name, serviceEnvVars, modulesConfig, registry);
+			await this.#loadServiceScopedUtilities(mutableServiceConfig, serviceConfig.name, modulesConfig, registry);
 
-		// Cargar el servicio (que ahora puede acceder a sus providers del kernel)
-		const service = await this.loadService(mutableServiceConfig, kernel);
+			// Cargar el servicio (que ahora puede acceder a sus providers del kernel)
+			const service = await this.loadService(mutableServiceConfig, kernel);
 
-		// Registrar los providers del servicio como dependencias de la app (reference counting)
-		this.#registerServiceProviderDeps(mutableServiceConfig, serviceEnvVars, registry);
+			// Registrar los providers del servicio como dependencias de la app (reference counting)
+			this.#registerServiceProviderDeps(mutableServiceConfig, serviceEnvVars, registry);
 
-		// Registrar el servicio con el config que incluye providers
-		registry.registerService(service.name, service, {
-			name: serviceConfig.name,
-			version: serviceConfig.version,
-			language: serviceConfig.language,
-			config: serviceUniqueConfig,
+			// Registrar el servicio con el config que incluye providers
+			registry.registerService(service.name, service, {
+				name: serviceConfig.name,
+				version: serviceConfig.version,
+				language: serviceConfig.language,
+				config: serviceUniqueConfig,
+			});
 		});
+
+		// Fuera del single-flight: cada app que declaró el servicio suma su referencia, la haya
+		// construido ella o la que ganó la carrera (`addModuleDependency` es idempotente).
+		if (registry.hasModule("service", serviceConfig.name, serviceUniqueConfig)) {
+			registry.addModuleDependency("service", serviceConfig.name, serviceUniqueConfig);
+		} else {
+			registry.addModuleDependency("service", serviceConfig.name);
+		}
 	}
 
 	/** Variables de entorno del `.env` del servicio (objeto vacío si no hay o falla). */
@@ -399,14 +449,19 @@ export class ModuleLoader {
 				Logger.debug(`[ModuleLoader] Provider opcional ${config.name} omitido (uri vacía)`);
 				continue;
 			}
-			if (registry.hasModule("provider", config.name, config.config)) {
-				Logger.debug(`[ModuleLoader] Provider ${config.name} ya existe, reutilizando`);
-				registry.addModuleDependency("provider", config.name, config.config);
-				continue;
-			}
+			const keyConfig = moduleKeyConfig(config);
 			try {
-				const provider = await this.loadProvider(config, serviceEnvVars);
-				this.#registerProviderBothNames(registry, provider, config);
+				await this.#loadOnce(`provider|${registry.getUniqueKey(config.name, keyConfig)}`, async () => {
+					if (registry.hasModule("provider", config.name, keyConfig)) {
+						Logger.debug(`[ModuleLoader] Provider ${config.name} ya existe, reutilizando`);
+						return;
+					}
+					const provider = await this.loadProvider(config, serviceEnvVars);
+					this.#registerProviderBothNames(registry, provider, config);
+				});
+				// Fuera del single-flight: el que espera tiene su PROPIO contexto de carga, así
+				// que su app también tiene que quedar anotada como dependiente (es idempotente).
+				registry.addModuleDependency("provider", config.name, keyConfig);
 			} catch (error) {
 				ModuleLoader.#failOrWarn(
 					modulesConfig.failOnError,
@@ -415,6 +470,59 @@ export class ModuleLoader {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Nombre bajo el que quedó registrada la utility de cada ruta ya cargada. Se consulta
+	 * contra el registry antes de confiar en él: tras un restart o un hot-reload la instancia
+	 * ya no está y hay que volver a construirla.
+	 */
+	readonly #loadedUtilityNames = new Map<string, string>();
+
+	/**
+	 * Ruta en disco de la utility, para identificarla ANTES de construirla.
+	 *
+	 * La deduplicación va por ruta y no por nombre a propósito: el nombre bajo el que una
+	 * utility se registra es el que su clase se auto-declara, así que dos utilities DISTINTAS
+	 * de presets distintos pueden reclamar el mismo. Deduplicando por nombre, la segunda no se
+	 * cargaría nunca y sus consumidores recibirían la ajena en silencio; por ruta, ambas se
+	 * cargan y la colisión sigue saliendo como warning del registry, que es lo que hay que ver.
+	 */
+	async #resolveUtilityPath(config: IModuleConfig): Promise<string | null> {
+		const resolved = await VersionResolver.resolveModuleVersion(
+			this.#utilitiesPath,
+			config.name,
+			config.version || "latest",
+			config.language || "typescript"
+		);
+		return resolved?.path ?? null;
+	}
+
+	/**
+	 * Carga la utility —o reutiliza la que ya esté registrada— y la registra con su alias.
+	 * Devuelve el nombre bajo el que quedó, que es el que entiende `addModuleDependency`.
+	 *
+	 * Punto de entrada ÚNICO a propósito (lo usan los dos caminos de acá abajo y
+	 * `BaseModule.#loadUtilities`): sin deduplicación central, una utility declarada por N
+	 * servicios se construye N veces y el registry descarta las sobrantes DESPUÉS de que ya
+	 * corrieron `start()`, dejándolas iniciadas y sin dueño (nadie les llama `stop()`).
+	 */
+	async loadAndRegisterUtility(registry: ModuleRegistry, config: IModuleConfig, appName?: string | null): Promise<string> {
+		const keyConfig = moduleKeyConfig(config);
+		const dedupKey = (await this.#resolveUtilityPath(config)) ?? config.name;
+		await this.#loadOnce(`utility|${registry.getUniqueKey(dedupKey, keyConfig)}`, async () => {
+			const known = this.#loadedUtilityNames.get(dedupKey);
+			// Se reutiliza sólo si la instancia SIGUE registrada: tras un restart desde el
+			// panel o un hot-reload, el registry la sacó y hay que volver a construirla.
+			if (known && registry.getUniqueKeysByName("utility", known).length > 0) {
+				Logger.debug(`[ModuleLoader] Utility ${config.name} ya cargada, reutilizando`);
+				return;
+			}
+			const utility = await this.loadUtility(config);
+			this.#registerUtilityWithAlias(registry, utility, config, appName);
+			this.#loadedUtilityNames.set(dedupKey, utility.name);
+		});
+		return this.#loadedUtilityNames.get(dedupKey) ?? config.name;
 	}
 
 	/** Utilities propias (no globales) del servicio. */
@@ -431,8 +539,12 @@ export class ModuleLoader {
 				continue;
 			}
 			try {
-				const utility = await this.loadUtility(utilityConfig);
-				this.#registerUtilityWithAlias(registry, utility, utilityConfig);
+				const registeredName = await this.loadAndRegisterUtility(registry, utilityConfig);
+				// Fuera del single-flight: el que espera tiene su PROPIO contexto de carga, así
+				// que su app también tiene que quedar anotada como dependiente (es idempotente).
+				// Sin esto el refCount se queda en 1 y la primera app que se descargue le hace
+				// `stop()` a una utility que las demás siguen usando.
+				registry.addModuleDependency("utility", registeredName, moduleKeyConfig(utilityConfig));
 			} catch (error) {
 				ModuleLoader.#failOrWarn(
 					modulesConfig.failOnError,
@@ -454,7 +566,7 @@ export class ModuleLoader {
 			const config = this.interpolateEnvVars(providerConfig, serviceEnvVars);
 			if (ModuleLoader.#shouldSkipOptionalProvider(config)) continue;
 			// addModuleDependency también maneja automáticamente los aliases (type)
-			registry.addModuleDependency("provider", config.name, config.config);
+			registry.addModuleDependency("provider", config.name, moduleKeyConfig(config));
 		}
 	}
 
@@ -659,6 +771,7 @@ export class ModuleLoader {
 			declared: Array.isArray(serviceConfig.privileges) ? serviceConfig.privileges : undefined,
 		});
 		await instance.start(lifecycleToken);
+		runDevCleanup(instance, `service ${serviceName}`);
 
 		const registrationConfig: IModuleConfig = {
 			name: serviceName,
@@ -683,12 +796,15 @@ export class ModuleLoader {
 				Logger.debug(`[ModuleLoader] Provider opcional ${providerConfig.name} omitido (uri vacía)`);
 				continue;
 			}
-			if (registry.hasModule("provider", providerConfig.name, providerConfig.config)) {
-				Logger.debug(`[ModuleLoader] Provider ${providerConfig.name} ya existe`);
-				continue;
-			}
-			const provider = await this.loadProvider(providerConfig, serviceEnvVars);
-			this.#registerProviderBothNames(registry, provider, providerConfig, null);
+			const keyConfig = moduleKeyConfig(providerConfig);
+			await this.#loadOnce(`provider|${registry.getUniqueKey(providerConfig.name, keyConfig)}`, async () => {
+				if (registry.hasModule("provider", providerConfig.name, keyConfig)) {
+					Logger.debug(`[ModuleLoader] Provider ${providerConfig.name} ya existe`);
+					return;
+				}
+				const provider = await this.loadProvider(providerConfig, serviceEnvVars);
+				this.#registerProviderBothNames(registry, provider, providerConfig, null);
+			});
 		}
 	}
 }

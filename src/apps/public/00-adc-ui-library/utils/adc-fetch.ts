@@ -11,6 +11,7 @@
 import { showError } from "./error-handler.js";
 import { forceLogoutAndRefresh } from "./auth-sync.js";
 import { appendCsrfHeader } from "./csrf.js";
+import { ensureFreshSession, refreshSession, startSessionRefresh } from "./auth-refresh.js";
 import ADCCustomError, { HttpError } from "@common/types/ADCCustomError.js";
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 
@@ -149,8 +150,13 @@ function sanitizeIdempotencyKey(key: string): string {
 	return key;
 }
 
+/**
+ * El 401 queda fuera del breaker: con renovación proactiva significa "sesión
+ * terminada", no "backend caído", y ya tiene su propio camino (renovar y reintentar).
+ * Contarlo haría que una ráfaga de sesiones vencidas fuerce un logout duro.
+ */
 function isCircuitBreakerStatus(status?: number): status is number {
-	return typeof status === "number" && status >= 400 && status < 600;
+	return typeof status === "number" && status >= 400 && status < 600 && status !== 401;
 }
 
 async function registerCircuitBreakerFailure(status?: number): Promise<boolean> {
@@ -378,14 +384,24 @@ export function createAdcApi(config: AdcApiConfig) {
 	// Build base URL based on environment
 	const baseUrl = IS_DEV && devPort ? getDevUrl(devPort, basePath) : basePath;
 
+	// La renovación proactiva se arranca al crear el primer cliente: cualquier app que
+	// hable con la API la obtiene sin tener que acordarse de inicializarla.
+	startSessionRefresh();
+
 	async function request<T, TData = Record<string, unknown>>(
 		method: HttpMethod,
 		path: string,
-		options: RequestOptions<TData> = {}
+		options: RequestOptions<TData> = {},
+		/** Interno: marca el reintento posterior a renovar, para no reintentar en bucle. */
+		isRetry = false
 	): Promise<AdcFetchResult<T>> {
 		const { params, body, headers, translateParams, idempotencyKey, idempotencyData, signal, skipCsrf } = options;
 		const rawIdempotencyKey = idempotencyData === undefined ? idempotencyKey : hashIdempotency(idempotencyData);
 		const resolvedIdempotencyKey = rawIdempotencyKey ? sanitizeIdempotencyKey(rawIdempotencyKey) : undefined;
+
+		// Renovación proactiva: si al token le quedan menos de unos minutos, se renueva
+		// ANTES de mandar la request. Cuesta una comparación numérica cuando no hace falta.
+		if (credentials !== "omit") await ensureFreshSession();
 
 		const url = `${baseUrl}${path}${buildQueryString(params)}`;
 		const requestHeaders = {
@@ -398,7 +414,7 @@ export function createAdcApi(config: AdcApiConfig) {
 		const fetchOptions: RequestInit = {
 			method,
 			credentials,
-			headers: skipCsrf ? requestHeaders : await appendCsrfHeader(method, url, requestHeaders, credentials, signal),
+			headers: skipCsrf ? requestHeaders : await appendCsrfHeader(method, url, requestHeaders, credentials),
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		};
 		const effectiveSignal = withTimeoutSignal(signal, REQUEST_TIMEOUT_MS);
@@ -415,6 +431,13 @@ export function createAdcApi(config: AdcApiConfig) {
 
 			if (response.status === 429) {
 				return await handleRateLimitedResponse(method, url, response, options.silent);
+			}
+
+			// Red de seguridad: el token venció antes de lo que creíamos (suspensión de la
+			// máquina, reloj corrido, cookie borrada). Se renueva una vez y se reintenta en
+			// silencio; si la renovación falla, el 401 sigue su curso normal.
+			if (response.status === 401 && !isRetry && credentials !== "omit" && (await refreshSession(true))) {
+				return await request<T, TData>(method, path, options, true);
 			}
 
 			return await toFetchResult<T>(method, response, options.silent);

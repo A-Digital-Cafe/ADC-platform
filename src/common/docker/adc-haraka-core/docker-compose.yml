@@ -34,6 +34,24 @@ services:
       - adc_haraka_queue:/app/queue
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      # Probe con `node` porque la imagen no trae `nc` ni `curl` (sólo ca-certificates
+      # y libcap2-bin), y comprueba el listener SMTP en sí, que es lo que importa:
+      # el proceso puede estar vivo con el 25 todavía cerrado.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('net').connect(25,'127.0.0.1').on('connect',function(){process.exit(0)}).on('error',function(){process.exit(1)})",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Igual que rabbit/redis: sin start_interval el primer chequeo espera el `interval`
+      # entero y el arranque en frío reporta healthy ~10 s tarde sin motivo.
+      start_period: 30s
+      start_interval: 500ms
     restart: unless-stopped
     logging:
       # Retención local acotada: sin esto el json-file default crece sin tope.

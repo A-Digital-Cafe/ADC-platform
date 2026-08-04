@@ -5,6 +5,7 @@ import { AttachmentsManager, type AttachmentsManagerOptions } from "./managers/A
 import { UserKeyStore, resolveStorageMasterKey } from "./crypto/userKeys.js";
 
 export type { AttachmentsManagerOptions };
+export type { S3Resolver } from "./managers/AttachmentsManager.js";
 export { AttachmentsManager, UserKeyStore, resolveStorageMasterKey };
 
 export interface CreateAttachmentsManagerOptions extends Omit<AttachmentsManagerOptions, "model"> {

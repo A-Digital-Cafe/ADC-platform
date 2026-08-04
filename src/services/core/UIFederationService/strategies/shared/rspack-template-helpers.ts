@@ -1,7 +1,77 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { normalizeForConfig, getServerHost } from "../../utils/fs/path-resolver.js";
 import type { IBuildContext } from "../types.js";
 import { buildExposesConfig } from "./rspack-helpers.js";
+import { BUNDLER_CACHE_CONTRACT, bundlerCacheDir } from "@common/utils/bundler-cache.ts";
+
+/** Versión de `@rspack/core` en uso: una caché escrita por otra versión no se reutiliza. */
+let cachedRspackVersion: string | null = null;
+function rspackVersion(): string {
+	if (cachedRspackVersion) return cachedRspackVersion;
+	try {
+		const pkg = fs.readFileSync(path.resolve(process.cwd(), "node_modules", "@rspack", "core", "package.json"), "utf8");
+		cachedRspackVersion = String(JSON.parse(pkg).version ?? "unknown");
+	} catch {
+		cachedRspackVersion = "unknown";
+	}
+	return cachedRspackVersion;
+}
+
+/**
+ * Archivos cuyo hash invalida la caché. Es la mitad importante del diseño: lo que rspack
+ * **no** ve como módulo (configs generadas, lockfile, manifiestos) tiene que estar acá o
+ * la caché sobrevive a cambios que sí cambian el resultado.
+ *
+ * La config generada cubre por transitividad a los generadores: cualquier cambio en el
+ * template, los aliases o la lista de módulos registrados termina en su contenido. Y como
+ * rspack invalida por **hash** y no por mtime, regenerarla idéntica en cada boot no
+ * invalida nada.
+ */
+function cacheBuildDependencies(context: IBuildContext, configPath: string, extraConfigs: string[]): string[] {
+	const { module } = context;
+	const root = process.cwd();
+	const candidates = [
+		configPath,
+		...extraConfigs,
+		path.join(module.appDir, "package.json"),
+		path.join(module.appDir, "config.json"),
+		path.join(module.appDir, "default.json"),
+		path.join(root, "package.json"),
+		path.join(root, "bun.lock"),
+	];
+	// `fs.existsSync` acá y no en el build: un `buildDependencies` con un path inexistente
+	// hace que rspack descarte la caché en cada corrida (queda siempre "inválida").
+	return [...new Set(candidates)].filter((file) => fs.existsSync(file));
+}
+
+/**
+ * Bloque `cache` de rspack 2 (top-level; en rspack 1.x vivía en `experiments.cache`).
+ *
+ * Se apaga con `ADC_RSPACK_CACHE=false`. El aislamiento es por `version` + directorio:
+ * contrato de caché, versión de rspack y modo van en la clave, así que un upgrade de
+ * rspack o un cambio de dev↔prod nunca reutilizan artefactos de la combinación anterior.
+ */
+export function buildCacheBlock(context: IBuildContext, mode: string, configPath: string, extraConfigs: string[]): string {
+	if (process.env.ADC_RSPACK_CACHE === "false") return "";
+	const { module, namespace } = context;
+	const directory = bundlerCacheDir(namespace, module.uiConfig.name);
+	const version = `${BUNDLER_CACHE_CONTRACT}|rspack-${rspackVersion()}|${mode}`;
+	const deps = cacheBuildDependencies(context, configPath, extraConfigs).map((file) => `'${normalizeForConfig(file)}'`);
+
+	return `
+    cache: {
+        type: 'persistent',
+        version: '${version}',
+        buildDependencies: [
+            ${deps.join(",\n            ")}
+        ],
+        storage: {
+            type: 'filesystem',
+            directory: '${normalizeForConfig(directory)}',
+        },
+    },`;
+}
 
 /** Inserta el alias de Tailwind v4 si está habilitado. */
 export function injectTailwindAlias(aliasesObject: string, tailwindCssPath: string, appDir: string): string {

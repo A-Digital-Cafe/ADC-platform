@@ -1,4 +1,5 @@
 import { ILifecycle } from "../behaviours/ILifecycle.d.ts";
+import type { DevCleanupOptions, OrphanScan } from "@common/utils/dev-cleanup.ts";
 
 /**
  * Configuración de un módulo específico (Service, Provider, Utility).
@@ -37,6 +38,14 @@ export interface IModuleConfig {
 	failOnError?: boolean;
 
 	/**
+	 * Marca la dependencia como opcional: su ausencia o su fallo de carga **no** hacen
+	 * fallar al consumidor, aunque el padre declare `failOnError: true`. El consumidor la
+	 * resuelve con `tryGetMyService` (undefined si no está) y el grafo de dependencias no
+	 * cascadea la baja. Aplica a las entradas de `services`/`providers`, no al módulo raíz.
+	 */
+	optional?: boolean;
+
+	/**
 	 * Privilegios extra solicitados por el módulo, además de los defaults de su tier.
 	 * Son valores del enum `Scope` (`@common/security/Capability`) como strings (vienen
 	 * de `config.json`); se validan en runtime y NUNCA conceden scopes de infraestructura
@@ -53,4 +62,19 @@ export interface IModuleConfig {
 
 export interface IModule extends ILifecycle {
 	readonly name: string;
+
+	/**
+	 * Autolimpieza de **huérfanos propios** del módulo: filas/objetos que quedaron sin dueño
+	 * (el usuario, el recurso padre o el archivo ya no existen) y que ninguna operación normal
+	 * va a volver a tocar. Opcional: impleméntalo sólo si el módulo tiene datos que puedan
+	 * quedar colgados.
+	 *
+	 * Lo dispara el kernel una vez, apenas el módulo arranca, en fire‑and‑forget: no demora el
+	 * arranque y si falla sólo deja un warning. Con `dryRun` (todo entorno que no sea
+	 * desarrollo) **hay que reportar sin borrar**; el runner loguea lo devuelto.
+	 *
+	 * Reglas: nunca lanzar por un huérfano suelto (acumular y seguir), no tocar datos de otros
+	 * módulos (pedíselos a su dueño) y devolver un `OrphanScan` por colección revisada.
+	 */
+	devCleanup?(opts: DevCleanupOptions): Promise<OrphanScan[] | OrphanScan | void>;
 }

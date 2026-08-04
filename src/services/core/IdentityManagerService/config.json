@@ -2,7 +2,7 @@
 	"kernelMode": 60,
 	"name": "IdentityManagerService",
 	"uiName": "Cuentas",
-	"privileges": ["identity:internal", "moderation:internal"],
+	"privileges": ["identity:internal", "moderation:internal", "session:revoke"],
 	"version": "1.0.0",
 	"failOnError": true,
 	"providers": [

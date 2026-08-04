@@ -1,5 +1,5 @@
 import { UserAuthenticationResult } from "../../../../core/IdentityManagerService/dao/users.ts";
-import type { IOAuthProvider, OAuthProviderConfig, TokenExchangeResult } from "../../types.js";
+import type { IOAuthProvider, OAuthProviderConfig, ProviderUserProfile, TokenExchangeResult } from "../../types.js";
 
 /**
  * Proveedor de autenticación nativo de la plataforma
@@ -35,7 +35,7 @@ export class PlatformAuthProvider implements IOAuthProvider {
 	/**
 	 * Valida credenciales y retorna el perfil del usuario
 	 */
-	async getUserProfile(_accessToken: string): Promise<UserAuthenticationResult> {
+	async getUserProfile(_accessToken: string): Promise<ProviderUserProfile> {
 		throw new Error("PlatformAuthProvider requiere validación de credenciales");
 	}
 

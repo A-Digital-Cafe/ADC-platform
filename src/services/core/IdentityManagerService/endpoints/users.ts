@@ -6,7 +6,7 @@ import type IdentityManagerService from "../index.js";
 import type { Capability } from "@common/security/Capability.ts";
 import * as US from "./schemas/users.js";
 import { SuccessResponse, OrgIdQuery } from "./schemas/common.js";
-import { assertCanManageUser, assertCanAssignRoles } from "../domain/hierarchy.js";
+import { assertCanManageUser, assertCanAssignRoles, assertCanGrantPermissions } from "../domain/hierarchy.js";
 import { checkUsername } from "@common/utils/name-policy.js";
 
 /**
@@ -498,6 +498,19 @@ export class UserEndpoints {
 
 		// Validar campos inmutables/sensibles ANTES de cualquier modificación
 		await validateImmutableFields(UserEndpoints.identity, currentUser, updates, callerOrgId);
+
+		// Permisos directos: nadie otorga lo que no tiene. `validateImmutableFields` sólo exige
+		// contexto global y forma del objeto: sin este guard, cualquier admin global puede
+		// escribir un `*` sobre un usuario de jerarquía menor y loguearse con esa cuenta.
+		// El contexto es `ctx.user?.orgId`, NO `callerOrgId`: éste absorbe `?orgId=` de la query,
+		// y resolver los permisos del actor en una org donde no es miembro daría un 403 espurio.
+		await assertCanGrantPermissions(
+			UserEndpoints.identity.permissions,
+			ctx.user?.id,
+			updates.permissions,
+			ctx.user?.orgId,
+			currentUser.permissions
+		);
 
 		// Prevent updating sensitive fields via API
 		delete (updates as any).passwordHash;

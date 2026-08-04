@@ -10,6 +10,8 @@ import type { CircuitBreaker } from "./CircuitBreaker.js";
 import { readBaseConfig } from "./AppConfigMerger.js";
 import { readJson, type AppCtor } from "./AppFileUtils.js";
 import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
+import { bootTimeline } from "../../utils/system/BootTimeline.ts";
+import { runDevCleanup } from "@common/utils/dev-cleanup.ts";
 
 /**
  * Corrida estable: si `run()` sobrevivió al menos este tiempo antes de fallar, el
@@ -17,6 +19,20 @@ import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
  * seguir acumulando hacia el circuito abierto.
  */
 const STABLE_RUN_MS = 60_000;
+
+/**
+ * `privileges` declarados por una app. La config de instancia (`config.json`/`config-*.json`,
+ * el nombre único que usan todas las apps) tiene prioridad; el `default.json` base queda como
+ * fallback para las apps fixture que todavía lo usan.
+ */
+async function readDeclaredPrivileges(appDir: string, configPath?: string): Promise<string[] | undefined> {
+	if (configPath) {
+		const instanceConfig = await readJson<{ privileges?: unknown }>(configPath);
+		if (Array.isArray(instanceConfig?.privileges)) return instanceConfig.privileges;
+	}
+	const baseConfig = await readBaseConfig(appDir);
+	return Array.isArray(baseConfig.privileges) ? baseConfig.privileges : undefined;
+}
 
 export interface AppLifecycleDeps {
 	kernel: Kernel;
@@ -46,20 +62,20 @@ export class AppLifecycle {
 		registry.registerApp(instanceName, app);
 		logger.logDebug(`Inicializando App ${app.name}`);
 
-		registry.setLoadingContext(instanceName);
-		try {
-			// Privilegios opt-in del app (default.json → `privileges`): scopes sensibles como
-			// `identity:system` sólo si el app los declara; si no, tier "app" = lifecycle + ui:register.
-			const baseConfig = await readBaseConfig(path.dirname(filePath));
-			const declared = Array.isArray(baseConfig.privileges) ? baseConfig.privileges : undefined;
-			// Provisionar (mintea/inyecta businessCap e infraCap + token de ciclo de vida) ANTES
-			// de cargar: loadModulesFromConfig usa la infraCap contenida; start valida el token.
-			const lifecycleToken = kernel.provisionModule(kernelKey, app, { name: instanceName, kind: "app", path: filePath, declared });
-			await app.loadModulesFromConfig();
-			await app.start?.(lifecycleToken);
-		} finally {
-			registry.setLoadingContext(null);
-		}
+		await bootTimeline.measure(`app:${instanceName}`, () =>
+			registry.runInLoadingContext(instanceName, async () => {
+				// Privilegios opt-in del app (`privileges` en su config): scopes sensibles como
+				// `identity:system` sólo si el app los declara; si no, tier "app" = lifecycle + ui:register.
+				// Se mira la config de instancia y, si no trae `privileges`, el `default.json` base:
+				// leer sólo la base dejaba el opt-in inalcanzable para toda app con `config.json`.
+				const declared = await readDeclaredPrivileges(path.dirname(filePath), configPath);
+				// Provisionar (mintea/inyecta businessCap e infraCap + token de ciclo de vida) ANTES
+				// de cargar: loadModulesFromConfig usa la infraCap contenida; start valida el token.
+				const lifecycleToken = kernel.provisionModule(kernelKey, app, { name: instanceName, kind: "app", path: filePath, declared });
+				await app.loadModulesFromConfig();
+				await app.start?.(lifecycleToken);
+			})
+		);
 
 		if (isShuttingDown()) {
 			logger.logDebug(`Cierre en progreso, no se ejecuta run() para: ${instanceName}`);
@@ -70,6 +86,7 @@ export class AppLifecycle {
 		logger.logDebug(`Ejecutando App ${app.name}`);
 		const startedAt = Date.now();
 		app.run().catch((e: Error) => this.#onRunFailure(e, startedAt, filePath, instanceName, configPath));
+		runDevCleanup(app, `app ${instanceName}`);
 	};
 
 	/** Agenda la re-inicialización de una instancia fallida bajo la política del breaker. */

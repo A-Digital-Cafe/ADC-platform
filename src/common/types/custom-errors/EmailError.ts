@@ -10,6 +10,8 @@ type EmailErrorTypes =
 	// Recursos
 	| "MESSAGE_NOT_FOUND"
 	| "ACCOUNT_NOT_FOUND"
+	/** La dirección del buzón a crear ya pertenece a otro usuario. */
+	| "MAIL_ADDRESS_TAKEN"
 	| "ATTACHMENT_NOT_FOUND"
 	| "FOLDER_NOT_FOUND"
 	// Tier / cuota

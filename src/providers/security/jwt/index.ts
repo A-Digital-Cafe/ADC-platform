@@ -1,6 +1,11 @@
 import * as jose from "jose";
 import { BaseProvider } from "../../BaseProvider.js";
+import { parseDurationSeconds } from "@common/utils/duration.js";
+import { sha256Bytes } from "@common/utils/crypto.js";
 import type { TokenPayload, IJWTProviderMultiKey, JWTProviderConfig, TokenVerificationResult } from "./types.d.ts";
+
+/** Largo mínimo recomendado del secreto; por debajo se avisa (no se bloquea el boot). */
+const MIN_SECRET_LENGTH = 32;
 
 /**
  * JWTProvider - Cifrado y descifrado de tokens JWT usando jose
@@ -35,9 +40,25 @@ export default class JWTProvider extends BaseProvider implements IJWTProviderMul
 		await super.start(kernelKey);
 
 		const secret = this.#config.secret;
-		if (secret && secret.length < 32) {
-			// Crear clave de 256 bits para A256GCM
-			this.#secretKey = new TextEncoder().encode(secret.padEnd(32, "0").slice(0, 32));
+		if (secret) {
+			// A256GCM necesita exactamente 32 bytes: se derivan con SHA-256 del secreto, sea cual
+			// sea su largo (rellenar/truncar caracteres descartaría entropía de un secreto fuerte).
+			this.#secretKey = sha256Bytes(secret);
+			if (secret.length < MIN_SECRET_LENGTH) {
+				// logError, no warn: con `dir` la clave derivada ES la de cifrado, así que un
+				// secreto corto hace forjables los tokens. No se lanza para no convertir una
+				// config que hoy arranca (SessionManagerService es kernelMode con
+				// `failOnError: true`) en una caída de boot, pero tiene que verse.
+				this.logger.logError(
+					`JWTProvider: jwtSecret tiene ${secret.length} caracteres y el contrato pide al menos ${MIN_SECRET_LENGTH}. ` +
+						`Derivar la clave no crea entropía que el secreto no tenga: los tokens emitidos con ella son débiles.`
+				);
+			}
+		} else {
+			// Sin secreto no se puede operar con la clave por defecto. No se lanza: SessionManager
+			// usa su propio KeyStore vía `encryptWithKey`, así que el kernel arranca igual; el que
+			// llame a `encrypt()` sin clave recibe el error explícito de ahí.
+			this.logger.logWarn("JWTProvider sin `jwtSecret`: las operaciones con la clave por defecto no van a estar disponibles.");
 		}
 		this.logger.logOk("JWTProvider iniciado");
 	}
@@ -134,22 +155,8 @@ export default class JWTProvider extends BaseProvider implements IJWTProviderMul
 		return result.valid;
 	}
 
-	// Parsea string de expiración a segundos
+	// Parsea string de expiración a segundos (default 7 días si el formato no es válido)
 	#parseExpiration(exp: string): number {
-		const match = /^(\d+)([smhdw])$/.exec(exp);
-		if (!match) return 7 * 24 * 60 * 60; // default 7 días
-
-		const value = Number.parseInt(match[1], 10);
-		const unit = match[2];
-
-		const multipliers: Record<string, number> = {
-			s: 1,
-			m: 60,
-			h: 60 * 60,
-			d: 24 * 60 * 60,
-			w: 7 * 24 * 60 * 60,
-		};
-
-		return value * (multipliers[unit] || 1);
+		return parseDurationSeconds(exp) ?? 7 * 24 * 60 * 60;
 	}
 }

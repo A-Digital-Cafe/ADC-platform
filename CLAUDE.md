@@ -57,10 +57,11 @@ de la letra; no dupliques su contenido acá. Puntos de entrada por tarea:
 Scaffolding (genera el esqueleto; igual hay que leer la doc de la capa):
 
 ```bash
-bun run create:app -- my-app
-bun run create:service -- my-service
-bun run create:provider -- my-provider
-bun run create:utility -- my-utility
+# El grupo es obligatorio: los módulos viven agrupados por categoría, no sueltos en la capa.
+bun run create:app -- public/my-app
+bun run create:service -- core/my-service
+bun run create:provider -- object/my-provider
+bun run create:utility -- adapters/my-utility
 ```
 
 ## Module Base Classes & Lifecycle
@@ -85,7 +86,7 @@ export default class MyApp extends BaseApp {
 Cada directorio de módulo sigue estructura npm workspace:
 
 - `package.json` — dependencias npm (instaladas por separado por módulo)
-- `config.json` o `default.json` — declara dependencias de módulos (providers/utilities/services)
+- `config.json` — declara dependencias de módulos (providers/utilities/services) y `privileges`
 - `README.md` — documentación breve (máx 15 líneas)
 
 Las apps soportan **múltiples instancias** vía archivos `config-*.json` (instancia `app-name:config-suffix`); detalle en [docs/architecture/app-runtime.md](docs/architecture/app-runtime.md).

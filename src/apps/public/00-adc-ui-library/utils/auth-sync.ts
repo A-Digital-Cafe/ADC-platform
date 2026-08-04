@@ -1,5 +1,6 @@
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 import { appendCsrfHeader } from "./csrf.js";
+import { noteSessionExpiry } from "./auth-refresh.js";
 
 export type AuthChangeType = "logout" | "login";
 
@@ -124,6 +125,9 @@ export async function forceLogoutAndRefresh(logoutUrl = getDefaultLogoutUrl()): 
 		}
 
 		setStoredAuthMarker(null);
+		// Sin esto quedaría un vencimiento huérfano en storage y la próxima carga
+		// intentaría renovar una sesión que ya no existe.
+		noteSessionExpiry(null);
 		broadcastAuthChange("logout");
 		globalThis.location?.reload();
 	})();

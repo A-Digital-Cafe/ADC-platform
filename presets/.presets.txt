@@ -1,12 +1,16 @@
 # Formato: <nombre>  <repo-url>  <ref>
-# - <nombre>: carpeta destino dentro de presets/
-# - <repo-url>: URL git (ssh o https)
-# - <ref>: branch, tag o commit (opcional, default = rama por defecto del remoto)
+# - <nombre>: carpeta destino dentro de presets/. Sólo [A-Za-z0-9._-], sin "/" ni "..".
+# - <repo-url>: URL git. Sólo https://, ssh:// o git@host:path — no se aceptan rutas
+#   locales, file:// ni helpers de transporte (ext::), y ningún valor puede empezar con "-".
+# - <ref>: branch, tag o SHA de 40 hex (opcional, default = rama por defecto del remoto).
+#   Un SHA se verifica contra HEAD después del clone; una rama es MUTABLE: lo que se clone
+#   depende de dónde apunte esa rama en ese momento. Pinear un SHA es lo seguro.
 #
 # Las líneas que empiezan con # se ignoran.
-# El script scripts/sync-presets.sh:
+# El script scripts/sync-presets.mjs (lo corre `postinstall`):
 #   - clona los que falten
 #   - omite silenciosamente los que no tengas permiso para clonar
+#   - descarta las líneas que no cumplan las reglas de arriba
 #   - NO toca los que ya estén clonados (usa `git -C <dir> pull` manualmente si querés actualizar)
 #
 # Ejemplos:

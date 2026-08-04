@@ -1,5 +1,6 @@
 import { Component, Prop, State, Event, EventEmitter, Element, Listen, Watch } from "@stencil/core";
 import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
+import { fixedAnchor } from "../../../utils/fixed-anchor";
 
 export interface ContextMenuItem {
 	label: string;
@@ -188,8 +189,11 @@ export class AdcContextMenu {
 		const targetY = this.center ? (window.innerHeight - offsetHeight) / 2 : this.y;
 		const left = Math.max(m, Math.min(targetX, window.innerWidth - offsetWidth - m));
 		const top = Math.max(m, Math.min(targetY, window.innerHeight - offsetHeight - m));
-		panel.style.left = `${left}px`;
-		panel.style.top = `${top}px`;
+		// El clamp trabaja en coordenadas de viewport (es contra la pantalla que hay que
+		// acotar); recién acá se pasan al sistema del bloque contenedor del panel `fixed`.
+		const cb = fixedAnchor(panel);
+		panel.style.left = `${left - cb.left}px`;
+		panel.style.top = `${top - cb.top}px`;
 		// Si no hay lugar a la derecha para un submenú (~12rem), abrirlo hacia la izquierda.
 		const flip = left + offsetWidth + 192 > window.innerWidth;
 		if (flip !== this.flipSubmenu) this.flipSubmenu = flip;

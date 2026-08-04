@@ -39,6 +39,7 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 			postcssConfigPath = await generatePostCSSConfig(tailwindCssPath, configDir, context.logger);
 		}
 
+		const configPath = path.join(configDir, "rspack.config.mjs");
 		const configContent = buildRspackConfigContent({
 			context,
 			safeName,
@@ -52,6 +53,7 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 			postcssConfigPath,
 			tailwindCssPath,
 			configDir,
+			configPath,
 			appExtension: this.getFileExtension(),
 			mainEntry: this.getMainEntry(),
 			extensions: this.getResolveExtensions(),
@@ -62,7 +64,6 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 			additionalRules: this.getAdditionalRules(),
 		});
 
-		const configPath = path.join(configDir, "rspack.config.mjs");
 		await fs.writeFile(configPath, configContent, "utf-8");
 		context.logger?.logDebug(`Config Rspack generado: ${configPath}`);
 		return configPath;

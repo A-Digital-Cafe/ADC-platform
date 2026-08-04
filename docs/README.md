@@ -7,6 +7,7 @@ README enruta por categoría, no re-lista cada archivo).
 | --------- | ---------- |
 | Entender cómo funciona la plataforma | [architecture/README.md](architecture/README.md) |
 | Crear/editar un módulo (app/service/provider/utility) | [structure/README.md](structure/README.md) |
+| Acceder a otro módulo o a una superficie privilegiada del kernel | [structure/kernel-access.md](structure/kernel-access.md) |
 | Crear, instalar o extraer un preset (repos git) | [multirepo.md](multirepo.md) |
 | Guías operativas (Discord OAuth, email/DNS, puertos) | [guides/](guides/) |
 
@@ -15,9 +16,12 @@ README enruta por categoría, no re-lista cada archivo).
 - **[architecture/](architecture/README.md)** — Modelo de capas, flujo de carga y temas profundos:
   [module-system](architecture/module-system.md) (loaders, versionado, multi-lenguaje, workspaces),
   [app-runtime](architecture/app-runtime.md) (instancias, hot reload, docker),
-  [ui-federation](architecture/ui-federation.md) (Web Components, Module Federation, namespaces, i18n).
+  [ui-federation](architecture/ui-federation.md) (Web Components, Module Federation, namespaces, i18n),
+  [boot-performance](architecture/boot-performance.md) (concurrencia del arranque, readiness, caché de bundler, flags).
 - **[structure/](structure/README.md)** — Plantillas + checklists para crear/editar módulos
-  (models, daos, endpoints, service-shell, frontend, enterprise-apps).
+  (models, daos, endpoints, service-shell, frontend, enterprise-apps) y
+  [kernel-access](structure/kernel-access.md), que es **la autoridad** sobre qué puede pedirle
+  un módulo al kernel y por qué vía (`getMyService`/`getMyProvider` vs. casos privilegiados).
 - **[multirepo.md](multirepo.md)** — Presets: instalación, creación, extracción y convenciones.
 - **[guides/](guides/)** — Guías operativas puntuales:
   [desktop-clients](guides/desktop-clients.md) (clientes que se publican en npm),

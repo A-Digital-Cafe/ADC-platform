@@ -10,6 +10,7 @@ import { Kernel } from "../../../kernel.js";
 import { Logger } from "../../logger/Logger.js";
 import { safeParseJson } from "@common/utils/json-schema.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
+import { runDevCleanup } from "@common/utils/dev-cleanup.ts";
 
 type Constructor<T> = new (...args: any[]) => T;
 
@@ -40,6 +41,7 @@ export default class TypeScriptLoader implements IModuleLoader {
 			const lifecycleToken = Symbol(`lifecycle:${providerInstance.name}`);
 			providerInstance.setKernelKey(lifecycleToken);
 			await providerInstance.start(lifecycleToken);
+			runDevCleanup(providerInstance, `provider ${providerInstance.name}`);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando provider ${providerInstance.name}: ${error.message}`);
 		}
@@ -54,6 +56,7 @@ export default class TypeScriptLoader implements IModuleLoader {
 			const lifecycleToken = Symbol(`lifecycle:${utilityInstance.name}`);
 			(utilityInstance as BaseUtility).setKernelKey?.(lifecycleToken);
 			await utilityInstance.start?.(lifecycleToken);
+			runDevCleanup(utilityInstance, `utility ${utilityInstance.name}`);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando utility ${utilityInstance.name}: ${error.message}`);
 		}
@@ -75,6 +78,7 @@ export default class TypeScriptLoader implements IModuleLoader {
 			}
 			const lifecycleToken = kernel.provisionModule(this.#kernelKey, serviceInstance, { name: serviceInstance.name, kind: "service", path: modulePath, declared });
 			await serviceInstance.start(lifecycleToken);
+			runDevCleanup(serviceInstance, `service ${serviceInstance.name}`);
 		} catch (error: any) {
 			Logger.warn(`[TypeScriptLoader] Error iniciando service ${serviceInstance.name}: ${error.message}`);
 		}

@@ -10,6 +10,7 @@ import { AppInstanceTracker } from "./AppInstanceTracker.js";
 import { AppLifecycle } from "./AppLifecycle.js";
 import { AppReloader } from "./AppReloader.js";
 import { CircuitBreaker } from "./CircuitBreaker.js";
+import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
 
 const RETRY_SHORT_MS = 30_000;
 const RETRY_SHORT_MAX = 5;
@@ -180,7 +181,10 @@ export class AppLoader {
 		if (!this.registry.hasApp(instanceName)) return;
 		const app = this.registry.getApp(instanceName);
 		this.logger.logDebug(`Removiendo app: ${app.name}`);
-		await app.stop?.(this.#kernelKey);
+		// `stop` valida el token de ciclo de vida por instancia, no la master key: llamarlo
+		// directamente con la master key lanza "Acceso no autorizado a stop" y deja la app
+		// registrada. `stopBoundModule` es el camino sancionado (mismo que AppLifecycle).
+		await stopBoundModule(app, this.#kernelKey);
 		await this.registry.cleanupAppModules(instanceName, this.#kernelKey);
 		this.registry.deleteApp(app.name);
 		this.#tracker.removeByFileKey(key);

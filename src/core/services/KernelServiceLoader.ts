@@ -59,6 +59,10 @@ export class KernelServiceLoader {
 			await this.#startDocker(servicePath, name);
 			const { instance, config } = await this.moduleLoader.loadKernelService(servicePath, configPath, this.kernel, this.kernelKey);
 			this.registry.registerService(name, instance, config);
+			// Identidad de plataforma atada a la ruta de origen: `name` viene del walk de FS,
+			// no del `name` que la clase declara. Es lo que consultan el kernel y el orquestador
+			// antes de entregar sus capabilities (ver `ModuleRegistry.getPlatformService`).
+			this.registry.pinPlatformService(name, instance, this.kernelKey);
 			this.logger.logOk(`Servicio kernel cargado: ${name}`);
 		} catch (error: any) {
 			this.logger.logError(`Error cargando servicio kernel (${name}): ${error.message}`);

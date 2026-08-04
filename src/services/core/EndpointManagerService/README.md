@@ -72,7 +72,7 @@ La seguridad es una responsabilidad compartida entre `EndpointManagerService` y 
 
 #### El Flujo de Validación de una Petición
 
-1.  **Wrapper y Extracción de Token**: Cada petición a un endpoint es interceptada por un "wrapper" lógico. Lo primero que hace es buscar un token de usuario en las cookies, cabeceras (`Authorization: Bearer`) o parámetros de la URL.
+1.  **Wrapper y Extracción de Token**: Cada petición a un endpoint es interceptada por un "wrapper" lógico. Lo primero que hace es buscar un token de usuario en la cookie de sesión y, si no hay, en `Authorization: Bearer`. **No se acepta por query string** (una URL queda en logs de proxy, historial y `Referer`); los consumidores que no pueden poner headers (`EventSource`, `<img>`, descargas) usan la cookie same-origin.
 
 2.  **Consulta al `SessionManagerService` (El Portero)**: `EndpointManagerService` le pasa el token encontrado al `SessionManagerService` con una pregunta simple: **"¿Es este token auténtico y a quién pertenece?"**.
     - `SessionManagerService` valida la firma y la fecha de expiración del token.
@@ -139,7 +139,7 @@ Esto ofrece la **seguridad** de una llamada a un endpoint con la **velocidad** d
 
 El wrapper acumula `count`, latencia, bytes y errores por clave `"<METHOD> <url>"` en memoria (hot path sin I/O) y un flush periódico las vuelca al hash diario de Redis `epm:<YYYY-MM-DD>`. Se leen con `getEndpointMetrics(day?)` (hoy = memoria, otro día = Redis) y se limpian con `resetEndpointMetrics(key?)`; ambos implementan `IEndpointMetricsReader` de `@common/types/endpoints`. Se configura en `private.metrics` (`ENDPOINT_METRICS_ENABLED`, `_FLUSH_INTERVAL_MS`, `_RETENTION_DAYS`).
 
-> `GET /api/jobs/:jobId` y `GET /api/csrf-token` se registran directo contra el provider HTTP, **sin** el wrapper, así que quedan fuera de las métricas (y del rate limit y de la auditoría de authz).
+> `GET /api/jobs/:jobId` y `GET /api/csrf-token` se registran directo contra el provider HTTP, **sin** el wrapper, así que quedan fuera de las métricas y del rate limit. `/api/jobs/:jobId` resuelve la sesión por su cuenta y **sólo se la devuelve a quien encoló el job** (`job.userId`); un job sin `userId` no se sirve a nadie. Mismo 404 para "no existe" y "no es tuyo".
 
 ### 7. Abstracción del Servidor HTTP
 

@@ -29,6 +29,15 @@ export class ReadonlyModuleRegistry {
 		return this.#registry.getService<T>(name, config);
 	}
 
+	/**
+	 * Servicio de plataforma por identidad pinneada en boot (o `undefined`). Para los casos
+	 * en que el llamador va a **reenviar su capability** al servicio resuelto: ahí el nombre
+	 * no alcanza como identidad, porque quien gane la resolución se queda con la capability.
+	 */
+	getPlatformService<T>(name: string): T | undefined {
+		return this.#registry.getPlatformService<T>(name);
+	}
+
 	hasModule(moduleType: ModuleType, name: string, config?: Record<string, any>): boolean {
 		return this.#registry.hasModule(moduleType, name, config);
 	}

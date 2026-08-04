@@ -16,4 +16,11 @@ export interface ISessionManagerService {
 	loginProgrammatic(cap: CapabilityToken, username: string, password: string): Promise<string | null>;
 	/** Extrae el token de sesión de las cookies de una request. */
 	extractSessionToken(req: { cookies?: Record<string, string> }): string | null;
+	/**
+	 * Revoca todos los refresh tokens del usuario: sus sesiones dejan de poder renovarse y
+	 * mueren cuando expire el access token vigente. Requiere capability `session:revoke`.
+	 *
+	 * @returns Cantidad de tokens revocados.
+	 */
+	revokeUserSessions(cap: CapabilityToken, userId: string): Promise<number>;
 }

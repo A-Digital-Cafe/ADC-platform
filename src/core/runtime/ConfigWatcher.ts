@@ -35,6 +35,14 @@ export interface ConfigWatcherDeps {
 	onNewAppConfig: (appFilePath: string) => Promise<void>;
 	/** `true` si el path pertenece a un módulo pendiente (no disparar cargas/recargas). */
 	isPendingPath: (p: string) => boolean;
+	/**
+	 * Watcher ya montado sobre `src/apps` (el que devuelve `watchLayer`). Se reutiliza para no
+	 * levantar un SEGUNDO árbol recursivo idéntico sobre los mismos ~220 directorios: ambos usan
+	 * la misma raíz, el mismo `ignored` y el mismo `awaitWriteFinish`, y se diferencian sólo en el
+	 * filtro por archivo, que se aplica en los handlers. Opcional: sin él la clase sigue siendo
+	 * construible sola.
+	 */
+	watcher?: ReturnType<typeof chokidar.watch>;
 }
 
 export class ConfigWatcher {
@@ -46,13 +54,15 @@ export class ConfigWatcher {
 
 	start(): void {
 		const srcAppsPath = path.resolve(process.cwd(), "src", "apps");
-		const watcher = chokidar.watch(srcAppsPath, {
-			ignoreInitial: true,
-			ignored: isIgnoredTreePath,
-			awaitWriteFinish: WRITE_FINISH,
-		});
+		const watcher =
+			this.deps.watcher ??
+			chokidar.watch(srcAppsPath, {
+				ignoreInitial: true,
+				ignored: isIgnoredTreePath,
+				awaitWriteFinish: WRITE_FINISH,
+			});
 		// Sin globs (chokidar ≥4): filtrar los .json de interés acá.
-		const relevant = (p: string) => p.endsWith(".json") && !["default.json", "tsonfig.json", "package.json"].includes(path.basename(p));
+		const relevant = (p: string) => p.endsWith(".json") && !["default.json", "tsconfig.json", "package.json"].includes(path.basename(p));
 
 		watcher.on("change", (p) => void (relevant(p) && this.#onChange(p)));
 		watcher.on("add", (p) => void (relevant(p) && this.#onAdd(p)));
@@ -147,7 +157,12 @@ function routeIndexEvents(
  * Vigila recursivamente el directorio de una capa (`src/services`, `src/apps`, ...)
  * y enruta los eventos de sus `index.<ext>` a los handlers.
  */
-export function watchLayer(dir: string, fileExtension: string, handlers: LayerEventHandlers, opts: WatchTreeOptions): void {
+export function watchLayer(
+	dir: string,
+	fileExtension: string,
+	handlers: LayerEventHandlers,
+	opts: WatchTreeOptions
+): ReturnType<typeof chokidar.watch> {
 	const indexName = `index${fileExtension}`;
 	const excluded = new Set(opts.exclude ?? []);
 	const watcher = chokidar.watch(dir, {
@@ -157,6 +172,8 @@ export function watchLayer(dir: string, fileExtension: string, handlers: LayerEv
 	});
 	const relevant = (p: string) => path.basename(p) === indexName && !p.split(path.sep).some((seg) => excluded.has(seg));
 	routeIndexEvents(watcher, relevant, () => handlers, opts.isStartingUp);
+	// Se devuelve para que `ConfigWatcher` pueda colgarse del mismo árbol (ver `ConfigWatcherDeps.watcher`).
+	return watcher;
 }
 
 /** Capa según el primer segmento bajo la raíz de un preset. */

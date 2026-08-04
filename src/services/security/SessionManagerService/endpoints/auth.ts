@@ -318,11 +318,15 @@ export class AuthEndpoints {
 			throw new AuthError(401, "NO_REFRESH_TOKEN", "No hay refresh token");
 		}
 
-		const storedToken = await AuthEndpoints.deps.refreshTokenRepo.findByToken(refreshToken);
+		// Acepta el token ya rotado dentro de la ventana de gracia: con apps federadas en
+		// orígenes distintos, dos pestañas pueden renovar a la vez y ninguna es fraudulenta.
+		const resolved = await AuthEndpoints.deps.refreshTokenRepo.resolveCurrent(refreshToken);
 
-		if (!storedToken) {
+		if (!resolved) {
 			throw new AuthError(401, "INVALID_REFRESH_TOKEN", "Refresh token inválido");
 		}
+
+		const storedToken = resolved.stored;
 
 		// Validar cambio de país usando Cloudflare headers
 		const currentCountry = AuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers);
@@ -369,7 +373,9 @@ export class AuthEndpoints {
 		}
 
 		const cookies = AuthEndpoints.buildTokenCookies(result.tokens.accessToken, result.tokens.refreshToken.token);
-		throw UncommonResponse.json({ success: true }, { cookies });
+		// `expiresAt` viaja en el cuerpo para que el cliente programe la próxima renovación
+		// sin tener que pedir `/session` ni leer la cookie (es HttpOnly).
+		throw UncommonResponse.json({ success: true, expiresAt: result.expiresAt }, { cookies });
 	}
 
 	/**
@@ -493,11 +499,7 @@ export class AuthEndpoints {
 		},
 	})
 	static async handleLogout(ctx: EndpointCtx): Promise<never> {
-		const refreshToken = ctx.cookies?.[REFRESH_COOKIE_NAME];
-
-		if (refreshToken) {
-			await AuthEndpoints.deps.refreshTokenRepo.revoke(refreshToken);
-		}
+		await AuthEndpoints.revokeCurrentSession(ctx);
 
 		const clearCookies: ClearCookie[] = [
 			{ name: ACCESS_COOKIE_NAME, options: { path: "/", domain: AuthEndpoints.deps.cookieDomain } },
@@ -508,6 +510,41 @@ export class AuthEndpoints {
 	}
 
 	// ============ Métodos auxiliares (privados estáticos) ============
+
+	/**
+	 * Revoca el refresh token de ESTA sesión (no la de los demás dispositivos del usuario).
+	 *
+	 * La cookie del refresh está acotada a `path=/api/auth/refresh`, así que el navegador no la
+	 * manda a este endpoint; y borrar cookies del lado del cliente no invalida nada —un token ya
+	 * capturado sigue sirviendo hasta su TTL de 30 días—. La sesión se identifica con el access
+	 * token, que sí llega (su cookie cuelga de `/`) y lleva dentro el `deviceId`.
+	 *
+	 * Best-effort a propósito: si no se puede identificar la sesión (sin token, o expirado), se
+	 * limpian las cookies igual. Cerrar sesión nunca debe fallar.
+	 */
+	private static async revokeCurrentSession(ctx: EndpointCtx): Promise<void> {
+		const { refreshTokenRepo, tokenService, logger } = AuthEndpoints.deps;
+
+		// Si por lo que sea llegó la cookie del refresh (cliente no-navegador), se usa directo.
+		const refreshToken = ctx.cookies?.[REFRESH_COOKIE_NAME];
+		if (refreshToken) {
+			await refreshTokenRepo.revoke(refreshToken);
+			return;
+		}
+
+		if (!ctx.token) return; // logout sin sesión: no hay nada que revocar
+
+		const verified = await tokenService.verifyAccessToken(ctx.token);
+		const userId = verified.payload?.userId;
+		const deviceId = verified.payload?.deviceId;
+		if (!userId || !deviceId) {
+			// Access token vencido o ilegible: no hay forma de saber qué sesión cerrar.
+			logger.logWarn("[logout] sesión no identificable: el refresh token sigue vivo hasta su TTL");
+			return;
+		}
+
+		await refreshTokenRepo.revokeForDevice(userId, deviceId);
+	}
 
 	private static async respondWithOrgSelection(fullUser: User): Promise<never> {
 		const orgOptions = await AuthEndpoints.getUserOrgOptions(fullUser);
@@ -614,6 +651,15 @@ export class AuthEndpoints {
 		try {
 			const user = await AuthEndpoints.deps.internalIdentity.users.getUser(userId);
 			if (!user) return null;
+
+			// Cuenta desactivada (ban, baja voluntaria, desactivación administrativa): tratarla
+			// como inexistente. Es el único punto donde `/api/auth/refresh` y `/api/auth/switch-org`
+			// vuelven a mirar el estado de la cuenta; devolver null hace que `refreshTokens` revoque
+			// el refresh token en vez de rotarlo, así que la sesión no se puede renovar más.
+			if (user.isActive === false) {
+				AuthEndpoints.deps.logger.logWarn(`Sesión rechazada: la cuenta ${userId} está desactivada`);
+				return null;
+			}
 
 			// Resolve avatar usando el helper compartido (perfil → metadata → linkedAccounts)
 			const avatar = resolveUserAvatar(user);

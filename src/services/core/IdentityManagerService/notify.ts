@@ -87,6 +87,22 @@ export class NotifyManager {
 		});
 	}
 
+	/**
+	 * Aviso al equipo (mismos destinatarios) de que un módulo cambió sus privilegios entre dos
+	 * provisiones, topic `security.module_privileges`. El caso real es un `git pull` cuyo
+	 * `config.json` pide scopes que el módulo no tenía: sin este aviso el cambio se aplica
+	 * sin dejar rastro. `withheld` sale no vacío cuando el gate de aprobación los retuvo.
+	 */
+	async modulePrivilegesChanged(event: { module: string; layer: string; filePath: string; added: string[]; withheld: string[] }): Promise<void> {
+		const retenidos = event.withheld.length ? ` No se concedieron (falta aprobación): ${event.withheld.join(", ")}.` : "";
+		await this.#fanoutToSecurityTeam({
+			topic: "security.module_privileges",
+			title: "Cambio de privilegios de un módulo",
+			body: `El ${event.layer} '${event.module}' pidió privilegios nuevos: ${event.added.join(", ") || "—"}.${retenidos}`,
+			data: { module: event.module, layer: event.layer, filePath: event.filePath, added: event.added, withheld: event.withheld },
+		});
+	}
+
 	/** Fan-out best-effort a los destinatarios de seguridad, excluyendo opcionalmente al actor. */
 	async #fanoutToSecurityTeam(input: Omit<NotifyInput, "userId">, excludeUserId?: string): Promise<void> {
 		let recipients: string[];

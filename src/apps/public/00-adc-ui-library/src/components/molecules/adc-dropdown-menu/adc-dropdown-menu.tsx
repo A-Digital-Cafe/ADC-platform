@@ -1,4 +1,5 @@
 import { Component, Prop, Event, EventEmitter, State, Listen, Element, Watch } from "@stencil/core";
+import { fixedAnchor } from "../../../utils/fixed-anchor";
 
 export interface DropdownMenuItem {
 	label: string;
@@ -58,9 +59,12 @@ export class AdcDropdownMenu {
 		const spaceAbove = r.top - m;
 		// Abre hacia arriba sólo si abajo no entra cómodo y arriba hay más lugar.
 		const openUp = spaceBelow < AdcDropdownMenu.MIN_SPACE_BELOW && spaceAbove > spaceBelow;
+		// El clamp de arriba trabaja en coordenadas de viewport (es contra la pantalla que hay
+		// que acotar); recién acá se pasan al sistema del bloque contenedor del panel `fixed`.
+		const cb = fixedAnchor(this.triggerEl);
 		this.menuPos = openUp
-			? { left, bottom: window.innerHeight - r.top + 2, maxHeight: Math.max(80, spaceAbove) }
-			: { left, top: r.bottom + 2, maxHeight: Math.max(80, spaceBelow) };
+			? { left: left - cb.left, bottom: cb.bottom - r.top + 2, maxHeight: Math.max(80, spaceAbove) }
+			: { left: left - cb.left, top: r.bottom + 2 - cb.top, maxHeight: Math.max(80, spaceBelow) };
 	}
 
 	/** Reposiciona el panel flotante al hacer scroll/resize (sigue al trigger). */

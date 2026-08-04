@@ -6,6 +6,7 @@ import type { Attachment, AttachmentDTO } from "../../../../common/types/attachm
 import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from "../../../../common/types/attachments/Attachment.js";
 import type { AttachmentDoc } from "../schemas/attachment.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
+import { isInlineSafeMime } from "../../../../common/utils/mime.ts";
 import { trimChar } from "../../../../common/utils/strings.ts";
 import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
 import { UNLIMITED_BYTES, type QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
@@ -51,8 +52,17 @@ export interface S3Like {
 		contentType?: string;
 		contentLength?: number;
 		ttl?: number;
+		publicHost?: string;
 	}): Promise<{ uploadUrl: string; bucket: string; key: string; headers: Record<string, string>; expiresIn: number; expiresAt: Date }>;
-	getPresignedDownloadUrl(input: { bucket?: string; key: string; ttl?: number; filename?: string; inline?: boolean }): Promise<string>;
+	getPresignedDownloadUrl(input: {
+		bucket?: string;
+		key: string;
+		ttl?: number;
+		filename?: string;
+		inline?: boolean;
+		contentType?: string;
+		publicHost?: string;
+	}): Promise<string>;
 	headObject(input: { bucket?: string; key: string }): Promise<{ contentType?: string; size?: number; etag?: string }>;
 	deleteObject(input: { bucket?: string; key: string }): Promise<void>;
 	putObject(input: {
@@ -75,9 +85,20 @@ export interface SubPathContext extends AttachmentPermissionContext {
 	ownerId: string;
 }
 
+/**
+ * El provider de S3, o —preferido— un getter que lo resuelve en cada uso.
+ *
+ * Guardar la instancia la ata al momento del `start()` del consumidor: si el kernel recarga el
+ * provider (edición en dev, deploy desde el panel), el consumidor se queda hablándole a una
+ * instancia detenida y todo falla con 503 `S3_UNAVAILABLE` hasta reiniciar el kernel. Con el
+ * getter, `getMyProvider(...)` —un lookup en un mapa— devuelve siempre la instancia vigente.
+ * Mismo patrón que `AttachmentsQuotaOptions.getTracker`.
+ */
+export type S3Resolver = S3Like | (() => S3Like);
+
 export interface AttachmentsManagerOptions {
 	model: Model<AttachmentDoc>;
-	s3Provider: S3Like;
+	s3Provider: S3Resolver;
 	bucket?: string;
 	basePath: string;
 	subPathResolver: (ctx: SubPathContext) => string;
@@ -110,6 +131,13 @@ export interface PresignUploadInput {
 	size: number;
 	ownerType: string;
 	ownerId: string;
+	/**
+	 * Host por el que el navegador llegó a la plataforma (`Host` del request, sin puerto).
+	 * Con un S3 local, la URL se firma contra ese host para que la subida funcione desde
+	 * otros dispositivos de la red; con un S3 real se ignora. Detalle en `PresignUploadInput`
+	 * de `internal-s3-provider`.
+	 */
+	publicHost?: string;
 }
 
 export interface PresignUploadResult {
@@ -148,7 +176,7 @@ function sanitizeSegment(seg: string): string {
 
 export class AttachmentsManager {
 	readonly #model: Model<AttachmentDoc>;
-	readonly #s3: S3Like;
+	readonly #resolveS3: () => S3Like;
 	readonly #bucket: string;
 	readonly #basePath: string;
 	readonly #subPathResolver: (ctx: SubPathContext) => string;
@@ -163,14 +191,14 @@ export class AttachmentsManager {
 
 	constructor(opts: AttachmentsManagerOptions) {
 		this.#model = opts.model;
-		this.#s3 = opts.s3Provider;
-		this.#bucket = opts.bucket ?? opts.s3Provider.getDefaultBucket();
+		this.#resolveS3 = typeof opts.s3Provider === "function" ? opts.s3Provider : () => opts.s3Provider as S3Like;
+		this.#bucket = opts.bucket ?? this.#s3.getDefaultBucket();
 		this.#basePath = sanitizeSegment(opts.basePath);
 		this.#subPathResolver = opts.subPathResolver;
 		this.#permissionChecker = opts.permissionChecker;
 		this.#maxSize = opts.maxSize ?? ATTACHMENT_DEFAULT_MAX_SIZE;
 		this.#allowedMimes = opts.allowedMimeTypes === null ? null : new Set(opts.allowedMimeTypes ?? ATTACHMENT_DEFAULT_ALLOWED_MIMES);
-		this.#presignTtl = opts.presignTtl ?? opts.s3Provider.getDefaultPresignTtl();
+		this.#presignTtl = opts.presignTtl ?? this.#s3.getDefaultPresignTtl();
 		this.#quota = opts.quota;
 		this.#onQuotaExceeded = opts.onQuotaExceeded;
 		this.#encryption = opts.encryption;
@@ -178,6 +206,11 @@ export class AttachmentsManager {
 		// El token de `@OnlyKernel` se guarda en el WeakMap del decorador (no como
 		// propiedad legible por nombre `this.kernelKey`).
 		bindKernelKey(this, opts.kernelKey);
+	}
+
+	/** Instancia vigente del provider de S3: se resuelve en cada uso, nunca se guarda (ver `S3Resolver`). */
+	get #s3(): S3Like {
+		return this.#resolveS3();
 	}
 
 	get bucket(): string {
@@ -308,13 +341,22 @@ export class AttachmentsManager {
 			createdAt: new Date(),
 		});
 
-		const presigned = await this.#s3.getPresignedUploadUrl({
-			bucket: this.#bucket,
-			key,
-			contentType: input.mimeType,
-			contentLength: input.size,
-			ttl: this.#presignTtl,
-		});
+		// La fila ya está creada: si el presign falla, se retira. Si no, cada fallo deja un
+		// `pending` que nadie reclama —no hay objeto en S3 ni `confirmUpload` que lo cierre—.
+		let presigned;
+		try {
+			presigned = await this.#s3.getPresignedUploadUrl({
+				bucket: this.#bucket,
+				key,
+				contentType: input.mimeType,
+				contentLength: input.size,
+				ttl: this.#presignTtl,
+				publicHost: input.publicHost,
+			});
+		} catch (error) {
+			await this.#model.deleteOne({ _id: attachmentId }).catch(() => undefined);
+			throw error;
+		}
 
 		return {
 			attachmentId,
@@ -481,7 +523,7 @@ export class AttachmentsManager {
 	async getDownloadUrl(
 		ctx: AttachmentPermissionContext,
 		attachmentId: string,
-		opts: { ttl?: number; inline?: boolean } = {}
+		opts: { ttl?: number; inline?: boolean; publicHost?: string } = {}
 	): Promise<{ url: string; attachment: Attachment; expiresIn: number }> {
 		const attachment = await this.#getReadyForRead(ctx, attachmentId);
 		if (attachment.encryption) {
@@ -490,12 +532,19 @@ export class AttachmentsManager {
 			throw new AttachmentError(409, "ATTACHMENT_ENCRYPTED", "Adjunto cifrado: descargar vía streaming del servicio");
 		}
 		const ttl = opts.ttl ?? this.#presignTtl;
+		// El `Content-Type` del upload presignado NO va firmado, así que lo guardado en S3 puede
+		// no ser lo declarado acá. Se fuerzan las dos cosas en la URL (ambas firmadas):
+		//  - `response-content-type` = el tipo declarado y validado contra la allowlist;
+		//  - `inline` sólo para tipos que el navegador no ejecuta (un SVG sí ejecuta scripts).
+		const inline = (opts.inline ?? false) && isInlineSafeMime(attachment.mimeType);
 		const url = await this.#s3.getPresignedDownloadUrl({
 			bucket: attachment.bucket,
 			key: attachment.storageKey,
 			ttl,
 			filename: attachment.fileName,
-			inline: opts.inline,
+			inline,
+			contentType: attachment.mimeType || undefined,
+			publicHost: opts.publicHost,
 		});
 		return { url, attachment, expiresIn: ttl };
 	}

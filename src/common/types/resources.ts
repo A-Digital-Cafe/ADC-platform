@@ -161,3 +161,11 @@ export function getResourceScopes(resourceId: string): ScopeDef[] {
 export function isGlobalOnlyResource(resourceId: string): boolean {
 	return RESOURCE_MAP.get(resourceId)?.globalOnly === true;
 }
+
+/**
+ * Ids de los recursos que **no** son `globalOnly`: exactamente lo que puede cubrir un
+ * permiso comodín (`*`) cuando no viene de un rol global. La expansión —y el porqué de
+ * expandir en vez de descartar el `*`— vive en `filterGlobalOnly` (permissionHierarchy).
+ * @public
+ */
+export const NON_GLOBAL_ONLY_RESOURCE_IDS: readonly string[] = RESOURCES.filter((r) => !r.globalOnly).map((r) => r.id);

@@ -3,15 +3,22 @@ type SecurityHeaders = Record<string, string>;
 interface HeaderReply {
 	header(name: string, value: string): unknown;
 	raw: { removeHeader?: (name: string) => void };
-}
-
-function shouldEnforceCsp(): boolean {
-	return process.env.SECURITY_CSP_ENFORCE === "true";
+	request?: { hostname?: string; headers?: Record<string, unknown> };
 }
 
 /** Producción real: NODE_ENV=production y NO el modo local de pruebas (start:prodtests usa PROD_PORT=3000). */
 function isRealProduction(): boolean {
 	return process.env.NODE_ENV === "production" && process.env.PROD_PORT !== "3000";
+}
+
+/**
+ * Enforce por defecto en producción real; la env sólo sirve para forzar o desactivar (mismo
+ * patrón que `shouldSendHsts`). Condicionarlo a un opt-in dejaría la política siempre en
+ * Report-Only, que sin `report-uri` no bloquea **ni** recolecta nada.
+ */
+function shouldEnforceCsp(): boolean {
+	if (process.env.SECURITY_CSP_ENFORCE) return process.env.SECURITY_CSP_ENFORCE === "true";
+	return isRealProduction();
 }
 
 function shouldSendHsts(): boolean {
@@ -31,16 +38,31 @@ function getDefaultCsp(): string {
 	const connectSrc = isRealProduction()
 		? "connect-src 'self' https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com"
 		: "connect-src 'self' http: ws: https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
+	// Sin `'unsafe-eval'`: nada del runtime lo necesita. rspack compila con `devtool: false` en
+	// prod y `cheap-module-source-map` en dev (nunca un devtool `eval-*`), y ni Stencil, ni Vue
+	// (se resuelve el build runtime-only), ni el runtime de Module Federation usan `eval`/`new
+	// Function`. Si algún día se declaran remotes MF por *manifest*, `@module-federation/sdk`
+	// sí evalúa el `getPublicPath` del manifest y habría que revisarlo.
+	//
+	// `'unsafe-inline'` sigue: la plataforma inyecta scripts inline que no se pueden hashear —el
+	// import map que genera UIFederation y el HTML que se reescribe por request—. Quitarlo exige
+	// nonce por request, que es trabajo aparte.
 	const scriptSrc = isRealProduction()
-		? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh https://*.adigitalcafe.com"
-		: "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh http: https://*.adigitalcafe.com";
+		? "script-src 'self' 'unsafe-inline' https://esm.sh https://*.adigitalcafe.com"
+		: "script-src 'self' 'unsafe-inline' https://esm.sh http: https://*.adigitalcafe.com";
 	return [
 		"default-src 'self'",
 		"base-uri 'self'",
 		"object-src 'none'",
 		"frame-ancestors 'none'",
 		"form-action 'self'",
-		"img-src 'self' data: blob:",
+		// `'unsafe-inline'` en script-src no cubre los atributos de evento (`onclick=`), y no
+		// hay ni uno en el árbol: negarlos es gratis y cierra una clase entera de inyección.
+		"script-src-attr 'none'",
+		// `https:` en la base y no en el delta de cada app: los avatares salen de hosts externos
+		// (DiceBear como fallback, el CDN de Discord) y casi todas las apps repetían esta línea
+		// en su config.json — las que no, rompen al enforcear.
+		"img-src 'self' data: blob: https:",
 		"font-src 'self' data:",
 		"style-src 'self' 'unsafe-inline'",
 		scriptSrc,
@@ -50,13 +72,38 @@ function getDefaultCsp(): string {
 	].join("; ");
 }
 
-function buildDefaultSecurityHeaders(): SecurityHeaders {
+/** Host de la request, sin puerto y en minúsculas. */
+function getRequestHost(reply: HeaderReply): string {
+	const raw = reply.request?.hostname || (reply.request?.headers?.host as string | undefined) || "";
+	return raw.replace(/:\d+$/, "").toLowerCase();
+}
+
+/**
+ * `same-site` compara **sitios**, y una IP pelada no tiene dominio registrable: Chromium no la
+ * considera same-site ni consigo misma, así que bloquea (`ERR_BLOCKED_BY_RESPONSE.NotSameSite`)
+ * todo subrecurso `no-cors` que venga de otro puerto —y la plataforma vive repartida en puertos:
+ * la preview de Drive sale del gateway :3000 dentro de una página en :3032—. Entrando por IP la
+ * única política que permite ese reparto es `cross-origin`. `localhost` no hace falta degradarlo:
+ * el navegador lo trata como sitio propio y el cruce de puertos ya funciona.
+ *
+ * En producción real NUNCA se degrada, aunque se entre por IP: si no, alcanzaría con pedir los
+ * recursos por la IP de origen en vez de por el dominio para saltearse CORP entero. Ahí la IP no
+ * es un caso de uso —el despliegue va detrás de un dominio— y si alguien la usa, que rompa fuerte
+ * es preferible a que afloje callado.
+ */
+function getResourcePolicy(host: string): string {
+	if (isRealProduction()) return "same-site";
+	const isIpHost = host.includes(":") || /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+	return isIpHost ? "cross-origin" : "same-site";
+}
+
+function buildDefaultSecurityHeaders(host: string): SecurityHeaders {
 	const headers: SecurityHeaders = {
 		[getCspHeaderName()]: getDefaultCsp(),
 		"Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()",
 		"Cross-Origin-Embedder-Policy": "unsafe-none",
 		"Cross-Origin-Opener-Policy": "same-origin",
-		"Cross-Origin-Resource-Policy": "same-site",
+		"Cross-Origin-Resource-Policy": getResourcePolicy(host),
 		"Origin-Agent-Cluster": "?1",
 		"Referrer-Policy": "strict-origin-when-cross-origin",
 		"X-Content-Type-Options": "nosniff",
@@ -74,8 +121,8 @@ function buildDefaultSecurityHeaders(): SecurityHeaders {
 	return headers;
 }
 
-function mergeSecurityHeaders(overrides?: SecurityHeaders): SecurityHeaders {
-	const merged = { ...buildDefaultSecurityHeaders() };
+function mergeSecurityHeaders(host: string, overrides?: SecurityHeaders): SecurityHeaders {
+	const merged = { ...buildDefaultSecurityHeaders(host) };
 	const cspOverride = overrides?.["Content-Security-Policy"];
 	if (cspOverride !== undefined) {
 		delete merged["Content-Security-Policy"];
@@ -122,7 +169,7 @@ function extendCsp(baseCsp: string, extension: string): string {
 
 export function applySecurityHeaders(reply: HeaderReply, overrides?: SecurityHeaders): void {
 	(reply.raw as any).removeHeader?.("X-Powered-By");
-	for (const [name, value] of Object.entries(mergeSecurityHeaders(overrides))) {
+	for (const [name, value] of Object.entries(mergeSecurityHeaders(getRequestHost(reply), overrides))) {
 		reply.header(name, value);
 	}
 }

@@ -114,8 +114,7 @@ export class SessionAdminEndpoints {
 		let revoked = 0;
 		const deviceId = ctx.data?.deviceId;
 		if (deviceId) {
-			const stored = await deps.refreshTokenRepo.findByUserAndDevice(targetUserId, deviceId);
-			if (stored && (await deps.refreshTokenRepo.revoke(stored.token))) revoked = 1;
+			if (await deps.refreshTokenRepo.revokeForDevice(targetUserId, deviceId)) revoked = 1;
 		} else {
 			revoked = await deps.refreshTokenRepo.revokeAllForUser(targetUserId);
 		}

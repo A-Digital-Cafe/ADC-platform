@@ -4,8 +4,8 @@ scaffoldModule({
 	label: 'App',
 	command: 'create:app',
 	baseDir: 'src/apps',
-	withModulesJson: true,
-	indexTemplate: (className) => `import { BaseApp } from '../BaseApp';
+	withConfigJson: true,
+	indexTemplate: (className) => `import { BaseApp } from '../../BaseApp.js';
 
 export default class ${className} extends BaseApp {
 	async run() {

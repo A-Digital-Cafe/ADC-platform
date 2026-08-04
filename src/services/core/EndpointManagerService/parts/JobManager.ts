@@ -1,4 +1,6 @@
-import type { IHostBasedHttpProvider } from "../../../../interfaces/modules/providers/IHttpServer.js";
+import type { FastifyRequest, IHostBasedHttpProvider } from "../../../../interfaces/modules/providers/IHttpServer.js";
+import { extractToken } from "./http.js";
+import { openJobToken } from "./job-token.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
@@ -8,6 +10,7 @@ import type { OperationMessage } from "@interfaces/modules/providers/IMessageQue
 import type { Consumer } from "rabbitmq-client";
 import { createHash } from "node:crypto";
 import { safeParseJson } from "@common/utils/json-schema.ts";
+import ADCCustomError from "@common/types/ADCCustomError.js";
 import { jobStatusCheck } from "../schemas/job-status.js";
 import type { EndpointHandler, HttpMethod, JobStatus } from "../types.js";
 
@@ -69,13 +72,10 @@ export class JobManager {
 			}
 
 			const raw = await redis.get(`job:${jobId}`);
-			if (!raw) {
-				reply.status(404).send({ error: "JOB_NOT_FOUND", message: "Job not found or expired" });
-				return;
-			}
+			const job = raw ? safeParseJson(raw, jobStatusCheck) : null;
 
-			const job = safeParseJson(raw, jobStatusCheck);
-			if (!job) {
+			// Mismo 404 para "no existe" y "no es tuyo": un jobId ajeno no se confirma ni se niega.
+			if (!job || !(await this.#isJobOwner(job, req))) {
 				reply.status(404).send({ error: "JOB_NOT_FOUND", message: "Job not found or expired" });
 				return;
 			}
@@ -83,6 +83,35 @@ export class JobManager {
 		});
 
 		this.#logger.logDebug("[EndpointManager] registered GET /api/jobs/:jobId");
+	}
+
+	/**
+	 * Un job sólo lo lee quien lo encoló.
+	 *
+	 * La ruta se registra directo contra el provider HTTP (no pasa por `createHttpWrapper`),
+	 * así que acá no hay ni sesión resuelta ni chequeo de permisos: había que agregarlos. El
+	 * cuerpo del job expone `result` —el valor de retorno completo de la mutación original— y
+	 * `error` sin sanitizar, que es MÁS de lo que filtra el camino síncrono.
+	 *
+	 * Sin `userId` (job encolado sin sesión) no hay dueño al que atarlo: fail-closed. Hoy los
+	 * tres endpoints `enqueue: true` exigen permisos, con lo cual un job anónimo es siempre uno
+	 * que va a fallar en el consumidor.
+	 */
+	async #isJobOwner(job: JobStatus, req: FastifyRequest<any>): Promise<boolean> {
+		if (!job.userId) return false;
+
+		const sessionManager = this.#getSessionManager();
+		if (!sessionManager) return false;
+
+		const { token } = extractToken(req, this.#getSessionManager);
+		if (!token) return false;
+
+		try {
+			const result = await sessionManager.verifyToken(token);
+			return result.valid === true && result.session?.user?.id === job.userId;
+		} catch {
+			return false;
+		}
 	}
 
 	/**
@@ -175,13 +204,18 @@ export class JobManager {
 				true
 			);
 		} catch (error: any) {
+			// Sólo los errores tipados de la plataforma llevan un mensaje pensado para el cliente;
+			// el resto (mongo, driver, `TypeError`) se sanea a genérico —igual que hace el camino
+			// síncrono con `INTERNAL_ERROR`— y el detalle va al log.
+			const isPublicError = error instanceof ADCCustomError;
+			if (!isPublicError) this.#logger.logError(`[EndpointManager] ${endpointLabel} falló en el job ${jobId}: ${error?.stack || error}`);
 			await this.#storeJobStatus(
 				jobId,
 				{
 					status: "failed",
 					endpoint: endpointLabel,
 					userId,
-					error: error.message,
+					error: isPublicError ? error.message : "Error interno del servidor",
 					createdAt: new Date().toISOString(),
 				},
 				false
@@ -235,7 +269,11 @@ export class JobManager {
 		const noToken = { token: null, drop: false };
 		if (!redis || !jobId) return noToken;
 		try {
-			const storedToken = await redis.get(`job-token:${jobId}`);
+			const sealed = await redis.get(`job-token:${jobId}`);
+			if (!sealed) return noToken;
+
+			// El token se guarda cifrado en reposo; el hash de AMQP es del claro.
+			const storedToken = openJobToken(sealed, this.#logger);
 			if (!storedToken) return noToken;
 
 			// Verify hash matches the one sent in the AMQP header

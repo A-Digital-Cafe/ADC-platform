@@ -11,6 +11,23 @@ export default class LangManagerService extends BaseService implements ILangMana
 	private currentLocale: string;
 	private readonly fallbackLocale: string;
 
+	/**
+	 * Memo de `getTranslations` por `namespace|locale`. Resolver un namespace implica un
+	 * deep-merge recursivo de sus dependencias más el suyo propio, y `/api/i18n` lo hacía
+	 * en **cada** request: es trabajo puro y determinista mientras no cambie el registro.
+	 *
+	 * Se invalida entero en `registerNamespace`/`unregisterNamespace` (un namespace nuevo
+	 * puede ser dependencia de otro ya cacheado, así que invalidar sólo su clave no basta).
+	 */
+	readonly #mergedCache = new Map<string, TranslationDict>();
+
+	/**
+	 * Locales realmente presentes en algún namespace, con sus formas base (`es-AR` → `es`).
+	 * Acota el espacio de claves del memo: el `locale` de `/api/i18n` es query string, así
+	 * que sin normalizar bastaba con pedir locales al azar para hacer crecer el mapa sin fin.
+	 */
+	readonly #knownLocales = new Set<string>();
+
 	constructor(kernel: any, options?: any) {
 		super(kernel, options);
 		this.currentLocale = options?.defaultLocale || "en";
@@ -27,6 +44,7 @@ export default class LangManagerService extends BaseService implements ILangMana
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
 		this.namespaces.clear();
+		this.#invalidateMerged();
 		this.logger.logOk("LangManagerService detenido");
 	}
 
@@ -91,13 +109,40 @@ export default class LangManagerService extends BaseService implements ILangMana
 			translations,
 			dependencies,
 		});
+		this.#invalidateMerged();
 		const depsText = dependencies?.length ? ` (deps: ${dependencies.join(", ")})` : "";
 		this.logger.logOk(`[i18n] ${namespace}: ${locales.join(", ")}${depsText}`);
+	}
+
+	/** Tira el memo y reconstruye el índice de locales. Todo cambio del registro pasa por acá. */
+	#invalidateMerged(): void {
+		this.#mergedCache.clear();
+		this.#knownLocales.clear();
+		for (const ns of this.namespaces.values()) {
+			for (const locale of ns.locales) {
+				this.#knownLocales.add(locale);
+				this.#knownLocales.add(locale.split("-")[0]);
+			}
+		}
+	}
+
+	/**
+	 * Locale efectivo para el memo. Equivale a lo que hace `#getRawTranslations` (exacto →
+	 * base → fallback) pero una sola vez y a nivel de clave, así que un locale inventado no
+	 * crea una entrada nueva: colapsa a su base conocida o al fallback.
+	 */
+	#normalizeLocale(locale?: string): string {
+		const target = locale || this.currentLocale;
+		if (this.#knownLocales.has(target)) return target;
+		const base = target.split("-")[0];
+		if (this.#knownLocales.has(base)) return base;
+		return this.fallbackLocale;
 	}
 
 	async unregisterNamespace(namespace: string): Promise<void> {
 		if (this.namespaces.has(namespace)) {
 			this.namespaces.delete(namespace);
+			this.#invalidateMerged();
 			this.logger.logDebug(`Namespace ${namespace} desregistrado`);
 		}
 	}
@@ -138,13 +183,23 @@ export default class LangManagerService extends BaseService implements ILangMana
 		return translation;
 	}
 
+	/**
+	 * Diccionario resuelto (dependencias + propio) de un namespace.
+	 *
+	 * El objeto devuelto es **compartido** (viene del memo): los consumidores lo serializan,
+	 * no lo mutan. Si algún día hace falta mutarlo, clonar en el consumidor.
+	 */
 	getTranslations(namespace: string, locale?: string): TranslationDict {
-		const targetLocale = locale || this.currentLocale;
 		const ns = this.namespaces.get(namespace);
 
 		if (!ns) {
 			return {};
 		}
+
+		const targetLocale = this.#normalizeLocale(locale);
+		const cacheKey = `${namespace}|${targetLocale}`;
+		const cached = this.#mergedCache.get(cacheKey);
+		if (cached) return cached;
 
 		// Obtener traducciones base de dependencias (deep merge)
 		let result: TranslationDict = {};
@@ -159,7 +214,9 @@ export default class LangManagerService extends BaseService implements ILangMana
 		const ownTranslations = this.#getRawTranslations(namespace, targetLocale);
 
 		// Merge: las propias sobreescriben las de dependencias
-		return this.#deepMerge(result, ownTranslations);
+		const merged = this.#deepMerge(result, ownTranslations);
+		this.#mergedCache.set(cacheKey, merged);
+		return merged;
 	}
 
 	/**

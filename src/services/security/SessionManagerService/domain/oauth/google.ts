@@ -1,4 +1,4 @@
-import { UserAuthenticationResult } from "../../../../core/IdentityManagerService/dao/users.ts";
+import type { ProviderUserProfile } from "../../types.js";
 import { BaseOAuthProvider } from "./base.js";
 
 /**
@@ -18,11 +18,14 @@ export class GoogleOAuthProvider extends BaseOAuthProvider {
 		};
 	}
 
-	protected parseUserProfile(data: Record<string, any>): UserAuthenticationResult {
+	protected parseUserProfile(data: Record<string, any>): ProviderUserProfile {
 		return {
 			id: data.id,
 			username: data.name || data.email?.split("@")[0] || "user",
 			email: data.email,
+			// `verified_email` es el campo del endpoint v2 en uso; `email_verified` es el de
+			// OIDC, por si el endpoint cambia. Sin ninguno de los dos, el email no se confía.
+			emailVerified: data.verified_email === true || data.email_verified === true,
 			avatar: data.picture,
 			metadata: data,
 		};

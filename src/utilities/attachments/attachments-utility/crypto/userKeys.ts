@@ -1,5 +1,6 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync, type CipherGCM, type DecipherGCM } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes, type CipherGCM, type DecipherGCM } from "node:crypto";
 import type { Connection, Model, Schema } from "mongoose";
+import { resolveAtRestMasterKey } from "../../../../common/utils/crypto.js";
 
 /**
  * Envelope encryption por usuario para binarios en S3:
@@ -27,21 +28,11 @@ interface UserKeyDoc {
  * Master key (KEK) de cifrado en reposo: `ADC_STORAGE_MASTER_KEY` (32 bytes en
  * hex o base64). Sin la env var se deriva una clave determinística de
  * desarrollo y se loguea una advertencia: NO usar ese fallback en producción.
+ *
+ * Alias del resolvedor compartido de `@common/utils/crypto`: todo el cifrado en reposo de la
+ * plataforma (DEKs de attachments, sobres de Redis) deriva de esta misma master key.
  */
-export function resolveStorageMasterKey(logger?: { logWarn(msg: string): void }): Buffer {
-	const raw = process.env.ADC_STORAGE_MASTER_KEY?.trim();
-	if (raw) {
-		if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
-		const b64 = Buffer.from(raw, "base64");
-		if (b64.length === DEK_LENGTH) return b64;
-		throw new Error("ADC_STORAGE_MASTER_KEY inválida: se esperan 32 bytes en hex (64 chars) o base64");
-	}
-	logger?.logWarn(
-		"ADC_STORAGE_MASTER_KEY no configurada: usando una master key de desarrollo derivada. " +
-			"Configurala en producción (32 bytes hex/base64) o el cifrado en reposo será predecible."
-	);
-	return scryptSync("adc-platform-dev-storage-key", "adc-storage-kek", DEK_LENGTH);
-}
+export const resolveStorageMasterKey = resolveAtRestMasterKey;
 
 export interface UserKeyStoreOptions {
 	connection: Connection;

@@ -4,7 +4,7 @@ scaffoldModule({
 	label: 'Provider',
 	command: 'create:provider',
 	baseDir: 'src/providers',
-	indexTemplate: (className, name) => `import { BaseProvider } from '../BaseProvider';
+	indexTemplate: (className, name) => `import { BaseProvider } from '../../BaseProvider.js';
 
 export default class ${className} extends BaseProvider {
 	public readonly name = "${name}";

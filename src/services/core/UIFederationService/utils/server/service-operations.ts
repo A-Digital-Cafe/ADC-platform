@@ -1,5 +1,6 @@
 import type { RegisteredUIModule } from "../../types.js";
 import type { UIFederationContext } from "../types/context.js";
+import { stopWatcher } from "../lifecycle/watcher-control.js";
 import { injectImportMapsInModuleHTMLs, updateImportMap } from "./import-map-updater.js";
 
 export interface UIStats {
@@ -26,9 +27,34 @@ export async function unregisterUIModule(name: string, ctx: UIFederationContext,
 		return;
 	}
 
+	await reapWatcher(name, found.namespace, found.module, ctx);
+
 	ctx.registry.getNamespaceModules(found.namespace).delete(name);
 	updateImportMap(found.namespace, ctx);
 	ctx.logger.logOk(`Módulo UI ${name} [${found.namespace}] desregistrado`);
+}
+
+/**
+ * Mata el dev server del módulo y borra su entrada de `ctx.watchBuilds`.
+ *
+ * Sin esto, cada disable/reload de una app UI dejaba un rspack residente para siempre:
+ * `stopAllWatchers` sólo corre en el `stop()` del servicio, y al borrar el módulo del
+ * registry se perdía la única referencia al hijo. La clave del mapa es la misma que usa
+ * `build-runner.ts` al guardarlo (`namespace:name`, con el `name` que es la clave del
+ * `Map` del namespace).
+ */
+async function reapWatcher(name: string, namespace: string, module: RegisteredUIModule, ctx: UIFederationContext): Promise<void> {
+	const watchKey = `${namespace}:${name}`;
+	const watcher = module.watcher ?? ctx.watchBuilds.get(watchKey);
+	ctx.watchBuilds.delete(watchKey);
+	if (!watcher) return;
+
+	try {
+		await stopWatcher(watchKey, watcher, ctx.logger);
+	} catch (error: any) {
+		ctx.logger.logWarn(`Error deteniendo dev server de ${name} [${namespace}]: ${error.message}`);
+	}
+	module.watcher = undefined;
 }
 
 /** Reinyecta los import maps en todos los módulos construidos. */

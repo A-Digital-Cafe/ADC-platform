@@ -4,7 +4,7 @@ scaffoldModule({
 	label: 'Utility',
 	command: 'create:utility',
 	baseDir: 'src/utilities',
-	indexTemplate: (className, name) => `import { BaseUtility } from '../BaseUtility';
+	indexTemplate: (className, name) => `import { BaseUtility } from '../../BaseUtility.js';
 
 export default class ${className} extends BaseUtility {
   public name = "${name}";

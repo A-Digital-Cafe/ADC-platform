@@ -57,7 +57,17 @@ export function tierForPath(path: string, kind: ModuleKind): ModuleTier {
  * Calcula los scopes del businessCap: defaults del tier ∪ privilegios declarados
  * (ignorando desconocidos y los reservados a infraestructura).
  */
-export function policyScopes(opts: { path: string; kind: ModuleKind; declared?: readonly string[] }): Scope[] {
+export function policyScopes(opts: {
+	path: string;
+	kind: ModuleKind;
+	declared?: readonly string[];
+	/**
+	 * Scopes declarados que NO deben concederse por faltarles aprobación (los calcula
+	 * `PrivilegeLedger.withheldFor` contra el baseline del gestor de módulos). Los defaults
+	 * del tier nunca se retienen: sin ellos el módulo no arranca.
+	 */
+	withheld?: readonly string[];
+}): Scope[] {
 	const tier = tierForPath(opts.path, opts.kind);
 	const scopes = new Set<Scope>(TIER_DEFAULTS[tier]);
 
@@ -73,6 +83,12 @@ export function policyScopes(opts: { path: string; kind: ModuleKind; declared?: 
 		if (INFRA_ONLY.has(scope)) continue; // nunca concedido a businessCap
 		if (!TESTS_ENABLED && TEST_ONLY.has(scope)) {
 			Logger.warn(`[capabilityPolicy] scope de test '${raw}' en '${opts.path}' ignorado: no se concede en producción`);
+			continue;
+		}
+		if (opts.withheld?.includes(raw)) {
+			// Un deploy no puede auto-ampliarse los privilegios: el scope está en el archivo
+			// pero no en el baseline aprobado, así que no se concede hasta que alguien lo apruebe.
+			Logger.warn(`[capabilityPolicy] privilegio '${raw}' en '${opts.path}' NO concedido: falta aprobación (gestor de módulos)`);
 			continue;
 		}
 		scopes.add(scope);

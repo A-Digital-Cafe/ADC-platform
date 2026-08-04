@@ -5,7 +5,16 @@ import type MongoProvider from "../../../providers/object/mongo/index.js";
 import { userSchema, groupSchema, roleSchema, organizationSchema, regionSchema, discordGuildConfigSchema } from "./domain/index.js";
 import type { DiscordGuildConfig } from "./domain/index.js";
 import type { User, Role, Group, Organization, RegionInfo } from "@common/types/identity/index.d.ts";
-import { UserManager, GroupManager, RoleManager, PermissionManager, SystemManager, RegionManager, OrgManager } from "./dao/index.js";
+import {
+	UserManager,
+	GroupManager,
+	RoleManager,
+	PermissionManager,
+	SystemManager,
+	RegionManager,
+	OrgManager,
+	type SessionRevoker,
+} from "./dao/index.js";
 import { seedDevUsers, purgeDevUsers } from "./dao/devSeeder.js";
 import { SystemRole } from "./defaults/systemRoles.js";
 import { NotifyManager } from "./notify.js";
@@ -111,6 +120,38 @@ export default class IdentityManagerService extends BaseService implements IIden
 	// ISessionManagerService (lazy-loaded singleton)
 	#sessionManager: ISessionManagerService | null = null;
 
+	/**
+	 * Corta las sesiones vivas de una cuenta que se acaba de desactivar (ban, baja,
+	 * desactivación administrativa). Se inyecta en `UserManager` porque el DAO no puede
+	 * resolver servicios; acá sí, con el mismo lazy-load que usa `createAuthVerifier`.
+	 *
+	 * Es **best-effort a propósito**: SessionManagerService carga después que Identity
+	 * (kernelMode 70 vs 60) y puede no estar disponible. Que el corte de sesión falle no
+	 * puede impedir el ban — el chequeo de `isActive` en `/api/auth/refresh` es la otra
+	 * mitad de la defensa y no depende de esta llamada.
+	 */
+	readonly #revokeSessions: SessionRevoker = async (userId: string, reason: string) => {
+		const session = this.#resolveSessionManager();
+		if (!session) {
+			this.logger.logWarn(`[Identity] SessionManagerService no disponible: sesiones de ${userId} no revocadas (${reason})`);
+			return;
+		}
+		const revoked = await session.revokeUserSessions(this.getCapability(), userId);
+		this.logger.logInfo(`[Identity] ${revoked} sesión(es) revocadas para ${userId} (${reason})`);
+	};
+
+	/** Lazy-load singleton de `ISessionManagerService`; `null` si todavía no está cargado. */
+	#resolveSessionManager(): ISessionManagerService | null {
+		if (!this.#sessionManager) {
+			try {
+				this.#sessionManager = this.getMyService<ISessionManagerService>("SessionManagerService");
+			} catch {
+				return null;
+			}
+		}
+		return this.#sessionManager;
+	}
+
 	// Nota: ModerationService y los purgers de presets se resuelven SIEMPRE en el
 	// momento de uso (lazy, sin cache de instancias): los presets cargan después de
 	// Identity (kernelMode 60) y pueden hot-reloadearse; cachear una instancia acá
@@ -200,7 +241,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// UserManager (independiente) → GroupManager (→ UserManager) → RoleManager (→ UserManager, GroupManager) → OrgManager (→ todos)
 			// El gate de asientos va SOLO en el manager con auth: los managers internos sirven
 			// a infraestructura (sesiones, seeds) y no deben quedar bloqueados por un límite comercial.
-			this.#userManager = new UserManager(UserModel, this.logger, this.#getAuthVerifier, this.#seatGate);
+			this.#userManager = new UserManager(UserModel, this.logger, this.#getAuthVerifier, this.#seatGate, this.#revokeSessions);
 			this.#groupManager = new GroupManager(GroupModel, this.#userManager, this.logger, this.#getAuthVerifier);
 			this.#roleManager = new RoleManager(
 				RoleModel,
@@ -225,7 +266,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// Managers internos (sin auth verifier) para servicios de infraestructura (ISessionManagerService)
 			// Usan () => null como AuthVerifierGetter, por lo que requirePermission no aplica
 			const noAuth: () => null = () => null;
-			this.#internalUserManager = new UserManager(UserModel, this.logger, noAuth);
+			this.#internalUserManager = new UserManager(UserModel, this.logger, noAuth, undefined, this.#revokeSessions);
 			const internalGroupManager = new GroupManager(GroupModel, this.#internalUserManager, this.logger, noAuth);
 			const internalRoleManager = new RoleManager(
 				RoleModel,
@@ -236,6 +277,11 @@ export default class IdentityManagerService extends BaseService implements IIden
 				noAuth
 			);
 			this.#internalRoleManager = internalRoleManager;
+			// Ojo: el `RegionManager` es el ÚNICO y va con auth verifier (su cache se poblaría dos
+			// veces si hubiera otro). Por eso el manager interno es "sin auth" en todo menos en las
+			// validaciones de región: un caller interno no debe pasar `region` en `create`/`update`
+			// de organización, o `getRegion` va a exigir un token que no tiene.
+			// Hoy nadie lo hace (el único uso interno es el patch de `tier` de adc-subscriptions).
 			this.#internalOrgManager = new OrgManager(
 				OrganizationModel,
 				internalRoleManager,
@@ -303,7 +349,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// Wire AttachmentsManager para avatares (opcional: si falta S3, los
 			// endpoints de subida devolverán 503 hasta que esté disponible).
 			try {
-				const s3 = this.getMyProvider<InternalS3Provider>("object/internal-s3-provider");
+				// Getter, no instancia: el provider se resuelve en cada uso para que una recarga
+				// en caliente no deje al manager hablándole a una instancia detenida.
+				const s3 = () => this.getMyProvider<InternalS3Provider>("object/internal-s3-provider");
 				const attachmentsUtil = this.getMyUtility<AttachmentsUtility>("attachments-utility");
 				const connection = this.#mongoProvider.getConnection();
 				this.#avatarAttachmentsManager = attachmentsUtil.createAttachmentsManager({

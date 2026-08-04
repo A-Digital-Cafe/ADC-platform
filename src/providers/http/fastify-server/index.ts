@@ -3,6 +3,7 @@ import fastifyCors from "@fastify/cors";
 import fastifyCookie from "@fastify/cookie";
 import fastifyFormbody from "@fastify/formbody";
 import * as path from "node:path";
+import { Transform } from "node:stream";
 import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
@@ -18,6 +19,7 @@ import {
 	createCorsOriginGuard,
 	getAllowHeader,
 	getBodyLimitBytes,
+	getRawBodyLimitBytes,
 	isAllowedHttpMethod,
 	isSafeStaticPath,
 	resolveSafeStaticPath,
@@ -146,6 +148,11 @@ function normalizeHandler(handler: HttpHandler): FastifyHandler {
 	return handler as FastifyHandler;
 }
 
+/** Error 413 para el techo de bodies binarios crudos (Fastify usa `statusCode` del error). */
+function rawBodyTooLarge(message: string): Error & { statusCode: number } {
+	return Object.assign(new Error(message), { statusCode: 413 });
+}
+
 /**
  * Implementación del servidor HTTP con Fastify y soporte para host-based routing
  */
@@ -240,11 +247,37 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		// Body parser para formularios
 		await this.app.register(fastifyFormbody);
 
-		// Binarios crudos: passthrough sin bufferizar (request.body = Readable).
-		// No aplica bodyLimit; los consumidores (ej. túnel de Drive) hacen pipe del
-		// stream y son responsables de sus propios límites.
-		this.app.addContentTypeParser("application/octet-stream", (_request, payload, done) => {
-			done(null, payload);
+		// Binarios crudos: sin bufferizar (request.body sigue siendo un Readable). Fastify no
+		// aplica `bodyLimit` a los parsers con firma de stream, así que el techo anti-abuso lo
+		// pone este wrapper: atajo por Content-Length + contador real, porque un cliente puede
+		// mandar chunked o declarar cualquier cosa. El tope por plan lo sigue poniendo cada
+		// consumidor (ej. el túnel de Drive); esto sólo evita el caso "subida infinita".
+		this.app.addContentTypeParser("application/octet-stream", (request, payload, done) => {
+			const max = getRawBodyLimitBytes();
+			const declared = Number(request.headers["content-length"]);
+			if (Number.isFinite(declared) && declared > max) {
+				done(rawBodyTooLarge(`Body binario de ${declared} bytes: supera el techo de ${max}`), undefined);
+				return;
+			}
+
+			let seen = 0;
+			const limiter = new Transform({
+				transform(chunk: Buffer, _enc, cb) {
+					seen += chunk.length;
+					if (seen > max) {
+						cb(rawBodyTooLarge(`Body binario supera el techo de ${max} bytes`));
+						return;
+					}
+					cb(null, chunk);
+				},
+			});
+			// `pipe` conserva la backpressure: no se bufferiza más allá del highWaterMark.
+			limiter.on("error", () => {
+				payload.unpipe(limiter);
+				payload.destroy(); // el emisor ya se pasó del techo: se corta el socket
+			});
+			payload.pipe(limiter);
+			done(null, limiter);
 		});
 
 		// Log de peticiones en desarrollo
@@ -313,6 +346,28 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			}
 		}
 
+		// Verificar rutas específicas del host
+		const hostRoutes = matchedHost?.routes.get(request.method.toUpperCase());
+		if (hostRoutes) {
+			for (const [routePath, handler] of hostRoutes) {
+				const matchResult = this.matchPath(routePath, urlPath);
+				if (matchResult.matched) {
+					(request.params as any) = { ...(request.params as any), ...matchResult.params };
+					return handler(request, reply);
+				}
+			}
+		}
+
+		// Las rutas API no deben servirse como archivos estáticos. El guard va antes de CUALQUIER
+		// fallback estático —también el de rutas globales sin host matcheado—: si no, entrando por
+		// una IP o un host no registrado, un `serveStatic` de prefijo ancho se traga las rutas
+		// `/api/*` y devuelve "File not found" en vez de este 404, sin dejar rastro en el log de dev.
+		if (urlPath.startsWith("/api/")) {
+			if (this.isDev) this.logger.logDebug(`API 404: ${request.method} ${urlPath} (${this.globalRoutes.length} rutas globales)`);
+			reply.code(404).send({ error: "API route not found", path: urlPath });
+			return;
+		}
+
 		// Si no hay host matcheado, intentar con rutas estáticas globales
 		if (!matchedHost) {
 			// Buscar en rutas estáticas globales por prefijo de path
@@ -329,30 +384,6 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			}
 
 			reply.code(404).send({ error: "Not Found", host: request.hostname });
-			return;
-		}
-
-		// Verificar rutas específicas del host
-		const hostRoutes = matchedHost.routes.get(request.method.toUpperCase());
-		if (hostRoutes) {
-			for (const [routePath, handler] of hostRoutes) {
-				const matchResult = this.matchPath(routePath, urlPath);
-				if (matchResult.matched) {
-					(request.params as any) = { ...(request.params as any), ...matchResult.params };
-					return handler(request, reply);
-				}
-			}
-		}
-
-		// Las rutas API no deben servirse como archivos estáticos
-		if (urlPath.startsWith("/api/")) {
-			if (this.isDev)
-				this.logger.logWarn(
-					`[DEBUG] API 404: ${urlPath}, globalRoutes: ${this.globalRoutes.length}, registered: ${this.globalRoutes
-						.map((r) => r.path)
-						.join(", ")}`
-				);
-			reply.code(404).send({ error: "API route not found", path: urlPath });
 			return;
 		}
 

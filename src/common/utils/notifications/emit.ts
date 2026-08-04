@@ -71,8 +71,11 @@ export async function emitNotification(registry: ReadonlyModuleRegistry, input: 
  */
 export async function emitNotificationSecure(registry: ReadonlyModuleRegistry, cap: CapabilityToken, input: NotifyInput): Promise<boolean> {
 	try {
-		if (!registry.hasAnyModule("service", NOTIFY_SERVICE)) return false;
-		const service = registry.getService<INotificationService>(NOTIFY_SERVICE);
+		// Por identidad pinneada: acá se reenvía la capability del productor (con
+		// `identity:internal` en los topics reservados), así que resolver por nombre dejaría
+		// que un módulo registrado como `NotificationService` se la quede.
+		const service = registry.getPlatformService<INotificationService>(NOTIFY_SERVICE);
+		if (!service) return false;
 		await service.notify(input, cap);
 		return true;
 	} catch {
@@ -98,7 +101,8 @@ export async function emitBroadcast(
 	cap: CapabilityToken,
 	input: BroadcastInput
 ): Promise<BroadcastEmitResult> {
-	if (!registry.hasAnyModule("service", NOTIFY_SERVICE)) return "dropped";
-	const service = registry.getService<INotificationService>(NOTIFY_SERVICE);
+	// Ídem `emitNotificationSecure`: identidad pinneada antes de reenviar la capability.
+	const service = registry.getPlatformService<INotificationService>(NOTIFY_SERVICE);
+	if (!service) return "dropped";
 	return await service.broadcast(cap, input);
 }

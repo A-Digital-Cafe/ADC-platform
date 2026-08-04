@@ -4,7 +4,12 @@ services:
     container_name: adc-minio-core
     command: server /data --console-address ":9001"
     ports:
-      - "127.0.0.1:9000:9000"
+      # El 9000 lo abre el NAVEGADOR (subidas con URL presignada), no sólo el kernel: para
+      # probar desde otro dispositivo de la LAN hay que publicarlo más allá del loopback
+      # (`MINIO_BIND_HOST=0.0.0.0`). Sigue cerrado por defecto — MinIO local usa credenciales
+      # de desarrollo, así que exponerlo es una decisión explícita.
+      - "${MINIO_BIND_HOST:-127.0.0.1}:9000:9000"
+      # La consola (9001) es sólo para el operador: nunca se abre a la red.
       - "127.0.0.1:9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-adcadmin}
@@ -16,20 +21,35 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # start_period/start_interval: sin esto el PRIMER chequeo recién corre
+      # a los `interval` (10 s), así que un arranque en frío tarda ~11 s en
+      # reportarse healthy aunque el servicio esté listo en ~1 s.
+      start_period: 30s
+      start_interval: 500ms
     networks:
       - adc-network
 
+  # Provisiona buckets y la cuenta de servicio con la que firma la plataforma. Corre en cada
+  # `compose up` y es idempotente: si la cuenta ya existe se le re-sincroniza secreto y política
+  # (así rotar S3_SECRET_KEY en el .env alcanza para rotarla acá).
   minio-init:
     image: minio/mc:latest
     container_name: adc-minio-core-init
     depends_on:
       minio:
         condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-adcadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-adcpassword}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-adc-platform}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-adc-platform-dev}
     entrypoint: >
       /bin/sh -c "
-        mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-adcadmin} $${MINIO_ROOT_PASSWORD:-adcpassword};
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
         mc mb -p local/adc-pm || true;
         mc mb -p local/adc-articles || true;
+        printf '%s' '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:*\"],\"Resource\":[\"arn:aws:s3:::adc-*\",\"arn:aws:s3:::adc-*/*\"]}]}' > /tmp/adc-policy.json;
+        mc admin user svcacct add --access-key $$S3_ACCESS_KEY --secret-key $$S3_SECRET_KEY --policy /tmp/adc-policy.json local $$MINIO_ROOT_USER 2>/dev/null || mc admin user svcacct edit --secret-key $$S3_SECRET_KEY --policy /tmp/adc-policy.json local $$S3_ACCESS_KEY || echo '[adc-minio-core-init] No se pudo provisionar la cuenta de servicio; la plataforma no podra acceder a S3.';
         exit 0;
       "
     networks:

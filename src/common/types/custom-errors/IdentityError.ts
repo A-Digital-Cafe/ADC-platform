@@ -14,6 +14,8 @@ type IdentityErrorTypes =
 	| "CANNOT_MODIFY_SELF"
 	| "HIERARCHY_VIOLATION"
 	| "GLOBAL_ONLY_RESOURCE"
+	// Se intentó otorgar un permiso que el actor no posee
+	| "PERMISSION_ESCALATION"
 	// Planes / asientos
 	| "SEAT_LIMIT_REACHED"
 	// Not found

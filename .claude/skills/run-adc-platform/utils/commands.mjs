@@ -63,8 +63,12 @@ export async function smoke() {
 	for (const [label, port] of portEntries()) {
 		const s = await curlStatus(port);
 		const ok = typeof s === "number" && s < 500;
-		if (!ok) bad++;
-		console.log(`  ${ok ? "OK " : "XX "} ${String(s).padEnd(8)} ${label}`);
+		// El árbol `apps/test` sólo levanta con `bun run dev:tests` (ENABLE_TESTS): un puerto
+		// test/* apagado es la configuración por defecto, no una falla — pero si responde,
+		// se valida igual.
+		const optional = !ok && label.startsWith("test/");
+		if (!ok && !optional) bad++;
+		console.log(`  ${ok ? "OK " : optional ? "-- " : "XX "} ${String(s).padEnd(8)} ${label}${optional ? " (sin ENABLE_TESTS)" : ""}`);
 	}
 	console.log("== screenshots ==");
 	for (const [url, name] of SMOKE_SHOTS) {

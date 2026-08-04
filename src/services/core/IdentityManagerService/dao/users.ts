@@ -25,19 +25,43 @@ const MAX_SEARCH_LIMIT = 50;
 /** Máximo duro de un listado de usuarios (una respuesta sin límite es un DoS accidental). */
 const MAX_LIST_LIMIT = 500;
 
+/**
+ * Corta las sesiones vivas de una cuenta que se acaba de desactivar. Lo provee el
+ * servicio (que sí puede resolver `SessionManagerService`); el DAO sólo lo invoca.
+ * Best-effort: un fallo acá nunca puede abortar el ban.
+ */
+export type SessionRevoker = (userId: string, reason: string) => Promise<void>;
+
 export class UserManager {
 	readonly #permissionChecker: PermissionChecker;
 
 	readonly #seatGate: SeatGate;
 
+	readonly #revokeSessions: SessionRevoker;
+
 	constructor(
 		private readonly userModel: Model<any>,
 		private readonly logger: ILogger,
 		getAuthVerifier: AuthVerifierGetter = () => null,
-		seatGate: SeatGate = async () => null
+		seatGate: SeatGate = async () => null,
+		revokeSessions: SessionRevoker = async () => {}
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "UserManager", RESOURCE_NAME);
 		this.#seatGate = seatGate;
+		this.#revokeSessions = revokeSessions;
+	}
+
+	/**
+	 * Desactivar una cuenta tiene que terminar sus sesiones: `isActive:false` por sí solo
+	 * no invalida nada, y sin esto el refresh token se sigue canjeando por access tokens
+	 * nuevos indefinidamente. Se llama en TODA transición a `isActive:false` (ban, baja voluntaria).
+	 */
+	async #revokeSessionsSafe(userId: string, reason: string): Promise<void> {
+		try {
+			await this.#revokeSessions(userId, reason);
+		} catch (error) {
+			this.logger.logError(`No se pudieron revocar las sesiones de ${userId} (${reason}): ${error}`);
+		}
 	}
 
 	/**
@@ -359,6 +383,9 @@ export class UserManager {
 			const update = buildUpdateSet(updates, USER_UPDATABLE_FIELDS, { updatedAt: new Date() });
 			const updated = await this.userModel.findOneAndUpdate({ id: userId }, update, { new: true });
 			if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+			// `isActive: false` por esta vía es la desactivación administrativa: mismo corte de
+			// sesiones que un ban (`updates.isActive` ya pasó por el allowlist de buildUpdateSet).
+			if (updates.isActive === false) await this.#revokeSessionsSafe(userId, "desactivación");
 			return updated.toObject?.() || updated;
 		} catch (error) {
 			this.logger.logError(`Error actualizando usuario: ${error}`);
@@ -563,6 +590,7 @@ export class UserManager {
 			{ new: true }
 		);
 		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+		await this.#revokeSessionsSafe(userId, "ban");
 		this.logger.logInfo(`Usuario baneado: ${userId} (reason="${args.reason}")`);
 		return updated.toObject?.() || updated;
 	}
@@ -619,6 +647,7 @@ export class UserManager {
 			{ new: true }
 		);
 		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+		await this.#revokeSessionsSafe(userId, "baja voluntaria");
 		this.logger.logInfo(`Usuario solicita borrado: ${userId}`);
 		return updated.toObject?.() || updated;
 	}

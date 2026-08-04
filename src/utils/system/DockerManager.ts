@@ -13,6 +13,18 @@ interface PublishedPort {
 	port: number;
 }
 
+/** Techo del probe de readiness: pasado esto se sigue con el boot avisando, nunca se cuelga. */
+const READY_TIMEOUT_MS = 20_000;
+/** Cadencia del poll de `docker compose ps`. */
+const READY_POLL_MS = 250;
+
+/** Fila de `docker compose ps --format json` (sólo los campos que interesan). */
+interface ComposePsRow {
+	Service?: string;
+	State?: string;
+	Health?: string;
+}
+
 /** Compose levantado por el kernel en esta corrida, con la capa a la que pertenece. */
 export interface ComposeTarget {
 	type: "app" | "service" | "common";
@@ -96,7 +108,7 @@ export class DockerManager {
 					else if (type === "service") map = this.#serviceDockerComposeMap;
 					else map = this.#commonDockerComposeMap;
 					map.set(name, dir);
-					setTimeout(() => resolve(), 3000);
+					this.#waitUntilReady(dockerComposeFile, name).then(resolve, resolve);
 				} else {
 					this.#logger.logWarn(`docker-compose falló con código ${code}`);
 					if (output.trim()) {
@@ -106,6 +118,70 @@ export class DockerManager {
 				}
 			});
 		});
+	}
+
+	/**
+	 * Espera a que el stack esté **realmente** listo: un delay fijo es a la vez de más
+	 * (redis responde en ~200 ms) y de menos (mongo en frío tarda más), y su fallo es
+	 * silencioso — el kernel sigue y los providers se comen el error de conexión.
+	 *
+	 * Poll de `docker compose ps --format json`, que lista **sólo los contenedores corriendo**:
+	 *  - servicio con healthcheck → se espera a `healthy`;
+	 *  - servicio sin healthcheck → alcanza con `running`;
+	 *  - one-shots que ya terminaron (`minio-init`) no aparecen, así que no se los espera.
+	 *
+	 * Por eso no se usa `docker compose up --wait`: ese falla cuando un servicio del compose sale
+	 * antes de ponerse healthy, que es exactamente lo que hace `minio-init`.
+	 *
+	 * Nunca lanza ni cuelga el boot: al vencer el techo avisa y sigue.
+	 */
+	async #waitUntilReady(dockerComposeFile: string, name: string): Promise<void> {
+		if (!this.#dockerPath) return;
+		const dockerPath = this.#dockerPath;
+		const deadline = Date.now() + READY_TIMEOUT_MS;
+		let lastPending = "";
+
+		while (Date.now() < deadline) {
+			const rows = DockerManager.#composePs(dockerPath, dockerComposeFile);
+			if (rows === null) return; // `ps` no responde: no bloquear el boot por el probe
+			const pending = rows.filter((r) => r.State !== "running" || r.Health === "starting" || r.Health === "unhealthy");
+			if (pending.length === 0) return;
+			lastPending = pending.map((r) => `${r.Service ?? "?"}=${r.Health || r.State}`).join(", ");
+			await new Promise((r) => setTimeout(r, READY_POLL_MS));
+		}
+
+		this.#logger.logWarn(
+			`[${name}] no quedó listo en ${READY_TIMEOUT_MS / 1000}s (${lastPending || "sin detalle"}); se sigue con el arranque. ` +
+				`Los providers que dependan de él van a reintentar la conexión.`
+		);
+	}
+
+	/** Filas de `docker compose ps` (JSON por línea), o `null` si el comando falla. */
+	static #composePs(dockerPath: string, dockerComposeFile: string): ComposePsRow[] | null {
+		try {
+			const raw = execFileSync(dockerPath, ["compose", "-f", dockerComposeFile, "ps", "--format", "json"], {
+				encoding: "utf8",
+				timeout: 5000,
+			}).trim();
+			if (!raw) return [];
+			// v2 emite un objeto por línea; algunas versiones emiten un array.
+			if (raw.startsWith("[")) return JSON.parse(raw) as ComposePsRow[];
+			return raw
+				.split("\n")
+				.filter((l) => l.trim())
+				.map((l) => JSON.parse(l) as ComposePsRow);
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Interpola `${VAR}` y `${VAR:-default}` con el entorno que va a heredar `docker compose`.
+	 * Sin esto, una IP de publicación parametrizada (`${MINIO_BIND_HOST:-127.0.0.1}:9000:9000`)
+	 * se descartaría como si fuera un rango de puertos y el aviso de puerto ocupado se perdería.
+	 */
+	static #expandEnv(spec: string): string {
+		return spec.replaceAll(/\$\{(\w+)(?::?-([^}]*))?\}/g, (_match, name: string, fallback?: string) => process.env[name] || fallback || "");
 	}
 
 	/**
@@ -134,7 +210,7 @@ export class DockerManager {
 				inPorts = false;
 				continue;
 			}
-			const spec = item[1].trim().replace(/^["']|["']$/g, "").replace(/\/(tcp|udp)$/i, "");
+			const spec = DockerManager.#expandEnv(item[1].trim().replace(/^["']|["']$/g, "").replace(/\/(tcp|udp)$/i, ""));
 			if (spec.includes("-") || !spec.includes(":")) continue; // rangos y puertos sueltos
 			const parts = spec.split(":");
 			// [ip, host, contenedor] | [host, contenedor]. El puerto de host es el ANTEÚLTIMO.

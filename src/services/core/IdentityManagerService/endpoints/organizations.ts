@@ -5,6 +5,7 @@ import type IdentityManagerService from "../index.js";
 import * as OS from "./schemas/organizations.js";
 import { SuccessResponse, JobAcceptedResponse } from "./schemas/common.js";
 import { checkOrgSlug as checkSlugPolicy } from "@common/utils/name-policy.js";
+import { assertCanGrantPermissions } from "../domain/hierarchy.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
 
@@ -148,9 +149,22 @@ export class OrgEndpoints {
 		},
 	})
 	static async updateOrganization(
-		ctx: EndpointCtx<{ orgId: string }, Partial<Pick<Organization, "slug" | "region" | "status" | "metadata">>>
+		ctx: EndpointCtx<{ orgId: string }, Partial<Pick<Organization, "slug" | "region" | "status" | "metadata" | "permissions">>>
 	) {
 		requireGlobalAccess(ctx);
+		// `UpdateOrgBody` no declara `permissions`, pero TypeBox valida sin stripear y
+		// `ORG_UPDATABLE_FIELDS` sí lo persiste: los permisos de org son el piso de todos sus
+		// miembros, así que pasan por el mismo guard de "no otorgues lo que no tenés".
+		if (ctx.data?.permissions?.length) {
+			const current = await OrgEndpoints.identity.organizations.getOrganization(ctx.params.orgId, ctx.token!);
+			await assertCanGrantPermissions(
+				OrgEndpoints.identity.permissions,
+				ctx.user?.id,
+				ctx.data.permissions,
+				ctx.user?.orgId,
+				current?.permissions
+			);
+		}
 		const org = await OrgEndpoints.identity.organizations.updateOrganization(ctx.params.orgId, ctx.data || {}, ctx.token!);
 		OrgEndpoints.identity.permissions.invalidateAll();
 		return org;

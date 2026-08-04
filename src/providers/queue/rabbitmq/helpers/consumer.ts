@@ -1,6 +1,7 @@
 import { ConsumerStatus, type Publisher, type Connection, type Consumer } from "rabbitmq-client";
 import type { RabbitMQProviderConfig, ConsumerOptions, OperationMessage } from "../types.js";
 import { publishToRetryQueue } from "./publisher.js";
+import { isPermanentClientError } from "@common/types/ADCCustomError.js";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
 
 interface CreateConsumerDeps {
@@ -59,6 +60,15 @@ export function createOperationConsumer(
 				]);
 				return ConsumerStatus.ACK;
 			} catch (error: any) {
+				// Un 4xx tipado no cambia de resultado en el reintento: reintentarlo mantiene la
+				// operación fallando durante el backoff y, como cada intento pasa por el
+				// circuit breaker, un solo pedido inválido alcanzaba para abrirlo y dejar la
+				// operación fuera de servicio para todos los usuarios.
+				if (isPermanentClientError(error)) {
+					logger.logDebug(`[RabbitMQ] ${consumerKey} sin reintento (${error.status} ${error.errorKey}): ${error.message}`);
+					return ConsumerStatus.DROP;
+				}
+
 				const nextRetry = retryCount;
 				const canRetry = nextRetry < maxRetries && nextRetry < retryDelays.length;
 

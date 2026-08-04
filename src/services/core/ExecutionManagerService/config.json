@@ -4,7 +4,7 @@
 	"kernelMode": 20,
 	"failOnError": true,
 	"custom": {
-		"minWorkers": 2,
+		"minWorkers": 0,
 		"maxWorkers": 4
 	}
 }

@@ -8,6 +8,7 @@ carga y las responsabilidades; los temas más profundos viven en docs hermanos:
 | Loaders, versionado semver, multi-lenguaje (IPC), workspaces | [module-system.md](module-system.md) |
 | Instancias múltiples, config por instancia, hot reload, docker | [app-runtime.md](app-runtime.md) |
 | UI framework-agnostic, Module Federation, namespaces, i18n, SW | [ui-federation.md](ui-federation.md) |
+| Arranque: concurrencia acotada, readiness, caché de bundler, flags | [boot-performance.md](boot-performance.md) |
 | Códigos HTTP: cuándo `204` vs `404`, etc  (back y front) | [http-status.md](http-status.md) |
 | Presets (módulos opcionales en repos git) | [../multirepo.md](../multirepo.md) |
 

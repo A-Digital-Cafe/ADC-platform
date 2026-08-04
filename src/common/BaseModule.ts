@@ -1,11 +1,15 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { IModule, IModuleConfig } from "../interfaces/modules/IModule.js";
 import { ILogger } from "../interfaces/utils/ILogger.js";
 import { Logger } from "../utils/logger/Logger.js";
 import { Kernel } from "../kernel.js";
 import { bindKernelKey } from "../utils/decorators/OnlyKernel.ts";
 import type { ReadonlyModuleRegistry } from "../utils/registry/ReadonlyModuleRegistry.ts";
-import type { ModuleRegistry } from "../utils/registry/ModuleRegistry.ts";
+import { moduleKeyConfig, type ModuleRegistry } from "../utils/registry/ModuleRegistry.ts";
 import type { ModuleLoader } from "../utils/loaders/ModuleLoader.ts";
+import { safeParseJson } from "./utils/json-schema.ts";
+import { moduleConfigCheck } from "./schemas/module-config.ts";
 import type { Capability } from "./security/Capability.ts";
 import { emitNotification, emitNotificationSecure, emitBroadcast, type BroadcastEmitResult } from "./utils/notifications/emit.js";
 import type { BroadcastInput, NotifyInput } from "./types/notifications/Notification.js";
@@ -43,9 +47,14 @@ export abstract class BaseModule implements IModule {
 
 	/**
 	 * Capability de infraestructura (registrar/cargar sub‑dependencias). **Contenida**:
-	 * vive en este campo privado de BaseModule, inaccesible para las subclases y para
-	 * código inyectado (que no tiene `this`), y sólo la usan `getMutableRegistry`/
-	 * `getModuleLoader` de aquí.
+	 * vive en este campo privado, inaccesible para las subclases y para código inyectado.
+	 *
+	 * Los accesores al registry mutable y al ModuleLoader son privados de verdad (`#`), no
+	 * `protected`, a propósito: `protected` no existe en runtime, así que un accesor
+	 * protected entregaría esos handles a cualquier código con la instancia y volvería
+	 * inservible la lista `INFRA_ONLY` de `capabilityPolicy` (que impide declarar
+	 * `registry:write` y `module:loader` en `privileges`). Los únicos consumidores son los
+	 * dos métodos de bootstrap de abajo, que devuelven **datos**, nunca handles.
 	 */
 	#infraCap?: Capability | symbol;
 
@@ -116,19 +125,154 @@ export abstract class BaseModule implements IModule {
 		return this.#businessCap;
 	}
 
-	/**
-	 * Registry **mutable** para registrar las sub‑dependencias declaradas del módulo.
-	 * Usa la infraCap contenida; la subclase puede invocarlo pero no extraer la infraCap.
-	 */
-	protected getMutableRegistry(): ModuleRegistry {
+	/** Registry **mutable**. Privado real: el handle no sale de este archivo. */
+	#mutableRegistry(): ModuleRegistry {
 		if (!this.#kernelRef || !this.#infraCap) throw new Error(`Infra no disponible en ${this.name} (módulo no provisionado)`);
 		return this.#kernelRef.getMutableRegistry(this.#infraCap);
 	}
 
-	/** Loader para cargar las sub‑dependencias declaradas del módulo. Usa la infraCap contenida. */
-	protected getModuleLoader(): ModuleLoader {
+	/** Loader de módulos (instancia código, lee `.env`). Privado real: no sale de este archivo. */
+	#moduleLoader(): ModuleLoader {
 		if (!this.#infraCap) throw new Error(`Infra no disponible en ${this.name} (módulo no provisionado)`);
 		return Kernel.getModuleLoader(this.#infraCap);
+	}
+
+	/**
+	 * Cierra la ventana de infraestructura. El bootstrap de un módulo ocurre una sola vez,
+	 * conducido por el kernel; a partir de ahí no queda capability con la que cargar código
+	 * ni mutar el registry, ni siquiera desde dentro de estas clases base.
+	 */
+	#consumeInfra(): void {
+		this.#infraCap = undefined;
+	}
+
+	/**
+	 * Arranque de las sub‑dependencias **declaradas** del módulo (providers/utilities de su
+	 * `config.json`). Devuelve la config base ya interpolada; el registry mutable y el
+	 * `ModuleLoader` se quedan acá dentro.
+	 *
+	 * De un solo uso: al terminar consume la infraCap. Un segundo llamado lanza.
+	 */
+	protected async bootstrapDeclaredDeps(moduleDir: string, options?: IModuleConfig): Promise<Partial<IModuleConfig>> {
+		const registry = this.#mutableRegistry();
+		const moduleLoader = this.#moduleLoader();
+		try {
+			const envVars = await moduleLoader.loadEnvFile(path.join(moduleDir, ".env"));
+			const baseConfig = await this.#readBaseConfig(moduleLoader, path.join(moduleDir, "config.json"), envVars);
+			const providers = await this.#resolveProviders(moduleLoader, registry, baseConfig, envVars, options);
+			// Utilities: prioridad app (options) > config.json del módulo. Son globales.
+			const utilities = options?.utilities || baseConfig.utilities || [];
+			await this.#loadUtilities(moduleLoader, registry, utilities, baseConfig.failOnError);
+			return { ...baseConfig, providers, utilities };
+		} finally {
+			this.#consumeInfra();
+		}
+	}
+
+	/**
+	 * Carga los módulos de la definición ya mergeada del propio módulo (camino de las apps).
+	 * Sin parámetros: sólo puede cargar lo que el módulo declaró en su `config`.
+	 *
+	 * De un solo uso, ídem {@link bootstrapDeclaredDeps}.
+	 */
+	protected async loadDefinitionModules(): Promise<void> {
+		if (!this.#kernelRef) throw new Error(`Infra no disponible en ${this.name} (módulo no provisionado)`);
+		const moduleLoader = this.#moduleLoader();
+		try {
+			await moduleLoader.loadAllModulesFromDefinition(this.config, this.#kernelRef);
+		} finally {
+			this.#consumeInfra();
+		}
+	}
+
+	/** Lee e interpola el `config.json` del módulo (objeto vacío si no existe o no parsea). */
+	async #readBaseConfig(
+		moduleLoader: ModuleLoader,
+		modulesConfigPath: string,
+		envVars: Record<string, string>
+	): Promise<Partial<IModuleConfig>> {
+		try {
+			const configContent = await fs.readFile(modulesConfigPath, "utf-8");
+			const rawConfig = safeParseJson(configContent, moduleConfigCheck);
+			if (rawConfig) return moduleLoader.interpolateEnvVars(rawConfig, envVars);
+		} catch (e: any) {
+			this.logger.logDebug(`No se pudo leer config.json: ${e.message}`);
+		}
+		return {};
+	}
+
+	/**
+	 * Providers efectivos del módulo: si la app los proporciona (options), se usan esos
+	 * (ya cargados); si no, se cargan los del `config.json` propio.
+	 */
+	async #resolveProviders(
+		moduleLoader: ModuleLoader,
+		registry: ModuleRegistry,
+		baseConfig: Partial<IModuleConfig>,
+		envVars: Record<string, string>,
+		options?: IModuleConfig
+	): Promise<IModuleConfig["providers"]> {
+		const fromApp = options?.providers || [];
+		if (fromApp.length > 0) return fromApp;
+		if (!baseConfig.providers || !Array.isArray(baseConfig.providers)) return fromApp;
+
+		// Cargar los providers del config.json con las variables de entorno del módulo
+		// (`baseConfig` ya viene interpolado, así que la uniqueKey coincide con la del registro).
+		for (const providerConfig of baseConfig.providers) {
+			try {
+				const keyConfig = moduleKeyConfig(providerConfig);
+
+				// Este es el camino por el que se cargan casi todos los providers del árbol: las
+				// entradas `services` de un `config.json` de app rara vez declaran `providers`, así
+				// que el chequeo equivalente de `ModuleLoader` no llega a correr. Sin este guard,
+				// cada servicio que declara p.ej. `object/mongo` con el mismo `custom` abría su
+				// propia conexión, y `registerProvider` la descartaba silenciosamente al ver la key
+				// ya ocupada: la instancia quedaba sin dueño, sin `stop()` y con el socket vivo.
+				if (registry.hasModule("provider", providerConfig.name, keyConfig)) {
+					registry.addModuleDependency("provider", providerConfig.name, keyConfig);
+					continue;
+				}
+
+				const provider = await moduleLoader.loadProvider(providerConfig, envVars);
+				registry.registerProvider(provider.name, provider, providerConfig);
+				// También registrar por el nombre del módulo/configuración
+				if (providerConfig.name !== provider.name) {
+					registry.registerProvider(providerConfig.name, provider, providerConfig);
+				}
+				// Agregar como dependencia de la app actual
+				registry.addModuleDependency("provider", providerConfig.name, keyConfig);
+			} catch (error) {
+				const message = `Error cargando provider ${providerConfig.name}`;
+				// failOnError puede venir del config.json del módulo
+				if (baseConfig.failOnError) throw new Error(message, { cause: error });
+				this.logger.logWarn(message);
+			}
+		}
+		return baseConfig.providers;
+	}
+
+	/** Carga y registra las utilities del módulo (con alias por nombre base si contiene "/"). */
+	async #loadUtilities(
+		moduleLoader: ModuleLoader,
+		registry: ModuleRegistry,
+		utilitiesToLoad: IModuleConfig["utilities"],
+		failOnError: boolean | undefined
+	): Promise<void> {
+		if (!utilitiesToLoad || !Array.isArray(utilitiesToLoad)) return;
+		for (const utilityConfig of utilitiesToLoad) {
+			try {
+				// Mismo razonamiento que el guard de providers de acá arriba, y por el mismo
+				// motivo: éste es el camino por el que se cargan casi todas las utilities del
+				// árbol, así que sin deduplicar, una utility declarada por N servicios se
+				// construía e INICIABA N veces para que el registry descartara N-1.
+				await moduleLoader.loadAndRegisterUtility(registry, utilityConfig, null);
+			} catch (error: any) {
+				const message = `Error cargando utility ${utilityConfig.name}: ${error.message}`;
+				this.logger.logError(message);
+				if (failOnError) throw new Error(message, { cause: error });
+				else throw error; // Re-lanzar para que el módulo no se registre
+			}
+		}
 	}
 
 	/**

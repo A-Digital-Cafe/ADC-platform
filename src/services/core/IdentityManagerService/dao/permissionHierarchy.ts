@@ -1,7 +1,7 @@
 import type { Permission, ResolvedPermission } from "@common/types/identity/Permission.ts";
 import type { Role } from "@common/types/identity/Role.ts";
 import { SystemRole } from "../defaults/systemRoles.js";
-import { isGlobalOnlyResource } from "@common/types/resources.ts";
+import { isGlobalOnlyResource, NON_GLOBAL_ONLY_RESOURCE_IDS } from "@common/types/resources.ts";
 
 /**
  * Helpers puros de la resolución jerárquica de permisos (sin modelos ni cache):
@@ -12,14 +12,36 @@ import { isGlobalOnlyResource } from "@common/types/resources.ts";
 /** Permisos finales por recurso mientras se aplica la jerarquía. */
 export type FinalPerms = Map<string, { action: number; scope: number; source: ResolvedPermission["source"] }>;
 
+/** Comodín de recurso. `RESOURCE_MAP` no lo lista, así que nunca es `globalOnly` por sí mismo. */
+const WILDCARD_RESOURCE = "*";
+
 /**
- * Filtra permisos de recursos `globalOnly` (security, modules): sólo un **rol
+ * Filtra permisos de recursos `globalOnly` (security, modules, plans): sólo un **rol
  * global** (orgId nulo) puede portarlos. Se descartan de permisos directos de
  * usuario, grupos, orgs y roles de organización.
+ *
+ * El comodín `*` no se descarta: **se expande** a los recursos no-`globalOnly`. Descartarlo
+ * dejaría sin autoridad al rol Admin de toda organización, cuyo único permiso sembrado es
+ * justamente `{resource:"*"}`. Y dejarlo pasar tal cual es el agujero: como
+ * `isGlobalOnlyResource("*")` es `false`, un `*` de organización sobrevive el filtro y después
+ * `hasPermission` lo hace matchear contra `security`/`modules`/`plans`. La expansión cierra
+ * las dos vías —bitfield y strings `resource.scope.action` de la sesión— sin tocar ningún
+ * dato sembrado en Mongo.
  */
 export function filterGlobalOnly(permissions: Permission[], fromGlobalRole: boolean): Permission[] {
 	if (fromGlobalRole) return permissions;
-	return permissions.filter((p) => !isGlobalOnlyResource(p.resource));
+
+	const result: Permission[] = [];
+	for (const p of permissions) {
+		if (p.resource === WILDCARD_RESOURCE) {
+			// Campos explícitos y no `{ ...p }`: los permisos vienen de subdocumentos de mongoose y
+			// el spread clonaría su `_id` en las N entradas expandidas.
+			for (const resource of NON_GLOBAL_ONLY_RESOURCE_IDS) result.push({ resource, action: p.action, scope: p.scope });
+		} else if (!isGlobalOnlyResource(p.resource)) {
+			result.push(p);
+		}
+	}
+	return result;
 }
 
 /** Doc de mongoose o objeto plano; normaliza a objeto plano (o null). */

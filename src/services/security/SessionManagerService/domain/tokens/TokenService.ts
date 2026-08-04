@@ -1,9 +1,13 @@
+import { parseDurationSeconds } from "@common/utils/duration.js";
 import type { TokenVerificationResult, IJWTProviderMultiKey, TokenPayload } from "@interfaces/modules/providers/IJWT.js";
 import type { AuthenticatedUser, SessionData } from "../../types.js";
 import type { KeyStore } from "../keys/KeyStore.js";
 import type { RefreshTokenRepository, StoredRefreshToken } from "./RefreshTokenRepository.js";
 
 const isProd = process.env.NODE_ENV === "production";
+
+/** Fallback si `accessTokenTtl` viniera con un formato no parseable (15 min). */
+const DEFAULT_ACCESS_TTL_SECONDS = 15 * 60;
 
 /**
  * Secure cookies require HTTPS. In start:prodtests (NODE_ENV=production over HTTP)
@@ -34,6 +38,8 @@ interface AccessTokenVerificationResult extends TokenVerificationResult {
 interface RefreshResult {
 	success: boolean;
 	tokens?: TokenPair;
+	/** Vencimiento del access token emitido (epoch ms), para que el cliente renueve antes. */
+	expiresAt?: number;
 	error?: string;
 }
 
@@ -65,12 +71,15 @@ export class TokenService {
 	readonly #jwtProvider: IJWTProviderMultiKey;
 	readonly #refreshTokenRepo: RefreshTokenRepository;
 	readonly #config: TokenServiceConfig;
+	/** Mismo parseo que usa el provider al firmar: el `expiresAt` publicado no puede divergir del `exp` real. */
+	readonly #accessTtlSeconds: number;
 
 	constructor(keyStore: KeyStore, jwtProvider: IJWTProviderMultiKey, refreshTokenRepo: RefreshTokenRepository, config: TokenServiceConfig) {
 		this.#keyStore = keyStore;
 		this.#jwtProvider = jwtProvider;
 		this.#refreshTokenRepo = refreshTokenRepo;
 		this.#config = config;
+		this.#accessTtlSeconds = parseDurationSeconds(config.accessTokenTtl) ?? DEFAULT_ACCESS_TTL_SECONDS;
 	}
 
 	/**
@@ -170,30 +179,43 @@ export class TokenService {
 		userAgent: string,
 		getUserById: (userId: string) => Promise<AuthenticatedUser | null>
 	): Promise<RefreshResult> {
-		// Buscar refresh token
-		const storedToken = await this.#refreshTokenRepo.findByToken(refreshToken);
+		// Buscar refresh token, aceptando el ya rotado dentro de la ventana de gracia
+		const resolved = await this.#refreshTokenRepo.resolveCurrent(refreshToken);
 
-		if (!storedToken) {
+		if (!resolved) {
 			return { success: false, error: "Refresh token inválido o expirado" };
 		}
+
+		const storedToken = resolved.stored;
 
 		// Obtener usuario actualizado
 		const user = await getUserById(storedToken.userId);
 		if (!user) {
-			await this.#refreshTokenRepo.revoke(refreshToken);
+			await this.#refreshTokenRepo.revoke(storedToken.token);
 			return { success: false, error: "Usuario no encontrado" };
 		}
 
-		// Rotar refresh token (borra el viejo, crea uno nuevo)
-		const newRefreshToken = await this.#refreshTokenRepo.rotate(refreshToken, {
-			ipAddress,
-			country,
-			userAgent,
-			ttlSeconds: this.#config.refreshTokenTtlSeconds,
-		});
+		// Rotación de un solo uso. Si `replayed`, otra pestaña ya rotó hace segundos:
+		// se reemite sólo el access token y se devuelve el refresh vigente, para que
+		// todas las pestañas converjan al mismo par en vez de pelearse por rotar.
+		let newRefreshToken = resolved.replayed
+			? storedToken
+			: await this.#refreshTokenRepo.rotate(refreshToken, {
+					ipAddress,
+					country,
+					userAgent,
+					ttlSeconds: this.#config.refreshTokenTtlSeconds,
+				});
 
 		if (!newRefreshToken) {
-			return { success: false, error: "Error al rotar refresh token" };
+			// Otra pestaña rotó entre `resolveCurrent` y `rotate`. Es la misma carrera
+			// benigna: reresolver por la gracia antes de tratarlo como fallo, porque un
+			// fallo aquí suma strike y tres strikes bloquean la cuenta.
+			const raced = await this.#refreshTokenRepo.resolveCurrent(refreshToken);
+			if (!raced?.replayed) {
+				return { success: false, error: "Error al rotar refresh token" };
+			}
+			newRefreshToken = raced.stored;
 		}
 
 		// Crear nuevo access token
@@ -219,6 +241,7 @@ export class TokenService {
 				accessToken,
 				refreshToken: newRefreshToken,
 			},
+			expiresAt: Date.now() + this.#accessTtlSeconds * 1000,
 		};
 	}
 

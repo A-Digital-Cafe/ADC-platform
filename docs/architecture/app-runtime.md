@@ -105,6 +105,6 @@ aplicación:
 ```
 src/apps/test/user-profile/
 ├── index.ts
-├── default.json
+├── config.json
 └── docker-compose.yml          # ← Se ejecuta automáticamente
 ```

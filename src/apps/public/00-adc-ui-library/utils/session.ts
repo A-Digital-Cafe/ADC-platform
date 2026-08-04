@@ -7,6 +7,7 @@
  */
 
 import { createAdcApi } from "./adc-fetch.js";
+import { noteSessionExpiry } from "./auth-refresh.js";
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 
 export type { SessionUser, SessionResponse };
@@ -28,6 +29,9 @@ export async function getSession(force = false, silent = false): Promise<Session
 	inflight = (async () => {
 		const result = await api.get<SessionResponse>("/session", { silent });
 		const data: SessionResponse = result.success && result.data ? result.data : { authenticated: false };
+		// Alimenta la renovación proactiva: la cookie es HttpOnly, así que el vencimiento
+		// del access token sólo se conoce por el cuerpo de la respuesta.
+		noteSessionExpiry(data.authenticated ? data.expiresAt : null);
 		cache = { data, ts: Date.now() };
 		return data;
 	})();

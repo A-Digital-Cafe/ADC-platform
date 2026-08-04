@@ -4,7 +4,7 @@ import type { FastifyRequest, IHostBasedHttpProvider } from "../../../../interfa
 import type { HttpMethod, RegisteredEndpoint, SetCookie } from "../types.js";
 import type { CsrfRuntimeConfig } from "./csrf-config.js";
 
-export type TokenSource = "cookie" | "bearer" | "query" | null;
+export type TokenSource = "cookie" | "bearer" | null;
 
 const CSRF_COOKIE_NAME = "adc_csrf";
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -56,7 +56,12 @@ export function registerCsrfEndpoint(httpProvider: IHostBasedHttpProvider, confi
 
 export function validateCsrf(endpoint: RegisteredEndpoint, req: FastifyRequest<any>, tokenSource: TokenSource, config: CsrfRuntimeConfig): void {
 	if (!config.enabled || !MUTATIVE_METHODS.has(endpoint.method) || endpoint.options?.skipCsrf === true) return;
-	if (getHeaderValue(req, "authorization")) return;
+
+	// La exención vale sólo si la request NO se autenticó por una credencial ambiente. La mera
+	// presencia de un header `Authorization` no prueba eso: `extractToken` resuelve la cookie
+	// PRIMERO (`parts/http.ts`), así que una request con cookie de sesión más un `Authorization`
+	// cualquiera se autentica por cookie y el CSRF tiene que correr. El chequeo de abajo expresa
+	// la regla correcta: un cliente puramente Bearer no manda cookies y sigue exento.
 	if (tokenSource !== "cookie" && !hasBrowserCookie(req)) return;
 
 	const headerToken = getHeaderValue(req, CSRF_HEADER_NAME);

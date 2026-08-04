@@ -46,10 +46,15 @@ export default class ExecutionManagerService extends BaseService implements IExe
 	constructor(kernel: any, options?: any) {
 		super(kernel, options);
 
-		// Configuración del pool de workers
+		// Configuración del pool de workers. Los valores llegan bajo `custom` del `config.json`
+		// (misma convención que el resto de los servicios); leerlos del nivel de arriba los
+		// dejaba siempre en `undefined`, cayendo a los defaults.
 		const cpuCount = os.cpus().length;
-		this.maxWorkers = options?.maxWorkers || Math.max(2, cpuCount - 1);
-		this.minWorkers = options?.minWorkers || Math.min(2, cpuCount);
+		const tuning = (options?.custom ?? options ?? {}) as { minWorkers?: number; maxWorkers?: number };
+		this.maxWorkers = tuning.maxWorkers || Math.max(2, cpuCount - 1);
+		// `??`, no `||`: `minWorkers: 0` es un valor legítimo (pool frío, se crea bajo
+		// demanda) y con `||` caía al default de 2, que es justo lo que se quiere evitar.
+		this.minWorkers = tuning.minWorkers ?? Math.min(2, cpuCount);
 
 		this.logger.logInfo(`Configurado para ${this.minWorkers}-${this.maxWorkers} workers (CPUs: ${cpuCount})`);
 	}
@@ -159,6 +164,15 @@ export default class ExecutionManagerService extends BaseService implements IExe
 		if (systemLoad.avgLoad < 0.5 && this.workerPool.length === 0) {
 			this.logger.logDebug("Carga baja, ejecutando localmente");
 			assignWorker(instance, null);
+			return;
+		}
+
+		// Pool frío (`minWorkers: 0`) con carga alta: el primer worker se crea acá. Sin esto,
+		// `workerPool[0]` es undefined y la asignación explota en la primera tarea.
+		if (this.workerPool.length === 0) {
+			const first = this.#createWorker();
+			first.taskCount++;
+			assignWorker(instance, first.worker);
 			return;
 		}
 

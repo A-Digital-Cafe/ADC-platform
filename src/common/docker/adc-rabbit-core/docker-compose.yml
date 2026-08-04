@@ -9,6 +9,22 @@ services:
       RABBITMQ_DEFAULT_PASS: password
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      # `check_port_connectivity` y NO `ping`: ping responde apenas vive el nodo Erlang,
+      # que es ~3 s ANTES de que abra el listener AMQP — justo la ventana del problema.
+      # Sin healthcheck, `DockerManager` sólo puede esperar a `running`, y el kernel
+      # conectaba antes de tiempo: docker-proxy ya tiene tomado el 5672 del host, así que
+      # acepta el TCP y lo cierra al no encontrar nada detrás. De ahí el
+      # "socket closed unexpectedly by server" en el boot en frío.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # start_period/start_interval: sin ellos el primer chequeo recién corre al
+      # `interval` (10 s) y un arranque en frío tarda ~11 s en reportarse healthy
+      # aunque el broker esté listo en ~3 s. Mismo motivo que en adc-redis-core.
+      start_period: 60s
+      start_interval: 500ms
 
 volumes:
   rabbitmq-data:

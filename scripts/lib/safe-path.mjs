@@ -1,26 +1,34 @@
 import path from 'node:path';
 
+const SEGMENT = /^[a-z0-9][a-z0-9-]*$/i;
+
 /**
  * Valida un nombre de módulo provisto por CLI y devuelve una ruta absoluta
  * garantizada dentro de `baseDir`. Previene path injection (`..`, separadores,
  * rutas absolutas) antes de canonicalizar.
  *
- * @param {string} name   Nombre crudo (process.argv[...]).
+ * Acepta `grupo/nombre` además de `nombre` porque ninguna capa guarda sus módulos
+ * como hijo directo: viven en `src/apps/public`, `src/services/core`, etc. El regex
+ * por segmento excluye `.`, así que un `..` no puede colarse como grupo.
+ *
+ * @param {string} name   Nombre crudo (process.argv[...]), con un grupo opcional.
  * @param {string} baseDir Directorio base absoluto donde debe vivir el módulo.
- * @returns {string} Ruta absoluta segura (hijo directo de baseDir).
+ * @returns {string} Ruta absoluta segura, a lo sumo dos niveles bajo baseDir.
  */
 export function resolveModuleDir(name, baseDir) {
-	if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/i.test(name)) {
+	const segments = typeof name === 'string' ? name.split('/') : [];
+	if (segments.length === 0 || segments.length > 2 || !segments.every((s) => SEGMENT.test(s))) {
 		throw new Error(
-			`Invalid module name "${name}". Use only letters, digits and hyphens (e.g. "my-module").`
+			`Invalid module name "${name}". Use "group/name" or "name", with letters, digits and hyphens (e.g. "public/my-app").`
 		);
 	}
 
 	const base = path.resolve(baseDir);
-	const dir = path.resolve(base, name);
+	const dir = path.resolve(base, ...segments);
 
-	// Tras canonicalizar, debe ser un hijo directo de baseDir.
-	if (path.dirname(dir) !== base) {
+	// Tras canonicalizar, debe seguir colgando de baseDir con la profundidad pedida.
+	const rel = path.relative(base, dir);
+	if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).length !== segments.length) {
 		throw new Error(`Refusing to write outside ${base}: "${name}"`);
 	}
 

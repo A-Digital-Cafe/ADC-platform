@@ -34,6 +34,15 @@ function buildRedisUrl(cfg: RedisProviderConfig): { url: string; physicalKey: st
 }
 
 /**
+ * INCR + EXPIRE en una sola ida al servidor. Fija el TTL al crear la clave y, además,
+ * **repara** claves que hayan quedado sin TTL (`TTL < 0`) por un corte entre ambos comandos.
+ */
+const INCR_WITH_TTL_SCRIPT =
+	"local c = redis.call('INCR', KEYS[1]) " +
+	"if c == 1 or redis.call('TTL', KEYS[1]) < 0 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
+	"return c";
+
+/**
  * RedisProvider - Cliente Redis nativo para Bun.
  *
  * Pool físico COMPARTIDO entre instancias: dos providers con el mismo
@@ -230,6 +239,25 @@ export default class RedisProvider extends BaseProvider {
 
 	async incrby(key: string, increment: number): Promise<number> {
 		return this.client.incrby(this._k(key), increment);
+	}
+
+	/**
+	 * Contador de ventana fija: incrementa y garantiza el TTL en **una sola operación atómica**.
+	 *
+	 * Con el par no atómico `incr()` + `if (count === 1) expire()`, cualquier corte entre las dos
+	 * llamadas (caída de la conexión, hot-reload del módulo, `expire` que devuelve false) deja la
+	 * clave sin TTL — y como el contador ya nunca vuelve a valer 1, el `expire` no se reintenta
+	 * jamás: la ventana no cierra nunca y el contador crece para siempre. Con `appendonly` la
+	 * clave envenenada sobrevive incluso al reinicio del contenedor.
+	 *
+	 * El script además **repara** claves que hayan quedado sin TTL por ese camino.
+	 *
+	 * @returns el valor del contador después del incremento.
+	 */
+	async incrWithTtl(key: string, ttlSeconds: number): Promise<number> {
+		const ttl = String(Math.max(1, Math.floor(ttlSeconds)));
+		const count = await this.client.send("EVAL", [INCR_WITH_TTL_SCRIPT, "1", this._k(key), ttl]);
+		return Number(count);
 	}
 
 	// === Operaciones de patrón ===

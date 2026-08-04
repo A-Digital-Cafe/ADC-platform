@@ -31,6 +31,24 @@ Estos documentos son el **prompt base** para crear o editar módulos (por humano
 | Acceder a otro módulo o a una superficie privilegiada   | [kernel-access.md](kernel-access.md)                   |
 | Crear, extraer o instalar un preset (repos git)         | [../multirepo.md](../multirepo.md)                     |
 
+## Autolimpieza de huérfanos (`devCleanup`)
+
+Cualquier módulo (app, service, provider o utility) puede exportar un `devCleanup(opts)` opcional
+—declarado en `IModule`— para barrer **sus propios** huérfanos: filas u objetos que quedaron sin
+dueño y que ninguna operación normal va a volver a tocar. El kernel lo dispara una vez, apenas el
+módulo arranca, en **fire‑and‑forget**: no demora el arranque y si falla sólo deja un warning.
+
+- En desarrollo limpia; en cualquier otro entorno corre con `opts.dryRun` y **sólo reporta** (el
+  runner loguea lo devuelto como warning). Borrar datos de producción no es tarea de un hook de arranque.
+- Devolvé un `OrphanScan` (`{ scope, found, removed?, detail? }`) por colección revisada; `found: 0`
+  no imprime nada.
+- Nunca lances por un huérfano suelto: acumulá y seguí. Ante la duda (una consulta que falla) **no borres**.
+- Limpiá sólo lo tuyo: si el huérfano lo define el estado de otro módulo, preguntale a su dueño.
+  Reusá la cascada de purga que ya tengas en vez de duplicar el borrado.
+
+Referencia: `@common/utils/dev-cleanup.ts` (contrato) y `EmailService.devCleanup` (buzones cuyo
+usuario ya no existe, que además bloqueaban el alta por la dirección única).
+
 ## Convenciones globales
 
 - Rutas de ejemplo: `src/services/<layer>/<MyService>/` y `src/apps/public/<my-app>/`. Dentro de un preset la estructura interna es idéntica; solo cambia la raíz (`presets/<preset>/services/...`, `presets/<preset>/apps/...`).

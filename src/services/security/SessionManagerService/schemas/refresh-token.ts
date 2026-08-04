@@ -16,6 +16,13 @@ const StoredRefreshTokenSchema = Type.Object({
 	country: Type.Union([Type.String(), Type.Null()]),
 	userAgent: Type.String(),
 	revoked: Type.Boolean(),
+	/**
+	 * **Id** (no el valor) del token que reemplazó a éste en una rotación. Junto con
+	 * `replacedAt` habilita la ventana de gracia: una pestaña que llega tarde con el token
+	 * viejo recibe el par vigente en vez de un 401 (ver `RefreshTokenRepository.resolveCurrent`).
+	 */
+	replacedBy: Type.Optional(Type.String()),
+	replacedAt: Type.Optional(Type.Number()),
 });
 
 export const storedRefreshTokenCheck = compileSchema(StoredRefreshTokenSchema);

@@ -20,8 +20,7 @@ import { GeoIPValidator } from "./domain/security/GeoIPValidator.js";
 import { SessionManager } from "./domain/session/manager.js";
 import { OAuthProviderRegistry, PlatformAuthProvider } from "./domain/oauth/index.js";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
-import { safeParseJson } from "@common/utils/json-schema.ts";
-import { permissionStringsCheck } from "./schemas/permissions.js";
+import { openPermissions, sealPermissions } from "./domain/security/perm-cache.js";
 
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
@@ -141,6 +140,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 				previous: undefined,
 			},
 			redis: this.#redis || undefined,
+			logger: this.logger,
 		});
 
 		await this.#keyStore.init();
@@ -150,7 +150,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 		this.#keyStore.startRotation();
 
 		// RefreshTokenRepository (30 días)
-		this.#refreshTokenRepo = new RefreshTokenRepository(30 * 24 * 60 * 60, this.#redis || undefined);
+		this.#refreshTokenRepo = new RefreshTokenRepository(30 * 24 * 60 * 60, this.#redis || undefined, this.logger);
 
 		// TokenService
 		this.#tokenService = new TokenService(this.#keyStore, this.#jwtProvider!, this.#refreshTokenRepo, {
@@ -310,12 +310,14 @@ export default class SessionManagerService extends BaseService implements ISessi
 	async #getCurrentPermissionStrings(userId: string, orgId?: string): Promise<string[] | null> {
 		if (!this.#identityService) return null;
 
-		const cacheKey = `session:permfp:${userId}:${orgId || "global"}`;
+		const orgKey = orgId || "global";
+		const cacheKey = `session:permfp:${userId}:${orgKey}`;
 		if (this.#redis) {
 			try {
-				const cached = await this.#redis.get(cacheKey);
-				const parsed = safeParseJson(cached, permissionStringsCheck);
-				if (parsed) return parsed;
+				// Sobre sellado: un valor manipulado en Redis no abre y cuenta como miss. Este
+				// set NO es informativo — `verifyToken` lo usa como permisos del request.
+				const cached = openPermissions(await this.#redis.get(cacheKey), userId, orgKey, this.logger);
+				if (cached) return cached;
 			} catch {
 				/* cache best-effort */
 			}
@@ -327,7 +329,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 
 			if (this.#redis) {
 				try {
-					await this.#redis.set(cacheKey, JSON.stringify(permissionStrings), PERMISSION_FINGERPRINT_TTL_SECONDS);
+					await this.#redis.set(cacheKey, sealPermissions(userId, orgKey, permissionStrings, this.logger), PERMISSION_FINGERPRINT_TTL_SECONDS);
 				} catch {
 					/* cache best-effort */
 				}
@@ -385,6 +387,27 @@ export default class SessionManagerService extends BaseService implements ISessi
 
 	extractSessionToken(req: { cookies?: Record<string, string> }): string | null {
 		return req.cookies?.[ACCESS_COOKIE_NAME] || null;
+	}
+
+	/**
+	 * Revoca todos los refresh tokens del usuario. Lo llama IdentityManagerService al
+	 * desactivar una cuenta (ban, baja, desactivación administrativa): sin esto, el
+	 * refresh token del baneado sigue siendo canjeable por access tokens nuevos.
+	 *
+	 * No invalida el access token vigente —es un JWT sin estado—, pero ese vence en
+	 * `accessTokenTtl` (15m) y el refresh ya no está para renovarlo. El corte inmediato
+	 * del canje lo hace además `getUserById` en el handler de `/api/auth/refresh`, que
+	 * rechaza a los usuarios con `isActive === false`.
+	 */
+	async revokeUserSessions(cap: CapabilityToken, userId: string): Promise<number> {
+		assertScope(cap, Scope.SessionRevoke);
+
+		if (!this.#tokenService) throw new Error("SessionManagerService no está inicializado");
+		if (!userId) return 0;
+
+		const revoked = await this.#tokenService.revokeAllUserTokens(userId);
+		if (revoked > 0) this.logger.logInfo(`[SessionManager] ${revoked} sesión(es) revocadas para ${userId}`);
+		return revoked;
 	}
 
 	/**

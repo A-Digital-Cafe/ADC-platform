@@ -1,6 +1,7 @@
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import type { User } from "@common/types/identity/User.js";
 import type { LoginAttemptTracker } from "../domain/security/LoginAttemptTracker.js";
+import type { UserBlockStatus } from "../schemas/block-status.js";
 import type { UserAuthenticationResult } from "../../../core/IdentityManagerService/dao/users.ts";
 
 export interface NativeLoginBody {
@@ -36,11 +37,39 @@ export async function resolveNativeLoginUser(
 		throw new AuthError(403, "ACCOUNT_DISABLED", "Cuenta desactivada");
 	}
 
+	// Sin `id` no hay a quién contabilizarle intentos ni a quién consultarle el bloqueo:
+	// tratarlo como credencial inválida es lo único seguro (fail-closed).
+	const userId = profile.id;
+	if (!userId) throw new AuthError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
+
 	if ("wrongPassword" in profile && profile.wrongPassword) {
-		await handleWrongNativePassword(profile.id, loginTracker, ipAddress);
+		await handleWrongNativePassword(userId, loginTracker, ipAddress);
 	}
 
+	// El bloqueo se chequea acá, con la credencial ya validada y antes de emitir sesión.
+	// Consultarlo sólo en el camino de fallo dejaría entrar con la contraseña correcta a una
+	// cuenta bloqueada (por fuerza bruta o por uso fraudulento de refresh tokens).
+	assertNotBlocked(await loginTracker.isBlocked(userId));
+
+	// Login correcto: limpia el contador de fallos. Sin esto los fallos se acumulan durante
+	// 24 h aunque el usuario haya entrado bien entremedio, y tres tropiezos sueltos terminan
+	// bloqueando a alguien legítimo.
+	await loginTracker.recordLoginAttempt(userId, true, ipAddress);
+
 	return profile as User;
+}
+
+/** Traduce un bloqueo activo al error correspondiente. No-op si la cuenta no está bloqueada. */
+function assertNotBlocked(blockStatus: UserBlockStatus): void {
+	if (!blockStatus.blocked) return;
+
+	if (blockStatus.permanent) {
+		throw new AuthError(403, "ACCOUNT_BLOCKED_PERMANENT", "Cuenta bloqueada");
+	}
+
+	throw new AuthError(403, "ACCOUNT_BLOCKED_TEMP", "Cuenta bloqueada temporalmente", {
+		blockedUntil: blockStatus.blockedUntil ?? undefined,
+	});
 }
 
 export function requiresOrgSelection(user: User, orgId: string | undefined): boolean {
@@ -62,17 +91,7 @@ export function assertOrgMembership(user: User, orgId: string | undefined): void
 }
 
 async function handleWrongNativePassword(userId: string, loginTracker: LoginAttemptTracker, ipAddress: string): Promise<never> {
-	const blockStatus = await loginTracker.recordLoginAttempt(userId, false, ipAddress);
-
-	if (blockStatus.blocked) {
-		if (blockStatus.permanent) {
-			throw new AuthError(403, "ACCOUNT_BLOCKED_PERMANENT", "Cuenta bloqueada");
-		}
-
-		throw new AuthError(403, "ACCOUNT_BLOCKED_TEMP", "Cuenta bloqueada temporalmente", {
-			blockedUntil: blockStatus.blockedUntil ?? undefined,
-		});
-	}
+	assertNotBlocked(await loginTracker.recordLoginAttempt(userId, false, ipAddress));
 
 	throw new AuthError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
 }

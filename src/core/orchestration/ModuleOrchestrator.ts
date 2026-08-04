@@ -22,6 +22,7 @@ import type {
 	TargetModules,
 } from "./types.js";
 import type { Capability } from "@common/security/Capability.ts";
+import type { PrivilegeChange, PrivilegeGrant, PrivilegeLedger } from "../security/PrivilegeLedger.js";
 
 /**
  * Margen tras el arranque antes de declarar "caído" a un módulo que nunca se vio cargado.
@@ -29,6 +30,14 @@ import type { Capability } from "@common/security/Capability.ts";
  * fallos los marcaría a todos como caídos al inicio.
  */
 const FAILURE_GRACE_MS = 180_000;
+
+/**
+ * Cuánto tiene que llevar AUSENTE un módulo antes de declararlo caído. Una recarga
+ * (deploy, re-habilitar, hot reload en dev) lo saca del registry durante segundos: sin
+ * esta confirmación, cualquier muestreo que caiga en ese hueco lo reporta como fallo y
+ * abre un incidente automático que se resuelve solo al tick siguiente.
+ */
+const ABSENCE_CONFIRM_MS = 90_000;
 
 /** Controlador de 503 expuesto por EndpointManagerService. Gateado por `platform:infra`. */
 interface EndpointUnavailabilityController {
@@ -52,6 +61,8 @@ export interface ModuleOrchestratorDeps {
 	kernelKey: symbol;
 	/** Capability `platform:infra` del kernel para operaciones de infra (503/rebuild UI). */
 	platformCap: Capability;
+	/** Registro de privilegios concedidos: el gestor de módulos lo persiste y lo aprueba. */
+	privilegeLedger: PrivilegeLedger;
 	presetsPath: string;
 	srcPath: string;
 }
@@ -81,6 +92,8 @@ export class ModuleOrchestrator {
 	#graphBuilt = false;
 	/** Miembros (`type:name`) vistos cargados alguna vez: distingue "se cayó" de "aún arrancando". */
 	readonly #everLoaded = new Set<string>();
+	/** Miembro (`type:name`) → instante en que se lo vio ausente por primera vez (ver `ABSENCE_CONFIRM_MS`). */
+	readonly #absentSince = new Map<string, number>();
 	/** Fin del margen de arranque para la detección de fallos (se fija en la 1ª consulta). */
 	#failureGraceUntil = 0;
 
@@ -119,6 +132,33 @@ export class ModuleOrchestrator {
 	 */
 	onModuleDetected(cb: (e: ModuleDetectionEvent) => void): void {
 		this.#d.detector.onDetected(cb);
+	}
+
+	/**
+	 * Privilegios concedidos hasta ahora. El gestor de módulos lo consulta en su arranque
+	 * para diffear contra el baseline persistido: los services de prioridad menor a la suya
+	 * ya fueron provisionados y no dispararon `onPrivilegeChange`.
+	 */
+	privilegeGrants(): PrivilegeGrant[] {
+		return this.#d.privilegeLedger.list();
+	}
+
+	/** Suscribe cambios de privilegios (apps y recargas posteriores al arranque del gestor). */
+	onPrivilegeChange(cb: (change: PrivilegeChange) => void): void {
+		this.#d.privilegeLedger.onChange(cb);
+	}
+
+	/**
+	 * Instala el baseline aprobado de privilegios. Con `gateEnabled`, un scope declarado que no
+	 * figure en la aprobación de su módulo NO se concede en la próxima provisión: es lo que
+	 * impide que un `git pull` amplíe privilegios por su cuenta.
+	 *
+	 * Va apagado por defecto: un gate fail-closed sin nadie que apruebe deja módulos legítimos
+	 * a medio arrancar tras un deploy. El registro y el aviso a seguridad son incondicionales.
+	 */
+	setPrivilegeApprovals(approvals: ReadonlyMap<string, readonly string[]> | null, gateEnabled: boolean): void {
+		this.#d.privilegeLedger.setApprovals(approvals, gateEnabled);
+		this.#d.logger.logInfo(`[orchestrator] baseline de privilegios instalado (gate ${gateEnabled ? "ACTIVO" : "sólo auditoría"}).`);
 	}
 
 	availabilitySnapshot(): Record<string, { messageKey?: string; since?: number }> {
@@ -199,6 +239,21 @@ export class ModuleOrchestrator {
 		return affected;
 	}
 
+	/**
+	 * `true` si `filePath` cuelga de una raíz legítima para esa capa: `src/<capa>s` o
+	 * `presets/<topic>/<capa>s`. Estructural a propósito (sin tocar el FS): la lista de
+	 * topics cambia en runtime cuando aparece un preset nuevo, y un chequeo que dependa
+	 * de esa lista rechazaría justo el caso que el lanzamiento manual existe para cubrir.
+	 */
+	#isInsideLayerRoot(type: OrchestratorLayer, filePath: string): boolean {
+		const layerDir = `${type}s`; // app→apps, service→services, provider→providers, utility→utilities
+		if (isInsideBase(path.join(this.#d.srcPath, layerDir), filePath)) return true;
+		const rel = path.relative(this.#d.presetsPath, path.resolve(filePath));
+		if (rel.startsWith("..") || path.isAbsolute(rel)) return false;
+		const [topic, layer] = rel.split(path.sep);
+		return Boolean(topic) && topic !== ".." && layer === layerDir;
+	}
+
 	/** Entrada pendiente para `type:name` (app-aware), o undefined. */
 	#pendingEntry(type: OrchestratorLayer, name: string): DisabledEntry | undefined {
 		const entry = type === "app" ? this.#d.disabledRegistry.getApp(name) : this.#d.disabledRegistry.get(type, name);
@@ -215,6 +270,16 @@ export class ModuleOrchestrator {
 	async #launchPending(entry: DisabledEntry): Promise<string[]> {
 		if (!entry.filePath) {
 			throw new Error(`'${entry.name}' está pendiente pero sin filePath registrado: no se puede lanzar (revisá su origen en disco).`);
+		}
+		// Anti path-traversal: `filePath` llega desde el estado persistido en mongo
+		// (`applyPersistedStatus`) y de ahí va directo a un `import()`, que es ejecución de
+		// código. Sin contención (la misma que ya exige el loader de kernel-services), una
+		// fila alterada en la base ejecuta cualquier archivo del disco con los privilegios
+		// del kernel.
+		if (!this.#isInsideLayerRoot(entry.type, entry.filePath)) {
+			throw new Error(
+				`[orchestrator] '${entry.name}' apunta fuera de las raíces de ${entry.type} permitidas, lanzamiento abortado: ${entry.filePath}`
+			);
 		}
 		this.#d.disabledRegistry.remove(entry.type, entry.name);
 		this.#invalidateGraph(); // su config ya está en disco: el grafo debe verlo
@@ -479,8 +544,18 @@ export class ModuleOrchestrator {
 		const memberState = (member: string, loaded: boolean): "up" | "failed" | "unknown" => {
 			if (loaded) {
 				this.#everLoaded.add(member);
+				this.#absentSince.delete(member);
 				return "up";
 			}
+			// Ausencia sin confirmar: durante una recarga (deploy, re-enable, hot reload) el
+			// módulo desaparece del registry unos segundos. Se espera a que la ausencia
+			// PERSISTA antes de llamarla caída; mientras tanto es "unknown" (ni fallo ni alta).
+			const since = this.#absentSince.get(member);
+			if (since === undefined) {
+				this.#absentSince.set(member, now);
+				return "unknown";
+			}
+			if (now - since < ABSENCE_CONFIRM_MS) return "unknown";
 			return graceOver || this.#everLoaded.has(member) ? "failed" : "unknown";
 		};
 		const out: FriendlyGroupState[] = [];
@@ -496,8 +571,12 @@ export class ModuleOrchestrator {
 			for (const svc of members.services) {
 				const svcEntry = this.#d.disabledRegistry.get("service", svc);
 				if (svcEntry?.pending) continue;
-				if (svcEntry) downBacks++;
-				else {
+				// Baja manual: su ausencia es intencional, así que se olvida el reloj de ausencia
+				// (al re-habilitarlo vuelve a contar desde cero, no arrastra el tiempo apagado).
+				if (svcEntry) {
+					downBacks++;
+					this.#absentSince.delete(`service:${svc}`);
+				} else {
 					const state = memberState(`service:${svc}`, loadedServices.has(svc));
 					if (state === "failed") {
 						downBacks++;
@@ -508,8 +587,10 @@ export class ModuleOrchestrator {
 			for (const base of members.apps) {
 				// Pendiente de lanzamiento: nunca fue parte de la plataforma, no cuenta como caída/fallo.
 				if (this.#d.disabledRegistry.getApp(base)?.pending) continue;
-				if (disabledAppBases.has(base)) downFronts++;
-				else {
+				if (disabledAppBases.has(base)) {
+					downFronts++;
+					this.#absentSince.delete(`app:${base}`);
+				} else {
 					const state = memberState(`app:${base}`, loadedAppBases.has(base));
 					if (state === "failed") {
 						downFronts++;
@@ -724,9 +805,12 @@ export class ModuleOrchestrator {
 		return this.#canonicalNamesByInstance(type).filter((name) => underPath.has(base(name)));
 	}
 
+	// Los dos controladores de abajo reciben la `platform:infra` del kernel, así que se
+	// resuelven por identidad pinneada en boot y no por nombre: la resolución por nombre
+	// desempata por longitud de `uniqueKey` y es ganable por un módulo homónimo.
 	#endpointController(): EndpointUnavailabilityController | null {
 		try {
-			const svc = this.#d.registry.getService<EndpointUnavailabilityController>("EndpointManagerService");
+			const svc = this.#d.registry.getPlatformService<EndpointUnavailabilityController>("EndpointManagerService");
 			return typeof svc?.setOwnerUnavailable === "function" ? svc : null;
 		} catch {
 			return null;
@@ -735,7 +819,7 @@ export class ModuleOrchestrator {
 
 	#uiController(): UIController | null {
 		try {
-			const svc = this.#d.registry.getService<UIController>("UIFederationService");
+			const svc = this.#d.registry.getPlatformService<UIController>("UIFederationService");
 			return typeof svc?.rebuildModule === "function" ? svc : null;
 		} catch {
 			return null;

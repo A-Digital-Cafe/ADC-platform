@@ -7,7 +7,7 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
-      MONGO_INITDB_DB: adc-core
+      MONGO_INITDB_DATABASE: adc-core
     volumes:
       - adc_mongo_core_data:/data/db
     healthcheck:
@@ -15,6 +15,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # start_period/start_interval: sin esto el PRIMER chequeo recién corre
+      # a los `interval` (10 s), así que un arranque en frío tarda ~11 s en
+      # reportarse healthy aunque el servicio esté listo en ~1 s.
+      start_period: 30s
+      start_interval: 500ms
     networks:
       - adc-network
 

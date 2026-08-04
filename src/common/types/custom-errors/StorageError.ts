@@ -17,7 +17,7 @@ type ExpectedStorageErrorTypes =
 	// Quota
 	| "QUOTA_EXCEEDED";
 
-type UnexpectedStorageErrorTypes = "QUOTA_UNAVAILABLE";
+type UnexpectedStorageErrorTypes = "QUOTA_UNAVAILABLE" | "S3_UNAVAILABLE";
 
 type StorageErrorTypes = ExpectedStorageErrorTypes | UnexpectedStorageErrorTypes;
 

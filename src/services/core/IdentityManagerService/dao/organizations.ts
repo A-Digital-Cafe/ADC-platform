@@ -15,6 +15,7 @@ import type { Organization } from "@common/types/identity/Organization.ts";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
 import type { Step } from "../../../core/OperationsService/types.ts";
 import { AuthorizationError } from "@common/types/custom-errors/AuthorizationError.ts";
+import { IdentityError } from "@common/types/custom-errors/IdentityError.ts";
 
 /** Máximo duro de un listado de organizaciones (una respuesta sin límite es un DoS accidental). */
 const MAX_LIST_LIMIT = 500;
@@ -49,20 +50,22 @@ export class OrgManager {
 
 		const regionPath = region || "default/default";
 
-		// Validar que la región existe
-		const regionInfo = await this.regionManager.getRegion(regionPath);
+		// Validar que la región existe. El token se propaga porque `RegionManager` está construido
+		// con el auth verifier real: sin token, `getRegion` tira `NO_TOKEN` y la creación falla
+		// siempre.
+		const regionInfo = await this.regionManager.getRegion(regionPath, token);
 		if (!regionInfo) {
-			throw new Error(`Región no existe: ${regionPath}`);
+			throw new IdentityError(400, "REGION_NOT_FOUND", `Región no existe: ${regionPath}`);
 		}
 
 		// Validar slug
 		const normalizedSlug = slug.toLowerCase().trim();
 		if (!/^[a-z0-9-]+$/.test(normalizedSlug)) {
-			throw new Error(`Slug inválido: ${slug}. Solo letras minúsculas, números y guiones`);
+			throw new IdentityError(400, "INVALID_FIELD", `Slug inválido: ${slug}. Solo letras minúsculas, números y guiones`);
 		}
 		const rejection = checkOrgSlug(normalizedSlug);
 		if (rejection) {
-			throw new Error(`Slug reservado: '${rejection.term}' está reservado por la plataforma`);
+			throw new IdentityError(403, "FORBIDDEN", `Slug reservado: '${rejection.term}' está reservado por la plataforma`);
 		}
 
 		try {
@@ -80,7 +83,7 @@ export class OrgManager {
 			return this.#toOrganization(org);
 		} catch (error) {
 			if (isDuplicateKeyError(error)) {
-				throw new Error(`Organización ${slug} ya existe`, { cause: error });
+				throw new IdentityError(409, "INVALID_FIELD", `Organización ${slug} ya existe`);
 			}
 			throw error;
 		}
@@ -136,16 +139,16 @@ export class OrgManager {
 		// No permitir cambiar orgId
 		delete (updates as any).orgId;
 
-		// Si se cambia la región, validar que existe
+		// Si se cambia la región, validar que existe (con el token, ídem `createOrganization`).
 		if (updates.region) {
-			const regionInfo = await this.regionManager.getRegion(updates.region);
-			if (!regionInfo) throw new Error(`Región no existe: ${updates.region}`);
+			const regionInfo = await this.regionManager.getRegion(updates.region, token);
+			if (!regionInfo) throw new IdentityError(400, "REGION_NOT_FOUND", `Región no existe: ${updates.region}`);
 		}
 
 		const update = buildUpdateSet(updates, ORG_UPDATABLE_FIELDS, { updatedAt: new Date() });
 		const org = await this.orgModel.findOneAndUpdate({ orgId }, update, { new: true, lean: true });
 
-		if (!org) throw new Error(`Organización no encontrada: ${orgId}`);
+		if (!org) throw new IdentityError(404, "ORG_NOT_FOUND", `Organización no encontrada: ${orgId}`);
 
 		this.logger.logDebug(`[OrgManager] Organización actualizada: ${orgId}`);
 		return this.#toOrganization(org);
@@ -156,7 +159,7 @@ export class OrgManager {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.DELETE, IdentityScopes.ORGANIZATIONS);
 
 		const org = await this.orgModel.findOne({ orgId });
-		if (!org) throw new Error(`Organización no encontrada: ${orgId}`);
+		if (!org) throw new IdentityError(404, "ORG_NOT_FOUND", `Organización no encontrada: ${orgId}`);
 
 		// Steps defined here in the DAO - the source of truth for cascade order
 		const steps: Step[] = [

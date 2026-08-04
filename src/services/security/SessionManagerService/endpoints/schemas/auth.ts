@@ -89,7 +89,11 @@ export const SwitchOrgResponse = Type.Object({
 	user: AuthUser,
 });
 
-export const RefreshResponse = Type.Object({ success: Type.Boolean() });
+export const RefreshResponse = Type.Object({
+	success: Type.Boolean(),
+	/** Vencimiento del nuevo access token (epoch ms): el cliente programa con esto la renovación. */
+	expiresAt: Type.Optional(Type.Number()),
+});
 
 export const LogoutResponse = Type.Object({
 	success: Type.Boolean(),

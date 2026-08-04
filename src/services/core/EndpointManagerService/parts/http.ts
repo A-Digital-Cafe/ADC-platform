@@ -14,6 +14,7 @@ import { validateCsrf, type TokenSource } from "./csrf.js";
 import type { CsrfRuntimeConfig } from "./csrf-config.js";
 import { resolveRateLimit, type ResolvedRateLimits } from "./rate-limit.js";
 import { assertNoOperatorKeys, compileEndpointSchemas, validateEndpointInput } from "./schema.js";
+import { sealJobToken } from "./job-token.js";
 import { isRecording, record } from "./metrics.js";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -24,7 +25,8 @@ interface ExtractedToken {
 	source: TokenSource;
 }
 
-function extractToken(req: FastifyRequest<any>, getSessionManager: () => ISessionVerifier | null): ExtractedToken {
+/** Resolución del token de sesión: cookie primero, `Authorization: Bearer` después. */
+export function extractToken(req: FastifyRequest<any>, getSessionManager: () => ISessionVerifier | null): ExtractedToken {
 	// 1. Intentar desde cookie via SessionManager
 	const sessionManager = getSessionManager();
 	if (sessionManager) {
@@ -38,12 +40,12 @@ function extractToken(req: FastifyRequest<any>, getSessionManager: () => ISessio
 		return { token: authHeader.substring(7), source: "bearer" };
 	}
 
-	// 3. Intentar desde query parameter (para WebSockets, etc.)
-	const queryToken = (req.query as any)?.token;
-	if (queryToken) {
-		return { token: queryToken, source: "query" };
-	}
-
+	// El token de sesión NO se acepta por query string: una URL termina en logs de proxy, en el
+	// historial del navegador, en `Referer` y —en dev— en la línea de request sin redactar que
+	// loguea el provider HTTP. Los consumidores que no pueden poner headers (los SSE de
+	// `adc-notification-bell` y del agente del túnel de Drive) abren `EventSource` con
+	// `withCredentials: true`, o sea cookie same-origin; los clientes CLI mandan
+	// `Authorization: Bearer`.
 	return { token: null, source: null };
 }
 
@@ -97,11 +99,14 @@ export function createHttpWrapper(
 				return;
 			}
 
-			// ── Rate limiting (Redis INCR + EXPIRE) ─────────────────────────
+			// ── Rate limiting (Redis: INCR + TTL en una operación atómica) ──
+			// La clave es `req.ip`, la IP del socket: fastify NO tiene `trustProxy`, así que no es
+			// falsificable por un header. Detrás de un reverse proxy todos comparten esa IP y por
+			// lo tanto el bucket; resolverlo requiere una allowlist de proxies configurada, no
+			// confiar en `X-Forwarded-For` (que sí sería un bypass trivial).
 			if (rl && redis) {
 				const key = rlKeyPrefix + req.ip;
-				const count = await redis.incr(key);
-				if (count === 1) await redis.expire(key, rlTtlSeconds);
+				const count = await redis.incrWithTtl(key, rlTtlSeconds);
 
 				reply.header("X-RateLimit-Limit", rl.max);
 				reply.header("X-RateLimit-Remaining", Math.max(0, rl.max - count));
@@ -182,11 +187,14 @@ export function createHttpWrapper(
 						});
 						await redis.setex(`job:${jobId}`, JOB_TTL_SECONDS, jobData);
 
-						// Store token in Redis (not in the queue) so consumer can verify session
+						// El token va a Redis (no a la cola) para que el consumidor pueda re-verificar
+						// la sesión. Cifrado en reposo: Redis no tiene auth y esto es una sesión viva.
+						// El hash que viaja por AMQP es del token EN CLARO, así que el consumidor lo
+						// compara después de abrir el sobre.
 						let tokenHash = "";
 						if (token) {
 							tokenHash = createHash("sha256").update(token).digest("hex");
-							await redis.setex(`job-token:${jobId}`, JOB_TTL_SECONDS, token);
+							await redis.setex(`job-token:${jobId}`, JOB_TTL_SECONDS, sealJobToken(token, logger));
 						}
 
 						// Publish minimal payload to RabbitMQ

@@ -1,4 +1,4 @@
-import { UserAuthenticationResult } from "../../../../core/IdentityManagerService/dao/users.ts";
+import type { ProviderUserProfile } from "../../types.js";
 import { BaseOAuthProvider } from "./base.js";
 
 /**
@@ -17,7 +17,7 @@ export class DiscordOAuthProvider extends BaseOAuthProvider {
 		};
 	}
 
-	protected parseUserProfile(data: Record<string, any>): UserAuthenticationResult {
+	protected parseUserProfile(data: Record<string, any>): ProviderUserProfile {
 		// Discord avatar URL format
 		let avatar: string | undefined;
 		if (data.avatar) {
@@ -29,6 +29,9 @@ export class DiscordOAuthProvider extends BaseOAuthProvider {
 			id: data.id,
 			username: data.username,
 			email: data.email,
+			// `verified` de `/users/@me`: Discord deja poner cualquier email en la cuenta,
+			// así que sin este flag el email no identifica a nadie.
+			emailVerified: data.verified === true,
 			avatar,
 			metadata: data,
 		};

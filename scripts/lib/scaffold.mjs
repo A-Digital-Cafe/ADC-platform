@@ -5,25 +5,38 @@ import { resolveModuleDir } from './safe-path.mjs';
 /**
  * Esqueleto común de los scripts `create:*`: valida el argumento, resuelve el
  * directorio destino de forma segura y escribe package.json, index.ts y
- * (si aplica) modules.json. Lo específico de cada capa — label, baseDir y
+ * (si aplica) config.json. Lo específico de cada capa — label, baseDir y
  * template del index — entra por opciones.
  */
-export function scaffoldModule({ label, command, baseDir, indexTemplate, withModulesJson = false }) {
-	const name = process.argv[2];
-	if (!name) {
-		console.error(`Usage: npm run ${command} -- <${label.toLowerCase()}-name>`);
+export function scaffoldModule({ label, command, baseDir, indexTemplate, withConfigJson = false }) {
+	const arg = process.argv[2];
+	const root = path.resolve(process.cwd(), baseDir);
+	// Los módulos viven agrupados por categoría (`public/`, `core/`, `object/`, …), nunca
+	// como hijo directo de la capa: sin grupo, el kernel no encontraría el módulo.
+	const groups = fs.existsSync(root)
+		? fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+		: [];
+	if (!arg?.includes('/')) {
+		console.error(`Usage: bun run ${command} -- <group>/<${label.toLowerCase()}-name>`);
+		if (groups.length) console.error(`Grupos existentes en ${baseDir}: ${groups.join(', ')}`);
 		process.exit(1);
 	}
 
+	const name = arg.split('/').pop();
 	const toPascalCase = (str) =>
 		str.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
 
 	let dir;
 	try {
-		dir = resolveModuleDir(name, path.resolve(process.cwd(), baseDir));
+		dir = resolveModuleDir(arg, root);
 	} catch (err) {
 		console.error(`Error: ${err.message}`);
 		process.exit(1);
+	}
+
+	const group = path.basename(path.dirname(dir));
+	if (!groups.includes(group)) {
+		console.warn(`⚠️  "${group}" no existe en ${baseDir}: se crea como categoría nueva.`);
 	}
 
 	if (fs.existsSync(dir)) {
@@ -40,14 +53,15 @@ export function scaffoldModule({ label, command, baseDir, indexTemplate, withMod
 	};
 	fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(packageJson, null, 2) + '\n');
 
-	if (withModulesJson) {
-		const modulesJson = {
+	// `config.json` es el nombre que leen los loaders; un `modules.json` no lo lee nadie.
+	if (withConfigJson) {
+		const configJson = {
 			failOnError: false,
 			providers: [],
 			utilities: [],
 			services: [],
 		};
-		fs.writeFileSync(path.join(dir, 'modules.json'), JSON.stringify(modulesJson, null, 2) + '\n');
+		fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(configJson, null, 2) + '\n');
 	}
 
 	fs.writeFileSync(path.join(dir, 'index.ts'), indexTemplate(toPascalCase(name), name));

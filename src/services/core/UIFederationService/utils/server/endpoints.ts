@@ -1,6 +1,19 @@
 import { DEFAULT_NAMESPACE, type UIFederationContext } from "../types/context.js";
 import { createImportMapObject, generateCompleteImportMap } from "../bundler/import-map.js";
 
+/** Tope de namespaces por request de `/api/i18n` (el árbol real no llega a 40). */
+const MAX_BUNDLED_NAMESPACES = 50;
+
+/**
+ * Primer valor de un parámetro de query. Una clave repetida (`?locale=es&locale=en`) llega
+ * como array, y pasarlo tal cual río abajo terminaba en `locale.split(...)` sobre un array:
+ * un 500 a un endpoint sin auth.
+ */
+function firstQueryValue(value: unknown): string | undefined {
+	const raw = Array.isArray(value) ? value[0] : value;
+	return typeof raw === "string" ? raw : undefined;
+}
+
 function getRequestHost(req: any): string {
 	const hostHeader = req.headers?.host || req.hostname || "localhost";
 	return hostHeader.split(":")[0];
@@ -33,7 +46,7 @@ function registerI18nRoutes(ctx: UIFederationContext): void {
 			reply.code(503).send({ error: "LangManagerService no disponible" });
 			return;
 		}
-		const translations = ctx.langManager.getTranslations(req.params?.namespace, req.query?.locale);
+		const translations = ctx.langManager.getTranslations(req.params?.namespace, firstQueryValue(req.query?.locale));
 		reply.header("Content-Type", "application/json");
 		reply.send(translations);
 	});
@@ -43,12 +56,17 @@ function registerI18nRoutes(ctx: UIFederationContext): void {
 			reply.code(503).send({ error: "LangManagerService no disponible" });
 			return;
 		}
-		const namespaces = (req.query?.namespaces || "").split(",").filter(Boolean);
+		// Deduplicado y acotado: `namespaces` es query string, y sin tope una sola request
+		// podía pedir el mismo namespace miles de veces para inflar la respuesta.
+		const requested: string[] = String(req.query?.namespaces || "")
+			.split(",")
+			.filter(Boolean);
+		const namespaces = [...new Set(requested)].slice(0, MAX_BUNDLED_NAMESPACES);
 		if (namespaces.length === 0) {
 			reply.send(ctx.langManager.getStats());
 			return;
 		}
-		const translations = ctx.langManager.getBundledTranslations(namespaces, req.query?.locale);
+		const translations = ctx.langManager.getBundledTranslations(namespaces, firstQueryValue(req.query?.locale));
 		reply.header("Content-Type", "application/json");
 		reply.send(translations);
 	});

@@ -7,6 +7,27 @@ export class VersionResolver {
 	static readonly #fileExtension = ".ts";
 
 	/**
+	 * Memo de resoluciones **exitosas**. Resolver es un walk de FS con `maxDepth: 3` sobre
+	 * `src/<capa>` + un directorio por cada topic de preset, y se repite por cada declaración:
+	 * el costo crece con (declaraciones × presets), no con una sola de las dos.
+	 *
+	 * Sólo se cachea el acierto. Un "no encontrado" NO se guarda porque un módulo puede
+	 * aparecer en disco después (preset nuevo autodetectado, alta de un módulo pendiente):
+	 * cachear el negativo lo dejaría inencontrable hasta reiniciar el proceso.
+	 *
+	 * La invalidación cuelga de la descarga de módulos (`ModuleRegistry`): cada reload, restart
+	 * y deploy/rollback pasa por un unload antes de volver a cargar, así que el camino que
+	 * lee de disco de nuevo siempre encuentra el cache frío. Sin eso, un rollback git dejaría
+	 * la resolución vieja apuntando al código anterior.
+	 */
+	static readonly #resolutionCache = new Map<string, { path: string; version: string }>();
+
+	/** Olvida las resoluciones cacheadas. La llama el registry al descargar un módulo. */
+	static invalidateResolutionCache(): void {
+		this.#resolutionCache.clear();
+	}
+
+	/**
 	 * Compara dos versiones semánticas (1.2.3)
 	 * @returns -1 si v1 < v2, 0 si v1 === v2, 1 si v1 > v2
 	 */
@@ -149,10 +170,19 @@ export class VersionResolver {
 		}
 
 		const dirs = Array.isArray(modulesDir) ? modulesDir : [modulesDir];
+		// La lista de directorios entra en la clave: el mismo nombre resuelve distinto según
+		// la capa que se esté buscando (`src/services` vs `src/utilities` vs presets).
+		const cacheKey = `${language}|${versionRange}|${moduleName}|${JSON.stringify(dirs)}`;
+		const cached = this.#resolutionCache.get(cacheKey);
+		if (cached) return cached;
+
 		for (let i = 0; i < dirs.length; i++) {
 			const isLast = i === dirs.length - 1;
 			const result = await this.#resolveSingle(dirs[i], moduleName, versionRange, language, !isLast);
-			if (result) return result;
+			if (result) {
+				this.#resolutionCache.set(cacheKey, result);
+				return result;
+			}
 		}
 		return null;
 	}

@@ -15,8 +15,10 @@ import {
 } from "../../../core/EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import { safeParseJson } from "@common/utils/json-schema.ts";
+import { createAtRestSealer } from "@common/utils/at-rest-envelope.ts";
+import { sha256Hex } from "@common/utils/crypto.ts";
 import { pendingLinkEntryCheck, type PendingLinkData } from "../schemas/pending-link.js";
-import type { AuthenticatedUser, IOAuthProvider, ModerationLookupService, OAuthProviderConfig } from "../types.js";
+import type { AuthenticatedUser, IOAuthProvider, ModerationLookupService, OAuthProviderConfig, ProviderUserProfile } from "../types.js";
 import { buildErrorUrl } from "../utils/errorRedirect.js";
 import { recordLoginAttemptIp, redirectIfRequestBanned } from "../utils/moderationGuards.js";
 import { syncDiscordRolesForUser } from "../utils/discordRoleSync.js";
@@ -42,8 +44,15 @@ const isProd = process.env.NODE_ENV === "production";
 const MAX_LINK_ATTEMPTS = 3;
 /** TTL del pending link en segundos (5 minutos) */
 const PENDING_LINK_TTL_SECONDS = 5 * 60;
-/** Prefijo Redis para pending links */
+/**
+ * Prefijo Redis para pending links.
+ *
+ * La entrada guarda el **access token del proveedor** más el email: el índice es
+ * `sha256(token)` —un id, no un secreto— y el valor va sellado, para que un `SCAN` sobre el
+ * Redis (que no tiene auth) no enumere tokens de vinculación vivos ni lea las credenciales.
+ */
 const REDIS_PENDING_PREFIX = "oauth:pending:";
+const pendingLinkSeal = createAtRestSealer("adc:oauth-pending");
 
 /** Dominios permitidos para returnUrl (anti open redirect) */
 const ALLOWED_REDIRECT_DOMAINS = new Set(["adigitalcafe.com", "localhost"]);
@@ -585,7 +594,11 @@ export class OAuthEndpoints {
 	 */
 	private static async storePendingLink(token: string, entry: PendingLinkEntry<PendingLinkData>): Promise<void> {
 		if (OAuthEndpoints.deps.redis) {
-			await OAuthEndpoints.deps.redis.setex(`${REDIS_PENDING_PREFIX}${token}`, PENDING_LINK_TTL_SECONDS, JSON.stringify(entry));
+			await OAuthEndpoints.deps.redis.setex(
+				`${REDIS_PENDING_PREFIX}${sha256Hex(token)}`,
+				PENDING_LINK_TTL_SECONDS,
+				pendingLinkSeal.seal(JSON.stringify(entry), OAuthEndpoints.deps.logger)
+			);
 			return;
 		}
 		OAuthEndpoints.pendingLinks.set(token, entry);
@@ -596,8 +609,8 @@ export class OAuthEndpoints {
 	 */
 	private static async getPendingLink(token: string): Promise<PendingLinkEntry<PendingLinkData> | null> {
 		if (OAuthEndpoints.deps.redis) {
-			const data = await OAuthEndpoints.deps.redis.get(`${REDIS_PENDING_PREFIX}${token}`);
-			return safeParseJson(data, pendingLinkEntryCheck);
+			const sealed = await OAuthEndpoints.deps.redis.get(`${REDIS_PENDING_PREFIX}${sha256Hex(token)}`);
+			return safeParseJson(pendingLinkSeal.open(sealed, OAuthEndpoints.deps.logger), pendingLinkEntryCheck);
 		}
 
 		return OAuthEndpoints.pendingLinks.get(token) || null;
@@ -608,7 +621,7 @@ export class OAuthEndpoints {
 	 */
 	private static async deletePendingLink(token: string): Promise<void> {
 		if (OAuthEndpoints.deps.redis) {
-			await OAuthEndpoints.deps.redis.del(`${REDIS_PENDING_PREFIX}${token}`);
+			await OAuthEndpoints.deps.redis.del(`${REDIS_PENDING_PREFIX}${sha256Hex(token)}`);
 			return;
 		}
 		OAuthEndpoints.pendingLinks.delete(token);
@@ -616,7 +629,7 @@ export class OAuthEndpoints {
 
 	private static async getOrCreateUser(
 		provider: string,
-		profile: { id: string; username: string; email?: string; avatar?: string },
+		profile: ProviderUserProfile,
 		accessToken: string
 	): Promise<GetOrCreateUserResult> {
 		if (!OAuthEndpoints.deps.internalIdentity) {
@@ -635,6 +648,17 @@ export class OAuthEndpoints {
 		}
 
 		const users = OAuthEndpoints.deps.internalIdentity.users;
+
+		// El email del proveedor sólo vale si el proveedor lo da por verificado: en Discord y
+		// Google se elige libremente al crear la cuenta, así que uno sin verificar no identifica
+		// a nadie. Usarlo para emparejar con una cuenta existente sería un oráculo de qué emails
+		// hay registrados, y grabarlo en el alta deja la dirección de otra persona pegada a la
+		// cuenta nueva. El chequeo de ban de más arriba sigue usando el email crudo a propósito:
+		// ahí conviene de más, no de menos.
+		const trustedEmail = profile.emailVerified ? profile.email : undefined;
+		if (profile.email && !trustedEmail) {
+			OAuthEndpoints.deps.logger.logWarn(`[oauth] ${provider}: email sin verificar, se ignora para vinculación y alta.`);
+		}
 
 		// 1. Buscar por linked account activo (provider + providerId)
 		const linkedUser = await users.findByLinkedExternalAccount(provider, profile.id);
@@ -659,8 +683,8 @@ export class OAuthEndpoints {
 		}
 
 		// 2. Si email coincide con usuario existente → requiere autenticación para vincular
-		if (profile.email) {
-			const emailUser = await users.getUserByEmail(profile.email);
+		if (trustedEmail) {
+			const emailUser = await users.getUserByEmail(trustedEmail);
 			if (emailUser) {
 				return {
 					type: "requires_link",
@@ -669,7 +693,7 @@ export class OAuthEndpoints {
 						providerId: profile.id,
 						providerUsername: profile.username,
 						providerAvatar: profile.avatar,
-						email: profile.email,
+						email: trustedEmail,
 						accessToken,
 					},
 				};
@@ -683,7 +707,7 @@ export class OAuthEndpoints {
 		const newUser = await users.createUser(uniqueUsername, randomPassword, []);
 
 		await users.updateUser(newUser.id, {
-			email: profile.email,
+			email: trustedEmail,
 			linkedAccounts: [
 				{
 					provider,
@@ -708,7 +732,7 @@ export class OAuthEndpoints {
 				providerId: profile.id,
 				provider,
 				username: newUser.username,
-				email: profile.email,
+				email: trustedEmail,
 				avatar: profile.avatar,
 				permissions: defaultPermissions,
 			},

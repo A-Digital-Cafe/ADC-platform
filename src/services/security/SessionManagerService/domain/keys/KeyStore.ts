@@ -1,5 +1,20 @@
 import { randomBytes } from "node:crypto";
+import { createAtRestSealer, type EnvelopeLogger } from "@common/utils/at-rest-envelope.ts";
+import { sha256Bytes } from "@common/utils/crypto.ts";
 import type RedisProvider from "../../../../../providers/queue/redis/index.js";
+
+/**
+ * Sellado en reposo de las claves de sesión.
+ *
+ * Estas claves cifran y autentican **todos** los access tokens (JWE) y persisten en un Redis
+ * sin autenticación: en claro, quien lea esa base descifra cualquier sesión y quien la escriba
+ * **fabrica sesiones nuevas** haciéndose pasar por cualquier usuario, sin necesitar su
+ * contraseña. Es estrictamente peor que escalar permisos dentro de una sesión ajena, y por eso
+ * el sobre acá no es opcional.
+ *
+ * Cambiar la etiqueta —o la master key— invalida las sesiones vivas y obliga a re-loguear.
+ */
+const keySeal = createAtRestSealer("adc:session-keys");
 
 /** Claves Redis para persistencia */
 const REDIS_KEYS = {
@@ -23,6 +38,8 @@ interface KeyStoreConfig {
 	};
 	/** Redis provider para persistencia (opcional) */
 	redis?: RedisProvider;
+	/** Logger para los avisos del sellado en reposo (opcional). */
+	logger?: EnvelopeLogger;
 }
 
 /**
@@ -58,12 +75,14 @@ export class KeyStore {
 	#rotationTimer: ReturnType<typeof setInterval> | null = null;
 	readonly #rotationCallbacks: KeyRotationCallback[] = [];
 	readonly #redis: RedisProvider | null = null;
+	readonly #logger: EnvelopeLogger | undefined;
 
 	constructor(config: KeyStoreConfig) {
 		this.#rotationInterval = config.rotationInterval;
 		this.#keyLength = config.keyLength;
 		this.#rotatedAt = Date.now();
 		this.#redis = config.redis || null;
+		this.#logger = config.logger;
 
 		// Inicializar con claves proporcionadas o generar nuevas
 		if (config.initialKeys?.current) {
@@ -85,22 +104,34 @@ export class KeyStore {
 		if (!this.#redis) return;
 
 		try {
-			const [current, previous, rotatedAt] = await Promise.all([
+			const [sealedCurrent, sealedPrevious, rotatedAt] = await Promise.all([
 				this.#redis.get(REDIS_KEYS.CURRENT),
 				this.#redis.get(REDIS_KEYS.PREVIOUS),
 				this.#redis.get(REDIS_KEYS.ROTATED_AT),
 			]);
 
+			const current = keySeal.open(sealedCurrent, this.#logger);
+
 			if (current) {
 				this.#currentKey = current;
 				this.#currentKeyBytes = this.#stringToKey(current);
-				this.#previousKey = previous;
-				this.#previousKeyBytes = previous ? this.#stringToKey(previous) : null;
+				this.#previousKey = keySeal.open(sealedPrevious, this.#logger);
+				this.#previousKeyBytes = this.#previousKey ? this.#stringToKey(this.#previousKey) : null;
 				this.#rotatedAt = rotatedAt ? Number.parseInt(rotatedAt, 10) : Date.now();
-			} else {
-				// No hay claves en Redis, persistir las actuales
-				await this.#persistKeys();
+				return;
 			}
+
+			// Sin clave utilizable: o no había ninguna, o lo guardado no abre (valor previo al
+			// cifrado, manipulado, o master key distinta). En ambos casos se persisten las de
+			// memoria, que además pisa el valor inservible. El costo es que las sesiones vivas
+			// dejan de validar y hay que volver a entrar; aceptarlo crudo no es una opción,
+			// porque justamente es lo que permitiría plantar una clave elegida por el atacante.
+			if (sealedCurrent) {
+				this.#logger?.logWarn(
+					"[KeyStore] la clave de sesión guardada no se pudo abrir: se genera una nueva y se invalidan las sesiones vivas."
+				);
+			}
+			await this.#persistKeys();
 		} catch {
 			// Si Redis falla, usar claves en memoria
 		}
@@ -159,8 +190,10 @@ export class KeyStore {
 
 		try {
 			await Promise.all([
-				this.#redis.set(REDIS_KEYS.CURRENT, this.#currentKey),
-				this.#previousKey ? this.#redis.set(REDIS_KEYS.PREVIOUS, this.#previousKey) : this.#redis.del(REDIS_KEYS.PREVIOUS),
+				this.#redis.set(REDIS_KEYS.CURRENT, keySeal.seal(this.#currentKey, this.#logger)),
+				this.#previousKey
+					? this.#redis.set(REDIS_KEYS.PREVIOUS, keySeal.seal(this.#previousKey, this.#logger))
+					: this.#redis.del(REDIS_KEYS.PREVIOUS),
 				this.#redis.set(REDIS_KEYS.ROTATED_AT, this.#rotatedAt.toString()),
 			]);
 		} catch {
@@ -218,9 +251,11 @@ export class KeyStore {
 	}
 
 	/**
-	 * Convierte string a Uint8Array de 32 bytes para A256GCM
+	 * Deriva los 32 bytes que pide A256GCM a partir del secreto, sea cual sea su largo.
+	 * Rellenar/truncar a 32 **caracteres** descartaría entropía del secreto real (32 bytes en
+	 * base64 son 44 caracteres); el hash no agrega entropía pero tampoco la tira.
 	 */
 	#stringToKey(key: string): Uint8Array {
-		return new TextEncoder().encode(key.padEnd(32, "0").slice(0, 32));
+		return sha256Bytes(key);
 	}
 }

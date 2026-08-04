@@ -43,3 +43,16 @@ export default abstract class ADCCustomError<T = Record<string, unknown>, M exte
 export class HttpError extends ADCCustomError<Record<string, unknown>, string> {
 	public readonly name = "HttpError";
 }
+
+/**
+ * ¿El error es culpa del pedido y no de la dependencia? Un 4xx tipado (slug duplicado,
+ * recurso inexistente, permisos) da el mismo resultado por más veces que se reintente, así
+ * que reintentarlo sólo gasta turnos y —peor— ensucia la salud del servicio con fallos que
+ * no son suyos. Se excluyen 408 y 429, que sí dependen del momento.
+ *
+ * Lo usan el consumer de RabbitMQ (para no reintentar) y el circuit breaker (para no contar).
+ */
+export function isPermanentClientError(error: unknown): boolean {
+	if (!(error instanceof ADCCustomError)) return false;
+	return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
+}

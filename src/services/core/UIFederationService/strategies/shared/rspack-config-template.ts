@@ -2,7 +2,7 @@ import * as path from "node:path";
 import type { IBuildContext } from "../types.js";
 import { normalizeForConfig } from "../../utils/fs/path-resolver.js";
 import { buildSharedConfig, buildStaticDirectories } from "./rspack-helpers.js";
-import { injectTailwindAlias, resolveFederationConfig, resolvePublicPath, buildDevServerBlock } from "./rspack-template-helpers.js";
+import { injectTailwindAlias, resolveFederationConfig, resolvePublicPath, buildDevServerBlock, buildCacheBlock } from "./rspack-template-helpers.js";
 
 export interface IRspackConfigOptions {
 	context: IBuildContext;
@@ -17,6 +17,8 @@ export interface IRspackConfigOptions {
 	postcssConfigPath: string;
 	tailwindCssPath: string;
 	configDir: string;
+	/** Ruta final del `rspack.config.mjs`: entra como `buildDependency` de la caché. */
+	configPath: string;
 	appExtension: string;
 	mainEntry: string;
 	extensions: string[];
@@ -42,7 +44,9 @@ export function buildRspackConfigContent(options: IRspackConfigOptions): string 
 		externals,
 		usedFrameworks,
 		aliasesObject,
+		postcssConfigPath,
 		tailwindCssPath,
+		configPath,
 		appExtension,
 		mainEntry,
 		extensions,
@@ -55,7 +59,10 @@ export function buildRspackConfigContent(options: IRspackConfigOptions): string 
 
 	const { module, uiOutputBaseDir } = context;
 	const mode = isProduction ? "production" : "development";
-	const devtool = isProduction ? "false" : "'cheap-module-source-map'";
+	// `eval-*` en dev: los source maps van embebidos en el bundle en vez de escribirse
+	// como archivo aparte, que es lo que más pesa en un rebuild incremental.
+	const devtool = isProduction ? "false" : "'eval-cheap-module-source-map'";
+	const cacheBlock = buildCacheBlock(context, mode, configPath, [postcssConfigPath, tailwindCssPath].filter(Boolean));
 
 	const finalAliasesObject = injectTailwindAlias(aliasesObject, tailwindCssPath, module.appDir);
 	const shared = buildSharedConfig(usedFrameworks);
@@ -77,7 +84,7 @@ ${imports}
 
 export default {
     mode: '${mode}',
-    devtool: ${devtool},
+    devtool: ${devtool},${cacheBlock}
     // Top-level desde rspack 2.0 (antes experiments.lazyCompilation). Debe ser
     // explícito: si queda undefined, \`rspack serve\` lo auto-activa con
     // { imports: true }, creando módulos "!lazy-compilation-proxy" para los
