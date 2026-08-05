@@ -1,7 +1,7 @@
 # ADC Platform [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=A-Digital-Cafe_ADC-platform&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=A-Digital-Cafe_ADC-platform) [![CodeQL](https://github.com/A-Digital-Cafe/ADC-platform/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/A-Digital-Cafe/ADC-platform/actions/workflows/github-code-scanning/codeql) [![Security](https://github.com/A-Digital-Cafe/ADC-platform/actions/workflows/security.yml/badge.svg)](https://github.com/A-Digital-Cafe/ADC-platform/actions/workflows/security.yml)
 
 ADC Platform es un kernel de software modular y dinámico construido sobre Node.js y TypeScript. Su arquitectura está diseñada para permitir la creación de aplicaciones complejas y escalables a través de la composición de módulos independientes: **Providers**, **Utilities**, **Services** y **Apps**.
-
+aaaaaaaaaaaaaa
 El objetivo principal del proyecto es ofrecer una base sólida y flexible que desacopla la lógica de negocio de las capas de infraestructura, permitiendo un desarrollo ágil y un alto grado de reutilización de código. La plataforma está pensada para evolucionar y soportar funcionalidades avanzadas como:
 
 - **Pipelines automáticos:** Creación de flujos de trabajo que se actualizan y despliegan de forma automática.
