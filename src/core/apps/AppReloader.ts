@@ -6,6 +6,7 @@ import { FILE_EXT, readJson, type AppCtor } from "./AppFileUtils.js";
 import type { AppInstanceTracker } from "./AppInstanceTracker.js";
 import type { AppLifecycle } from "./AppLifecycle.js";
 import type { CircuitBreaker } from "./CircuitBreaker.js";
+import { moduleImportUrl } from "../../utils/loaders/module-url.js";
 
 export interface AppReloaderDeps {
 	kernel: Kernel;
@@ -49,7 +50,7 @@ export class AppReloader {
 				: path.dirname(configPath);
 			const appFilePath = path.join(appDir, `index${FILE_EXT}`);
 
-			const module = await import(`${appFilePath}?v=${Date.now()}`);
+			const module = await import(moduleImportUrl(appFilePath));
 			const AppClass: AppCtor | undefined = module.default;
 			if (!AppClass) {
 				logger.logError(`No se pudo cargar la clase de la app: ${instanceName.split(":")[0]}`);

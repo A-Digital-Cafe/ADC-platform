@@ -1,4 +1,4 @@
-import { ACTIONS } from "./constants.ts";
+import { ACTIONS, ALL_ACTIONS } from "./constants.ts";
 import { ResourceHeader } from "./ResourceHeader.tsx";
 import type { ScopeDef } from "@common/types/resources.js";
 
@@ -15,7 +15,7 @@ interface ResourceMatrixProps {
 }
 
 export function ResourceMatrix({ resource, scopes, permMap, onToggle, onToggleRow, onToggleCol, onRemove, disabled, t }: ResourceMatrixProps) {
-	const allActions = ACTIONS.reduce((acc, a) => acc | a.value, 0);
+	const allActions = ALL_ACTIONS;
 
 	/**
 	 * Resuelve la etiqueta de un scope probando primero la subclave específica

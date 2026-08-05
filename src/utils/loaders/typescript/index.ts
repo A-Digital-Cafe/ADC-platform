@@ -11,6 +11,7 @@ import { Logger } from "../../logger/Logger.js";
 import { safeParseJson } from "@common/utils/json-schema.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import { runDevCleanup } from "@common/utils/dev-cleanup.ts";
+import { invalidateModule, moduleImportUrl } from "../module-url.js";
 
 type Constructor<T> = new (...args: any[]) => T;
 
@@ -89,10 +90,10 @@ export default class TypeScriptLoader implements IModuleLoader {
 	 * Helper centralizado para importar módulos dinámicamente y validar su estructura.
 	 */
 	private async importClass<T>(modulePath: string, role: string): Promise<Constructor<T>> {
+		const indexFile = path.join(modulePath, `index${this.#extension}`);
 		try {
-			const indexFile = path.join(modulePath, `index${this.#extension}`);
-			// Cache busting para recarga en caliente
-			const module = await import(`${indexFile}?v=${Date.now()}`);
+			// El token de cache lo maneja `moduleImportUrl`: sólo cambia tras un invalidate.
+			const module = await import(moduleImportUrl(indexFile));
 			const ModuleClass = module.default;
 
 			if (!ModuleClass) {
@@ -101,6 +102,9 @@ export default class TypeScriptLoader implements IModuleLoader {
 
 			return ModuleClass as Constructor<T>;
 		} catch (error) {
+			// El registro quedó cacheado con el error: sin invalidar, cualquier reintento
+			// posterior (aunque el módulo ya esté arreglado) devolvería el mismo fallo.
+			invalidateModule(indexFile);
 			Logger.error(`[TypeScriptLoader] Error cargando ${role}: ${error}`);
 			throw error;
 		}

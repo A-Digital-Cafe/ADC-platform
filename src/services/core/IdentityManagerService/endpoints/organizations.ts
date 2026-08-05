@@ -5,7 +5,7 @@ import type IdentityManagerService from "../index.js";
 import * as OS from "./schemas/organizations.js";
 import { SuccessResponse, JobAcceptedResponse } from "./schemas/common.js";
 import { checkOrgSlug as checkSlugPolicy } from "@common/utils/name-policy.js";
-import { assertCanGrantPermissions } from "../domain/hierarchy.js";
+import { assertCanGrantPermissions, assertCanManageUser, assertCanAssignRoles } from "../domain/hierarchy.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
 
@@ -230,7 +230,15 @@ export class OrgEndpoints {
 		const org = await OrgEndpoints.identity.organizations.getOrganization(ctx.params.orgId, ctx.token!);
 		if (!org) throw new IdentityError(404, "ORG_NOT_FOUND", "Organización no encontrada");
 
-		await OrgEndpoints.identity.users.addOrgMembership(ctx.params.userId, ctx.params.orgId, ctx.data?.roleIds || [], ctx.token!);
+		const roleIds = ctx.data?.roleIds || [];
+		// Jerarquía de roles (defensa en profundidad, ADC-06): sin estos guards los roleIds de la
+		// membresía se escribían SIN validar, a diferencia de createUser/updateUser. Se evalúa en el
+		// contexto global del actor (`requireGlobalAccess` ya lo garantiza), igual que `updateUser`.
+		const actorOrgId = ctx.user?.orgId;
+		await assertCanManageUser(OrgEndpoints.identity.permissions, ctx.user?.id, ctx.params.userId, actorOrgId);
+		await assertCanAssignRoles(OrgEndpoints.identity.permissions, ctx.user?.id, roleIds, actorOrgId);
+
+		await OrgEndpoints.identity.users.addOrgMembership(ctx.params.userId, ctx.params.orgId, roleIds, ctx.token!);
 		OrgEndpoints.identity.permissions.invalidateUser(ctx.params.userId);
 		return { success: true };
 	}

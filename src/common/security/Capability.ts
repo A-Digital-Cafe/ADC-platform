@@ -69,6 +69,8 @@ const MINT: unique symbol = Symbol("capability-mint");
  */
 export class Capability {
 	readonly #scopes: ReadonlySet<Scope>;
+	/** Scopes retirados tras el minteo; {@link #scopes} queda congelado. */
+	readonly #revoked = new Set<Scope>();
 	readonly #owner: string;
 	readonly #type: string;
 
@@ -81,9 +83,32 @@ export class Capability {
 		this.#type = type;
 	}
 
-	/** `true` si esta capability porta el scope dado. */
+	/** `true` si esta capability porta el scope dado y no le fue retirado. */
 	has(scope: Scope): boolean {
-		return this.#scopes.has(scope);
+		return this.#scopes.has(scope) && !this.#revoked.has(scope);
+	}
+
+	/**
+	 * Retira scopes ya concedidos. Exige {@link MINT}, así que sólo el {@link CapabilityIssuer}
+	 * puede: el módulo que tiene la capability en la mano, no.
+	 *
+	 * Existe porque la capability se mintea una sola vez por instancia y el módulo la guarda:
+	 * cuando el baseline de privilegios llega tarde, retirarle el scope es lo único que cierra el
+	 * hueco. **Corta llamadas futuras**; un handle privilegiado ya obtenido sigue en su poder.
+	 *
+	 * @returns los scopes que efectivamente se retiraron.
+	 */
+	revoke(mint: symbol, scopes: Iterable<Scope>): Scope[] {
+		if (mint !== MINT) {
+			throw new CapabilityError(500, "INVALID_CAPABILITY", "Sólo el CapabilityIssuer puede retirar scopes");
+		}
+		const removed: Scope[] = [];
+		for (const scope of scopes) {
+			if (!this.#scopes.has(scope) || this.#revoked.has(scope)) continue;
+			this.#revoked.add(scope);
+			removed.push(scope);
+		}
+		return removed;
 	}
 
 	/** Nombre/instancia del módulo titular (para auditoría y diagnósticos). */
@@ -108,8 +133,21 @@ export class Capability {
  * capabilities ni ampliar sus propios scopes.
  */
 export class CapabilityIssuer {
+	/**
+	 * Última capability emitida por titular (`type:owner`), para poder retirar scopes sin que el
+	 * llamador conserve la referencia. Una re-provisión pisa la entrada anterior.
+	 */
+	readonly #issued = new Map<string, Capability>();
+
 	mint(owner: string, type: string, scopes: Iterable<Scope>): Capability {
-		return new Capability(MINT, owner, type, scopes);
+		const capability = new Capability(MINT, owner, type, scopes);
+		this.#issued.set(`${type}:${owner}`, capability);
+		return capability;
+	}
+
+	/** Retira scopes de la capability vigente de un titular; devuelve los que se retiraron. */
+	revoke(owner: string, type: string, scopes: Iterable<Scope>): Scope[] {
+		return this.#issued.get(`${type}:${owner}`)?.revoke(MINT, scopes) ?? [];
 	}
 }
 

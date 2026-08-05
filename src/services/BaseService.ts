@@ -76,13 +76,38 @@ export abstract class BaseService extends BaseModule implements IService {
 	 *
 	 * Un provider de infraestructura (mongo, redis) puede tardar en levantar: fallar
 	 * al primer intento haría depender el arranque del orden de los contenedores.
+	 *
+	 * Si el provider expone `whenReady()` se espera su promesa de conexión (despierta en
+	 * cuanto conecta y propaga el error real); el poll queda sólo para los que no la tienen.
 	 */
-	protected async waitForProvider(provider: { isConnected(): boolean }, what = "El provider", maxWaitMs = 10_000): Promise<void> {
-		const startTime = Date.now();
-		while (!provider.isConnected() && Date.now() - startTime < maxWaitMs) {
-			await new Promise((resolve) => setTimeout(resolve, 500));
+	protected async waitForProvider(
+		provider: { isConnected(): boolean; whenReady?(): Promise<void> },
+		what = "El provider",
+		maxWaitMs = 10_000
+	): Promise<void> {
+		if (provider.isConnected()) return;
+		let cause: unknown;
+		if (provider.whenReady) {
+			let timer: NodeJS.Timeout | undefined;
+			try {
+				await Promise.race([
+					provider.whenReady(),
+					new Promise((_, reject) => {
+						timer = setTimeout(() => reject(new Error(`timeout de ${maxWaitMs} ms`)), maxWaitMs);
+					}),
+				]);
+			} catch (error) {
+				cause = error;
+			} finally {
+				clearTimeout(timer);
+			}
+		} else {
+			const startTime = Date.now();
+			while (!provider.isConnected() && Date.now() - startTime < maxWaitMs) {
+				await new Promise((resolve) => setTimeout(resolve, 500));
+			}
 		}
-		if (!provider.isConnected()) throw new Error(`${what} no pudo conectarse en el tiempo esperado`);
+		if (!provider.isConnected()) throw new Error(`${what} no pudo conectarse en el tiempo esperado`, { cause });
 	}
 
 	/**

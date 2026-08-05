@@ -1,4 +1,4 @@
-import { Component, Prop, h, Event, EventEmitter, Host } from "@stencil/core";
+import { Component, Prop, Event, EventEmitter, Host } from "@stencil/core";
 
 /**
  * ADC Button - Componente de botón con Tailwind CSS

@@ -453,6 +453,27 @@ export default class MongoProvider extends BaseProvider {
 		return dbConnection;
 	}
 
+	/**
+	 * Libera una vista lógica creada con `useDb({ useCache: true })`.
+	 *
+	 * Mongoose la cachea a nivel driver (`Connection.relatedDbs`/`otherDbs`), NO en nuestro
+	 * `#dbViewsCache`: borrar sólo nuestra entrada deja la vista y sus modelos compilados retenidos
+	 * ahí para siempre, así que una LRU de más arriba acotaría su objeto pero no la memoria real.
+	 * Pensado para el `onEvict` de esa LRU — llamarlo con la vista en uso deja a quien la retenga
+	 * con un connection "disconnected".
+	 */
+	releaseDbView(connection: Connection, dbName: string): void {
+		const key = `${connection.host}:${connection.port}/${dbName}`;
+		if (!this.#dbViewsCache.delete(key)) return;
+		try {
+			// Existe en runtime (`NativeConnection.prototype.removeDb`) pero no está en los
+			// tipos de mongoose.
+			(connection as Connection & { removeDb(name: string): void }).removeDb(dbName);
+		} catch {
+			// Ya liberada (carrera con otro release, o nunca se cacheó con `useCache: true`).
+		}
+	}
+
 	createModelForDb<T>(dbConnection: Connection, name: string, schema: Schema): Model<T> {
 		try {
 			return dbConnection.model<T>(name);

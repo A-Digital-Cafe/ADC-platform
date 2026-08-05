@@ -11,6 +11,7 @@ import { AppLifecycle } from "./AppLifecycle.js";
 import { AppReloader } from "./AppReloader.js";
 import { CircuitBreaker } from "./CircuitBreaker.js";
 import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
+import { invalidateModule, moduleImportUrl } from "../../utils/loaders/module-url.js";
 
 const RETRY_SHORT_MS = 30_000;
 const RETRY_SHORT_MAX = 5;
@@ -96,7 +97,7 @@ export class AppLoader {
 			return;
 		}
 
-		const module = await import(`${filePath}?v=${Date.now()}`);
+		const module = await import(moduleImportUrl(filePath));
 		const AppClass: AppCtor | undefined = module.default;
 		if (!AppClass) return;
 
@@ -154,6 +155,9 @@ export class AppLoader {
 				? `Faltan dependencias de Node.js para la app en ${filePath}`
 				: `Error cargando App ${filePath}`;
 		this.logger.logError(`${prefix}: ${e}`);
+		// El reintento tiene que re-evaluar: el módulo que falló quedó cacheado con su error
+		// (y las deps npm que faltaban pueden haberse instalado mientras tanto).
+		invalidateModule(filePath);
 		this.#breaker.schedule(filePath, e?.message ?? String(e), () => this.#retryLoad(filePath));
 	}
 

@@ -86,7 +86,7 @@ export class AdcAppsMenu {
 
 		return (
 			<Host>
-				<button class="apps-trigger" onClick={this.toggle} aria-label="Apps" aria-expanded={String(this.open)} title="Apps">
+				<button type="button" class="apps-trigger" onClick={this.toggle} aria-label="Apps" aria-expanded={String(this.open)} title="Apps">
 					<adc-icon-apps></adc-icon-apps>
 				</button>
 

@@ -24,8 +24,10 @@ import {
 	isAllowedHttpMethod,
 	isCspNonceEnabled,
 	isSafeStaticPath,
+	resolveTrustProxy,
 	stampCspNonce,
 	resolveSafeStaticPath,
+	warnIfCorsAllowlistEmpty,
 } from "./security/index.js";
 
 type FastifyHandler = (req: FastifyRequest<any>, reply: FastifyReply<any>) => void | Promise<void>;
@@ -186,6 +188,11 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			},
 		};
 
+		// Proxies confiables (`TRUSTED_PROXIES`, documentado en `.env.example`). Sin lista la
+		// opción no se setea y `request.ip` sigue siendo la IP del socket.
+		const trustProxy = resolveTrustProxy();
+		if (trustProxy) fastifyOptions.trustProxy = trustProxy;
+
 		// Configurar HTTP/2 si está habilitado
 		if (http2Enabled) {
 			fastifyOptions.http2 = true;
@@ -225,7 +232,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	}
 
 	private async setupMiddleware(): Promise<void> {
-		// CORS - En desarrollo permitir credenciales desde cualquier localhost
+		// CORS - En desarrollo permitir credenciales desde cualquier localhost; en producción real,
+		// sólo `CORS_ALLOWED_ORIGINS` (los vhosts registrados dejaron de ser allowlist).
+		warnIfCorsAllowlistEmpty(this.logger);
 		await this.app.register(
 			fastifyCors as any,
 			{
@@ -279,6 +288,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 				payload.unpipe(limiter);
 				payload.destroy(); // el emisor ya se pasó del techo: se corta el socket
 			});
+			// `pipe` NO propaga los errores del origen: si el cliente aborta o se cae el socket,
+			// el limiter se quedaría abierto para siempre (handler colgado) y el 'error' del
+			// payload quedaría sin listener. Lo trasladamos al destino, que es quien lee el
+			// consumidor. `destroy` sobre un stream ya destruido es no-op, así que el handler
+			// de arriba puede volver a tocar el payload sin riesgo.
+			payload.on("error", (err) => limiter.destroy(err));
 			payload.pipe(limiter);
 			done(null, limiter);
 		});
@@ -308,8 +323,15 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		}) as any);
 	}
 
+	/**
+	 * Host de la request para el ruteo por vhost.
+	 *
+	 * `headers.host` **antes** que `request.hostname`: con `trustProxy` activo fastify deriva
+	 * `hostname` de `X-Forwarded-Host`, que el cliente puede mandar (el edge reenvía los headers
+	 * desconocidos tal cual). `trustProxy` tiene que afectar a `request.ip`, no al ruteo.
+	 */
 	private extractHostname(request: FastifyRequest): string {
-		const host = request.hostname || request.headers.host || "";
+		const host = request.headers.host || request.hostname || "";
 		// Eliminar puerto si existe
 		return host.split(":")[0].toLowerCase();
 	}

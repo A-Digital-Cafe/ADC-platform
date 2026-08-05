@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import type { Permission } from "@common/types/identity/Permission.js";
 import { RESOURCES, type ScopeDef } from "@common/types/resources.js";
-import { ACTIONS } from "./constants.ts";
+import { ALL_ACTIONS } from "./constants.ts";
 import { buildBitfieldMap, bitfieldMapToPermissions } from "./helpers.ts";
 import { ResourceMatrix } from "./ResourceMatrix.tsx";
 
@@ -56,8 +56,7 @@ export function PermissionEditor({ permissions, onChange, disabled, orgContext }
 			const updated = new Map(permMap);
 			const key = `${resource}:${scope}`;
 			const current = updated.get(key) ?? 0;
-			const allActs = ACTIONS.reduce((acc, a) => acc | a.value, 0);
-			updated.set(key, current === allActs ? 0 : allActs);
+			updated.set(key, current === ALL_ACTIONS ? 0 : ALL_ACTIONS);
 			rebuildAll(updated);
 		},
 		[permMap, disabled, rebuildAll]

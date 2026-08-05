@@ -28,6 +28,7 @@ export function BottomNav({ currentPath }: { readonly currentPath: string }) {
 			{navItems.map((item) => (
 				<button
 					key={item.path}
+					type="button"
 					onClick={() => handleNavigate(item.path)}
 					style={{
 						display: "flex",

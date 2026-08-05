@@ -35,7 +35,6 @@ export class ModuleLoader {
 	}
 
 	readonly #configCache = new Map<string, IModuleConfig>();
-	readonly #envCache = new Map<string, Record<string, string>>();
 
 	readonly #kernelKey: symbol;
 
@@ -64,13 +63,6 @@ export class ModuleLoader {
 
 	public getConfigByPath(modulePath: string): IModuleConfig | undefined {
 		return this.#configCache.get(modulePath);
-	}
-
-	/**
-	 * Obtiene las variables de entorno cargadas para un módulo específico
-	 */
-	public getEnvByPath(modulePath: string): Record<string, string> | undefined {
-		return this.#envCache.get(modulePath);
 	}
 
 	private static readonly kvRegex = new RegExp(/^([^=]+)=(.*)$/);
@@ -603,7 +595,6 @@ export class ModuleLoader {
 
 		// Fusionar variables: prioridad a las del padre (servicio), luego las propias del provider
 		const mergedEnvVars = { ...providerEnvVars, ...parentEnvVars };
-		this.#envCache.set(resolved.path, mergedEnvVars);
 
 		// Obtener el loader correcto
 		const loader = this.#loaderManager.getLoader(language);
@@ -650,7 +641,6 @@ export class ModuleLoader {
 		// resolved.path ya es el directorio de la utility
 		const envPath = path.join(resolved.path, ".env");
 		const envVars = await this.loadEnvFile(envPath);
-		this.#envCache.set(resolved.path, envVars);
 
 		// Obtener el loader correcto
 		const loader = this.#loaderManager.getLoader(language);
@@ -697,7 +687,6 @@ export class ModuleLoader {
 		// resolved.path ya es el directorio del servicio
 		const envPath = path.join(resolved.path, ".env");
 		const envVars = await this.loadEnvFile(envPath);
-		this.#envCache.set(resolved.path, envVars);
 
 		// Obtener el loader correcto
 		const loader = this.#loaderManager.getLoader(language);

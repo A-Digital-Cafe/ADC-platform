@@ -69,12 +69,23 @@ export async function runRspackWatcher(
 	const elapsed = Date.now() - spawnedAt;
 	if (arm === "timeout") {
 		context.logger?.logWarn(`${module.uiConfig.name} [${namespace}] no reportó readiness en ${elapsed}ms; se continúa igual.`);
+	} else if (elapsed > SLOW_RSPACK_MS) {
+		context.logger?.logWarn(
+			`${module.uiConfig.name} [${namespace}] tardó ${elapsed}ms en estar listo (esperado < ${SLOW_RSPACK_MS}ms). ` +
+				`Revisar la caché persistente y el config generado antes de culpar al bundler.`
+		);
 	} else {
 		context.logger?.logDebug(`${module.uiConfig.name} [${namespace}] listo en ${elapsed}ms (brazo: ${arm}).`);
 	}
 
 	return { watcher, outputPath };
 }
+
+/**
+ * Guardia de regresión sobre el config generado (ver `docs/architecture/boot-performance.md`): en
+ * caliente un hijo de rspack está entre 218 y 720 ms. Holgado a propósito — un clone frío tarda más.
+ */
+const SLOW_RSPACK_MS = 3000;
 
 /**
  * Ejecuta un build de producción de rspack (sin watch), espera a que termine.

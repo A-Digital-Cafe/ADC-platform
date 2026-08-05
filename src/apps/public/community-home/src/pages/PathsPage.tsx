@@ -40,7 +40,7 @@ export function PathsPage() {
 			<div className="px-8">
 				<div className="text-center py-8 text-adc-danger-600">
 					<p>Error cargando rutas: {error}</p>
-					<button onClick={loadPaths} className="mt-4 px-4 py-2 bg-button text-white rounded-adc">
+					<button type="button" onClick={loadPaths} className="mt-4 px-4 py-2 bg-button text-white rounded-adc">
 						Reintentar
 					</button>
 				</div>

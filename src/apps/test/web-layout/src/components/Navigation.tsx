@@ -15,13 +15,13 @@ export function Navigation({ currentPath }: { readonly currentPath: string }) {
 
 	return (
 		<nav className="flex gap-3 py-4 border-b-2 border-gray-200 mb-5">
-			<button onClick={() => handleNavigate("/")} className={getButtonClasses("/")}>
+			<button type="button" onClick={() => handleNavigate("/")} className={getButtonClasses("/")}>
 				Inicio
 			</button>
-			<button onClick={() => handleNavigate("/users")} className={getButtonClasses("/users")}>
+			<button type="button" onClick={() => handleNavigate("/users")} className={getButtonClasses("/users")}>
 				Usuarios
 			</button>
-			<button onClick={() => handleNavigate("/config")} className={getButtonClasses("/config")}>
+			<button type="button" onClick={() => handleNavigate("/config")} className={getButtonClasses("/config")}>
 				Configuración
 			</button>
 		</nav>

@@ -13,13 +13,24 @@ interface GeoValidationResult {
  * GeoIPValidator - Validación geográfica usando headers de Cloudflare
  *
  * Detecta cambios de país para revocar tokens y solicitar re-login.
- * Usa el header cf-ipcountry de Cloudflare; si no está presente, retorna null.
+ * Usa el header `cf-ipcountry` de Cloudflare; si no está presente, retorna null.
+ *
+ * **La IP del cliente no se resuelve acá**: la resuelve el provider HTTP contra la allowlist de
+ * `TRUSTED_PROXIES` y llega por `ctx.ip`, que es también la clave del rate limit. Una sola noción
+ * de "IP del cliente" en toda la plataforma, y ninguna que el cliente pueda elegir con un header.
  */
 export class GeoIPValidator {
 	/**
-	 * Extrae el país desde los headers de Cloudflare
+	 * País del cliente según Cloudflare, o `null` si no se puede afirmar.
+	 *
+	 * `viaTrustedProxy` es obligatorio y sin default: `CF-IPCountry` no lo valida nadie, así que
+	 * mandarlo a mano evitaría la revocación por cambio de país —o la dispararía contra la sesión
+	 * de otro—. En dev (sin `TRUSTED_PROXIES`) siempre es `null`, y `validateLocationChange`
+	 * acepta cuando no puede determinar el país.
 	 */
-	getCountryFromHeaders(headers: Record<string, string | string[] | undefined>): string | null {
+	getCountryFromHeaders(headers: Record<string, string | string[] | undefined>, viaTrustedProxy: boolean): string | null {
+		if (!viaTrustedProxy) return null;
+
 		const cfCountry = headers[CF_IPCOUNTRY_HEADER];
 		if (!cfCountry) return null;
 
@@ -55,37 +66,5 @@ export class GeoIPValidator {
 		}
 
 		return { valid: true, currentCountry, previousCountry };
-	}
-
-	/**
-	 * Extrae IP real del request (considerando proxies)
-	 */
-	extractRealIP(headers: Record<string, string | string[] | undefined>, socketIP: string): string {
-		// Orden de prioridad para headers de IP
-		const ipHeaders = ["cf-connecting-ip", "x-real-ip", "x-forwarded-for"];
-
-		for (const header of ipHeaders) {
-			const value = headers[header.toLowerCase()];
-			if (value) {
-				const ip = Array.isArray(value) ? value[0] : value.split(",")[0].trim();
-				if (this.#isValidIP(ip)) {
-					return ip;
-				}
-			}
-		}
-
-		return socketIP || "unknown";
-	}
-
-	#isValidIP(ip: string): boolean {
-		const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-		if (ipv4Regex.test(ip)) {
-			const parts = ip.split(".").map(Number);
-			return parts.every((p) => p >= 0 && p <= 255);
-		}
-
-		// IPv6 (simplificado)
-		const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
-		return ipv6Regex.test(ip);
 	}
 }

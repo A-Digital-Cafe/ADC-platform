@@ -319,6 +319,8 @@ export class JobManager {
 			cookies: {},
 			headers: {},
 			ip: "queue-worker",
+			// Un job encolado no viene de ningún socket: no hay edge que haya puesto headers.
+			viaTrustedProxy: false,
 		};
 
 		// Read stepper resume index from retry headers

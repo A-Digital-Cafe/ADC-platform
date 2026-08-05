@@ -162,10 +162,14 @@ export class ModuleOrchestrator {
 	 *
 	 * Va apagado por defecto: un gate fail-closed sin nadie que apruebe deja módulos legítimos
 	 * a medio arrancar tras un deploy. El registro y el aviso a seguridad son incondicionales.
+	 *
+	 * Con el gate activo, `reconcile` re-evalúa además lo ya provisionado antes de que existiera
+	 * el baseline.
 	 */
 	setPrivilegeApprovals(approvals: ReadonlyMap<string, readonly string[]> | null, gateEnabled: boolean): void {
 		this.#d.privilegeLedger.setApprovals(approvals, gateEnabled);
 		this.#d.logger.logInfo(`[orchestrator] baseline de privilegios instalado (gate ${gateEnabled ? "ACTIVO" : "sólo auditoría"}).`);
+		this.#d.privilegeLedger.reconcile();
 	}
 
 	/**

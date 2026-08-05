@@ -1,14 +1,48 @@
 /**
- * Qué cuenta como "producción real" para la plataforma.
+ * Qué cuenta como "producción real" para la plataforma: cookies `Secure`, HSTS, CSP en enforce,
+ * CSRF y KEK desde `ADC_STORAGE_MASTER_KEY`.
  *
- * `bun run start:prodtests` levanta con `NODE_ENV=production` para ejercitar los caminos de
- * prod, pero corre en la máquina del desarrollador: por eso `PROD_PORT=3000` actúa de
- * centinela y lo excluye. Vivía copiado en cinco archivos (cookies `Secure`, HSTS, CSP,
- * CSRF, headers de módulo UI); acá hay una sola definición para que no puedan divergir.
+ * Fail-closed a propósito: `NODE_ENV=production` alcanza y sólo un `ADC_LOCAL_PROD=true`
+ * deliberado degrada. Olvidarse de la variable endurece, no ablanda.
  *
- * Es una de las excepciones documentadas de `process.env`: NODE_ENV/PROD_PORT son del
- * proceso, no configuración de un módulo.
+ * Es una de las excepciones documentadas de `process.env`: son banderas del proceso, no
+ * configuración de un módulo.
  */
 export function isRealProduction(): boolean {
-	return process.env.NODE_ENV === "production" && process.env.PROD_PORT !== "3000";
+	return process.env.NODE_ENV === "production" && !isLocalProdRun();
+}
+
+/**
+ * `bun run start:prodtests` ejercita los caminos de producción en la máquina del desarrollador.
+ * Es la única razón legítima para correr con `NODE_ENV=production` y seguridad degradada.
+ */
+export function isLocalProdRun(): boolean {
+	return process.env.NODE_ENV === "production" && process.env.ADC_LOCAL_PROD === "true";
+}
+
+/** Perfil de seguridad resuelto: lo que el kernel imprime al arrancar. */
+export interface SecurityProfile {
+	name: "development" | "local-prod" | "production";
+	/** Qué prendió/apagó el perfil, para que el banner no obligue a leer el código. */
+	effects: string;
+	/** `true` cuando corre con `NODE_ENV=production` pero seguridad degradada a propósito. */
+	degraded: boolean;
+}
+
+/**
+ * Nombra el perfil de seguridad vigente para el banner de arranque; no decide nada
+ * ({@link isRealProduction} sigue siendo la fuente).
+ */
+export function resolveSecurityProfile(): SecurityProfile {
+	if (process.env.NODE_ENV !== "production") {
+		return { name: "development", effects: "cookies=insecure hsts=off csp=report-only kek=dev-derived", degraded: false };
+	}
+	if (isLocalProdRun()) {
+		return {
+			name: "local-prod",
+			effects: "cookies=insecure hsts=off csp=report-only kek=dev-derived (ADC_LOCAL_PROD=true)",
+			degraded: true,
+		};
+	}
+	return { name: "production", effects: "cookies=Secure hsts=on csp=enforce kek=ADC_STORAGE_MASTER_KEY", degraded: false };
 }

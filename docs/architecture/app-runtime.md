@@ -39,7 +39,8 @@ para declarar dependencias y configuraciones de módulos específicas de esa ins
 
 En desarrollo (`NODE_ENV=development`) el Kernel observa cambios y recarga componentes
 automáticamente. Los watchers vigilan **directorios** y filtran por path (chokidar ≥4 no
-soporta globs).
+soporta globs), hasta **3 niveles** bajo la raíz del árbol: `<grupo>/<módulo>/index.<ext>`, su
+variante versionada y los `configs/*.json`. Un módulo enterrado más abajo no se vigila.
 
 ### Hot reload de archivos de configuración
 

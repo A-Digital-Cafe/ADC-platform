@@ -1,9 +1,17 @@
 export default class LRUCache<K, V> {
 	readonly #cache = new Map<K, V>();
 	readonly #maxSize: number;
+	readonly #onEvict?: (key: K, value: V) => void;
 
-	constructor(maxSize: number) {
+	/**
+	 * `onEvict` corre SÓLO cuando `set` desaloja por tamaño (no en `delete`/`clear`, donde el
+	 * caller ya tiene el valor y decide él mismo qué hacer). Pensado para liberar un recurso
+	 * externo que el valor cacheado retiene (p. ej. una vista de conexión) y que de otro modo
+	 * sobreviviría a su entrada en esta cache.
+	 */
+	constructor(maxSize: number, onEvict?: (key: K, value: V) => void) {
 		this.#maxSize = maxSize;
+		this.#onEvict = onEvict;
 	}
 
 	get(key: K): V | undefined {
@@ -23,7 +31,9 @@ export default class LRUCache<K, V> {
 			// Remove least recently used (first item)
 			const firstKey = this.#cache.keys().next().value;
 			if (firstKey !== undefined) {
+				const evicted = this.#cache.get(firstKey) as V;
 				this.#cache.delete(firstKey);
+				this.#onEvict?.(firstKey, evicted);
 			}
 		}
 		this.#cache.set(key, value);

@@ -30,8 +30,19 @@ export async function unregisterUIModule(name: string, ctx: UIFederationContext,
 	await reapWatcher(name, found.namespace, found.module, ctx);
 
 	ctx.registry.getNamespaceModules(found.namespace).delete(name);
+	await releaseI18nNamespace(found.module, ctx);
 	updateImportMap(found.namespace, ctx);
 	ctx.logger.logOk(`Módulo UI ${name} [${found.namespace}] desregistrado`);
+}
+
+/** Devuelve al `LangManagerService` el namespace de i18n que `register-flow.ts` le dio para apps deshabilitadas */
+async function releaseI18nNamespace(module: RegisteredUIModule, ctx: UIFederationContext): Promise<void> {
+	if (!module.uiConfig.i18n || !ctx.langManager) return;
+	try {
+		await ctx.langManager.unregisterNamespace(module.name);
+	} catch (error: any) {
+		ctx.logger.logWarn(`Error liberando el namespace i18n de ${module.name}: ${error.message}`);
+	}
 }
 
 /**

@@ -36,7 +36,10 @@ export function resolveCsrfConfig(options: CsrfOptions = {}): CsrfRuntimeConfig 
 	const enabled = parseBoolean(options.enabled, true);
 	const rawSecret = options.secret || undefined;
 
-	if (enabled && process.env.NODE_ENV === "production" && !rawSecret) {
+	// `isRealProduction()` y no `NODE_ENV` a secas, para que `start:prodtests` arranque (servicio
+	// `failOnError: true`). Ahí el secreto cae al aleatorio de proceso: CSRF sigue activo, pero sus
+	// tokens no sobreviven a un reinicio.
+	if (enabled && isRealProduction() && !rawSecret) {
 		throw new Error("CSRF_SECRET is required when CSRF is enabled in production");
 	}
 

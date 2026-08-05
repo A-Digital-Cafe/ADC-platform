@@ -48,7 +48,7 @@ src/services/<layer>/<MyService>/
 - Cada variable se documenta en **un solo** `.env.example`: las de infraestructura compartida en el de la raíz, las propias del servicio en el suyo. No repetir.
 - `${VAR}` y `${VAR:-default}` se interpolan desde el `.env` propio del servicio. La interpolación es de un solo nivel: **no** anidar (`${A:-${B}}` no funciona). Para fallbacks entre vars, declarar cada una como su propia clave en `private` y resolver la prioridad en código (ej. `config.supportTicketsProjectId || config.orgManagementProjectId`).
 - `private` es configuración interna accesible vía `this.config?.private`.
-- **Nunca leer `process.env` en el código del servicio** (DAOs, endpoints, index). Las variables de entorno se declaran en `config.json` (interpoladas en `private` o en `custom` de un provider) y se documentan en el `.env.example` del servicio. Excepción: flags de runtime de la plataforma (`NODE_ENV`, `PROD_PORT`) que maneja `BaseService`/el kernel, no el módulo.
+- **Nunca leer `process.env` en el código del servicio** (DAOs, endpoints, index). Las variables de entorno se declaran en `config.json` (interpoladas en `private` o en `custom` de un provider) y se documentan en el `.env.example` del servicio. Excepción: flags de runtime de la plataforma (`NODE_ENV`, `PROD_PORT`, `ADC_LOCAL_PROD`) que maneja `BaseService`/el kernel, no el módulo — y aun así, el perfil de seguridad se consulta por `isRealProduction()` de `@common/utils/runtime-env.ts`, nunca leyendo las variables a mano.
 - Si el servicio debe cargar **antes que las apps**, agregar `"kernelMode": true` (prioridad 1) o un número que define el orden de carga — menor carga antes (ej. `LangManagerService: 10` antes que `IdentityManagerService: 60`).
 
 ## index.ts — contrato base

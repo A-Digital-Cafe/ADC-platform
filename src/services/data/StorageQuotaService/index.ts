@@ -72,7 +72,7 @@ export default class StorageQuotaService extends BaseService implements IStorage
 		await super.start(kernelKey);
 
 		this.mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
-		await this.waitForMongo();
+		await this.waitForProvider(this.mongoProvider, "MongoDB");
 
 		this.#identity = this.getMyService<IIdentityManagerService>("IdentityManagerService");
 		this.#internalIdentity = this.#identity._internal(this.getCapability());
@@ -225,14 +225,4 @@ export default class StorageQuotaService extends BaseService implements IStorage
 		this.logger.logOk("StorageQuotaService detenido");
 	}
 
-	private async waitForMongo(): Promise<void> {
-		const maxWaitTime = 10000;
-		const startTime = Date.now();
-		while (!this.mongoProvider.isConnected() && Date.now() - startTime < maxWaitTime) {
-			await new Promise((resolve) => setTimeout(resolve, 500));
-		}
-		if (!this.mongoProvider.isConnected()) {
-			throw new Error("MongoDB no pudo conectarse en el tiempo esperado");
-		}
-	}
 }

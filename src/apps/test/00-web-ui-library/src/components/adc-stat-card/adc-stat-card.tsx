@@ -1,4 +1,4 @@
-import { Component, Prop, h, Host } from "@stencil/core";
+import { Component, Prop, Host } from "@stencil/core";
 
 /**
  * ADC Stat Card - Componente de tarjeta de estadísticas con Tailwind CSS

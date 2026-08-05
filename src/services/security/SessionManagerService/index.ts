@@ -81,12 +81,18 @@ export default class SessionManagerService extends BaseService implements ISessi
 	}
 
 	/**
-	 * Dominio de las cookies de sesión. En dev se devuelve "" a propósito: sin atributo `Domain` la
-	 * cookie queda *host-only* y vale tanto en `localhost` como entrando por la IP de LAN (probar
-	 * desde el móvil), mientras que con `Domain=localhost` el navegador descarta el Set-Cookie.
+	 * Dominio de las cookies de sesión. Por defecto "" (*host-only*): sin atributo `Domain`, sólo
+	 * el host exacto que emitió la cookie la recibe.
+	 *
+	 * Antes producción usaba `.adigitalcafe.com`, que compartía la sesión con CUALQUIER subdominio
+	 * de inquilino (`*.adigitalcafe.com`): un subdominio de bajo valor comprometido podía pivotar a
+	 * la API central con la sesión del usuario (CWE-1275, ADC-05). Host-only lo evita. Un despliegue
+	 * que de verdad necesite SSO entre subdominios debe habilitarlo de forma EXPLÍCITA vía
+	 * `private.cookieDomain` (p. ej. ".adigitalcafe.com"), asumiendo ese riesgo. En dev "" también
+	 * es lo correcto: vale en `localhost` y entrando por la IP de LAN.
 	 */
 	get #cookieDomain(): string {
-		return this.config.private?.cookieDomain || (IS_DEV ? "" : ".adigitalcafe.com");
+		return this.config.private?.cookieDomain || "";
 	}
 
 	/** Configuración custom interpolada desde config.json + .env */
@@ -212,6 +218,15 @@ export default class SessionManagerService extends BaseService implements ISessi
 				logger: this.logger,
 				moderation: this.#moderation,
 				onLoginSuccess: (userId: string, ip: string) => void this.checkAndNotifyNewLoginIp(userId, ip),
+				// Aviso al usuario cuando se detecta reuso de un refresh token (posible robo) y se
+				// revoca su familia de sesiones. Mismo canal seguro que las sesiones revocadas.
+				onTokenReuse: (userId: string) =>
+					void this.emitSecureNotification({
+						userId,
+						topic: "security.sessions_revoked",
+						title: "Cerramos tus sesiones por seguridad",
+						body: "Detectamos el reuso de un token de sesión (posible robo). Volvé a iniciar sesión.",
+					}),
 			},
 			(username: string, password: string) => this.#validatePlatformCredentials(username, password)
 		);

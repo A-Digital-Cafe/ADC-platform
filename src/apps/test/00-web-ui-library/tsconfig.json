@@ -7,12 +7,12 @@
 		"module": "esnext",
 		"moduleResolution": "bundler",
 		"target": "es2017",
-		"jsx": "react",
-		"jsxFactory": "h",
-		"jsxFragmentFactory": "Fragment",
+		"jsx": "react-jsx",
+		"jsxImportSource": "@stencil/core",
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
-		"types": []
+		"skipLibCheck": true,
+		"types": ["@stencil/core"]
 	},
 	"include": ["src"],
 	"exclude": ["node_modules"]

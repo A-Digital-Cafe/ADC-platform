@@ -1,4 +1,4 @@
-import { CRUDXAction } from "./Actions.js";
+import { ACTION_FLAGS, CRUDXAction } from "./Actions.js";
 import { RESOURCES, RESOURCE_MAP, type ResourceDef, type ScopeDef } from "./resources.js";
 
 // Typed permission builder
@@ -152,20 +152,11 @@ export function hasPermissionString(userPerms: readonly string[], required: stri
 
 // Human-readable permission descriptions
 
-/** Acciones atómicas (bit → nombre) para descomponer el bitfield de acción. */
-const ATOMIC_ACTIONS: ReadonlyArray<readonly [number, string]> = [
-	[CRUDXAction.READ, "read"],
-	[CRUDXAction.WRITE, "write"],
-	[CRUDXAction.UPDATE, "update"],
-	[CRUDXAction.DELETE, "delete"],
-	[CRUDXAction.EXECUTE, "execute"],
-];
-
 /** Convierte un bitfield de acción en una etiqueta legible (`delete`, `read+write`, `crud`, `all`). */
 function actionToLabel(action: number): string {
 	if (action === CRUDXAction.ALL) return "all";
 	if (action === CRUDXAction.CRUD) return "crud";
-	const names = ATOMIC_ACTIONS.filter(([bit]) => (action & bit) === bit).map(([, name]) => name);
+	const names = ACTION_FLAGS.decode(action);
 	return names.length > 0 ? names.join("+") : String(action);
 }
 
@@ -179,7 +170,7 @@ function scopeToLabel(resource: ResourceDef, scopeBits: number): string {
  * Traduce un permiso a una etiqueta legible para documentación/logs.
  *
  * - Scoped (`identity.8.8`) → `identity:groups (delete)`
- * - Combinado (`identity.10.2`) → `identity:groups+users (write)`
+ * - Combinado (`identity.10.2`) → `identity:users+groups (write)` (orden de declaración del recurso)
  *
  * Si el permiso no se reconoce, se devuelve tal cual (fallback seguro).
  *

@@ -187,6 +187,20 @@ export class RefreshTokenRepository {
 	}
 
 	/**
+	 * ¿El token presentado es el REUSO de uno ya rotado, más allá de la ventana de gracia?
+	 * Es la señal canónica de robo (OAuth 2.0 Security BCP §4.14.2): devuelve el `userId` para
+	 * revocar toda su familia. Un token nunca visto o simplemente expirado devuelve `null` (un
+	 * 401 normal, no un incidente de seguridad). Ver ADC-04.
+	 */
+	async detectReplayedToken(token: string): Promise<{ userId: string } | null> {
+		const raw = await this.#readRaw(tokenId(token));
+		if (raw?.replacedBy && raw.replacedAt !== undefined && Date.now() - raw.replacedAt > GRACE_SECONDS * 1000) {
+			return { userId: raw.userId };
+		}
+		return null;
+	}
+
+	/**
 	 * Busca un refresh token por usuario y dispositivo
 	 */
 	async findByUserAndDevice(userId: string, deviceId: string): Promise<StoredRefreshToken | null> {
@@ -359,7 +373,14 @@ export class RefreshTokenRepository {
 		return this.#tokens.get(id) ?? null;
 	}
 
-	/** Deja el token rotado apuntando a su reemplazo durante la ventana de gracia. */
+	/**
+	 * Deja el token rotado apuntando a su reemplazo. Dentro de `GRACE_SECONDS`, presentar el
+	 * token viejo devuelve el par vigente (`resolveCurrent`). Pasada la gracia, el registro se
+	 * conserva como *tombstone* hasta el vencimiento natural del token —no 60s— para poder
+	 * DETECTAR su reuso (señal de robo) en lugar de perderlo. El corte de gracia lo hace el
+	 * timestamp `replacedAt` (en `resolveCurrent`/`detectReplayedToken`), no la expiración de la
+	 * clave. Ver ADC-04.
+	 */
 	async #linkReplacement(oldId: string, newId: string): Promise<void> {
 		const stored = await this.#readRaw(oldId);
 		if (!stored) return;
@@ -368,9 +389,8 @@ export class RefreshTokenRepository {
 		stored.replacedAt = Date.now();
 
 		if (this.#redis) {
-			// El TTL es la ventana: al expirar la clave, presentar el token viejo
-			// vuelve a ser un 401 seco.
-			await this.#redis.set(`${REDIS_PREFIX.TOKEN}${oldId}`, this.#seal(stored), GRACE_SECONDS);
+			const tombstoneTtl = Math.max(GRACE_SECONDS, Math.ceil((stored.expiresAt - Date.now()) / 1000));
+			await this.#redis.set(`${REDIS_PREFIX.TOKEN}${oldId}`, this.#seal(stored), tombstoneTtl);
 		}
 	}
 

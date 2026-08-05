@@ -1,4 +1,4 @@
-import type { ModuleKind } from "./capabilityPolicy.js";
+import { revocableScopes, type ModuleKind } from "./capabilityPolicy.js";
 
 /** Privilegios efectivamente concedidos a un módulo en su última provisión. */
 export interface PrivilegeGrant {
@@ -8,6 +8,8 @@ export interface PrivilegeGrant {
 	path: string;
 	/** Scopes de la businessCap, ordenados (comparación estable). */
 	scopes: string[];
+	/** Lo que el `config.json` pidió en `privileges`, tal cual (crudo, sin filtrar por política). */
+	declared: string[];
 	at: number;
 }
 
@@ -21,6 +23,11 @@ export interface PrivilegeChange {
 	first: boolean;
 	/** Scopes declarados que NO se concedieron por faltarles aprobación. */
 	withheld: string[];
+	/**
+	 * El gate llegó **después** de la provisión: los `withheld` ya se habían concedido y hay que
+	 * retirárselos a la capability viva, no simplemente no darlos.
+	 */
+	retroactive: boolean;
 }
 
 /** Aprobación vigente de un módulo: los scopes que se le permiten declarar. */
@@ -58,6 +65,8 @@ export class PrivilegeLedger {
 	 * `null` (o gate apagado) deja el comportamiento histórico: se concede todo lo declarado y
 	 * el cambio sólo se audita. Es el default a propósito — un gate fail-closed sin quién
 	 * apruebe deja módulos legítimos sin arrancar tras un deploy.
+	 *
+	 * Lo ya provisionado no queda afuera del gate: lo re-evalúa {@link reconcile}.
 	 */
 	setApprovals(approvals: PrivilegeApprovals | null, gateEnabled: boolean): void {
 		this.#approvals = approvals;
@@ -76,11 +85,14 @@ export class PrivilegeLedger {
 	}
 
 	/** Registra la concesión y emite el delta contra la provisión anterior (si lo hay). */
-	record(grant: Omit<PrivilegeGrant, "scopes"> & { scopes: readonly string[] }, withheld: readonly string[] = []): void {
+	record(
+		grant: Omit<PrivilegeGrant, "scopes" | "declared"> & { scopes: readonly string[]; declared: readonly string[] },
+		withheld: readonly string[] = []
+	): void {
 		const key = privilegeKey(grant.kind, grant.name);
 		const previous = this.#grants.get(key);
 		const scopes = [...grant.scopes].sort((a, b) => a.localeCompare(b));
-		const next: PrivilegeGrant = { ...grant, scopes };
+		const next: PrivilegeGrant = { ...grant, scopes, declared: [...grant.declared] };
 		this.#grants.set(key, next);
 
 		const before = new Set(previous?.scopes ?? []);
@@ -93,7 +105,40 @@ export class PrivilegeLedger {
 		// no cambió sus privilegios es el caso masivamente mayoritario.
 		if (!first && added.length === 0 && removed.length === 0 && withheld.length === 0) return;
 
-		const change: PrivilegeChange = { grant: next, added, removed, first, withheld: [...withheld] };
+		this.#emit({ grant: next, added, removed, first, withheld: [...withheld], retroactive: false });
+	}
+
+	/**
+	 * Re-evalúa contra el baseline recién instalado **lo que ya se concedió**, y emite la
+	 * retención de los scopes que el gate hubiera negado.
+	 *
+	 * Cierra el hueco del arranque en frío: el baseline vive en mongo y sólo existe cuando
+	 * arranca el gestor de módulos (`kernelMode: 75`, atado a `EndpointManagerService`), así que
+	 * los kernel services de prioridad menor ya se provisionaron con lo que decía su
+	 * `config.json`. Sin esto el gate recién actuaría en la siguiente recarga.
+	 *
+	 * Actualiza el grant registrado —se reporta lo que el módulo *tiene*— y marca el cambio como
+	 * `retroactive` para que el kernel retire el scope de la capability viva.
+	 */
+	reconcile(): void {
+		if (!this.#gateEnabled || !this.#approvals) return;
+
+		for (const [key, grant] of this.#grants) {
+			const withheld = revocableScopes({
+				path: grant.path,
+				kind: grant.kind,
+				withheld: this.withheldFor(grant.kind, grant.name, grant.declared),
+			}).filter((scope) => grant.scopes.includes(scope));
+			if (withheld.length === 0) continue;
+
+			const gone = new Set<string>(withheld);
+			const next: PrivilegeGrant = { ...grant, scopes: grant.scopes.filter((scope) => !gone.has(scope)) };
+			this.#grants.set(key, next);
+			this.#emit({ grant: next, added: [], removed: [], first: false, withheld, retroactive: true });
+		}
+	}
+
+	#emit(change: PrivilegeChange): void {
 		for (const sub of this.#subs) {
 			try {
 				sub(change);

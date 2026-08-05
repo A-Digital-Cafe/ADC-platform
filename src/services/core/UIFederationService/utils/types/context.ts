@@ -3,7 +3,19 @@ import type { ILangManagerService } from "../../../LangManagerService/types.js";
 import type FastifyServerProvider from "../../../../../providers/http/fastify-server/index.js";
 import type { ImportMap } from "../../../../../interfaces/modules/IUIModule.js";
 import type { ModuleRegistry } from "../registry/module-registry.js";
+import type { LoadSemaphore } from "../../../../../utils/system/LoadSemaphore.ts";
 import type { ISEOService } from "../../../../../common/types/SEO/Service.js";
+
+/** Ver {@link UIFederationContext.deferredBuilds}. */
+export interface DeferredBuildPolicy {
+	/**
+	 * Módulos cuyo build NO puede diferirse porque alguien espera su `buildStatus`: UI libraries,
+	 * remotes y lo nombrado en un `uiDependencies` ajeno. El resto son hojas.
+	 */
+	observed: ReadonlySet<string>;
+	/** Registra el build diferido para que el kernel lo drene antes de dar el boot por hecho. */
+	track: (pending: Promise<void>) => void;
+}
 
 export interface HostRegistryEntry {
 	namespace: string;
@@ -22,6 +34,13 @@ export interface UIFederationContext {
 	hostRegistry: Map<string, HostRegistryEntry>;
 	httpProvider: FastifyServerProvider | null;
 	langManager: ILangManagerService | null;
+	/** Cota de bundlers concurrentes; ver `UIFederationService.#buildGate`. */
+	buildGate: LoadSemaphore;
+	/**
+	 * Diferimiento de builds durante el arranque. `null` fuera de él —recargas, deploys,
+	 * `rebuildModule`—, donde el llamador espera que al resolver la promesa el módulo esté listo.
+	 */
+	deferredBuilds: DeferredBuildPolicy | null;
 	logger: ILogger;
 	port: number;
 	uiOutputBaseDir: string;

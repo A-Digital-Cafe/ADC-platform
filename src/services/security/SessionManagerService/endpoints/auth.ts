@@ -41,6 +41,8 @@ interface AuthEndpointsDeps {
 	moderation: ModerationLookupService | null;
 	/** Hook tras un login exitoso: detecta dispositivo/IP nuevo y notifica (best-effort). */
 	onLoginSuccess?: (userId: string, ip: string) => void;
+	/** Hook cuando se detecta reuso de un refresh token (posible robo) y se revoca su familia. */
+	onTokenReuse?: (userId: string) => void;
 }
 
 interface RegisterBody {
@@ -86,7 +88,7 @@ export class AuthEndpoints {
 	})
 	static async handleNativeLogin(ctx: EndpointCtx<Record<string, string>, NativeLoginBody>): Promise<unknown> {
 		const { username, password, orgId } = validateNativeLoginBody(ctx.data);
-		const ipAddress = AuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);
+		const ipAddress = ctx.ip;
 
 		// Pre-check: IP baneada -> rechazar antes de revelar si las credenciales son válidas
 		await assertIpNotBanned(AuthEndpoints.deps.moderation, ipAddress);
@@ -323,13 +325,24 @@ export class AuthEndpoints {
 		const resolved = await AuthEndpoints.deps.refreshTokenRepo.resolveCurrent(refreshToken);
 
 		if (!resolved) {
+			// Detección de reuso (ADC-04): un refresh token ya rotado y presentado fuera de la
+			// ventana de gracia es la señal canónica de robo (OAuth 2.0 Security BCP §4.14.2).
+			// En vez de un 401 seco —que dejaría viva la sesión del atacante— se revoca TODA la
+			// familia del usuario (contención) y se le avisa.
+			const replay = await AuthEndpoints.deps.refreshTokenRepo.detectReplayedToken(refreshToken);
+			if (replay) {
+				await AuthEndpoints.deps.tokenService.revokeAllUserTokens(replay.userId);
+				AuthEndpoints.deps.logger.logWarn(`Reuso de refresh token detectado para ${replay.userId}: familia de tokens revocada`);
+				AuthEndpoints.deps.onTokenReuse?.(replay.userId);
+				throw new AuthError(401, "TOKEN_REUSE_DETECTED", "Sesión invalidada por seguridad", { requireRelogin: true });
+			}
 			throw new AuthError(401, "INVALID_REFRESH_TOKEN", "Refresh token inválido");
 		}
 
 		const storedToken = resolved.stored;
 
 		// Validar cambio de país usando Cloudflare headers
-		const currentCountry = AuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers);
+		const currentCountry = AuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers, ctx.viaTrustedProxy);
 		const geoValidation = AuthEndpoints.deps.geoValidator.validateLocationChange(currentCountry, storedToken.country);
 
 		if (!geoValidation.valid) {
@@ -353,7 +366,7 @@ export class AuthEndpoints {
 			});
 		}
 
-		const ipAddress = AuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);
+		const ipAddress = ctx.ip;
 		const result = await AuthEndpoints.deps.tokenService.refreshTokens(
 			refreshToken,
 			ipAddress,
@@ -588,8 +601,8 @@ export class AuthEndpoints {
 	}
 
 	private static async getTokenCookies(ctx: EndpointCtx, user: AuthenticatedUser): Promise<SetCookie[]> {
-		const ipAddress = AuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);
-		const country = AuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers);
+		const ipAddress = ctx.ip;
+		const country = AuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers, ctx.viaTrustedProxy);
 		const deviceId = AuthEndpoints.generateDeviceId(ctx.headers);
 		const userAgent = ctx.headers["user-agent"]?.toString() || "unknown";
 

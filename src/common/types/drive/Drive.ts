@@ -222,8 +222,10 @@ export const DRIVE_TRASH_RETENTION_DAYS = 30;
 // Días en "eliminado permanentemente" (retención legal, recuperable por admin) antes de la purga real.
 export const DRIVE_LEGAL_HOLD_RETENTION_DAYS = 90;
 
-/** Límites operativos del Drive. */
-export const DRIVE_MAX_FILE_SIZE = 512 * 1024 * 1024; // 512 MB por archivo
+/**
+ * Límites estructurales, iguales para todos los planes. Los que un plan puede mover (tamaño de
+ * archivo, dispositivos, unidades remotas, transferencias, egress) salen de `utils/drive-limits.ts`.
+ */
 export const DRIVE_MAX_FOLDER_DEPTH = 20;
 export const DRIVE_NAME_MAX_LENGTH = 200;
 
@@ -340,14 +342,11 @@ export interface DriveRemoteWebdavConfig {
 }
 
 export const DRIVE_REMOTE_UNIT_NAME_MAX_LENGTH = 60;
-export const DRIVE_MAX_REMOTE_UNITS_PER_USER = 20;
 
 export const DRIVE_DEVICE_NAME_MAX_LENGTH = 60;
-export const DRIVE_MAX_DEVICES_PER_USER = 20;
 export const DRIVE_TUNNEL_RPC_TIMEOUT_MS = 15_000;
 /** Ventana para que ambos extremos de una transferencia se conecten. */
 export const DRIVE_TUNNEL_TRANSFER_MATCH_TIMEOUT_MS = 30_000;
-export const DRIVE_TUNNEL_MAX_TRANSFERS_PER_USER = 8;
 export const DRIVE_TUNNEL_PAIRING_TTL_MS = 10 * 60 * 1000;
 /** TTL de respaldo del autoborrado de entregas (horas). */
 export const DRIVE_TRANSFER_DEFAULT_TTL_HOURS = 48;

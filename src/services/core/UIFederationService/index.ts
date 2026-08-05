@@ -18,6 +18,8 @@ import { setupImportMapEndpoints } from "./utils/server/endpoints.js";
 import { computeStats, refreshAllImportMaps, unregisterUIModule, type UIStats } from "./utils/server/service-operations.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Scope, assertScope, type Capability, type CapabilityToken } from "@common/security/Capability.ts";
+import { LoadSemaphore } from "../../../utils/system/LoadSemaphore.ts";
+import { MemoryProbe } from "../../../utils/system/MemoryProbe.ts";
 import type { IUIFederationService } from "@common/types/ui/IUIFederationService.ts";
 
 export default class UIFederationService extends BaseService implements IUIFederationService {
@@ -30,6 +32,15 @@ export default class UIFederationService extends BaseService implements IUIFeder
 	readonly #uiOutputBaseDir: string;
 	readonly #port: number;
 	readonly #isDevelopment: boolean;
+	/**
+	 * Cota de bundlers concurrentes: mismo techo y mismo freno por memoria que el semáforo de
+	 * arranque, pero con el ciclo de vida de **este servicio**, así que también cubre los caminos
+	 * de recarga (deploy git, `enable()`, `rebuildModule`), que no tenían ninguno.
+	 */
+	readonly #buildGate: LoadSemaphore;
+	/** Builds diferidos en vuelo. `null` = diferimiento apagado (fuera del arranque). */
+	#deferredBuilds: Promise<void>[] | null = null;
+	#observedModules: ReadonlySet<string> = new Set();
 	#langManager: ILangManagerService | null = null;
 	#httpProvider: FastifyServerProvider | null = null;
 	#seoService: ISEOService | null = null;
@@ -41,6 +52,11 @@ export default class UIFederationService extends BaseService implements IUIFeder
 		this.#uiOutputBaseDir = path.resolve(basePath, "..", "temp", "ui-builds");
 		const prodPort = !this.#isDevelopment && (process.env.PROD_PORT ?? 80);
 		this.#port = options?.port || prodPort || 3000;
+		this.#buildGate = new LoadSemaphore({
+			maxParallel: LoadSemaphore.defaultMaxParallel(),
+			probe: new MemoryProbe(),
+			logger: this.logger,
+		});
 	}
 
 	#ctx(): UIFederationContext {
@@ -51,6 +67,10 @@ export default class UIFederationService extends BaseService implements IUIFeder
 			hostRegistry: this.#hostRegistry,
 			httpProvider: this.#httpProvider,
 			langManager: this.#langManager,
+			buildGate: this.#buildGate,
+			deferredBuilds: this.#deferredBuilds
+				? { observed: this.#observedModules, track: (pending) => this.#deferredBuilds?.push(pending) }
+				: null,
 			logger: this.logger,
 			port: this.#port,
 			uiOutputBaseDir: this.#uiOutputBaseDir,
@@ -90,6 +110,7 @@ export default class UIFederationService extends BaseService implements IUIFeder
 	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
+		this.#buildGate.dispose();
 		await stopAllWatchers(this.#watchBuilds, this.logger);
 		this.logger.logOk("UIFederationService detenido");
 	}
@@ -155,6 +176,33 @@ export default class UIFederationService extends BaseService implements IUIFeder
 	refreshAllImportMaps(cap: CapabilityToken): Promise<void> {
 		assertScope(cap, Scope.PlatformInfra);
 		return refreshAllImportMaps(this.#ctx());
+	}
+
+	/**
+	 * Enciende el diferimiento de builds para lo que queda del arranque. `observed` son los
+	 * módulos que alguien espera; el resto son hojas y su build sale del camino de `app.start()`.
+	 *
+	 * De un solo sentido: lo apaga {@link drainDeferredBuilds}, para que una recarga o un deploy
+	 * posteriores vuelvan al modo síncrono, donde el llamador sí espera un módulo listo.
+	 */
+	enableDeferredBuilds(cap: CapabilityToken, observed: Iterable<string>): void {
+		assertScope(cap, Scope.PlatformInfra);
+		this.#observedModules = new Set(observed);
+		this.#deferredBuilds = [];
+	}
+
+	/**
+	 * Espera a los builds diferidos y vuelve al modo síncrono. El kernel lo llama antes de
+	 * reinyectar los import maps: a partir de ahí el árbol tiene que estar completo.
+	 */
+	async drainDeferredBuilds(cap: CapabilityToken): Promise<void> {
+		assertScope(cap, Scope.PlatformInfra);
+		const pending = this.#deferredBuilds;
+		this.#deferredBuilds = null;
+		if (!pending?.length) return;
+		this.logger.logInfo(`Esperando ${pending.length} build(s) UI diferido(s)...`);
+		await Promise.all(pending);
+		this.logger.logOk(`${pending.length} build(s) UI diferido(s) completado(s).`);
 	}
 
 	getStats(): UIStats {

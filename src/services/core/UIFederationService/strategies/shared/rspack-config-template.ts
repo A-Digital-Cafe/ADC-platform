@@ -29,6 +29,11 @@ export interface IRspackConfigOptions {
 	additionalRules: string;
 }
 
+/** `devtool` de desarrollo; ver la nota en {@link buildRspackConfigContent}. */
+function devDevtool(): string {
+	return process.env.ADC_UI_SOURCEMAPS === "true" ? "'eval-cheap-module-source-map'" : "'eval'";
+}
+
 /**
  * Construye el contenido completo de `rspack.config.mjs` a partir de las opciones.
  * Centraliza el template para todos los frameworks rspack.
@@ -59,9 +64,14 @@ export function buildRspackConfigContent(options: IRspackConfigOptions): string 
 
 	const { module, uiOutputBaseDir } = context;
 	const mode = isProduction ? "production" : "development";
-	// `eval-*` en dev: los source maps van embebidos en el bundle en vez de escribirse
-	// como archivo aparte, que es lo que más pesa en un rebuild incremental.
-	const devtool = isProduction ? "false" : "'eval-cheap-module-source-map'";
+	// `eval-*` en dev: los source maps van embebidos en el bundle en vez de escribirse como
+	// archivo aparte, que es lo que más pesa en un rebuild incremental. `eval` pelado es el más
+	// barato (no genera el mapa por módulo) a cambio de stack traces que apuntan al módulo
+	// transpilado; `ADC_UI_SOURCEMAPS=true` recupera los mapas para depurar.
+	//
+	// En prod tiene que seguir siendo `false`: `security/headers.ts` omite `'unsafe-eval'` de
+	// `script-src` **porque** no hay devtool `eval-*`, y con uno la CSP bloquearía el bundle.
+	const devtool = isProduction ? "false" : devDevtool();
 	const cacheBlock = buildCacheBlock(context, mode, configPath, [postcssConfigPath, tailwindCssPath].filter(Boolean));
 
 	const finalAliasesObject = injectTailwindAlias(aliasesObject, tailwindCssPath, module.appDir);

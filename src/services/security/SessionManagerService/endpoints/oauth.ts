@@ -489,8 +489,8 @@ export class OAuthEndpoints {
 	}
 
 	private static async getTokenCookies(ctx: EndpointCtx<ProviderParams>, user: AuthenticatedUser): Promise<SetCookie[]> {
-		const ipAddress = OAuthEndpoints.deps.geoValidator.extractRealIP(ctx.headers, ctx.ip);
-		const country = OAuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers);
+		const ipAddress = ctx.ip;
+		const country = OAuthEndpoints.deps.geoValidator.getCountryFromHeaders(ctx.headers, ctx.viaTrustedProxy);
 		const deviceId = OAuthEndpoints.generateDeviceId(ctx.headers);
 		const userAgent = ctx.headers["user-agent"]?.toString() || "unknown";
 
@@ -561,6 +561,12 @@ export class OAuthEndpoints {
 	private static isAllowedRedirectUrl(url: string): boolean {
 		// Límite defensivo de longitud
 		if (url.length > 2048) return false;
+
+		// Rechazar caracteres de control (\x00-\x1F, \x7F) y backslashes en cualquier posición:
+		// el navegador los elimina/normaliza al procesar el `Location`, así que "/\t/evil.com" o
+		// "/\evil.com" sortearían el chequeo de "//" y acabarían navegando a "//evil.com" (open
+		// redirect). Una URL de redirect legítima nunca los lleva sin escapar. Ver ADC-02.
+		if (/[\p{Cc}\\]/u.test(url)) return false;
 
 		// Solo paths relativos. Rechazar protocol-relative ("//evil.com") y "/\" (backslash trick)
 		if (url.startsWith("/")) {

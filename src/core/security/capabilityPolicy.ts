@@ -95,3 +95,23 @@ export function policyScopes(opts: {
 	}
 	return [...scopes];
 }
+
+/**
+ * Scopes que se le pueden **retirar** a un módulo ya provisionado, dado lo que el gate hubiera
+ * retenido: el complemento de {@link policyScopes} para el camino retroactivo.
+ *
+ * Nunca incluye los defaults del tier: sin `lifecycle` el módulo no puede ni detenerse, y esos
+ * scopes no vienen de `privileges` sino de dónde vive el módulo.
+ */
+export function revocableScopes(opts: { path: string; kind: ModuleKind; withheld: readonly string[] }): Scope[] {
+	const tierDefaults = new Set<Scope>(TIER_DEFAULTS[tierForPath(opts.path, opts.kind)]);
+	const known = new Set<string>(Object.values(Scope));
+	const revocable: Scope[] = [];
+	for (const raw of opts.withheld) {
+		if (!known.has(raw)) continue;
+		const scope = raw as Scope;
+		if (tierDefaults.has(scope)) continue;
+		revocable.push(scope);
+	}
+	return revocable;
+}

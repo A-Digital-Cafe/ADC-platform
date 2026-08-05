@@ -40,29 +40,54 @@ async function registerEndpointsIfHost(module: RegisteredUIModule, ctx: UIFedera
 }
 
 /**
+ * Build del módulo y todo lo que depende de su output: import maps, servido, assets públicos,
+ * i18n y endpoints del host.
+ */
+async function buildAndFinishRegistration(module: RegisteredUIModule, ctx: UIFederationContext): Promise<void> {
+	const namespace = module.namespace;
+
+	await buildUIModule(module, namespace, ctx);
+
+	if (module.outputPath) await injectImportMapsInModuleHTMLs(module.name, namespace, ctx);
+	updateImportMap(namespace, ctx);
+
+	await serveModule(module, namespace, ctx);
+	await registerPublicAssetsIfAble(module, ctx);
+	await registerI18nNamespace(module, ctx);
+	await registerEndpointsIfHost(module, ctx);
+
+	if (!(module.uiConfig.isHost ?? false) && module.uiConfig.devPort) {
+		await regenerateLayoutConfigsForNamespace(namespace, ctx);
+	}
+}
+
+/**
  * Orquesta el flujo completo de registro de un módulo UI tras su validación inicial.
  * Levanta `module.buildStatus = "error"` y propaga la excepción si algo falla.
+ *
+ * Durante el arranque el build de una **hoja** no se espera: el `start()` de la app retorna con el
+ * módulo registrado y el kernel drena los diferidos después. Contrapartida deliberada: sin nadie
+ * esperándolo, su fallo ya no falla el `start()` y queda como `buildStatus: "error"` + `logError`.
  */
 export async function runRegisterFlow(module: RegisteredUIModule, ctx: UIFederationContext): Promise<void> {
 	const isHost = module.uiConfig.isHost ?? false;
-	const namespace = module.namespace;
 
 	try {
 		if (isHost) await generateStandaloneFiles(module.appDir, module.uiConfig, ctx.logger);
 
-		await buildUIModule(module, namespace, ctx);
-
-		if (module.outputPath) await injectImportMapsInModuleHTMLs(module.name, namespace, ctx);
-		updateImportMap(namespace, ctx);
-
-		await serveModule(module, namespace, ctx);
-		await registerPublicAssetsIfAble(module, ctx);
-		await registerI18nNamespace(module, ctx);
-		await registerEndpointsIfHost(module, ctx);
-
-		if (!isHost && module.uiConfig.devPort) {
-			await regenerateLayoutConfigsForNamespace(namespace, ctx);
+		const deferral = ctx.deferredBuilds;
+		if (deferral && !deferral.observed.has(module.name)) {
+			ctx.logger.logDebug(`Build de ${module.name} diferido: ningún módulo lo declara como dependencia UI.`);
+			deferral.track(
+				buildAndFinishRegistration(module, ctx).catch((error: any) => {
+					module.buildStatus = "error";
+					ctx.logger.logError(`Error registrando módulo UI ${module.name} (build diferido): ${error.message}`);
+				})
+			);
+			return;
 		}
+
+		await buildAndFinishRegistration(module, ctx);
 	} catch (error: any) {
 		module.buildStatus = "error";
 		ctx.logger.logError(`Error registrando módulo UI ${module.name}: ${error.message}`);

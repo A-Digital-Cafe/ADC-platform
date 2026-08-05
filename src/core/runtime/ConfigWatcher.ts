@@ -19,6 +19,29 @@ function isIgnoredTreePath(p: string): boolean {
 /** Estabilización de escritura: espera a que el archivo deje de crecer (copias/clones). */
 const WRITE_FINISH = { stabilityThreshold: 2000, pollInterval: 100 };
 
+/**
+ * Techo de recorrido. Lo vigilable vive como mucho tres niveles bajo la raíz del árbol:
+ * `<grupo>/<módulo>/index.<ext>`, su variante versionada (`<módulo>/1.0.0-ts/index.ts`) y los
+ * configs de instancia (`<módulo>/configs/*.json`). Sin techo chokidar baja al `src/` de cada
+ * app —~600 directorios vigilados al boot— y encima entrega eventos de `index.ts` internos.
+ */
+const WATCH_DEPTH = 3;
+
+/** Archivos `.json` que son config de instancia de una app. */
+function isInstanceConfig(p: string): boolean {
+	return p.endsWith(".json") && !["default.json", "tsconfig.json", "package.json"].includes(path.basename(p));
+}
+
+/** Árbol vigilado del que salen configs de app. */
+export interface ConfigTree {
+	/** Raíz vigilada (`src/apps` o la raíz de un topic de preset). */
+	root: string;
+	/** Primer segmento bajo `root` que debe contener el config (`apps` en un preset). */
+	layer?: string;
+	/** Sólo `src/apps`: en producción sus configs viven copiados en `appsPath`. */
+	mapToBuild?: boolean;
+}
+
 export interface ConfigWatcherDeps {
 	logger: ILogger;
 	registry: ModuleRegistry;
@@ -37,7 +60,7 @@ export interface ConfigWatcherDeps {
 	isPendingPath: (p: string) => boolean;
 	/**
 	 * Watcher ya montado sobre `src/apps` (el que devuelve `watchLayer`). Se reutiliza para no
-	 * levantar un SEGUNDO árbol recursivo idéntico sobre los mismos ~220 directorios: ambos usan
+	 * levantar un SEGUNDO árbol recursivo idéntico sobre los mismos directorios: ambos usan
 	 * la misma raíz, el mismo `ignored` y el mismo `awaitWriteFinish`, y se diferencian sólo en el
 	 * filtro por archivo, que se aplica en los handlers. Opcional: sin él la clase sigue siendo
 	 * construible sola.
@@ -59,14 +82,24 @@ export class ConfigWatcher {
 			chokidar.watch(srcAppsPath, {
 				ignoreInitial: true,
 				ignored: isIgnoredTreePath,
+				depth: WATCH_DEPTH,
 				awaitWriteFinish: WRITE_FINISH,
 			});
+		this.attach(watcher, { root: srcAppsPath, mapToBuild: true });
+	}
+
+	/**
+	 * Cuelga los handlers de config sobre un árbol YA vigilado. Además de `src/apps` lo usan
+	 * los topics de preset: sus apps viven fuera de `src/apps`, y sin esto editar el
+	 * `config.json` de una app de preset en dev no hacía nada.
+	 */
+	attach(watcher: ReturnType<typeof chokidar.watch>, tree: ConfigTree): void {
 		// Sin globs (chokidar ≥4): filtrar los .json de interés acá.
-		const relevant = (p: string) => p.endsWith(".json") && !["default.json", "tsconfig.json", "package.json"].includes(path.basename(p));
+		const relevant = (p: string) => isInstanceConfig(p) && (!tree.layer || path.relative(tree.root, p).split(path.sep)[0] === tree.layer);
 
 		watcher.on("change", (p) => void (relevant(p) && this.#onChange(p)));
 		watcher.on("add", (p) => void (relevant(p) && this.#onAdd(p)));
-		watcher.on("unlink", (p) => void (relevant(p) && this.#onUnlink(p, srcAppsPath)));
+		watcher.on("unlink", (p) => void (relevant(p) && this.#onUnlink(p, tree)));
 	}
 
 	async #onChange(srcConfigPath: string): Promise<void> {
@@ -92,9 +125,9 @@ export class ConfigWatcher {
 		}
 	}
 
-	async #onUnlink(srcConfigPath: string, srcAppsPath: string): Promise<void> {
+	async #onUnlink(srcConfigPath: string, tree: ConfigTree): Promise<void> {
 		if (this.deps.isStartingUp()) return;
-		const targetConfigPath = await this.#resolveDeletedConfigPath(srcConfigPath, srcAppsPath);
+		const targetConfigPath = await this.#resolveDeletedConfigPath(srcConfigPath, tree);
 		const instanceName = this.deps.appConfigFilePaths.get(targetConfigPath);
 		if (!instanceName) return;
 		this.deps.logger.logInfo(`Archivo de configuración eliminado: ${path.basename(srcConfigPath)}`);
@@ -106,9 +139,9 @@ export class ConfigWatcher {
 		this.deps.removeConfigPath(targetConfigPath);
 	}
 
-	async #resolveDeletedConfigPath(srcConfigPath: string, srcAppsPath: string): Promise<string> {
-		if (this.deps.isDevelopment) return srcConfigPath;
-		const relativePath = path.relative(srcAppsPath, srcConfigPath);
+	async #resolveDeletedConfigPath(srcConfigPath: string, tree: ConfigTree): Promise<string> {
+		if (this.deps.isDevelopment || !tree.mapToBuild) return srcConfigPath;
+		const relativePath = path.relative(tree.root, srcConfigPath);
 		const target = path.join(this.deps.appsPath, relativePath);
 		try {
 			await fs.unlink(target);
@@ -168,6 +201,7 @@ export function watchLayer(
 	const watcher = chokidar.watch(dir, {
 		ignoreInitial: opts.ignoreInitial ?? true,
 		ignored: isIgnoredTreePath,
+		depth: WATCH_DEPTH,
 		awaitWriteFinish: WRITE_FINISH,
 	});
 	const relevant = (p: string) => path.basename(p) === indexName && !p.split(path.sep).some((seg) => excluded.has(seg));
@@ -195,11 +229,12 @@ export function watchPresetTopic(
 	fileExtension: string,
 	handlersFor: (layer: ModuleType | "app") => LayerEventHandlers,
 	opts: WatchTreeOptions
-): void {
+): ReturnType<typeof chokidar.watch> {
 	const indexName = `index${fileExtension}`;
 	const watcher = chokidar.watch(topicPath, {
 		ignoreInitial: opts.ignoreInitial ?? true,
 		ignored: isIgnoredTreePath,
+		depth: WATCH_DEPTH,
 		awaitWriteFinish: WRITE_FINISH,
 	});
 	const layerOf = (p: string): ModuleType | "app" | null => {
@@ -211,6 +246,8 @@ export function watchPresetTopic(
 		const layer = layerOf(p);
 		return layer ? handlersFor(layer) : null;
 	}, opts.isStartingUp);
+	// Se devuelve para que `ConfigWatcher` cuelgue de él los configs de las apps del preset.
+	return watcher;
 }
 
 /**

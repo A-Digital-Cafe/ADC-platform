@@ -614,27 +614,4 @@ export class ModuleRegistry {
 		};
 	}
 
-	getStateSnapshot(): object {
-		return {
-			apps: Array.from(this.#appsRegistry.keys()),
-			providers: {
-				keys: Array.from(this.#moduleStore.provider.registry.keys()),
-				refs: Object.fromEntries(this.#moduleStore.provider.refCount),
-			},
-			utilities: {
-				keys: Array.from(this.#moduleStore.utility.registry.keys()),
-				refs: Object.fromEntries(this.#moduleStore.utility.refCount),
-			},
-			services: {
-				keys: Array.from(this.#moduleStore.service.registry.keys()),
-				refs: Object.fromEntries(this.#moduleStore.service.refCount),
-			},
-			appDependencies: Object.fromEntries(
-				Array.from(this.#appModuleDependencies.entries()).map(([appName, deps]) => [
-					appName,
-					Array.from(deps).map((dep) => ({ type: dep.type, key: dep.uniqueKey })),
-				])
-			),
-		};
-	}
 }

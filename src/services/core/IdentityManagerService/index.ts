@@ -47,6 +47,17 @@ import { createQuotaTrackerGetter } from "../../data/StorageQuotaService/index.j
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.js";
 import { createSeatGate, type SeatGate } from "@common/types/plans/consumers.js";
 import type { IPlanService } from "@common/types/plans/IPlanService.js";
+import LRUCache from "@adc/utils/performance/LRUCache.ts";
+
+/** Organizaciones (× modo read/write) con managers vivos a la vez. */
+const ORG_MANAGERS_CACHE_SIZE = 200;
+
+/** Entrada de `#orgManagersCache`: managers + la vista/dbName que hay que liberar al desalojar. */
+interface CachedOrgManagers {
+	managers: OrgScopedManagers;
+	connection: Connection;
+	dbName: string;
+}
 
 /**
  * Espera antes de la primera corrida del purge de retención: da tiempo a que
@@ -160,8 +171,18 @@ export default class IdentityManagerService extends BaseService implements IIden
 	// IOperationsService for stepper support in cascade DAOs
 	readonly #operationsService: IOperationsService;
 
-	// Cache de conexiones por organización
-	readonly #orgConnectionCache: Map<string, { connection: Connection; managers: OrgScopedManagers }> = new Map();
+	/**
+	 * Managers por organización. Acotado: cada entrada retiene tres modelos compilados y con un Map
+	 * crecía una entrada por org (× modo) hasta el `stop()` del servicio. El `onEvict` libera además
+	 * la vista de mongoose que sostiene esos modelos; sin eso, la LRU acotaría el objeto de
+	 * aplicación pero no la memoria real.
+	 */
+	readonly #orgManagersCache = new LRUCache<string, CachedOrgManagers>(ORG_MANAGERS_CACHE_SIZE, (_key, cached) =>
+		this.#mongoProvider.releaseDbView(cached.connection, cached.dbName)
+	);
+
+	/** Conexión por URI de región: acotada por la cantidad de regiones, no por orgs. */
+	readonly #regionConnections = new Map<string, Connection>();
 
 	/** Tracker de cuota lazy: StorageQuotaService carga después (kernelMode mayor). */
 	readonly #getQuotaTracker: QuotaTrackerGetter;
@@ -198,16 +219,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 		this.#kernelKey = kernelKey;
 
 		try {
-			// Esperar a que MongoDB esté conectado (máximo 10 segundos)
-			const maxWaitTime = 10000;
-			const startTime = Date.now();
-			while (!this.#mongoProvider.isConnected() && Date.now() - startTime < maxWaitTime) {
-				await new Promise((resolve) => setTimeout(resolve, 500));
-			}
-
-			if (!this.#mongoProvider.isConnected()) {
-				throw new Error("MongoDB no pudo conectarse en el tiempo esperado");
-			}
+			await this.waitForProvider(this.#mongoProvider, "MongoDB");
 
 			// Configurar modelos para la base de datos LOCAL (entidades globales)
 			const RegionModel = this.#mongoProvider.createModel<RegionInfo>("Region", regionSchema);
@@ -548,8 +560,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 		// Generar cache key que incluye el modo
 		const cacheKey = `${org.orgId}:${mode}`;
 
-		// Verificar cache
-		const cached = this.#orgConnectionCache.get(cacheKey);
+		const cached = this.#orgManagersCache.get(cacheKey);
 		if (cached) {
 			return cached.managers;
 		}
@@ -570,8 +581,8 @@ export default class IdentityManagerService extends BaseService implements IIden
 			throw new Error(`No hay connectionUri configurado para región: ${org.region}`);
 		}
 
-		// Obtener/crear conexión
-		const regionConnection = await this.#mongoProvider.getOrCreateConnection(connectionUri);
+		// Obtener/crear conexión (una sola toma del pool por región, no una por org)
+		const regionConnection = await this.#getRegionConnection(connectionUri);
 
 		// Cambiar a la base de datos de la organización
 		const dbName = this.#orgManager!.getDbName(org);
@@ -607,13 +618,17 @@ export default class IdentityManagerService extends BaseService implements IIden
 			},
 		};
 
-		// Cachear
-		this.#orgConnectionCache.set(cacheKey, {
-			connection: orgDbConnection,
-			managers,
-		});
+		this.#orgManagersCache.set(cacheKey, { managers, connection: regionConnection, dbName });
 
 		return managers;
+	}
+
+	async #getRegionConnection(connectionUri: string): Promise<Connection> {
+		const cached = this.#regionConnections.get(connectionUri);
+		if (cached) return cached;
+		const connection = await this.#mongoProvider.getOrCreateConnection(connectionUri);
+		this.#regionConnections.set(connectionUri, connection);
+		return connection;
 	}
 
 	// Métodos de servicio
@@ -633,8 +648,8 @@ export default class IdentityManagerService extends BaseService implements IIden
 	@OnlyKernel()
 	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
-		// Limpiar cache de conexiones por organización
-		this.#orgConnectionCache.clear();
+		this.#orgManagersCache.clear();
+		this.#regionConnections.clear();
 
 		if (this.#retentionTimer) {
 			clearInterval(this.#retentionTimer);

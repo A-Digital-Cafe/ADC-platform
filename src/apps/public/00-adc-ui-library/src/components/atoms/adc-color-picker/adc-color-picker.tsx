@@ -18,10 +18,9 @@ function cssColorToHex(value: string): string {
 	if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
 	if (/^#[0-9a-f]{3}$/i.test(v)) return `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`.toLowerCase();
 	if (typeof document === "undefined") return "#000000";
-	if (!parseCtx) parseCtx = document.createElement("canvas").getContext("2d");
+	parseCtx ??= document.createElement("canvas").getContext("2d");
 	if (!parseCtx) return "#000000";
-	parseCtx.fillStyle = "#000000"; // baseline: si `v` es inválido, fillStyle no cambia
-	parseCtx.fillStyle = v;
+	parseCtx.fillStyle = v || "#000000"; // baseline: si `v` es inválido, fillStyle no cambia
 	const norm = parseCtx.fillStyle; // el navegador devuelve "#rrggbb" o "rgba(r, g, b, a)"
 	if (/^#[0-9a-f]{6}$/i.test(norm)) return norm.toLowerCase();
 	const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(norm);

@@ -115,6 +115,81 @@ lo declaró `optional` funciona sin él, y si contara, un `kernelMode` que lo de
 —`EmailService` ← Identity/Notification— bastaría para seguir reportándolo caído. Un service sin
 consumidores requeridos se carga por su cuenta y su ausencia sí es un fallo.
 
+## El build UI sale del camino de `app.start()`
+
+Dos cambios que se leen como uno:
+
+**Cota propia de bundlers (`buildGate`).** `UIFederationService` tiene su propio `LoadSemaphore`,
+con el mismo techo y el mismo freno por memoria que el del arranque pero con el ciclo de vida del
+servicio. Envuelve **sólo** la llamada a `strategy.build()`, y se adquiere **después** de
+`waitForUILibraryBuild`/`waitForDeclaredRemotes` — al revés habría inanición: los que esperan
+ocuparían el techo mientras el productor sigue encolado, y con el freno de memoria en 1, deadlock.
+Además tapa un agujero que no estaba en el diagnóstico original: el semáforo del kernel se dispone
+al terminar `start()`, así que **deploy git, `enable()` y `rebuildModule` no tenían ninguna cota**.
+
+**Diferimiento de hojas.** Una *hoja* es un módulo cuyo `buildStatus` nadie consulta. El kernel lee
+los `config.json` antes de cargar las capas y arma el conjunto **observado** —UI libraries, remotes
+y todo lo nombrado en un `uiDependencies` ajeno—; el resto no se espera dentro de `app.start()`, y
+el kernel los drena en `apps:deferred-builds` antes de reinyectar los import maps. Medido: **17 de
+19 módulos** se difieren (los 2 que quedan son las UI libraries, que es exactamente el diseño: sin
+deps Stencil declaradas, `waitForUILibraryBuild` espera a *todas* las del namespace).
+
+Medición, 3 pares alternados de boot completo en caliente, `BOOT-TOTAL` del propio `BootTimeline`:
+
+| | sin diferir | con diferir |
+| --- | --- | --- |
+| boot (media) | 30.800 ms | **30.262 ms** (−538 ms, −1,7 %) |
+| pico de hijos (media) | 5.083 MiB | **5.031 MiB** (−52 MiB) |
+
+Gana en los 3 pares, pero es una mejora chica **y era previsible**: el camino crítico son las dos
+compilaciones Stencil (8,7 s la de `adc-ui-library`), que por definición nunca se difieren. El valor
+real del cambio no es ese 1,7 % sino sacar trabajo de bundler del slot de carga y ponerle una cota a
+los caminos de recarga.
+
+> Cuidado al medir esto: la resolución importa. Un primer intento con un poll de 1 s dio el signo
+> **opuesto** — las diferencias son de cientos de ms y quedaban debajo del ruido de cuantización.
+> Usar `BOOT-TOTAL`, que lo calcula el kernel sobre `performance.now()`.
+
+Contrapartida deliberada: el fallo de un build diferido ya no puede fallar el `start()` de su app
+—no hay nadie esperándolo—, así que queda como `buildStatus: "error"` con un `logError`, que es lo
+que el panel de módulos ya lee. `ADC_DEFER_UI_BUILDS=false` vuelve al comportamiento anterior en una
+corrida, mismo espíritu que `BOOT_MAX_PARALLEL=1`.
+
+> **Falso positivo que costó una tarde, anotado para no repetirlo.** Durante la validación,
+> `adc-home` apareció en blanco con el diferimiento activo y renderizó en una corrida sin él, y se
+> revirtió el cambio entero por eso. Al re-medir contra el árbol **sin ninguna modificación**
+> (`git stash` de todo) la página seguía en blanco: el bug es **preexistente** y no tiene relación.
+> La corrida que renderizó era el outlier, no la regresión. Antes de atribuirle un fallo de UI a un
+> cambio de arranque, reproducirlo sobre el árbol limpio — un solo boot "bueno" no es evidencia.
+
+## El config generado de rspack no es el cuello de botella
+
+Auditado y medido, porque *leyéndolo* parece caro y la conclusión intuitiva es la equivocada. Los
+tres rasgos que llaman la atención son deliberados y su costo no aparece en las mediciones:
+
+| Rasgo | Por qué está | Qué pasa si se "arregla" |
+| --- | --- | --- |
+| `lazyCompilation: false` explícito | si queda `undefined`, `rspack serve` lo auto-activa con `{ imports: true }` | los proxies `!lazy-compilation-proxy` sobre los `import()` de Stencil rompen el HMR de los `*.entry.js` (`Cannot set properties of undefined`) |
+| `react` compartido con `eager: true` | el host inicializa el share scope de Module Federation antes de resolver remotes | `container.init(__webpack_share_scopes__.default)` queda sin guard en `loadRemoteComponent`, y en `platform-links.ts` degrada en silencio con `?? {}` → **dos Reacts en runtime** |
+| Cada app re-escanea la UI library para Tailwind | `stencil-output.ts` **quita** el `@import "tailwindcss"` de la CSS de la librería | el escaneo de la app es el único productor de esas clases: recortarlo las borra del bundle (medido: 34 selectores reales en adc-drive) |
+
+Los números del último boot completo: las apps rspack están entre **218 y 720 ms**, contra **5,2 s**
+de la sola compilación Stencil de la UI library y 5,2 s de `docker:compose`, sobre 30 s totales. El
+camino crítico son las dos libs Stencil, no los 17 hijos de rspack.
+
+Para que la próxima lectura del config no repita el análisis, `rspack-process.ts` emite un WARN si
+un módulo tarda más de `SLOW_RSPACK_MS` (3 s) en estar listo. Es holgado a propósito: un clone frío,
+sin caché persistente, tarda más y no debe gritar.
+
+Lo único que sí se recortó es el `devtool` de desarrollo: `eval` pelado en vez de
+`eval-cheap-module-source-map`, con `ADC_UI_SOURCEMAPS=true` para recuperar los mapas por módulo
+cuando hace falta depurar. En producción sigue siendo `false`, y eso es load-bearing — la CSP omite
+`'unsafe-eval'` de `script-src` **porque** el build de prod no usa un devtool `eval-*`.
+
+> **Medir el segundo boot, no el primero.** Cualquier edición del template invalida las 17 cachés
+> persistentes por `buildDependencies`, así que la primera corrida después de tocarlo es fría por
+> construcción y no compara contra nada.
+
 ## Lo que NO se hace, y por qué
 
 - **Hidratación on-demand de apps dormidas + stub de puerto**: `ADC_LOAD_APPS` deja la app sin

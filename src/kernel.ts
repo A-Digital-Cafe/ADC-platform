@@ -3,12 +3,15 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Logger } from "./utils/logger/Logger.js";
 import { ModuleLoader } from "./utils/loaders/ModuleLoader.js";
+import { invalidateModule } from "./utils/loaders/module-url.js";
 import { ModuleRegistry, type ModuleType } from "./utils/registry/ModuleRegistry.js";
 import { ReadonlyModuleRegistry } from "./utils/registry/ReadonlyModuleRegistry.ts";
 import { Scope, assertScope, CapabilityIssuer, type Capability, type CapabilityToken } from "./common/security/Capability.ts";
 import { setLifecycleRoot } from "./utils/decorators/OnlyKernel.ts";
 import { policyScopes, INFRA_CAP_SCOPES, type ModuleKind } from "./core/security/capabilityPolicy.ts";
 import { PrivilegeLedger, type PrivilegeChange } from "./core/security/PrivilegeLedger.ts";
+import { resolveSecurityProfile } from "./common/utils/runtime-env.ts";
+import type UIFederationServiceType from "./services/core/UIFederationService/index.ts";
 
 /** Superficie que el kernel usa para inyectar capabilities en un módulo recién construido. */
 interface ProvisionableModule {
@@ -99,6 +102,8 @@ export class Kernel {
 	readonly #disabledRegistry = new DisabledRegistry();
 	readonly #detector: ModuleDetector;
 	readonly #orchestrator: ModuleOrchestrator;
+	/** Se crea en `#startWatchers`; los presets adoptados en runtime se cuelgan de él. */
+	#configWatcher?: ConfigWatcher;
 
 	constructor() {
 		// Raíz de confianza para el stop de ciclo de vida (ver `stopBoundModule`): la master key.
@@ -187,9 +192,13 @@ export class Kernel {
 	 * con `withheld`: en arranque en frío el módulo se provisiona DESPUÉS de que el gestor instale
 	 * el baseline, así que la primera provisión del proceso es justo donde el gate actúa, y sin
 	 * esta salida la retención no dejaría más rastro que un warn de `capabilityPolicy`.
+	 *
+	 * `retroactive` es el otro extremo: el módulo se provisionó ANTES de que existiera el
+	 * baseline, así que no alcanza con no conceder — hay que retirarle el scope.
 	 */
 	#onPrivilegeChange(change: PrivilegeChange): void {
 		const { grant, removed, withheld, first } = change;
+		if (change.retroactive) this.#revokeGrantedScopes(grant, withheld);
 		// En un alta no hay provisión anterior contra la cual diffear: `added` es el set entero
 		// del módulo, no una ampliación. Reportarlo como pedido nuevo sería mentira.
 		const added = first ? [] : change.added;
@@ -199,8 +208,11 @@ export class Kernel {
 		}
 		const parts = [added.length ? `+[${added.join(", ")}]` : "", removed.length ? `-[${removed.join(", ")}]` : ""].filter(Boolean).join(" ");
 		if (withheld.length) {
-			const delta = parts ? ` ${parts}` : ""; // en un alta no hay delta: la retención va sola
-			this.#logger.logWarn(`Privilegios de ${grant.kind}:${grant.name}: RETENIDOS [${withheld.join(", ")}] por falta de aprobación.${delta}`);
+			// El camino retroactivo ya lo reportó `#revokeGrantedScopes` como "RETIRADOS".
+			if (!change.retroactive) {
+				const delta = parts ? ` ${parts}` : ""; // en un alta no hay delta: la retención va sola
+				this.#logger.logWarn(`Privilegios de ${grant.kind}:${grant.name}: RETENIDOS [${withheld.join(", ")}] por falta de aprobación.${delta}`);
+			}
 		} else {
 			this.#logger.logWarn(`Privilegios de ${grant.kind}:${grant.name} cambiaron: ${parts} (origen: ${grant.path})`);
 		}
@@ -223,6 +235,28 @@ export class Kernel {
 			.notifications(this.#securityNotifyCap)
 			.modulePrivilegesChanged({ module: grant.name, layer: grant.kind, filePath: grant.path, added, withheld })
 			.catch((err: unknown) => this.#logger.logDebug(`Alerta de cambio de privilegios no emitida: ${err}`));
+	}
+
+	/** Una línea al arranque con el perfil vigente: "¿este deploy corre degradado?" sin leer cinco archivos. */
+	#logBootSecurityProfile(): void {
+		const profile = resolveSecurityProfile();
+		const line = `SECURITY PROFILE: ${profile.name} → ${profile.effects}`;
+		if (profile.degraded) this.#logger.logWarn(`${line} — seguridad DEGRADADA a propósito; nunca en un deploy real.`);
+		else this.#logger.logInfo(line);
+	}
+
+	/**
+	 * Retira de la capability viva de un módulo los scopes que el gate hubiera retenido (sólo el
+	 * camino retroactivo). Corta las llamadas futuras, pero un handle privilegiado que el módulo ya
+	 * haya tomado sigue siendo suyo: por eso se reporta como incidente aunque funcione.
+	 */
+	#revokeGrantedScopes(grant: PrivilegeChange["grant"], withheld: readonly string[]): void {
+		const revoked = this.#issuer.revoke(grant.name, grant.kind, withheld as Scope[]);
+		if (revoked.length === 0) return;
+		this.#logger.logWarn(
+			`Privilegios de ${grant.kind}:${grant.name}: RETIRADOS [${revoked.join(", ")}] al instalarse el baseline ` +
+				`(se habían concedido antes de que existiera). Revisar si el módulo alcanzó a usarlos.`
+		);
 	}
 
 	/**
@@ -324,10 +358,11 @@ export class Kernel {
 		instance.setKernelKey(lifecycleToken);
 		// Privilegios: se calculan contra el baseline aprobado (si hay gate activo) y se anota
 		// lo concedido, para que una ampliación entre provisiones no pase inadvertida.
-		const withheld = this.#privilegeLedger.withheldFor(opts.kind, opts.name, opts.declared ?? []);
+		const declared = opts.declared ?? [];
+		const withheld = this.#privilegeLedger.withheldFor(opts.kind, opts.name, declared);
 		const scopes = policyScopes({ ...opts, withheld });
 		const businessCap = this.#issuer.mint(opts.name, opts.kind, scopes);
-		this.#privilegeLedger.record({ kind: opts.kind, name: opts.name, path: opts.path, scopes, at: Date.now() }, withheld);
+		this.#privilegeLedger.record({ kind: opts.kind, name: opts.name, path: opts.path, scopes, declared, at: Date.now() }, withheld);
 		const infraCap = this.#issuer.mint(opts.name, "infra", INFRA_CAP_SCOPES);
 		instance.setCapability?.(businessCap);
 		instance.setInfraToken?.(infraCap);
@@ -342,6 +377,7 @@ export class Kernel {
 		this.#bootToken = bootToken;
 		this.#logger.logInfo("Iniciando...");
 		this.#logger.logInfo(`Modo: ${this.#isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}`);
+		this.#logBootSecurityProfile();
 		this.#logger.logDebug(`Base path: ${this.#basePath}`);
 
 		this.#presetTopics = await this.#discoverPresetTopics();
@@ -368,6 +404,8 @@ export class Kernel {
 		// Las UI libraries de presets cargan antes que cualquier otra app: hosts de src o
 		// de otros presets pueden declararlas en uiDependencies, y la carga de presets es
 		// secuencial/alfabética (sin este pase, un host anterior espera 30s por la lib).
+		await this.#enableDeferredUiBuilds(excludeList);
+
 		const presetUiLibs = await this.#collectPresetUiLibs(excludeList);
 		const semaphore = new LoadSemaphore({ maxParallel: LoadSemaphore.defaultMaxParallel(), probe: new MemoryProbe(), logger: this.#logger });
 		const layerOptions = this.#layerLoadOptions(excludeList, semaphore);
@@ -391,6 +429,7 @@ export class Kernel {
 		}
 
 		this.#startWatchers();
+		await bootTimeline.measure("apps:deferred-builds", () => this.#drainDeferredUiBuilds());
 		await this.#refreshUiImportMaps();
 		this.#scheduleStartupReady();
 		this.#scheduleStatusInterval();
@@ -452,6 +491,55 @@ export class Kernel {
 		return [...dormant];
 	}
 
+	/**
+	 * Enciende el diferimiento de builds UI para lo que queda del arranque (ver
+	 * `docs/architecture/boot-performance.md`).
+	 *
+	 * Se difieren las **hojas**: los módulos cuyo `buildStatus` nadie consulta. El complemento
+	 * (`observed`) sale de leer los `config.json` antes de cargar nada: UI libraries, remotes y todo
+	 * lo nombrado en un `uiDependencies` ajeno.
+	 *
+	 * Errar el conjunto no rompe nada —un diferido que alguien espere degrada al techo del poll
+	 * (30/60 s) y sigue—, pero el criterio es conservador: ante la duda, no se difiere.
+	 */
+	async #enableDeferredUiBuilds(excludeList: string[]): Promise<void> {
+		// Con `ADC_NO_UI_SERVERS` el build es un no-op y diferirlo sólo agrega ruido.
+		if (process.env.ADC_NO_UI_SERVERS === "true") return;
+		// Mismo espíritu que `BOOT_MAX_PARALLEL=1`: volver al comportamiento anterior por una corrida
+		// hace depurable un problema de orden de build.
+		if (process.env.ADC_DEFER_UI_BUILDS === "false") {
+			this.#logger.logInfo("Builds UI diferidos DESACTIVADOS por ADC_DEFER_UI_BUILDS=false.");
+			return;
+		}
+		const uiFederation = this.#registry.getPlatformService<UIFederationServiceType>("UIFederationService");
+		if (!uiFederation) return;
+
+		const observed = new Set<string>();
+		for (const layerPath of [this.#appsPath, ...this.#presetLayerPaths("apps")]) {
+			for (const app of await collectAppConfigsRecursive(layerPath, excludeList, this.#fileExtension)) {
+				for (const dep of app.dependencies) observed.add(dep);
+				if (!app.isUILib && !app.isRemote) continue;
+				observed.add(app.name);
+				// `BaseApp` registra `web-foo` como `foo` cuando el config no declara `uiModule.name`;
+				// `AppConfigReader` no puede saberlo, así que entran las dos grafías.
+				if (app.name.startsWith("web-")) observed.add(app.name.slice(4));
+			}
+		}
+
+		uiFederation.enableDeferredBuilds(this.#platformCap, observed);
+		this.#logger.logDebug(`[boot] builds UI diferibles: todo lo que no esté en las ${observed.size} dependencias observadas.`);
+	}
+
+	/** Espera los builds UI diferidos y vuelve al modo síncrono. */
+	async #drainDeferredUiBuilds(): Promise<void> {
+		try {
+			const uiFederation = this.#registry.getPlatformService<UIFederationServiceType>("UIFederationService");
+			await uiFederation?.drainDeferredBuilds(this.#platformCap);
+		} catch (error: any) {
+			this.#logger.logError(`Error drenando los builds UI diferidos: ${error.message}`);
+		}
+	}
+
 	/** UI libraries (Stencil con exports) presentes en las capas apps de los presets. */
 	async #collectPresetUiLibs(excludeList: string[]): Promise<{ path: string; dirName: string }[]> {
 		const libs: { path: string; dirName: string }[] = [];
@@ -482,14 +570,7 @@ export class Kernel {
 			exclude: ["BaseApp.ts", "AppWithSeo.ts"],
 		});
 
-		// Presets conocidos al boot: un watcher por topic (cubre capas creadas después).
-		for (const topic of this.#presetTopics) {
-			watchPresetTopic(path.resolve(this.#presetsPath, topic), this.#fileExtension, (layer) => this.#layerEventHandlers(layer), {
-				isStartingUp,
-			});
-		}
-
-		new ConfigWatcher({
+		this.#configWatcher = new ConfigWatcher({
 			logger: this.#logger,
 			registry: this.#registry,
 			appConfigFilePaths: this.#appLoader.appConfigFilePaths,
@@ -501,7 +582,13 @@ export class Kernel {
 			onNewAppConfig: (appFile) => this.#onNewAppConfig(appFile),
 			isPendingPath: (p) => this.#disabledRegistry.isPendingPath(p),
 			watcher: appsWatcher,
-		}).start();
+		});
+		this.#configWatcher.start();
+
+		// Presets conocidos al boot: un watcher por topic (cubre capas creadas después).
+		for (const topic of this.#presetTopics) {
+			this.#watchPresetTree(path.resolve(this.#presetsPath, topic), isStartingUp);
+		}
 
 		// Presets agregados en runtime: se adoptan (watcher de topic) pero sus módulos
 		// quedan PENDIENTES de lanzamiento manual; nada se autoejecuta.
@@ -523,6 +610,7 @@ export class Kernel {
 						this.#logger.logDebug(`Cambio en app pendiente/deshabilitada ignorado: ${p}`);
 						return;
 					}
+					invalidateModule(p);
 					await this.#appLoader.unloadApp(p);
 					await this.#appLoader.loadApp(p);
 				},
@@ -539,6 +627,7 @@ export class Kernel {
 					this.#logger.logDebug(`Cambio en módulo pendiente/deshabilitado ignorado: ${p}`);
 					return;
 				}
+				invalidateModule(p);
 				await this.#dependencyReloader.handleFileChange(type, p);
 			},
 			unlink: async (p) => {
@@ -563,6 +652,18 @@ export class Kernel {
 		await this.#detector.detect("app", appFilePath);
 	}
 
+	/**
+	 * Watcher del árbol de un preset: enruta sus `index.<ext>` por capa y, sobre el MISMO
+	 * árbol, los `config*.json` de sus apps (que viven fuera de `src/apps`).
+	 */
+	#watchPresetTree(topicPath: string, isStartingUp: () => boolean, ignoreInitial?: boolean): void {
+		const watcher = watchPresetTopic(topicPath, this.#fileExtension, (layer) => this.#layerEventHandlers(layer), {
+			isStartingUp,
+			ignoreInitial,
+		});
+		this.#configWatcher?.attach(watcher, { root: topicPath, layer: "apps" });
+	}
+
 	/** Adopta un preset aparecido en runtime: topic + watcher de su árbol (módulos → pendientes). */
 	#adoptRuntimePreset(topicPath: string): void {
 		const topic = path.basename(topicPath);
@@ -573,17 +674,13 @@ export class Kernel {
 			`Preset nuevo detectado en runtime: '${topic}'. Sus módulos NO se autoejecutan: quedan pendientes de lanzamiento en modules-manager.`
 		);
 		// `ignoreInitial: false`: los archivos ya copiados/clonados también pasan por el detector.
-		watchPresetTopic(topicPath, this.#fileExtension, (layer) => this.#layerEventHandlers(layer), {
-			isStartingUp: () => this.#isStartingUp,
-			ignoreInitial: false,
-		});
+		this.#watchPresetTree(topicPath, () => this.#isStartingUp, false);
 	}
 
 	async #refreshUiImportMaps(): Promise<void> {
 		try {
 			// Por identidad pinneada: `refreshAllImportMaps` recibe `platform:infra`.
-			const uiFederation =
-				this.#registry.getPlatformService<import("./services/core/UIFederationService/index.ts").default>("UIFederationService");
+			const uiFederation = this.#registry.getPlatformService<UIFederationServiceType>("UIFederationService");
 			if (uiFederation) await uiFederation.refreshAllImportMaps(this.#platformCap);
 			else this.#logger.logWarn("UIFederationService no encontrado");
 		} catch (error: any) {
@@ -600,17 +697,17 @@ export class Kernel {
 		}, 10000);
 	}
 
+	/**
+	 * Latido de contadores del registry cada 5 min (la serie por módulo ya la expone modules-manager).
+	 *
+	 * No volver a meter acá el dump del estado del kernel: eran ~23 KB sin lector cada 30 s, que
+	 * reciclaban entero el ring buffer de `GET /api/logs` y salían crudos y sin redactar a stdout.
+	 */
 	#scheduleStatusInterval(): void {
 		this.#statusInterval = setInterval(() => {
 			const stats = this.#registry.getModuleStats();
 			this.#logger.logInfo(`Providers: ${stats.providers} - Utilities: ${stats.utilities} - Services: ${stats.services}`);
-			const kernelState = {
-				...this.#registry.getStateSnapshot(),
-				appFiles: Object.fromEntries(this.#appLoader.appFilePaths),
-				appConfigFiles: Object.fromEntries(this.#appLoader.appConfigFilePaths),
-			};
-			this.#logger.logDebug("Kernel State Dump:", JSON.stringify(kernelState, null, 2));
-		}, 30000);
+		}, 300_000);
 	}
 
 	/**

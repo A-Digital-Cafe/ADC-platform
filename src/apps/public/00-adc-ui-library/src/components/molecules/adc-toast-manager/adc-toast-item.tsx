@@ -30,6 +30,7 @@ export function renderToastItem(toast: DisplayedToast, onDismiss: (id: number) =
 			)}
 
 			<button
+				type="button"
 				class="ml-auto opacity-80 hover:opacity-100 transition-opacity text-xl font-bold"
 				onClick={() => onDismiss(toast.id)}
 				aria-label="Cerrar notificación"

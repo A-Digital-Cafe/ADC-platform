@@ -125,8 +125,16 @@ export interface EndpointCtx<P = Record<string, string>, D = unknown> {
 	cookies: Record<string, string | undefined>;
 	/** Request headers (read-only) */
 	headers: Record<string, string | undefined>;
-	/** Client IP address */
+	/**
+	 * IP del cliente, que el cliente nunca elige: sale de `X-Forwarded-For` descartando los saltos
+	 * de `TRUSTED_PROXIES`, o del socket si no hay lista. La única grabable/baneable/cuotificable.
+	 */
 	ip: string;
+	/**
+	 * La request entró por un proxy de `TRUSTED_PROXIES`, así que se les puede creer a los headers
+	 * propios del edge (`CF-IPCountry`), que `trustProxy` no valida. Ver `security/trusted-proxies.ts`.
+	 */
+	viaTrustedProxy: boolean;
 }
 
 /** Authenticated user information */

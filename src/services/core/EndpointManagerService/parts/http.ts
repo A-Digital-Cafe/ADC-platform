@@ -16,6 +16,7 @@ import { resolveRateLimit, type ResolvedRateLimits } from "./rate-limit.js";
 import { assertNoOperatorKeys, compileEndpointSchemas, validateEndpointInput } from "./schema.js";
 import { sealJobToken } from "./job-token.js";
 import { isRecording, record } from "./metrics.js";
+import { isTrustedProxyPeer } from "@providers/http/fastify-server/security/index.js";
 
 const MUTATIVE_METHODS: ReadonlySet<HttpMethod> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const JOB_TTL_SECONDS = 600; // 10 min
@@ -100,10 +101,10 @@ export function createHttpWrapper(
 			}
 
 			// ── Rate limiting (Redis: INCR + TTL en una operación atómica) ──
-			// La clave es `req.ip`, la IP del socket: fastify NO tiene `trustProxy`, así que no es
-			// falsificable por un header. Detrás de un reverse proxy todos comparten esa IP y por
-			// lo tanto el bucket; resolverlo requiere una allowlist de proxies configurada, no
-			// confiar en `X-Forwarded-For` (que sí sería un bypass trivial).
+			// La clave es `req.ip`, que no es falsificable por un header en ninguno de los dos
+			// modos: sin `TRUSTED_PROXIES` es la IP del socket, y con la lista fastify la resuelve
+			// desde `X-Forwarded-For` descartando los saltos confiables. Detrás de un edge sin la
+			// lista declarada, en cambio, todos los usuarios comparten bucket.
 			if (rl && redis) {
 				const key = rlKeyPrefix + req.ip;
 				const count = await redis.incrWithTtl(key, rlTtlSeconds);
@@ -144,6 +145,7 @@ export function createHttpWrapper(
 				cookies: ((req as any).cookies as Record<string, string | undefined>) || {},
 				headers: req.headers as Record<string, string | undefined>,
 				ip: req.ip,
+				viaTrustedProxy: isTrustedProxyPeer(req.socket?.remoteAddress),
 			};
 
 			try {

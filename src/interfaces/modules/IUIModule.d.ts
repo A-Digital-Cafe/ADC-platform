@@ -26,9 +26,9 @@ interface UIModuleSecurityHeaders {
 interface UIModuleSecurityConfig {
 	/** Headers comunes a todos los entornos (base sobre la que se aplican los overrides) */
 	headers?: Record<string, string>;
-	/** Overrides para entornos locales: `npm run dev` y `start:prodtests` (PROD_PORT=3000) */
+	/** Overrides para entornos locales: `bun run dev` y `start:prodtests` (`ADC_LOCAL_PROD=true`) */
 	development?: UIModuleSecurityHeaders;
-	/** Overrides para producción real: `npm run start` (PROD_PORT != 3000) */
+	/** Overrides para producción real: `bun run start` (`NODE_ENV=production` sin `ADC_LOCAL_PROD`) */
 	production?: UIModuleSecurityHeaders;
 }
 

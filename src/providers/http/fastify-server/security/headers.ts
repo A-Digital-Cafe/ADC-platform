@@ -37,10 +37,14 @@ function getDefaultCsp(nonce?: string): string {
 		? "connect-src 'self' https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com"
 		: "connect-src 'self' http: ws: https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
 	// Sin `'unsafe-eval'`: nada del runtime lo necesita. rspack compila con `devtool: false` en
-	// prod y `cheap-module-source-map` en dev (nunca un devtool `eval-*`), y ni Stencil, ni Vue
-	// (se resuelve el build runtime-only), ni el runtime de Module Federation usan `eval`/`new
-	// Function`. Si algún día se declaran remotes MF por *manifest*, `@module-federation/sdk`
-	// sí evalúa el `getPublicPath` del manifest y habría que revisarlo.
+	// **producción**, y ni Stencil, ni Vue (se resuelve el build runtime-only), ni el runtime de
+	// Module Federation usan `eval`/`new Function`. Si algún día se declaran remotes MF por
+	// *manifest*, `@module-federation/sdk` sí evalúa el `getPublicPath` del manifest y habría que
+	// revisarlo.
+	//
+	// En dev el devtool sí es `eval-*`, pero esos bundles los sirve el dev-server de rspack en su
+	// propio puerto y nunca pasan por acá. La invariante a sostener es la de prod: un devtool
+	// `eval-*` en el build de producción hace que esta CSP bloquee el bundle.
 	//
 	// Inline: con nonce por request (`csp-nonce.ts` lo genera y lo sella sobre el HTML final en
 	// el último hook `onSend`). El `'unsafe-inline'` sólo queda como fallback cuando el nonce
@@ -72,9 +76,14 @@ function getDefaultCsp(nonce?: string): string {
 	].join("; ");
 }
 
-/** Host de la request, sin puerto y en minúsculas. */
+/**
+ * Host de la request, sin puerto y en minúsculas.
+ *
+ * `headers.host` primero: con `trustProxy` activo `request.hostname` sale de `X-Forwarded-Host`,
+ * que el cliente puede mandar, y acá se decide si CORP degrada a `cross-origin`.
+ */
 function getRequestHost(reply: HeaderReply): string {
-	const raw = reply.request?.hostname || (reply.request?.headers?.host as string | undefined) || "";
+	const raw = (reply.request?.headers?.host as string | undefined) || reply.request?.hostname || "";
 	return raw.replace(/:\d+$/, "").toLowerCase();
 }
 

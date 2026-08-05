@@ -80,7 +80,12 @@ export async function buildUIModule(module: RegisteredUIModule, namespace: strin
 			isDevelopment: process.env.NODE_ENV === "development",
 		};
 
-		const result = await bootTimeline.measure(`build:${module.name}`, () => strategy.build(buildCtx));
+		// El gate se adquiere ACÁ, después de los wait-helpers, y nunca antes: esperar a la UI library
+		// o a los remotes dentro de un slot ocupa el techo mientras el productor sigue encolado —
+		// inanición, y deadlock si el freno de memoria bajó el techo a 1.
+		const result = await ctx.buildGate.run(`build:${module.name}`, () =>
+			bootTimeline.measure(`build:${module.name}`, () => strategy.build(buildCtx))
+		);
 		applyBuildResult(module, namespace, result, ctx);
 		module.buildStatus = "built";
 
