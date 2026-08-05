@@ -6,7 +6,15 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['**/*.d.ts', '**/utils/react-jsx.ts', 'src/common/docker/adc-haraka-core/**'],
+    // `dist-ui/` va acá porque la estrategia astro compila DENTRO del directorio de la app
+    // (las de rspack escriben en `temp/ui-builds`, fuera de `src`): sin esto, lintea el bundle.
+    ignores: [
+      '**/*.d.ts',
+      '**/utils/react-jsx.ts',
+      'src/common/docker/adc-haraka-core/**',
+      '**/dist-ui/**',
+      '**/dist/**',
+    ],
   },
   {
     files: [

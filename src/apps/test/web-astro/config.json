@@ -1,0 +1,12 @@
+{
+	"uiModule": {
+		"name": "astro-probe",
+		"framework": "astro",
+		"outputDir": "dist-ui",
+		"devPort": 3008,
+		"isHost": true,
+		"isRemote": false,
+		"sharedLibs": ["react"],
+		"i18n": false
+	}
+}

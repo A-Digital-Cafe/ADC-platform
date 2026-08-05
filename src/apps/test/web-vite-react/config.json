@@ -1,0 +1,12 @@
+{
+	"uiModule": {
+		"name": "vite-react-probe",
+		"framework": "vite-react",
+		"outputDir": "dist-ui",
+		"devPort": 3007,
+		"isHost": true,
+		"isRemote": false,
+		"sharedLibs": ["react"],
+		"i18n": false
+	}
+}

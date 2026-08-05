@@ -7,6 +7,8 @@ dist-ui/
 
 # Astro auto-generated configs (se generan en runtime por UIFederationService)
 **/web-*/astro.config.mjs
+# Tipos que astro sincroniza en cada build (`.astro/`), regenerables
+**/.astro/
 
 # Temporary files
 temp/
