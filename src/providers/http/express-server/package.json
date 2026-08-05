@@ -10,7 +10,8 @@
 		"cors": "^2.8.6",
 		"body-parser": "^1.20.6",
 		"@connectrpc/connect": "^2.1.2",
-		"@connectrpc/connect-express": "^2.1.2"
+		"@connectrpc/connect-express": "^2.1.2",
+		"@connectrpc/connect-node": "^2.1.2"
 	},
 	"devDependencies": {
 		"@types/express": "^4.17.21",
