@@ -15,6 +15,7 @@
 		{ "name": "📦 adc-modules-manager", "path": "presets/adc-modules-manager" },
 		{ "name": "📦 adc-subscriptions", "path": "presets/adc-subscriptions" },
 		{ "name": "📦 community-content", "path": "presets/community-content" },
+		{ "name": "❔ help", "path": "presets/help" },
 		{ "name": "📦 my-account", "path": "presets/my-account" },
 		{ "name": "📦 adc-notifications", "path": "presets/adc-notifications" },
 		{ "name": "📦 org-requests", "path": "presets/org-requests" },

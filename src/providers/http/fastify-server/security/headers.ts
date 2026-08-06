@@ -142,13 +142,24 @@ function mergeSecurityHeaders(host: string, nonce?: string, overrides?: Security
 	// "Content-Security-Policy-Extend": fusiona fuentes/directivas adicionales sobre la
 	// CSP por defecto (que ya distingue dev/prod). Evita duplicar la política completa
 	// en cada config.json — las apps solo declaran su delta (ej. "img-src https:").
+	//
+	// "Content-Security-Policy-Restrict": **reemplaza** una directiva de la base en vez de sumarle
+	// fuentes. Extend no puede restar —une listas—, así que sin esto una app no tiene forma de
+	// cerrar un comodín que la base concede por compatibilidad (ej. `img-src https:`, que está en la
+	// base porque casi todas las apps muestran avatares remotos). Se aplica después de Extend: lo
+	// que restrinja una directiva gana sobre lo que esa misma directiva haya sumado.
 	const cspExtend = overrides?.["Content-Security-Policy-Extend"];
-	if (cspExtend && cspOverride === undefined) {
-		merged[getCspHeaderName()] = extendCsp(getDefaultCsp(nonce), cspExtend);
+	const cspRestrict = overrides?.["Content-Security-Policy-Restrict"];
+	if ((cspExtend || cspRestrict) && cspOverride === undefined) {
+		let csp = cspExtend ? extendCsp(getDefaultCsp(nonce), cspExtend) : getDefaultCsp(nonce);
+		if (cspRestrict) csp = restrictCsp(csp, cspRestrict);
+		merged[getCspHeaderName()] = csp;
 	}
 
 	for (const [name, value] of Object.entries(overrides ?? {})) {
-		if (name === "Content-Security-Policy" || name === "Content-Security-Policy-Extend") continue;
+		if (name === "Content-Security-Policy" || name === "Content-Security-Policy-Extend" || name === "Content-Security-Policy-Restrict") {
+			continue;
+		}
 		if (value === "") delete merged[name];
 		else merged[name] = value;
 	}
@@ -172,6 +183,28 @@ function extendCsp(baseCsp: string, extension: string): string {
 		const existing = directives.get(name);
 		if (existing === undefined) directives.set(name, addition);
 		else if (addition && !existing.includes(addition)) directives.set(name, `${existing} ${addition}`);
+	}
+	return [...directives.entries()].map(([name, value]) => (value ? `${name} ${value}` : name)).join("; ");
+}
+
+/**
+ * Reemplaza directivas completas de una política ("dir src1 src2; dir2 ..."), en vez de sumarles
+ * fuentes como hace `extendCsp`. Una directiva sin fuentes (`"object-src"`) la deja vacía, que es
+ * la forma de negarla. Las directivas no mencionadas quedan como estaban.
+ */
+function restrictCsp(baseCsp: string, restriction: string): string {
+	const directives = new Map<string, string>();
+	for (const part of baseCsp.split(";")) {
+		const trimmed = part.trim();
+		if (!trimmed) continue;
+		const [name, ...values] = trimmed.split(/\s+/);
+		directives.set(name, values.join(" "));
+	}
+	for (const part of restriction.split(";")) {
+		const trimmed = part.trim();
+		if (!trimmed) continue;
+		const [name, ...values] = trimmed.split(/\s+/);
+		directives.set(name, values.join(" "));
 	}
 	return [...directives.entries()].map(([name, value]) => (value ? `${name} ${value}` : name)).join("; ");
 }

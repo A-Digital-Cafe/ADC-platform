@@ -29,3 +29,4 @@ adc-image-editor https://github.com/A-Digital-Cafe/adc-image-editor.git main
 adc-modules-manager https://github.com/A-Digital-Cafe/adc-modules-manager.git main
 adc-notifications https://github.com/A-Digital-Cafe/adc-notifications.git main
 adc-media https://github.com/A-Digital-Cafe/adc-media.git main
+help https://github.com/A-Digital-Cafe/help.git main

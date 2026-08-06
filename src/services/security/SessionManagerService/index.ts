@@ -20,6 +20,7 @@ import { GeoIPValidator } from "./domain/security/GeoIPValidator.js";
 import { SessionManager } from "./domain/session/manager.js";
 import { OAuthProviderRegistry, PlatformAuthProvider } from "./domain/oauth/index.js";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
+import { currentLegalVersions } from "@common/utils/legal-docs.js";
 import { openPermissions, sealPermissions } from "./domain/security/perm-cache.js";
 
 // Endpoints (singleton)
@@ -132,6 +133,49 @@ export default class SessionManagerService extends BaseService implements ISessi
 		await this.#initDomainComponents();
 
 		this.logger.logOk(`SessionManagerService iniciado${this.#redis ? " con Redis" : ""}`);
+
+		void this.#checkLegalDocsVersion();
+	}
+
+	/**
+	 * Avisa al equipo cuando se despliega una versión nueva de los Términos o de la Política de
+	 * Privacidad. Este servicio es el que valida la aceptación en el alta, así que es el que sabe
+	 * qué versión está vigente; el aviso existe para que publicar el documento y comunicarlo no
+	 * sean dos cosas que dependan de acordarse.
+	 *
+	 * La marca de "ya avisado" vive en Redis y no en Mongo a propósito: no vale un modelo nuevo
+	 * para un par de strings, y el peor caso de perder la clave es un aviso repetido —que para un
+	 * cambio legal es el lado seguro del error—. Sin Redis, no avisa: best-effort, nunca rompe el
+	 * arranque.
+	 */
+	async #checkLegalDocsVersion(): Promise<void> {
+		if (!this.#redis || !this.#identityService) return;
+		const current = currentLegalVersions();
+		try {
+			const key = "legal:announced-versions";
+			const raw = await this.#redis.get(key);
+			// La clave la escribe sólo este método, así que un JSON.parse directo alcanza: si viniera
+			// corrupta, el catch de abajo la trata como "no avisar" y el siguiente arranque la resella.
+			const previous = raw ? (JSON.parse(raw) as Partial<typeof current>) : null;
+
+			// Primer arranque con la clave vacía: sellar sin avisar. Si no, cada Redis nuevo
+			// dispararía una alerta por un cambio que no ocurrió.
+			if (!previous?.termsVersion || !previous.privacyVersion) {
+				await this.#redis.set(key, JSON.stringify(current));
+				return;
+			}
+
+			const changed: string[] = [];
+			if (previous.termsVersion !== current.termsVersion) changed.push("Términos y Condiciones");
+			if (previous.privacyVersion !== current.privacyVersion) changed.push("Política de Privacidad");
+			if (changed.length === 0) return;
+
+			await this.#redis.set(key, JSON.stringify(current));
+			await this.#identityService.notifications(this.getCapability()).legalDocsUpdated({ changed, ...current });
+			this.logger.logInfo(`[SessionManager] Documentos legales actualizados (${changed.join(", ")}): avisado al equipo`);
+		} catch (err: any) {
+			this.logger.logWarn(`Chequeo de versión de documentos legales falló: ${err?.message || err}`);
+		}
 	}
 
 	async #initDomainComponents(): Promise<void> {

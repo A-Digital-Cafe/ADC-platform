@@ -8,6 +8,14 @@ export interface OrgOption {
 	slug: string;
 }
 
+/** Aceptación de Términos y Privacidad + autodeclaración de edad, tal como la envía el formulario. */
+export interface LegalAcceptanceInput {
+	acceptedTerms: boolean;
+	ageConfirmed: boolean;
+	termsVersion: string;
+	privacyVersion: string;
+}
+
 export interface AuthResponse {
 	success: boolean;
 	user?: SessionUser;
@@ -48,10 +56,14 @@ export const authApi = {
 		}),
 
 	/**
-	 * Registro de nuevo usuario
+	 * Registro de nuevo usuario.
+	 *
+	 * `legal` viaja con la versión de los documentos que el formulario mostró: el servidor la
+	 * compara con la vigente y rechaza el alta si no coinciden (pestaña vieja tras una
+	 * actualización). Así la constancia guardada prueba qué texto se aceptó, no sólo que se aceptó.
 	 */
-	register: (username: string, email: string, password: string) =>
-		api.post<AuthResponse>("/register", { body: { username, email, password }, idempotencyKey: username }),
+	register: (username: string, email: string, password: string, legal: LegalAcceptanceInput) =>
+		api.post<AuthResponse>("/register", { body: { username, email, password, legal }, idempotencyKey: username }),
 
 	/**
 	 * Obtener sesión actual

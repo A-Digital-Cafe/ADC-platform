@@ -44,6 +44,8 @@ src/apps/public/adc-<feature>/        # o presets/<preset>/apps/adc-<feature>/
 		"serviceWorker": false,            // true SOLO en apps layout
 		"enableSEO": true,
 		"security": {
+			// -Extend suma fuentes a la CSP base; -Restrict reemplaza la directiva entera
+			// (única forma de cerrar un comodín que la base concede, ej. `img-src https:`)
 			"headers": { "Content-Security-Policy-Extend": "img-src https:" }
 		},
 		"hosting": [

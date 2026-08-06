@@ -6,6 +6,8 @@ import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { showError } from "@ui-library/utils/error-handler";
 import { useAbortable } from "@ui-library/utils/use-abortable";
 import { getBaseUrl } from "@common/utils/url-utils.js";
+import { LEGAL_DOCUMENTS, MIN_AGE } from "@common/utils/legal-docs.js";
+import { resolvePlatformPath } from "@ui-library/utils/platform-links";
 import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
 
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
@@ -42,7 +44,17 @@ const REGISTER_SPECIFIC_ERROR_KEYS = [
 	{ key: "INVALID_EMAIL", severity: "error" },
 	{ key: "USERNAME_EXISTS", severity: "warning" },
 	{ key: "EMAIL_EXISTS", severity: "warning" },
+	{ key: "LEGAL_NOT_ACCEPTED", severity: "error" },
+	{ key: "AGE_NOT_CONFIRMED", severity: "error" },
+	{ key: "LEGAL_VERSION_MISMATCH", severity: "warning" },
 ];
+
+/** URLs absolutas a los documentos legales, que viven en la app `help` (otro origen). */
+const LEGAL_LINKS = {
+	terms: resolvePlatformPath("help", LEGAL_DOCUMENTS.terms.href) ?? LEGAL_DOCUMENTS.terms.href,
+	privacy: resolvePlatformPath("help", LEGAL_DOCUMENTS.privacy.href) ?? LEGAL_DOCUMENTS.privacy.href,
+	ages: resolvePlatformPath("help", `${LEGAL_DOCUMENTS.terms.href}#edad-minima`) ?? LEGAL_DOCUMENTS.terms.href,
+};
 
 /** Base URL for API calls */
 const API_BASE = getBaseUrl(3000);
@@ -60,6 +72,8 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+	const [acceptedTerms, setAcceptedTerms] = useState(false);
+	const [ageConfirmed, setAgeConfirmed] = useState(false);
 
 	const checkUsernameRequest = useAbortable((signal, value: string) => identityApi.checkUsernameExists(value, signal));
 
@@ -109,10 +123,26 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 			return;
 		}
 
+		// El servidor vuelve a exigir ambas casillas: esto sólo evita el viaje de ida y vuelta.
+		if (!acceptedTerms) {
+			showError({ errorKey: "LEGAL_NOT_ACCEPTED", message: t("errors.LEGAL_NOT_ACCEPTED") });
+			return;
+		}
+
+		if (!ageConfirmed) {
+			showError({ errorKey: "AGE_NOT_CONFIRMED", message: t("errors.AGE_NOT_CONFIRMED") });
+			return;
+		}
+
 		setLoading(true);
 
 		// authApi.register now handles errors internally via createAdcApi
-		const result = await authApi.register(username, email, password);
+		const result = await authApi.register(username, email, password, {
+			acceptedTerms,
+			ageConfirmed,
+			termsVersion: LEGAL_DOCUMENTS.terms.version,
+			privacyVersion: LEGAL_DOCUMENTS.privacy.version,
+		});
 
 		if (result.success && globalThis.location) {
 			redirectToReturnUrl(returnUrl);
@@ -235,12 +265,63 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 						/>
 					</div>
 
+					{/*
+					 * Casillas legales. Sin `<label htmlFor>` en la de términos: el texto lleva enlaces y,
+					 * dentro de un label, un clic en el enlace también togglea la casilla. Con
+					 * `aria-labelledby` el control conserva nombre accesible sin ese conflicto.
+					 */}
+					<div className="space-y-3 pt-2">
+						<div className="flex items-start gap-2">
+							<input
+								id="acceptTerms"
+								type="checkbox"
+								checked={acceptedTerms}
+								required
+								aria-labelledby="acceptTermsLabel"
+								className="mt-0.5 w-4 h-4 shrink-0 accent-primary cursor-pointer"
+								onChange={(e) => setAcceptedTerms((e.target as HTMLInputElement).checked)}
+							/>
+							<p id="acceptTermsLabel" className="text-xs text-muted leading-relaxed mt-0!">
+								{t("register.acceptTermsBefore") || "He leído y acepto los"}{" "}
+								<a href={LEGAL_LINKS.terms} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+									{t("register.termsLink") || "Términos y Condiciones"}
+								</a>{" "}
+								{t("register.acceptTermsBetween") || "y la"}{" "}
+								<a href={LEGAL_LINKS.privacy} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+									{t("register.privacyLink") || "Política de Privacidad"}
+								</a>
+								{"."}
+							</p>
+						</div>
+
+						<div className="flex items-start gap-2">
+							<input
+								id="ageConfirmed"
+								type="checkbox"
+								checked={ageConfirmed}
+								required
+								className="mt-0.5 w-4 h-4 shrink-0 accent-primary cursor-pointer"
+								onChange={(e) => setAgeConfirmed((e.target as HTMLInputElement).checked)}
+							/>
+							<p className="text-xs text-muted leading-relaxed mt-0!">
+								<label htmlFor="ageConfirmed" className="cursor-pointer">
+									{t("register.ageConfirm", { minAge: String(MIN_AGE) }) ||
+										`Declaro tener al menos ${MIN_AGE} años, o la edad mínima que exija mi país.`}
+								</label>{" "}
+								<a href={LEGAL_LINKS.ages} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+									{t("register.ageLink") || "Ver edades por país"}
+								</a>
+								{"."}
+							</p>
+						</div>
+					</div>
+
 					<adc-button
 						key={loading ? "loading" : "idle"}
 						type="submit"
 						class="w-full flex justify-end mt-8"
 						loading={loading}
-						disabled={usernameStatus === "unavailable"}
+						disabled={usernameStatus === "unavailable" || !acceptedTerms || !ageConfirmed}
 						variant="primary"
 					>
 						{loading ? t("register.submitting") || "Creando cuenta..." : t("register.submit") || "Crear Cuenta"}
@@ -293,6 +374,23 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							Google
 						</a>
 					</div>
+					{/*
+					 * El alta por OAuth no pasa por el formulario, así que no puede exigir las casillas.
+					 * Este aviso es el clickwrap de ese camino: el servidor graba la misma constancia
+					 * con `via: "oauth"` al crear la cuenta.
+					 */}
+					<p className="mt-4 text-[11px] text-center text-muted leading-relaxed">
+						{t("register.oauthLegalBefore") || "Al continuar con Discord o Google aceptás los"}{" "}
+						<a href={LEGAL_LINKS.terms} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+							{t("register.termsLink") || "Términos y Condiciones"}
+						</a>{" "}
+						{t("register.acceptTermsBetween") || "y la"}{" "}
+						<a href={LEGAL_LINKS.privacy} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+							{t("register.privacyLink") || "Política de Privacidad"}
+						</a>
+						{t("register.oauthLegalAfter", { minAge: String(MIN_AGE) }) ||
+							`, y declarás tener al menos ${MIN_AGE} años o la edad mínima que exija tu país.`}
+					</p>
 				</div>
 			</adc-blur-panel>
 		</div>

@@ -103,6 +103,24 @@ export class NotifyManager {
 		});
 	}
 
+	/**
+	 * Aviso al equipo (mismos destinatarios) de que se desplegó una versión nueva de los Términos
+	 * o de la Política de Privacidad, topic `security.legal_docs_updated`.
+	 *
+	 * El disparo no es cosmético: la constancia de aceptación de cada usuario queda ligada a una
+	 * versión concreta, y los Términos comprometen a anunciar con antelación los cambios que
+	 * recorten beneficios. Sin este aviso la versión nueva entra en vigor en silencio y el anuncio
+	 * se olvida, que es exactamente lo que no puede pasar.
+	 */
+	async legalDocsUpdated(event: { changed: string[]; termsVersion: string; privacyVersion: string }): Promise<void> {
+		await this.#fanoutToSecurityTeam({
+			topic: "security.legal_docs_updated",
+			title: "Cambió un documento legal de la plataforma",
+			body: `Se publicó una versión nueva de: ${event.changed.join(", ")}. Falta anunciarlo a las personas usuarias.`,
+			data: { changed: event.changed, termsVersion: event.termsVersion, privacyVersion: event.privacyVersion },
+		});
+	}
+
 	/** Fan-out best-effort a los destinatarios de seguridad, excluyendo opcionalmente al actor. */
 	async #fanoutToSecurityTeam(input: Omit<NotifyInput, "userId">, excludeUserId?: string): Promise<void> {
 		let recipients: string[];

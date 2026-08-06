@@ -13,10 +13,24 @@ export const LoginBody = Type.Object({
 	),
 });
 
+/**
+ * Aceptación de Términos y Privacidad. Es obligatoria: sin constancia no hay forma de acreditar
+ * que la persona aceptó las condiciones (art. 7.1 RGPD), y los Términos quedan sin respaldo.
+ * Las versiones que manda el cliente son las que su página mostró; el handler las contrasta con
+ * las vigentes y rechaza el alta si no coinciden.
+ */
+export const LegalAcceptanceBody = Type.Object({
+	acceptedTerms: Type.Boolean({ description: "Casilla de aceptación de Términos y Política de Privacidad" }),
+	ageConfirmed: Type.Boolean({ description: "Autodeclaración de edad mínima" }),
+	termsVersion: Type.String({ minLength: 1, maxLength: 32 }),
+	privacyVersion: Type.String({ minLength: 1, maxLength: 32 }),
+});
+
 export const RegisterBody = Type.Object({
 	username: Type.String({ minLength: 3, maxLength: 32 }),
 	email: Type.String({ minLength: 5, maxLength: 254 }),
 	password: Type.String({ minLength: 8, maxLength: 256 }),
+	legal: LegalAcceptanceBody,
 });
 
 export const SwitchOrgBody = Type.Object({

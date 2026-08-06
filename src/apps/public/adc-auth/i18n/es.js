@@ -33,7 +33,15 @@ export default {
 		passwordStrengthLabel: "Seguridad de la contraseña",
 		passwordWeak: "Débil",
 		passwordMedium: "Media",
-		passwordStrong: "Fuerte"
+		passwordStrong: "Fuerte",
+		acceptTermsBefore: "He leído y acepto los",
+		acceptTermsBetween: "y la",
+		termsLink: "Términos y Condiciones",
+		privacyLink: "Política de Privacidad",
+		ageConfirm: "Declaro tener al menos {{minAge}} años, o la edad mínima que exija mi país.",
+		ageLink: "Ver edades por país",
+		oauthLegalBefore: "Al continuar con Discord o Google aceptás los",
+		oauthLegalAfter: ", y declarás tener al menos {{minAge}} años o la edad mínima que exija tu país."
 	},
 	errors: {
 		// Errores específicos de formulario (se muestran como callout inline)
@@ -50,6 +58,9 @@ export default {
 		USERNAME_EXISTS: "El nombre de usuario ya está en uso",
 		EMAIL_EXISTS: "El email ya está registrado",
 		PASSWORDS_MISMATCH: "Las contraseñas no coinciden",
+		LEGAL_NOT_ACCEPTED: "Tenés que aceptar los Términos y Condiciones y la Política de Privacidad para crear una cuenta",
+		AGE_NOT_CONFIRMED: "Tenés que confirmar que cumplís con la edad mínima",
+		LEGAL_VERSION_MISMATCH: "Los Términos o la Política de Privacidad se actualizaron. Recargá la página para leer la versión vigente.",
 		PASSWORD_TOO_SHORT: "La contraseña debe tener al menos 8 caracteres",
 		// Errores inesperados de auth (dominio)
 		AUTH_ERROR: "Error durante la autenticación",

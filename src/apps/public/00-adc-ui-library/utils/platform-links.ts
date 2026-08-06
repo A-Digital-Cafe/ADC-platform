@@ -176,6 +176,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 		subdomain: "notifications",
 		remoteName: "adc_notifications",
 		headerMenuExpose: "./NotificationsMenu",
+		settingsExpose: "./AccountSettings",
 	},
 	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org", iconTag: "adc-icon-app-org" },
 	{ id: "status", label: "Status", devPort: 3020, subdomain: "status", iconTag: "adc-icon-app-status" },

@@ -32,6 +32,7 @@ import {
 import * as OAS from "./schemas/oauth.js";
 import { checkUsername, generateRandomUsername } from "@common/utils/name-policy.js";
 import { isPrivateHost } from "@common/utils/url-utils.js";
+import { buildLegalAcceptance } from "@common/utils/legal-docs.js";
 
 /** Nombre de las cookies */
 const STATE_COOKIE_NAME = "oauth_state";
@@ -725,6 +726,7 @@ export class OAuthEndpoints {
 			metadata: {
 				avatar: profile.avatar,
 				createdVia: provider,
+				legalAcceptance: buildLegalAcceptance("oauth", true),
 			},
 		});
 

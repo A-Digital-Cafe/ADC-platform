@@ -22,6 +22,7 @@ import { SystemRole } from "../../../core/IdentityManagerService/defaults/system
 import { assertEmailNotBanned, assertIpNotBanned, recordLoginAttemptIp, redirectIfRequestBanned } from "../utils/moderationGuards.js";
 import { assertOrgMembership, requiresOrgSelection, resolveNativeLoginUser, validateNativeLoginBody, type NativeLoginBody } from "../utils/nativeLogin.js";
 import { checkUsername } from "@common/utils/name-policy.js";
+import { buildLegalAcceptance, currentLegalVersions } from "@common/utils/legal-docs.js";
 
 /** Nombre de las cookies */
 const ACCESS_COOKIE_NAME = "access_token";
@@ -45,10 +46,18 @@ interface AuthEndpointsDeps {
 	onTokenReuse?: (userId: string) => void;
 }
 
+interface LegalAcceptanceBody {
+	acceptedTerms?: boolean;
+	ageConfirmed?: boolean;
+	termsVersion?: string;
+	privacyVersion?: string;
+}
+
 interface RegisterBody {
 	username?: string;
 	email?: string;
 	password?: string;
+	legal?: LegalAcceptanceBody;
 }
 
 interface ValidRegisterBody {
@@ -186,12 +195,14 @@ export class AuthEndpoints {
 			// Crear usuario
 			const newUser = await users.createUser(username, password, []);
 
-			// Actualizar con email
+			// Actualizar con email. La constancia legal se sella en el servidor: qué versión de cada
+			// documento estaba vigente y cuándo se aceptó. Sin esto, la casilla no prueba nada.
 			await users.updateUser(newUser.id, {
 				email,
 				metadata: {
 					createdVia: "platform",
 					createdAt: new Date().toISOString(),
+					legalAcceptance: buildLegalAcceptance("register-form", true),
 				},
 			});
 
@@ -597,7 +608,36 @@ export class AuthEndpoints {
 			throw new AuthError(400, "INVALID_EMAIL", "El email no es válido");
 		}
 
+		AuthEndpoints.validateLegalAcceptance(body?.legal);
+
 		return { username, email, password };
+	}
+
+	/**
+	 * Exige la aceptación de Términos y Privacidad y la declaración de edad, y comprueba que la
+	 * página que las mostró tenía las versiones vigentes.
+	 *
+	 * La comprobación de versión no es ceremonia: si el documento cambió mientras el formulario
+	 * estaba abierto, la constancia diría que se aceptó un texto que la persona nunca vio. Ante ese
+	 * caso rechazamos el alta y pedimos recargar, que es barato y deja la prueba limpia.
+	 */
+	private static validateLegalAcceptance(legal: LegalAcceptanceBody | undefined): void {
+		if (!legal?.acceptedTerms) {
+			throw new AuthError(400, "LEGAL_NOT_ACCEPTED", "Debés aceptar los Términos y Condiciones y la Política de Privacidad");
+		}
+
+		if (!legal.ageConfirmed) {
+			throw new AuthError(400, "AGE_NOT_CONFIRMED", "Debés confirmar que cumplís con la edad mínima");
+		}
+
+		const current = currentLegalVersions();
+		if (legal.termsVersion !== current.termsVersion || legal.privacyVersion !== current.privacyVersion) {
+			throw new AuthError(
+				409,
+				"LEGAL_VERSION_MISMATCH",
+				"Los Términos o la Política de Privacidad se actualizaron. Recargá la página para leer la versión vigente."
+			);
+		}
 	}
 
 	private static async getTokenCookies(ctx: EndpointCtx, user: AuthenticatedUser): Promise<SetCookie[]> {

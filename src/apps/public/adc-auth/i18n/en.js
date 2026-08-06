@@ -33,7 +33,15 @@ export default {
 		passwordStrengthLabel: "Password strength",
 		passwordWeak: "Weak",
 		passwordMedium: "Medium",
-		passwordStrong: "Strong"
+		passwordStrong: "Strong",
+		acceptTermsBefore: "I have read and accept the",
+		acceptTermsBetween: "and the",
+		termsLink: "Terms and Conditions",
+		privacyLink: "Privacy Policy",
+		ageConfirm: "I declare that I am at least {{minAge}} years old, or the minimum age required in my country.",
+		ageLink: "See ages by country",
+		oauthLegalBefore: "By continuing with Discord or Google you accept the",
+		oauthLegalAfter: ", and you declare that you are at least {{minAge}} years old or the minimum age required in your country."
 	},
 	errors: {
 		// Form-specific errors (shown as inline callout)
@@ -51,6 +59,9 @@ export default {
 		EMAIL_EXISTS: "Email is already registered",
 		PASSWORDS_MISMATCH: "Passwords don't match",
 		PASSWORD_TOO_SHORT: "Password must be at least 8 characters",
+		LEGAL_NOT_ACCEPTED: "You must accept the Terms and Conditions and the Privacy Policy to create an account",
+		AGE_NOT_CONFIRMED: "You must confirm that you meet the minimum age",
+		LEGAL_VERSION_MISMATCH: "The Terms or the Privacy Policy have been updated. Reload the page to read the current version.",
 		// Unexpected auth errors (domain)
 		AUTH_ERROR: "Authentication error",
 		AUTH_UNAVAILABLE: "Authentication service unavailable",

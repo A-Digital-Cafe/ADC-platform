@@ -9,7 +9,7 @@ Autenticación OAuth 2.0 con Access/Refresh Tokens y rotación de secretos (`ker
 | GET    | `/api/auth/login/:provider`                 | público             | Inicia login OAuth                                                 |
 | GET    | `/api/auth/callback/:provider`              | público             | Callback OAuth                                                     |
 | POST   | `/api/auth/login`                           | público             | Login nativo (username/password)                                   |
-| POST   | `/api/auth/register`                        | público             | Registro de nuevo usuario                                          |
+| POST   | `/api/auth/register`                        | público             | Registro de nuevo usuario (exige `legal`: ver abajo)               |
 | GET    | `/api/auth/session`                         | público             | Verifica sesión                                                    |
 | POST   | `/api/auth/refresh`                         | público             | Renueva tokens                                                     |
 | POST   | `/api/auth/logout`                          | público             | Cierra sesión                                                      |
@@ -41,3 +41,7 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
 - **Geo-validation**: cambio de país invalida sesión
 - **Moderación**: integra `ModerationService` (opcional, vía `IModerationService`) para bloquear logins baneados;
   avisa `security.new_login` (inApp + email) ante login desde IP nueva
+- **Aceptación legal**: el alta exige `legal` (aceptación de Términos/Privacidad + edad mínima) y
+  rechaza con `LEGAL_VERSION_MISMATCH` si las versiones que manda el cliente no son las vigentes de
+  `@common/utils/legal-docs`. La constancia (versiones + timestamp del servidor + vía) queda en
+  `metadata.legalAcceptance`; el alta por OAuth graba la misma constancia con `via: "oauth"`
