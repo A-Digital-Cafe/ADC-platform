@@ -1,4 +1,5 @@
 import "@ui-library/utils/react-jsx";
+import { isPlatformUrl } from "@ui-library/utils/platform-links";
 import PageShell from "../components/PageShell";
 
 interface Item {
@@ -150,7 +151,7 @@ const STATUS_LABEL: Record<Item["status"], string> = {
 /** Relativo → enlace SPA interno; adigitalcafe → chip de plataforma; resto → enlace externo. */
 function renderRoadmapLink(href: string, label: string) {
 	if (!/^https?:\/\//i.test(href)) return <a href={href}>{label}</a>;
-	if (/\/\/[^/]*adigitalcafe\.com/i.test(href)) return <adc-platform-link href={href}>{label}</adc-platform-link>;
+	if (isPlatformUrl(href)) return <adc-platform-link href={href}>{label}</adc-platform-link>;
 	return <adc-external-link href={href}>{label}</adc-external-link>;
 }
 

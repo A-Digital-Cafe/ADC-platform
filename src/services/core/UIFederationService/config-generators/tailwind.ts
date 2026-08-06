@@ -155,10 +155,10 @@ export default ${JSON.stringify(themeConfig, null, 2)};
 	const userTailwindCss = path.join(module.appDir, "src", "styles", "tailwind.css");
 	let userCssImport = "";
 	try {
-		await fs.access(userTailwindCss);
-		// Leer el contenido del CSS del usuario para incluir sus extensiones (sin el @import tailwindcss)
+		// Leer el contenido del CSS del usuario para incluir sus extensiones (sin el @import
+		// tailwindcss).
 		const userCssContent = await fs.readFile(userTailwindCss, "utf-8");
-		// Extraer solo las extensiones (todo excepto @import "tailwindcss")
+		// Extraer solo las extensiones: cualquier línea menos el @import "tailwindcss"
 		const extensions = userCssContent
 			.split("\n")
 			.filter((line) => !line.includes('@import "tailwindcss"') && !line.includes("@import 'tailwindcss'"))

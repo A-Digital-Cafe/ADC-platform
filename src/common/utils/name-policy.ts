@@ -9,7 +9,7 @@
  * La usan `SessionManagerService` (registro y OAuth), `IdentityManagerService`
  * (cambio de username) y el `EmailService` (entrega y validación de envío).
  */
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeAddress } from "./email-address.ts";
 
@@ -96,16 +96,24 @@ function parsePolicy(raw: RawPolicy): NamePolicy {
  * Política vigente. Relee el archivo sólo si cambió su `mtime`, así el coste por
  * llamada es un `stat`. Si el archivo falta o está corrupto devuelve la última
  * política válida (o una vacía): una config rota no debe tirar el registro.
+ *
+ * El `stat` y la lectura van sobre el **mismo descriptor**: si se resolvieran dos
+ * veces por ruta, una reescritura entre medio dejaría el contenido nuevo cacheado
+ * bajo el `mtime` viejo (o al revés, el viejo bajo el nuevo, que no se recupera).
  */
 export function getNamePolicy(): NamePolicy {
+	let fd: number | undefined;
 	try {
-		const mtimeMs = statSync(POLICY_PATH).mtimeMs;
+		fd = openSync(POLICY_PATH, "r");
+		const mtimeMs = fstatSync(fd).mtimeMs;
 		if (mtimeMs !== cachedMtimeMs) {
-			cached = parsePolicy(JSON.parse(readFileSync(POLICY_PATH, "utf8")) as RawPolicy);
+			cached = parsePolicy(JSON.parse(readFileSync(fd, "utf8")) as RawPolicy);
 			cachedMtimeMs = mtimeMs;
 		}
 	} catch {
 		// Se mantiene la política ya cargada.
+	} finally {
+		if (fd !== undefined) closeSync(fd);
 	}
 	return cached;
 }

@@ -231,6 +231,18 @@ export function getAccountSettingsApps(): PlatformApp[] {
 	return getPlatformApps().filter((a) => !!a.settingsExpose && !!a.remoteName);
 }
 
+export function isPlatformUrl(rawUrl: string): boolean {
+	let url: URL;
+	try {
+		url = new URL(rawUrl, globalThis.location?.href);
+	} catch {
+		return false;
+	}
+	if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+	const host = url.hostname.toLowerCase();
+	return host === PROD_BASE_DOMAIN || host.endsWith(`.${PROD_BASE_DOMAIN}`);
+}
+
 /** Limpia la caché de resoluciones (ej: tras cambiar de sesión/permisos). */
 export function clearPlatformLinkCache(): void {
 	getRegistry().cache.clear();
@@ -255,6 +267,9 @@ function findApp(hostname: string, portStr: string): PlatformApp | null {
 	const normalized = hostname.toLowerCase();
 	// Apps en el apex (sin subdominio, ej: home) se matchean por hostname completo.
 	for (const app of apps.values()) if (app.prodHostname?.toLowerCase() === normalized) return app;
+	// Fuera del dominio de plataforma no hay match por subdominio: sin este guard,
+	// `community.evil.com` se haría pasar por la app `community`.
+	if (!normalized.endsWith(`.${PROD_BASE_DOMAIN}`)) return null;
 	const subdomain = normalized.split(".")[0];
 	if (!subdomain) return null;
 	for (const app of apps.values()) if (app.subdomain && app.subdomain === subdomain) return app;

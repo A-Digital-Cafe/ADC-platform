@@ -24,7 +24,6 @@ function getPriority(config: ServiceConfig): number | null {
 
 async function readConfig(configPath: string): Promise<ServiceConfig | null> {
 	try {
-		await fs.access(configPath);
 		const raw = await fs.readFile(configPath, "utf-8");
 		return safeParseJson(raw, moduleConfigCheck) as ServiceConfig | null;
 	} catch {

@@ -72,7 +72,6 @@ export * from './loader/index.js';
 
 	for (const cssPath of possibleCssPaths) {
 		try {
-			await fs.access(cssPath);
 			const cssContent = await fs.readFile(cssPath, "utf-8");
 			combinedCss += "\n/* ---- " + path.basename(cssPath) + " ---- */\n";
 			combinedCss += extractPureCss(cssContent, moduleName);

@@ -29,6 +29,14 @@ function stringify(value: unknown): string {
 	}
 }
 
+/** Prefijo de continuación: una línea con este gutter no puede pasar por entrada nueva. */
+const CONTINUATION = "\n  │ ";
+
+function sanitizeLogText(text: string): string {
+	// eslint-disable-next-line no-control-regex -- los caracteres de control son justamente el objetivo.
+	return text.replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replaceAll(/\r\n|[\r\n]/g, CONTINUATION);
+}
+
 /**
  * Códigos ANSI para colores en la consola
  */
@@ -92,20 +100,31 @@ export default class ConsoleLogger implements ILogger {
 	 * Único punto de salida del logger: consola (`[title] msg`) y ring buffer en memoria, donde el
 	 * módulo va aparte del mensaje para poder filtrar. La redacción se aplica sólo al buffer, que
 	 * se consulta por HTTP (la consola es efímera y local).
+	 *
+	 * Por ser el único punto de salida es también donde se sanitiza (ver `sanitizeLogText`): así
+	 * ningún productor puede inyectar líneas falsas, sin que cada caller tenga que acordarse.
 	 */
 	#emit(level: Exclude<LogLevel, "NONE">, module: string, message: string, args: any[]): void {
 		if (!this.#shouldLog(level)) return;
 
-		const formatted = this.#format(level, module ? `[${module}] ${message}` : message);
-		if (level === "ERROR") console.error(formatted, ...args);
-		else if (level === "WARN") console.warn(formatted, ...args);
-		else console.log(formatted, ...args);
+		const safeModule = sanitizeLogText(module);
+		const safeMessage = sanitizeLogText(message);
+		// Sólo los strings sueltos llegan crudos a la consola: dentro de un objeto o un array,
+		// `util.inspect` ya escapa los saltos de línea al formatearlos.
+		const safeArgs = args.map((arg) => (typeof arg === "string" ? sanitizeLogText(arg) : arg));
 
-		const serialized = args.length ? [message, ...args.map(stringify)].join(" ") : message;
+		const formatted = this.#format(level, safeModule ? `[${safeModule}] ${safeMessage}` : safeMessage);
+		if (level === "ERROR") console.error(formatted, ...safeArgs);
+		else if (level === "WARN") console.warn(formatted, ...safeArgs);
+		else console.log(formatted, ...safeArgs);
+
+		// Los args string ya vienen sanitizados de `safeArgs`; re-sanitizarlos duplicaría el gutter.
+		const serializedArgs = safeArgs.map((arg) => (typeof arg === "string" ? arg : sanitizeLogText(stringify(arg))));
+		const serialized = safeArgs.length ? [safeMessage, ...serializedArgs].join(" ") : safeMessage;
 		// Recortar ANTES de redactar (ver `MAX_MESSAGE_CHARS`).
 		const capped = serialized.length > MAX_MESSAGE_CHARS ? `${serialized.slice(0, MAX_MESSAGE_CHARS)}…` : serialized;
 		try {
-			logBuffer.push(BufferLevels[level], module || ROOT_MODULE, redact(capped));
+			logBuffer.push(BufferLevels[level], safeModule || ROOT_MODULE, redact(capped));
 		} catch {
 			// El buffer es un extra de diagnóstico: nunca puede hacer fallar a quien loguea.
 		}

@@ -85,6 +85,8 @@ export default resolvePlatformLink;
 
 > La app debe estar listada en `DEFAULT_APPS` (`platform-links.ts`) con su `remoteName` y `resolverExpose`. `registerPlatformLinkResolver(appId, fn)` sigue disponible como _fast-path_ opcional en proceso.
 
+> `isPlatformUrl(url)` responde si una URL es del dominio de la plataforma. Usalo para decidir entre chip y enlace externo: compara el host parseado, nunca por substring (`adigitalcafe.com.evil.com` contiene el dominio sin serlo).
+
 ## markdown-blocks.ts
 
 `markdownToBlocks(md)` — convierte markdown (subset: encabezados, listas, checkboxes, código, citas, callouts `> [!tone]`, tablas, divisores) en bloques para `adc-blocks-renderer`. El formato inline lo resuelve `adc-inline-tokens` al renderizar, incluidos los chips `adc-platform-link`.
