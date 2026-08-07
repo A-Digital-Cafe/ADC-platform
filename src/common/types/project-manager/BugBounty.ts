@@ -3,9 +3,12 @@
  *
  * Flujo: el reporter abre un ticket tipo `security` en el subdominio `status`.
  * Se calcula un `descriptionHash` (SHA-256 de la descripción) que se publica de
- * inmediato en el log de transparencia. Al resolverse, si el reporter aceptó
- * agradecimiento público, la descripción se hace pública y debe coincidir con el
- * hash. La recompensa es un upgrade temporal de tier (plus/pro) — ver [[tiers]].
+ * inmediato en el log de transparencia. La descripción en sí queda privada hasta
+ * que el ticket esté resuelto Y el reporter haya consentido divulgarla
+ * (`publicDisclosure`); recién ahí se publica y debe coincidir con el hash. El
+ * crédito con handle es un consentimiento aparte (`wantsCredit`): se puede pedir
+ * la publicación del reporte sin querer aparecer nombrado, y viceversa.
+ * La recompensa es un upgrade temporal de tier (plus/pro) — ver [[tiers]].
  *
  * El admin/Security Manager triagea la severidad y otorga la recompensa
  * (variante plus/pro) considerando la preferencia del reporter y los recursos
@@ -107,7 +110,8 @@ export interface BugBountyPublicEntry {
 	creditHandle?: string | null;
 	/**
 	 * Descripción original: presente SOLO cuando el ticket está `resolved` y el
-	 * reporter aceptó agradecimiento público. Debe verificar contra `descriptionHash`.
+	 * reporter consintió la divulgación (`publicDisclosure`), que es un
+	 * consentimiento distinto del crédito. Debe verificar contra `descriptionHash`.
 	 */
 	description?: string | null;
 }

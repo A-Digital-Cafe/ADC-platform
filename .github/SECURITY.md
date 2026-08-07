@@ -71,11 +71,24 @@ usuario). El otorgamiento lo confirma un admin/Security Manager al resolver.
 ### Transparencia
 
 Cada ticket de seguridad entra en un **log público** (subdominio `status`) con:
-`id de ticket`, `fecha/hora`, **hash SHA-256 de la descripción** y `estado`.
-Al resolverse, **si aceptaste agradecimiento público**, se publica la descripción
-original — y cualquiera puede recomputar el SHA-256 y verificar que coincide con
-el hash publicado al recibirse (prueba de no-manipulación). Los reporteros que
-optan por crédito aparecen en <https://status.adigitalcafe.com/status/bounty>.
+`id de ticket`, `fecha/hora`, **hash SHA-256 de la descripción**, `estado` y
+`severidad`. Eso es todo lo que se publica al recibirlo.
+
+**La descripción del reporte no se publica nunca por defecto.** Se publica sólo si
+se cumplen las dos condiciones: (1) el ticket está **resuelto** (vulnerabilidad
+parcheada) y (2) vos **consentiste la divulgación** del reporte. Recién ahí
+cualquiera puede recomputar el SHA-256 y verificar que coincide con el hash
+publicado al recibirse (prueba de no-manipulación).
+
+Son **dos consentimientos distintos** y podés dar uno sin el otro:
+
+- **Divulgación del reporte** — publicar la descripción (una vez resuelto).
+- **Crédito público** — que aparezca tu handle en
+  <https://status.adigitalcafe.com/status/bounty>. Requiere que además hayas
+  consentido la divulgación.
+
+Si borrás tu cuenta, el consentimiento de crédito no sobrevive: tu handle se
+elimina del ticket.
 
 ## Safe Harbor (puerto seguro)
 
@@ -131,11 +144,15 @@ increase them or agree on other benefits from the ticket, considering your
 | Critical      | 3 months **plus** · or 1 month **pro**  |
 
 **Transparency** — every security ticket enters a public log (`status`
-subdomain) with: ticket id, date/time, **SHA-256 hash of the description**, and
-status. On resolution, **if you opted in for public credit**, the original
-description is published and anyone can recompute the SHA-256 to verify it
-matches the hash recorded at intake. Credited reporters appear at
-<https://status.adigitalcafe.com/status/bounty>.
+subdomain) with: ticket id, date/time, **SHA-256 hash of the description**,
+status and severity. That is all that is published at intake. The report's
+description is **never published by default**: it is disclosed only once the
+ticket is **resolved** (issue patched) **and** you opted in to disclosure — then
+anyone can recompute the SHA-256 and verify it matches the hash recorded at
+intake. Disclosure and **public credit** are two separate opt-ins: credited
+reporters appear at <https://status.adigitalcafe.com/status/bounty>, and credit
+requires disclosure too. If you delete your account, the credit consent does not
+survive: your handle is removed from the ticket.
 
 **Safe Harbor** — we will not pursue legal action for good-faith security
 research that follows this policy: test only your own accounts; no access to
