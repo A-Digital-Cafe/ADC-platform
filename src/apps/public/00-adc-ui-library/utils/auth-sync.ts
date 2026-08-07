@@ -144,7 +144,7 @@ export async function forceLogoutAndRefresh(logoutUrl = getDefaultLogoutUrl()): 
  * avatar del usuario ha cambiado, para que cada consumidor refresque su UI
  * sin recargar la página ni re-fetchear la sesión (lo que rotaría el JWT/CSRF).
  *
- * Cuando `avatar` viene `null` significa "sin avatar" (fallback DiceBear).
+ * Cuando `avatar` viene `null` significa "sin avatar" (cae en el auto-avatar propio).
  */
 export interface AvatarUpdatePayload {
 	userId: string;

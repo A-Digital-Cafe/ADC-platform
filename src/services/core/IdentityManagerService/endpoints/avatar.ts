@@ -1,7 +1,7 @@
 import { RegisterEndpoint, type EndpointCtx, UncommonResponse } from "../../EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.js";
 import { IdentityError } from "@common/types/custom-errors/IdentityError.js";
-import { buildDicebearAvatar } from "@common/utils/avatar.js";
+import { buildDefaultAvatarUrl } from "@common/utils/avatar.js";
 import { hostnameFromHostHeader } from "@common/utils/url-utils.js";
 import type { AttachmentsManager } from "../../../../utilities/attachments/attachments-utility/index.js";
 import type IdentityManagerService from "../index.js";
@@ -77,7 +77,7 @@ export class AvatarEndpoints {
 	 * Lista las opciones de avatar disponibles para el usuario:
 	 *  - cada `linkedAccount` con `providerAvatar`
 	 *  - opción `custom` (si tiene attachment subido)
-	 *  - opción `none` (fallback DiceBear)
+	 *  - opción `none` (fallback al auto-avatar)
 	 */
 	@RegisterEndpoint({
 		method: "GET",
@@ -86,7 +86,7 @@ export class AvatarEndpoints {
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Lista opciones de avatar del usuario actual",
-			description: "Incluye `default` (DiceBear), cuentas vinculadas con avatar, `custom` (si hay) y `none`.",
+			description: "Incluye `default` (auto-avatar), cuentas vinculadas con avatar, `custom` (si hay) y `none`.",
 			schema: { response: { 200: AS.AvatarOptionsResponse } },
 		},
 	})
@@ -98,7 +98,7 @@ export class AvatarEndpoints {
 		const defaultOption: AvatarOption = {
 			id: "default",
 			label: "Default auto-avatar",
-			url: buildDicebearAvatar(user.id || user.username || "default"),
+			url: buildDefaultAvatarUrl(user.id || user.username || "default"),
 		};
 		const options: AvatarOption[] = [defaultOption];
 
@@ -333,4 +333,5 @@ export class AvatarEndpoints {
 		});
 		throw UncommonResponse.redirect(url, { status: 302 });
 	}
+
 }

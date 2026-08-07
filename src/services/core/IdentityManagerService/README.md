@@ -8,6 +8,7 @@ Servicio kernel (`kernelMode: 60`) para identidad: usuarios, roles, grupos y org
 - Roles predefinidos **sincronizados en boot** desde `defaults/systemRoles.ts` (la matriz rol × permisos vive ahí)
 - `createAuthVerifier()` para validar tokens desde otros servicios; alertas `security.alert` a Admins/Security Managers globales (`notify.ts`)
 - Avatares vía `internal-s3-provider` + `attachments-utility`; soft-delete de usuarios con cron de purga reanudable (stepper + `forEachPage`)
+- Auto-avatar: SVG propio elegido por semilla desde `common/public/avatars` (`@common/utils/avatar.ts`), sin red ni terceros
 - Dev: siembra usuarios de prueba (`defaults/devUsers.ts`); fuera de dev se purgan en cada arranque
 
 Dependencias y configuración: `config.json` (env vars en `.env.example`).

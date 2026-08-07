@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <radialGradient id="bodyGrad" cx="40%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#ff7373"/>
+      <stop offset="100%" stop-color="#FF5C5C"/>
+    </radialGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <clipPath id="bodyClip">
+      <path d="
+        M 100 34
+        C 128 32 150 46 156 62
+        C 164 72 178 84 174 102
+        C 172 120 180 134 164 150
+        C 154 160 152 172 130 176
+        C 114 179 100 172 84 176
+        C 64 180 50 168 44 150
+        C 38 134 24 124 30 104
+        C 34 88 30 68 46 56
+        C 62 40 82 36 100 34
+        Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- sombra -->
+  <ellipse cx="100" cy="180" rx="52" ry="9" fill="#000000" opacity="0.12"/>
+
+  <!-- cuerpo slime deforme (liso arriba, bultos abajo/costados) -->
+  <path d="
+    M 100 34
+    C 128 32 150 46 156 62
+    C 164 72 178 84 174 102
+    C 172 120 180 134 164 150
+    C 154 160 152 172 130 176
+    C 114 179 100 172 84 176
+    C 64 180 50 168 44 150
+    C 38 134 24 124 30 104
+    C 34 88 30 68 46 56
+    C 62 40 82 36 100 34
+    Z"
+    fill="url(#bodyGrad)" stroke="#993737" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- brillo textura suave, difuso, no circular -->
+  <g clip-path="url(#bodyClip)" opacity="0.5" filter="url(#soft)">
+    <path d="M 40 40 C 70 55 95 40 130 55 C 110 70 80 65 60 75 C 45 65 35 55 40 40 Z" fill="#ffffff"/>
+  </g>
+
+  <!-- ojos (menos frente) -->
+  <g>
+    <circle cx="78" cy="92" r="10" fill="#2b2b2b"/>
+    <circle cx="120" cy="94" r="10" fill="#2b2b2b"/>
+    <circle cx="81" cy="88" r="3" fill="#ffffff"/>
+    <circle cx="123" cy="90" r="3" fill="#ffffff"/>
+  </g>
+
+  <!-- mejillas -->
+  <ellipse cx="62" cy="110" rx="8" ry="5" fill="#ff8fa3" opacity="0.6"/>
+  <ellipse cx="138" cy="112" rx="8" ry="5" fill="#ff8fa3" opacity="0.6"/>
+
+  <!-- boca -->
+  <path d="M 88 112 Q 99 120 110 111" fill="none" stroke="#2b2b2b" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,12 +1,12 @@
 /**
- * Resolución de avatar en el cliente. Centraliza la lógica de fallback a
- * DiceBear y un caché batch para resolver avatares de autores cuando el
- * backend no los entregó (p. ej. comentarios antiguos o linkedAccounts
- * añadidos después de emitir el JWT).
+ * Resolución de avatar en el cliente. Centraliza la lógica de fallback al
+ * auto-avatar de la plataforma y un caché batch para resolver avatares de
+ * autores cuando el backend no los entregó (p. ej. comentarios antiguos o
+ * linkedAccounts añadidos después de emitir el JWT).
  */
 
 import { createAdcApi } from "./adc-fetch.js";
-import { buildDicebearAvatar } from "@common/utils/avatar.js";
+import { buildDefaultAvatarUrl } from "@common/utils/avatar.js";
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 
 interface PublicProfile {
@@ -31,11 +31,11 @@ function resolveServerRelative(url: string): string {
 
 /**
  * Devuelve la URL del avatar a renderizar, garantizando un fallback
- * determinista (DiceBear) cuando no hay foto disponible.
+ * determinista (auto-avatar propio) cuando no hay foto disponible.
  */
 export function buildAvatarUrl(opts: { avatar?: string | null; seed?: string | null }): string {
 	if (opts.avatar) return resolveServerRelative(opts.avatar);
-	return buildDicebearAvatar(opts.seed || "default");
+	return resolveServerRelative(buildDefaultAvatarUrl(opts.seed || "default"));
 }
 
 /**

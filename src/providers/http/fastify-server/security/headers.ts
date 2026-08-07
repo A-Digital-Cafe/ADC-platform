@@ -63,8 +63,8 @@ function getDefaultCsp(nonce?: string): string {
 		// `'unsafe-inline'` en script-src no cubre los atributos de evento (`onclick=`), y no
 		// hay ni uno en el árbol: negarlos es gratis y cierra una clase entera de inyección.
 		"script-src-attr 'none'",
-		// `https:` en la base y no en el delta de cada app: los avatares salen de hosts externos
-		// (DiceBear como fallback, el CDN de Discord) y casi todas las apps repetían esta línea
+		// `https:` en la base y no en el delta de cada app: los avatares de cuentas vinculadas
+		// salen de hosts externos (el CDN de Discord) y casi todas las apps repetían esta línea
 		// en su config.json — las que no, rompen al enforcear.
 		"img-src 'self' data: blob: https:",
 		"font-src 'self' data:",

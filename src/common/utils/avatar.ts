@@ -6,11 +6,11 @@
  * - IdentityManagerService (endpoint público de avatar)
  *
  * Soporta selección explícita del usuario vía `metadata.avatarSource`:
- *   - `"default"`           → auto-avatar determinista DiceBear generado en backend
+ *   - `"default"`           → auto-avatar determinista servido por la plataforma
  *   - `"custom"`            → usa `metadata.customAvatar.attachmentId` (servido por
  *                             `/api/identity/users/:id/avatar/raw` que redirige a S3 presigned)
  *   - `"linked:<provider>"` → usa el `providerAvatar` del `LinkedAccount` indicado
- *   - `"none"`              → sin avatar (fallback a DiceBear en cliente)
+ *   - `"none"`              → sin avatar (fallback al auto-avatar en cliente)
  *
  * Si no hay selección explícita, prioridad legacy:
  *   1. `user.avatar` (columna explícita)
@@ -37,7 +37,7 @@ function getCustomAvatarUrl(userId: string | undefined, ref: CustomAvatarRef | u
 }
 
 function getDefaultAvatarUrl(user: UserAvatarSource): string {
-	return buildDicebearAvatar(user.id || user.username || "default");
+	return buildDefaultAvatarUrl(user.id || user.username || "default");
 }
 
 export function resolveUserAvatar(user: UserAvatarSource | null | undefined): string | undefined {
@@ -74,7 +74,19 @@ export function resolveUserAvatar(user: UserAvatarSource | null | undefined): st
 	return linked || getDefaultAvatarUrl(user);
 }
 
-/** @public Construye la URL de DiceBear como avatar procedural determinista. */
-export function buildDicebearAvatar(seed: string): string {
-	return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+/** Avatares por defecto en `common/public/avatars`, que se copia a todas las apps. */
+const DEFAULT_AVATARS = ["amarillo", "azul", "celeste", "morado", "naranja", "rojo", "rosa", "verde"] as const;
+
+/**
+ * @public URL del auto-avatar determinista para una semilla.
+ *
+ * Archivos estáticos propios, same-origin: enlazar un generador externo le contaba a un tercero
+ * qué IDs de usuario mira cada visitante, en casi todas las pantallas y sin base legal ni aviso.
+ * El hash sólo reparte colores, así que no necesita ser criptográfico — pero sí dar lo mismo en
+ * servidor y en navegador, porque los dos construyen esta URL.
+ */
+export function buildDefaultAvatarUrl(seed: string): string {
+	let hash = 0;
+	for (let i = 0; i < seed.length; i++) hash = (hash * 31 + (seed.codePointAt(i) ?? 0)) >>> 0;
+	return `/avatars/def-avatar-${DEFAULT_AVATARS[hash % DEFAULT_AVATARS.length]}.svg`;
 }
