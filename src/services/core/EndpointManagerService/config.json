@@ -23,7 +23,7 @@
 		"metrics": {
 			"enabled": "${ENDPOINT_METRICS_ENABLED:-true}",
 			"flushIntervalMs": "${ENDPOINT_METRICS_FLUSH_INTERVAL_MS:-60000}",
-			"retentionDays": "${ENDPOINT_METRICS_RETENTION_DAYS:-7}"
+			"retentionHours": "${ENDPOINT_METRICS_RETENTION_HOURS:-25}"
 		}
 	},
 	"providers": [
@@ -31,6 +31,20 @@
 			"name": "fastify-server",
 			"version": "latest",
 			"language": "typescript"
+		},
+		{
+			"name": "object/mongo",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"host": "${MONGO_HOST:-localhost:27017}",
+				"user": "${MONGO_USER:-admin}",
+				"password": "${MONGO_PASSWORD:-password}",
+				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"db": "adc-endpoints",
+				"maxRetries": 5,
+				"retryDelay": 5000
+			}
 		},
 		{
 			"name": "queue/rabbitmq",

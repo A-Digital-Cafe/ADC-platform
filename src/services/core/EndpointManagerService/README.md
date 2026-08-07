@@ -137,7 +137,15 @@ Esto ofrece la **seguridad** de una llamada a un endpoint con la **velocidad** d
 
 ### 6. Métricas por Endpoint
 
-El wrapper acumula `count`, latencia, bytes y errores por clave `"<METHOD> <url>"` en memoria (hot path sin I/O) y un flush periódico las vuelca al hash diario de Redis `epm:<YYYY-MM-DD>`. Se leen con `getEndpointMetrics(day?)` (hoy = memoria, otro día = Redis) y se limpian con `resetEndpointMetrics(key?)`; ambos implementan `IEndpointMetricsReader` de `@common/types/endpoints`. Se configura en `private.metrics` (`ENDPOINT_METRICS_ENABLED`, `_FLUSH_INTERVAL_MS`, `_RETENTION_DAYS`).
+Ventana **móvil de 24 h**, no un día calendario: así a las 00:05 se sigue viendo la tarde anterior en vez de una tabla vacía. Tres soportes para los mismos contadores (`parts/metrics-aggregate.ts` define la forma y la suma):
+
+1. **Memoria** (`parts/metrics.ts`): el hot path sólo suma en memoria por clave `"<METHOD> <url>"` — `count`, latencia (media/p90/pico), bytes y errores **por código HTTP**. El p90 sale de un histograma de clases logarítmicas, no de guardar cada muestra: el error queda acotado por el ancho de la clase.
+2. **Redis** (`epm:<YYYY-MM-DDTHH>`): un flush periódico vuelca el delta de la **hora en curso**. Es la red de contención ante un hot-reload o un reinicio dentro de la misma hora.
+3. **Mongo** (`parts/metrics-store.ts`, db `adc-endpoints`): al cerrar cada hora, su hash se archiva como una fila por (hora, endpoint), se borra de Redis y se poda lo que quedó fuera de la retención. Se archiva **siempre** una marca de "hora medida", incluso sin tráfico: sin ella una hora tranquila sería indistinguible de una hora caída y la media por hora saldría siempre de más.
+
+`getEndpointMetrics()` suma el archivo + el hash de la hora en curso + el delta que el hot path todavía no volcó (así una tanda de 500 se ve en el acto, no un minuto después). `perHour` promedia **sólo horas cerradas**; la hora en curso se informa aparte (`currentCount`) y suma a los totales. `hourly` viene alineado con `hours` para dibujar la serie por hora. `resetEndpointMetrics(key?)` borra los tres soportes: limpiar sólo la memoria dejaría 24 h de historia y la tabla no se movería. Ambos implementan `IEndpointMetricsReader` de `@common/types/endpoints`. Se configura en `private.metrics` (`ENDPOINT_METRICS_ENABLED`, `_FLUSH_INTERVAL_MS`, `_RETENTION_HOURS`; mínimo 25 = 24 + la que corre).
+
+> Mongo se conecta **en segundo plano**: este servicio es `kernelMode` con `failOnError`, y esperar a la base pondría el boot entero detrás de ella. Mientras no conecte, la ventana muestra sólo la hora en curso.
 
 > `GET /api/jobs/:jobId` y `GET /api/csrf-token` se registran directo contra el provider HTTP, **sin** el wrapper, así que quedan fuera de las métricas y del rate limit. `/api/jobs/:jobId` resuelve la sesión por su cuenta y **sólo se la devuelve a quien encoló el job** (`job.userId`); un job sin `userId` no se sirve a nadie. Mismo 404 para "no existe" y "no es tuyo".
 

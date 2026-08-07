@@ -15,9 +15,12 @@ import { registerCsrfEndpoint } from "./parts/csrf.js";
 import { resolveCsrfConfig, type CsrfOptions, type CsrfRuntimeConfig } from "./parts/csrf-config.js";
 import { resolveRateLimitConfig, type RateLimitConfig, type ResolvedRateLimits } from "./parts/rate-limit.js";
 import * as metrics from "./parts/metrics.js";
+import { emptyAggregate, mergeAggregate, toRow, type MetricAggregate } from "./parts/metrics-aggregate.js";
+import { METRICS_SCHEMAS, MetricsStore, type HourlyMetricDoc, type MeasuredHourDoc } from "./parts/metrics-store.js";
+import type MongoProvider from "../../../providers/object/mongo/index.ts";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Scope, assertScope, Capability, type CapabilityToken } from "@common/security/Capability.ts";
-import type { EndpointMetricRow, IEndpointMetricsReader } from "@common/types/endpoints/IEndpointMetrics.ts";
+import type { EndpointMetricsPage, IEndpointMetricsReader } from "@common/types/endpoints/IEndpointMetrics.ts";
 
 // Re-exportar decoradores para uso externo
 export { RegisterEndpoint, EnableEndpoints, DisableEndpoints, readEndpointMetadata, readEnableEndpointsConfig } from "./decorators.js";
@@ -56,6 +59,10 @@ export default class EndpointManagerService extends BaseService implements IEndp
 	readonly #unavailableOwners = new Map<string, string>();
 	#redis: RedisProvider | null = null;
 	#metricsTimer: ReturnType<typeof setInterval> | null = null;
+	/** Archivo horario de métricas. `null` hasta que Mongo conecta (o para siempre, si no conecta). */
+	#metricsStore: MetricsStore | null = null;
+	#archiveTimer: ReturnType<typeof setTimeout> | null = null;
+	#archiving = false;
 
 	static readonly JOB_TTL_SECONDS = JobManager.JOB_TTL_SECONDS;
 
@@ -77,6 +84,10 @@ export default class EndpointManagerService extends BaseService implements IEndp
 			this.#metricsTimer = setInterval(() => {
 				metrics.flush(redis).catch((err) => this.logger.logDebug(`Flush de métricas falló: ${err?.message ?? err}`));
 			}, metricsConfig.flushIntervalMs);
+			// El archivo horario NO bloquea el arranque: este servicio es `kernelMode` y `failOnError`,
+			// y esperar a Mongo acá pondría el boot entero detrás de una base que todavía puede estar
+			// levantando. Mientras no conecte, la ventana muestra sólo la hora en curso.
+			void this.#startMetricsArchive();
 		}
 
 		this.#jobManager = new JobManager({
@@ -225,26 +236,138 @@ export default class EndpointManagerService extends BaseService implements IEndp
 	}
 
 	/**
-	 * Métricas agregadas por endpoint (clave `"<METHOD> <url>"`). Hoy sale del acumulador en
-	 * memoria del proceso; cualquier otro día, del hash diario de Redis.
+	 * Conecta el archivo horario en segundo plano y deja programado el cierre de hora. Si Mongo
+	 * nunca conecta, la única consecuencia es que la ventana se queda en la hora en curso.
+	 */
+	async #startMetricsArchive(): Promise<void> {
+		try {
+			const mongo = this.getMyProvider<MongoProvider>("object/mongo");
+			await this.waitForProvider(mongo, "MongoDB (métricas de endpoints)");
+			this.#metricsStore = new MetricsStore(
+				mongo.createModel<HourlyMetricDoc>("endpoint_metrics_hourly", METRICS_SCHEMAS.hourly),
+				mongo.createModel<MeasuredHourDoc>("endpoint_metrics_hours", METRICS_SCHEMAS.measuredHour)
+			);
+		} catch (error: any) {
+			this.logger.logWarn(`Métricas sin histórico horario (Mongo no disponible): ${error?.message ?? error}`);
+			return;
+		}
+		// Arranque: puede haber horas cerradas sin archivar (kernel apagado, Mongo caído).
+		await this.#archiveClosedHours();
+		this.#scheduleNextArchive();
+	}
+
+	/**
+	 * Dispara el archivado justo después de cada cambio de hora. Se reprograma con `setTimeout`
+	 * en vez de un `setInterval` de una hora porque el intervalo deriva, y con la deriva el cierre
+	 * terminaría cayendo dentro de la hora siguiente.
+	 */
+	#scheduleNextArchive(): void {
+		const nextHour = metrics.hourStartMs() + 3_600_000;
+		// Margen sobre el límite: da tiempo a que el flush del ticker deje la hora completa en Redis.
+		const delay = Math.max(1000, nextHour + 30_000 - Date.now());
+		this.#archiveTimer = setTimeout(() => {
+			void this.#archiveClosedHours().finally(() => this.#scheduleNextArchive());
+		}, delay);
+	}
+
+	/**
+	 * Vuelca a Mongo cada hora ya cerrada que siga teniendo hash en Redis y lo borra, y después
+	 * poda lo que quedó fuera de la retención. Las horas candidatas se enumeran desde el reloj
+	 * (no con `KEYS`), así que el barrido es acotado y no crece con la base.
+	 */
+	async #archiveClosedHours(): Promise<void> {
+		const store = this.#metricsStore;
+		const redis = this.#redis;
+		if (!store || !redis || this.#archiving) return;
+		this.#archiving = true;
+		try {
+			// Primero el flush: una hora recién cerrada puede tener delta en memoria todavía.
+			await metrics.flush(redis);
+			for (const hour of metrics.closedHoursToArchive()) {
+				const rows = await metrics.readHour(redis, hour);
+				const startsAt = Date.parse(`${hour}:00:00.000Z`);
+				// Una hora sin hash puede ser tranquila (kernel arriba, cero requests) o no medida
+				// (kernel caído). Sólo la primera cuenta como medida, y se sabe por el arranque del
+				// proceso; sin esta marca una noche tranquila inflaría la media de llamadas/hora.
+				if (rows.size === 0 && startsAt < metrics.measuringSince()) continue;
+				await store.archiveHour(hour, new Date(startsAt), rows, metrics.ownerOf);
+				// Sólo después de archivar: si Mongo falló, el hash sigue ahí y se reintenta.
+				if (rows.size > 0) await metrics.dropHour(redis, hour);
+			}
+			// La hora que se cayó del borde de la ventana: "cada hora se borra la 25ava".
+			await store.purgeBefore(new Date(metrics.hourStartMs() - metrics.retentionHours() * 3_600_000));
+		} catch (error: any) {
+			this.logger.logDebug(`Archivado de métricas falló (se reintenta): ${error?.message ?? error}`);
+		} finally {
+			this.#archiving = false;
+		}
+	}
+
+	/** Tramo de la hora en curso: lo ya volcado a Redis más el delta que el hot path no volcó todavía. */
+	async #currentHourAggregates(): Promise<Map<string, MetricAggregate>> {
+		const current = this.#redis ? await metrics.readHour(this.#redis, metrics.currentHourLabel()) : new Map<string, MetricAggregate>();
+		for (const [key, delta] of metrics.unflushedDelta()) {
+			const existing = current.get(key);
+			if (existing) mergeAggregate(existing, delta);
+			else current.set(key, delta);
+		}
+		return current;
+	}
+
+	/**
+	 * Ventana móvil de 24 h por endpoint (clave `"<METHOD> <url>"`): las horas archivadas en Mongo
+	 * más el tramo de la hora en curso. El tramo parcial se suma a los totales —para que una
+	 * tanda de 500 se vea en el acto— pero queda fuera de `perHour`, que promedia sólo horas
+	 * completas.
 	 *
 	 * Sin gate de capability a propósito: son datos operativos de la propia capa de endpoints y
 	 * el control de acceso real lo hace el permiso del endpoint que las expone.
 	 */
-	async getEndpointMetrics(day?: string): Promise<{ day: string; endpoints: EndpointMetricRow[] }> {
-		const today = metrics.metricsDay();
-		const target = day ?? today;
-		if (target === today) return { day: target, endpoints: metrics.snapshot() };
-		if (!this.#redis) return { day: target, endpoints: [] };
-		// Un día recién cerrado puede tener delta todavía en memoria (el rollover no hace I/O):
-		// volcarlo antes de leer evita mostrar el día de ayer incompleto hasta el próximo tick.
-		await metrics.flush(this.#redis);
-		return { day: target, endpoints: await metrics.readDay(this.#redis, target) };
+	async getEndpointMetrics(): Promise<EndpointMetricsPage> {
+		const now = Date.now();
+		const archived = this.#metricsStore
+			? await this.#metricsStore.readWindow(metrics.windowHours(now))
+			: { covered: [] as string[], byKey: new Map() };
+		const current = await this.#currentHourAggregates();
+
+		const endpoints = [...new Set([...archived.byKey.keys(), ...current.keys()])].map((key) => {
+			const past = archived.byKey.get(key);
+			const live = current.get(key);
+			const agg = emptyAggregate();
+			if (past) mergeAggregate(agg, past.agg);
+			if (live) mergeAggregate(agg, live);
+			return toRow(agg, {
+				key,
+				// El dueño en memoria manda: el archivado puede traer el de un despliegue anterior.
+				owner: metrics.ownerOf(key) || past?.owner || "",
+				hourly: past?.hourly ?? new Array<number>(archived.covered.length).fill(0),
+				currentCount: live?.count ?? 0,
+			});
+		});
+
+		return {
+			generatedAt: new Date(now).toISOString(),
+			currentHourStart: new Date(metrics.hourStartMs(now)).toISOString(),
+			hours: archived.covered.map((hour) => `${hour}:00:00.000Z`),
+			endpoints,
+		};
 	}
 
-	/** Limpia el acumulado en memoria de una clave (o de todas). Lo ya volcado a Redis no se toca. */
-	resetEndpointMetrics(key?: string): Promise<number> {
-		return Promise.resolve(metrics.reset(key));
+	/**
+	 * Borra una clave (o todas) de la ventana entera: memoria, hora en curso en Redis e histórico
+	 * archivado. Limpiar sólo la memoria dejaría 24 h de historia intacta y la tabla no se movería,
+	 * que es exactamente lo contrario de lo que promete el botón.
+	 */
+	async resetEndpointMetrics(key?: string): Promise<number> {
+		const cleared = new Set(metrics.reset(key));
+		if (this.#redis) {
+			const hour = metrics.currentHourLabel();
+			if (key) await metrics.dropKeyFromHour(this.#redis, hour, key).catch(() => undefined);
+			else await metrics.dropHour(this.#redis, hour).catch(() => undefined);
+		}
+		for (const archivedKey of (await this.#metricsStore?.clear(key)) ?? []) cleared.add(archivedKey);
+		if (key) return cleared.has(key) ? 1 : 0;
+		return cleared.size;
 	}
 
 	// Obtiene información sobre los endpoints registrados
@@ -259,9 +382,15 @@ export default class EndpointManagerService extends BaseService implements IEndp
 			clearInterval(this.#metricsTimer);
 			this.#metricsTimer = null;
 		}
+		if (this.#archiveTimer) {
+			clearTimeout(this.#archiveTimer);
+			this.#archiveTimer = null;
+		}
 		// Último volcado antes de soltar el provider: si Redis ya se cayó, `flush` lo absorbe.
+		// Lo que quede en el hash de la hora en curso lo recoge el barrido de arranque siguiente.
 		if (this.#redis) await metrics.flush(this.#redis);
 		this.#redis = null;
+		this.#metricsStore = null;
 
 		// Graceful shutdown: drain all queue consumers first
 		if (this.#jobManager) {
