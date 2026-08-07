@@ -32,6 +32,14 @@ const MAX_LIST_LIMIT = 500;
  */
 export type SessionRevoker = (userId: string, reason: string) => Promise<void>;
 
+/**
+ * Da de baja el débito automático de la cuenta que se está eliminando. Lo provee el
+ * servicio (que sí puede resolver `SubscriptionService`, que vive en un preset y
+ * puede no estar cargado); el DAO sólo lo invoca. Best-effort: un fallo acá no puede
+ * abortar la baja de cuenta, pero tampoco puede pasar en silencio.
+ */
+export type SubscriptionCanceller = (userId: string) => Promise<void>;
+
 export class UserManager {
 	readonly #permissionChecker: PermissionChecker;
 
@@ -39,16 +47,20 @@ export class UserManager {
 
 	readonly #revokeSessions: SessionRevoker;
 
+	readonly #cancelSubscription: SubscriptionCanceller;
+
 	constructor(
 		private readonly userModel: Model<any>,
 		private readonly logger: ILogger,
 		getAuthVerifier: AuthVerifierGetter = () => null,
 		seatGate: SeatGate = async () => null,
-		revokeSessions: SessionRevoker = async () => {}
+		revokeSessions: SessionRevoker = async () => {},
+		cancelSubscription: SubscriptionCanceller = async () => {}
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "UserManager", RESOURCE_NAME);
 		this.#seatGate = seatGate;
 		this.#revokeSessions = revokeSessions;
+		this.#cancelSubscription = cancelSubscription;
 	}
 
 	/**
@@ -615,6 +627,11 @@ export class UserManager {
 	/**
 	 * Auto-eliminación: marca cuenta inactiva y programa borrado en `retentionDays` días.
 	 * El borrado físico lo realiza el cron de retención en IdentityManagerService.
+	 *
+	 * Da de baja además el débito automático **personal**: sin esto la cuenta queda
+	 * inactiva y programada para borrarse pero se le sigue cobrando todos los meses.
+	 * Las suscripciones de una organización no se tocan: son de la organización, no
+	 * de quien se va.
 	 */
 	async requestSelfDeletion(userId: string, reason?: string, retentionDays = 30, token?: string): Promise<User> {
 		const callerId = await this.#permissionChecker.resolveUserId(token);
@@ -640,6 +657,13 @@ export class UserManager {
 		);
 		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
 		await this.#revokeSessionsSafe(userId, "baja voluntaria");
+		try {
+			await this.#cancelSubscription(userId);
+		} catch (error) {
+			// La baja de cuenta ya está hecha y no se revierte por esto, pero queda el rastro
+			// para que operaciones cancele el cobro a mano antes del próximo débito.
+			this.logger.logError(`Baja de cuenta ${userId}: NO se pudo cancelar la suscripción, revisar cobro recurrente: ${error}`);
+		}
 		this.logger.logInfo(`Usuario solicita borrado: ${userId}`);
 		return updated.toObject?.() || updated;
 	}

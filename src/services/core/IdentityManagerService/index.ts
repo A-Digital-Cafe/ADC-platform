@@ -14,11 +14,13 @@ import {
 	RegionManager,
 	OrgManager,
 	type SessionRevoker,
+	type SubscriptionCanceller,
 } from "./dao/index.js";
 import { seedDevUsers, purgeDevUsers } from "./dao/devSeeder.js";
 import { SystemRole } from "./defaults/systemRoles.js";
 import { NotifyManager } from "./notify.js";
 import { type IAuthVerifier, type AuthVerifierGetter } from "@common/types/auth-verifier.ts";
+import type { ISubscriptionService } from "@common/types/subscriptions/index.ts";
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
 import type { IModerationService } from "@common/types/identity/IModerationService.js";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
@@ -156,6 +158,25 @@ export default class IdentityManagerService extends BaseService implements IIden
 		return this.#sessionManager;
 	}
 
+	/**
+	 * Corta el débito recurrente al pedir la baja de la cuenta. Sin esto la suscripción
+	 * sigue cobrando sobre una cuenta programada para borrarse.
+	 *
+	 * Resolución perezosa y sin cache, como el resto de los presets: SubscriptionService
+	 * es kernelMode 85 y declara a Identity, así que sólo puede ser una dependencia
+	 * `optional` resuelta en el momento de uso. Si falla, `requestSelfDeletion` deja el
+	 * `logError` — la baja no se revierte, pero el cobro pendiente queda asentado.
+	 */
+	readonly #cancelSubscription: SubscriptionCanceller = async (userId: string) => {
+		const subscriptions = this.tryGetMyService<ISubscriptionService>("SubscriptionService");
+		if (!subscriptions) {
+			this.logger.logWarn(`[Identity] SubscriptionService no disponible: no se canceló la suscripción de ${userId}`);
+			return;
+		}
+		const cancelled = await subscriptions.cancelFor(userId, null);
+		if (cancelled) this.logger.logInfo(`[Identity] Suscripción de ${userId} cancelada por baja de cuenta`);
+	};
+
 	// Nota: ModerationService y los purgers de presets se resuelven SIEMPRE en el
 	// momento de uso (lazy, sin cache de instancias): los presets cargan después de
 	// Identity (kernelMode 60) y pueden hot-reloadearse; cachear una instancia acá
@@ -241,7 +262,14 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// UserManager (independiente) → GroupManager (→ UserManager) → RoleManager (→ UserManager, GroupManager) → OrgManager (→ todos)
 			// El gate de asientos va SOLO en el manager con auth: los managers internos sirven
 			// a infraestructura (sesiones, seeds) y no deben quedar bloqueados por un límite comercial.
-			this.#userManager = new UserManager(UserModel, this.logger, this.#getAuthVerifier, this.#seatGate, this.#revokeSessions);
+			this.#userManager = new UserManager(
+				UserModel,
+				this.logger,
+				this.#getAuthVerifier,
+				this.#seatGate,
+				this.#revokeSessions,
+				this.#cancelSubscription
+			);
 			this.#groupManager = new GroupManager(GroupModel, this.#userManager, this.logger, this.#getAuthVerifier);
 			this.#roleManager = new RoleManager(
 				RoleModel,

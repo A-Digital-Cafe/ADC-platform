@@ -69,6 +69,11 @@
 			"name": "DriveService",
 			"version": "latest",
 			"optional": true
+		},
+		{
+			"name": "SubscriptionService",
+			"version": "latest",
+			"optional": true
 		}
 	],
 	"private": {
