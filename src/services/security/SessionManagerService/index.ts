@@ -20,13 +20,21 @@ import { GeoIPValidator } from "./domain/security/GeoIPValidator.js";
 import { SessionManager } from "./domain/session/manager.js";
 import { OAuthProviderRegistry, PlatformAuthProvider } from "./domain/oauth/index.js";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
-import { currentLegalVersions } from "@common/utils/legal-docs.js";
+import {
+	LEGAL_DOCUMENT_LIST,
+	MIN_LEGAL_NOTICE_DAYS,
+	currentLegalVersions,
+	legalNoticeDays,
+	type LegalDocument,
+} from "@common/utils/legal-docs.js";
+import { PLATFORM_TOPICS } from "@common/utils/notifications/platform-topics.js";
 import { openPermissions, sealPermissions } from "./domain/security/perm-cache.js";
 
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
 import { OAuthEndpoints } from "./endpoints/oauth.js";
 import { SessionAdminEndpoints } from "./endpoints/sessions.js";
+import { LegalEndpoints } from "./endpoints/legal.js";
 
 // Decoradores
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
@@ -44,6 +52,11 @@ interface SessionManagerConfig {
 const ACCESS_COOKIE_NAME = "access_token";
 const IS_DEV = process.env.NODE_ENV !== "production";
 const PERMISSION_FINGERPRINT_TTL_SECONDS = 60;
+/**
+ * Espera antes de chequear los documentos legales: `NotificationService` arranca después que este
+ * servicio (kernelMode 80 contra 70), así que anunciar en `start()` descartaría el aviso.
+ */
+const LEGAL_CHECK_DELAY_MS = 30_000;
 
 /**
  * SessionManagerService - Orquestador de autenticación y sesiones
@@ -75,6 +88,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 	#geoValidator: GeoIPValidator | null = null;
 	#sessionManager: SessionManager | null = null;
 	#oauthRegistry: OAuthProviderRegistry | null = null;
+	#legalCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Configuración (overrides opcionales vía config.json → private; defaults por entorno)
 	get #defaultRedirectUrl(): string {
@@ -104,7 +118,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 	// Lifecycle
 
 	@EnableEndpoints({
-		managers: () => [AuthEndpoints, OAuthEndpoints, SessionAdminEndpoints],
+		managers: () => [AuthEndpoints, OAuthEndpoints, SessionAdminEndpoints, LegalEndpoints],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -134,14 +148,14 @@ export default class SessionManagerService extends BaseService implements ISessi
 
 		this.logger.logOk(`SessionManagerService iniciado${this.#redis ? " con Redis" : ""}`);
 
-		void this.#checkLegalDocsVersion();
+		this.#legalCheckTimer = setTimeout(() => void this.#checkLegalDocsVersion(), LEGAL_CHECK_DELAY_MS);
 	}
 
 	/**
-	 * Avisa al equipo cuando se despliega una versión nueva de los Términos o de la Política de
-	 * Privacidad. Este servicio es el que valida la aceptación en el alta, así que es el que sabe
-	 * qué versión está vigente; el aviso existe para que publicar el documento y comunicarlo no
-	 * sean dos cosas que dependan de acordarse.
+	 * Detecta el despliegue de una versión nueva de los Términos o de la Política de Privacidad y
+	 * la anuncia. Este servicio es el que valida la aceptación, así que es el que sabe qué versión
+	 * está vigente; el aviso existe para que publicar el documento y comunicarlo no sean dos cosas
+	 * que dependan de acordarse.
 	 *
 	 * La marca de "ya avisado" vive en Redis y no en Mongo a propósito: no vale un modelo nuevo
 	 * para un par de strings, y el peor caso de perder la clave es un aviso repetido —que para un
@@ -165,17 +179,61 @@ export default class SessionManagerService extends BaseService implements ISessi
 				return;
 			}
 
-			const changed: string[] = [];
-			if (previous.termsVersion !== current.termsVersion) changed.push("Términos y Condiciones");
-			if (previous.privacyVersion !== current.privacyVersion) changed.push("Política de Privacidad");
+			const changed = LEGAL_DOCUMENT_LIST.filter((doc) =>
+				doc.id === "terms" ? previous.termsVersion !== current.termsVersion : previous.privacyVersion !== current.privacyVersion
+			);
 			if (changed.length === 0) return;
 
-			await this.#redis.set(key, JSON.stringify(current));
-			await this.#identityService.notifications(this.getCapability()).legalDocsUpdated({ changed, ...current });
-			this.logger.logInfo(`[SessionManager] Documentos legales actualizados (${changed.join(", ")}): avisado al equipo`);
+			// Sellar sólo si el aviso salió: si se descartó, el próximo arranque lo reintenta. Un
+			// aviso repetido lo deduplica `NotificationService`; uno perdido no lo recupera nadie.
+			if (await this.#announceLegalDocs(changed)) await this.#redis.set(key, JSON.stringify(current));
+			else this.logger.logWarn("[SessionManager] Cambio de documentos legales sin anunciar: se reintenta en el próximo arranque");
 		} catch (err: any) {
 			this.logger.logWarn(`Chequeo de versión de documentos legales falló: ${err?.message || err}`);
 		}
+	}
+
+	/**
+	 * Anuncia el cambio a TODAS las personas usuarias (`platform.legal`, canal in-app no
+	 * silenciable) y al equipo. El aviso sale al desplegar la versión nueva y dice desde cuándo
+	 * rige: eso es lo que hace cierto el preaviso de los Términos, porque la re-aceptación no se
+	 * pide hasta `effectiveFrom`. Un `effectiveFrom` demasiado cerca de la publicación deja el
+	 * compromiso incumplido, así que se loguea como error en vez de pasar en silencio.
+	 *
+	 * `broadcastId` es determinista (documento + versión) y no un UUID: si el aviso se reintenta
+	 * —clave de Redis perdida, redeploy— el dedup de `NotificationService` evita la doble entrega.
+	 *
+	 * @returns `false` si el anuncio a las personas usuarias se descartó (sin subsistema de
+	 * notificaciones): el caller no debe dar el cambio por avisado.
+	 */
+	async #announceLegalDocs(changed: LegalDocument[]): Promise<boolean> {
+		for (const doc of changed) {
+			const days = legalNoticeDays(doc);
+			if (days < MIN_LEGAL_NOTICE_DAYS) {
+				this.logger.logError(
+					`[SessionManager] ${doc.label} ${doc.version} rige desde ${doc.effectiveFrom}: ${days} día(s) de preaviso, menos de los ${MIN_LEGAL_NOTICE_DAYS} comprometidos en los Términos`
+				);
+			}
+		}
+
+		const detail = changed.map((doc) => `${doc.label} (rige desde el ${doc.effectiveFrom})`).join(" y ");
+		const mode = await this.emitBroadcast({
+			broadcastId: `legal:${changed.map((doc) => `${doc.id}@${doc.version}`).join("+")}`,
+			topic: PLATFORM_TOPICS.legal.topic,
+			title: "Actualizamos nuestros documentos legales",
+			body: `Cambió: ${detail}. Podés leer el texto nuevo ahora; a partir de esa fecha te vamos a pedir que lo aceptes para seguir usando la plataforma.`,
+			link: changed[0].href,
+			// Ruta de la app `help`: que la resuelva el cliente según entorno en vez de clavar un dominio.
+			linkApp: "help",
+			data: { changed: changed.map((doc) => ({ id: doc.id, version: doc.version, effectiveFrom: doc.effectiveFrom })) },
+		});
+
+		await this.#identityService?.notifications(this.getCapability()).legalDocsUpdated({
+			changed: changed.map((doc) => doc.label),
+			...currentLegalVersions(),
+		});
+		this.logger.logInfo(`[SessionManager] Documentos legales actualizados (${changed.map((doc) => doc.label).join(", ")}): anuncio ${mode}`);
+		return mode !== "dropped";
 	}
 
 	async #initDomainComponents(): Promise<void> {
@@ -296,6 +354,11 @@ export default class SessionManagerService extends BaseService implements ISessi
 					this.logger.logDebug(`Alerta de seguridad no emitida: ${err?.message || err}`);
 				}
 			},
+		});
+
+		LegalEndpoints.init({
+			internalIdentity: this.#internalIdentity,
+			logger: this.logger,
 		});
 
 		OAuthEndpoints.init({
@@ -575,6 +638,8 @@ export default class SessionManagerService extends BaseService implements ISessi
 		this.#keyStore?.stopRotation();
 		this.#refreshTokenRepo?.stop();
 		this.#loginTracker?.stop();
+		if (this.#legalCheckTimer) clearTimeout(this.#legalCheckTimer);
+		this.#legalCheckTimer = null;
 
 		this.#keyStore = null;
 		this.#tokenService = null;

@@ -1,7 +1,7 @@
 {
 	"name": "SessionManagerService",
 	"uiName": "Cuentas",
-	"privileges": ["identity:internal", "identity:discord", "moderation:internal"],
+	"privileges": ["identity:internal", "identity:discord", "moderation:internal", "notifications:broadcast"],
 	"version": "1.0.0",
 	"kernelMode": 70,
 	"failOnError": true,
