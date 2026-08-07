@@ -2,8 +2,12 @@ import { Component, Prop, State } from "@stencil/core";
 
 /**
  * Componente YouTube Facade para carga perezosa de videos
- * Muestra una thumbnail clickeable en lugar de cargar el iframe inmediatamente
- * Mejora performance al evitar cargar el player de YouTube hasta que sea necesario
+ * Muestra un cartel clickeable en lugar de cargar el iframe inmediatamente
+ *
+ * Hasta que la persona no toca "reproducir" NO se contacta ningún host de terceros: por eso
+ * el cartel es local (nada de `i.ytimg.com`, que ya en el render le filtraría la IP y el video
+ * mirado a Google) y el player se incrusta en `youtube-nocookie.com`. Si se quiere una miniatura
+ * real hay que auto-hospedarla y pasarla por `poster`.
  */
 @Component({
 	tag: "adc-youtube-facade",
@@ -15,6 +19,9 @@ export class AdcYoutubeFacade {
 
 	/** Título del video para accesibilidad */
 	@Prop({ attribute: "title" }) videoTitle: string = "Video de YouTube";
+
+	/** Miniatura propia (auto-hospedada). Sin ella se muestra un cartel local. */
+	@Prop() poster?: string;
 
 	/** Ancho del contenedor (opcional, por defecto responsive) */
 	@Prop() width?: string;
@@ -73,7 +80,7 @@ export class AdcYoutubeFacade {
 				<iframe
 					width="560"
 					height="315"
-					src={`https://www.youtube.com/embed/${id}?autoplay=1`}
+					src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1`}
 					title={this.videoTitle}
 					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
 					allowFullScreen
@@ -82,13 +89,9 @@ export class AdcYoutubeFacade {
 				/>
 			);
 
-		// URL de la thumbnail de YouTube (calidad hqdefault para consistencia con temp-ui)
-		const thumbnailUrl = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
-
-		// Renderizar facade (thumbnail clickeable con dimensiones fijas 480x320)
 		return (
 			<div
-				class="relative overflow-hidden cursor-pointer group mx-auto rounded-xxl shadow-cozy bg-gray-100 w-full max-w-[480px]"
+				class="relative overflow-hidden cursor-pointer group mx-auto rounded-xxl shadow-cozy bg-linear-to-br from-slate-700 to-slate-900 w-full max-w-[480px]"
 				style={{ aspectRatio: "3 / 2" }}
 				onClick={this.activate}
 				onKeyPress={this.handleKeyPress}
@@ -96,11 +99,13 @@ export class AdcYoutubeFacade {
 				tabIndex={0}
 				aria-label={`Reproducir video: ${this.videoTitle}`}
 			>
-				{/* Imagen de fondo (thumbnail) */}
-				<img src={thumbnailUrl} alt={this.videoTitle} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+				{this.poster && (
+					<img src={this.poster} alt={this.videoTitle} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+				)}
 
-				{/* Overlay oscuro */}
 				<span class="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors" />
+
+				<span class="absolute bottom-0 inset-x-0 p-3 text-white text-sm font-medium text-center line-clamp-2">{this.videoTitle}</span>
 
 				{/* Botón de play centrado */}
 				<span class="absolute inset-0 flex items-center justify-center">

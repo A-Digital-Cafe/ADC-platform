@@ -15,7 +15,7 @@
 		"i18n": true,
 		"security": {
 			"headers": {
-				"Content-Security-Policy-Extend": "img-src https:; frame-src https://www.youtube.com; child-src https://www.youtube.com"
+				"Content-Security-Policy-Extend": "img-src https:; frame-src https://www.youtube-nocookie.com; child-src https://www.youtube-nocookie.com"
 			}
 		},
 		"hosting": [
