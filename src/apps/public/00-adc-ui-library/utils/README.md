@@ -20,6 +20,10 @@ Cliente compartido de Identity API (`/api/identity`). Fuente única: las apps re
 
 `useAbortable(fn)` — hook React para llamadas cancelables (aborta la anterior y al desmontar; los `AbortError` devuelven `undefined`).
 
+## use-media-query.ts
+
+`useMediaQuery(query)` / `useIsCompact()` — hooks React para layouts que no se resuelven sólo con clases `lg:` (por ejemplo elegir entre panel lateral y `adc-modal size="full"`). `COMPACT_QUERY` es el mismo corte que el breakpoint `lg` de Tailwind: usarla en vez de hardcodear el ancho, así el layout JS y las clases `lg:` no se desincronizan.
+
 ## auth-sync.ts
 
 Sincroniza login/logout entre pestañas y expone un logout forzado con recarga para errores globales de sesión. En `localStorage` solo persiste un fingerprint no reversible (`authMarkerFor`), nunca el userId real.

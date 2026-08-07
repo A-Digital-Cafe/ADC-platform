@@ -59,6 +59,12 @@ export class AdcAccessButton {
 	/** URL del botón de mi cuenta */
 	@Prop() accountUrl: string = "";
 
+	/** Texto del acceso al panel de módulos (sólo admins globales) */
+	@Prop() modulesAdminText: string = "Admin - Módulos";
+
+	/** URL del panel de módulos (sólo admins globales) */
+	@Prop() modulesAdminUrl: string = "";
+
 	@Prop() redirectAfterLogin: boolean = true;
 
 	/** Texto del botón cuando no está logueado */
@@ -175,6 +181,10 @@ export class AdcAccessButton {
 
 	private getDefaultAccountUrl(): string {
 		return getUrl(3016, "my-account.adigitalcafe.com");
+	}
+
+	private getDefaultModulesAdminUrl(): string {
+		return getUrl(3038, "modules.adigitalcafe.com");
 	}
 
 	private fetchSession(): Promise<Response> {
@@ -502,6 +512,25 @@ export class AdcAccessButton {
 								</button>
 							)}
 						</div>
+						{/* Panel de módulos: sólo para admins globales (`isAdmin` ya excluye contexto de org) */}
+						{this.user?.isAdmin && (
+							<div class="border-t border-divider">
+								<a
+									href={this.modulesAdminUrl || this.getDefaultModulesAdminUrl()}
+									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
+									role="menuitem"
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6Zm0 9.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 8.25 20.25H6A2.25 2.25 0 0 1 3.75 18v-2.25Zm9.75-9.75A2.25 2.25 0 0 1 15.75 3.75H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6Zm0 9.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
+										/>
+									</svg>
+									{this.modulesAdminText}
+								</a>
+							</div>
+						)}
 						{/* Mi cuenta */}
 						<div class="border-t border-divider">
 							<a

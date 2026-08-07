@@ -1,8 +1,17 @@
 /* Mismos tokens de tema que `adc-mail-composer` (ver global/tailwind.css). */
+
+/* El host es un custom element: sin `display` sería inline y no acotaría el ancho
+ * del cuerpo del correo (en pantallas angostas eso desborda la página). */
+.adc-mail-viewer {
+	display: block;
+	max-width: 100%;
+}
+
 .adc-mail-viewer__content {
 	color: var(--c-text);
 	line-height: 1.6;
-	word-break: break-word;
+	/* Palabras largas (URLs, tokens) parten de línea en vez de ensanchar la vista. */
+	overflow-wrap: break-word;
 }
 
 .adc-mail-viewer__content a {
@@ -30,4 +39,10 @@
 .adc-mail-viewer__content pre,
 .adc-mail-viewer__content code {
 	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+/* `pre` conserva los saltos originales: sin scroll propio, una línea larga
+ * ensancharía toda la vista en mobile. */
+.adc-mail-viewer__content pre {
+	overflow-x: auto;
 }

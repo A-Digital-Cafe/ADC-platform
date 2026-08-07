@@ -90,7 +90,13 @@ export class AdcSidebar {
 									>
 										<span class="text-left whitespace-nowrap text-lg font-semibold">{item.label}</span>
 
-										{item.badge && <span class="ml-auto badge badge-sm">{item.badge}</span>}
+										{/* Píldora con color heredado: el ítem activo invierte texto y fondo,
+										    así el contador contrasta en los dos estados sin condicionales. */}
+										{item.badge && (
+											<span class="ml-auto inline-flex min-w-6 shrink-0 items-center justify-center rounded-full border border-current px-1.5 text-xs font-semibold leading-5">
+												{item.badge}
+											</span>
+										)}
 									</span>
 								</a>
 							</div>

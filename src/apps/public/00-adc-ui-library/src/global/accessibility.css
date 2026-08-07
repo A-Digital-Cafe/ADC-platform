@@ -4,13 +4,26 @@
 @media only screen and (max-width: 768px) {
     button,
     a,
-    input,
+    input:not([type="checkbox"], [type="radio"]),
     select,
     textarea,
     [role="button"],
     [role="link"] {
         min-height: 44px;
         min-width: 44px;
+        touch-action: manipulation;
+    }
+
+    /* Casillas y radios son cuadrados de ~1rem: llevarlos a 44px los deforma y
+       desarma cualquier fila que los contenga (tablas, listas de bloques,
+       formularios). Se quedan en el mínimo de WCAG 2.5.8 (24px) y el área táctil
+       cómoda la aporta la etiqueta que los envuelve. */
+    input[type="checkbox"],
+    input[type="radio"] {
+        /* px y no rem: el root font-size de la plataforma no es 16px, así que
+           1.5rem se quedaría corto respecto del mínimo que se busca acá. */
+        min-height: 24px;
+        min-width: 24px;
         touch-action: manipulation;
     }
 }
