@@ -19,6 +19,19 @@ const REDIS = {
 
 const LOGIN_IPS_TTL_SECONDS = 3 * 60 * 60;
 
+/**
+ * Minimización: al desactivar un ban se borran los campos que sólo hacían falta mientras el
+ * bloqueo estaba vigente. El registro sobrevive sin ellos hasta que lo alcanza el TTL.
+ */
+const MINIMIZE_ON_DEACTIVATE = { emailMasks: "", lastLoginAt: "", reason: "" } as const;
+
+function deactivateUpdate(reason: string) {
+	return {
+		$set: { active: false, unbannedAt: new Date(), unbanReason: reason },
+		$unset: MINIMIZE_ON_DEACTIVATE,
+	};
+}
+
 /** Límites de listado de bans: default razonable + máximo duro (se clampa en el DAO). */
 const DEFAULT_LIST_LIMIT = 200;
 const MAX_LIST_LIMIT = 500;
@@ -267,9 +280,7 @@ export class BanRepository {
 			for (const h of d.ipHashes || []) allIps.add(h);
 		}
 
-		await this.model.updateMany(query, {
-			$set: { active: false, unbannedAt: new Date(), unbanReason: reason || "" },
-		});
+		await this.model.updateMany(query, deactivateUpdate(reason || ""));
 
 		// Rebuild Redis selectivamente: solo eliminamos los hashes que ya no estén
 		// referenciados por ningún ban activo restante.
@@ -279,9 +290,47 @@ export class BanRepository {
 	}
 
 	/**
+	 * Desactiva los bans temporales ya vencidos. Los lookups ya los ignoran por `expiresAt`,
+	 * pero mientras sigan `active` no se minimizan ni entran en la ventana de retención.
+	 */
+	async deactivateExpiredBans(): Promise<number> {
+		const query = { active: true, expiresAt: { $ne: null, $lte: new Date() } };
+		const docs = await this.model.find(query, { emailHashes: 1, ipHashes: 1, _id: 0 }).lean();
+		if (!docs.length) return 0;
+
+		const allEmails = new Set<string>();
+		const allIps = new Set<string>();
+		for (const d of docs) {
+			for (const h of d.emailHashes || []) allEmails.add(h);
+			for (const h of d.ipHashes || []) allIps.add(h);
+		}
+
+		await this.model.updateMany(query, deactivateUpdate("expiración automática"));
+		await this.#syncRedisRemoveIfOrphan([...allEmails], [...allIps]);
+		return docs.length;
+	}
+
+	/**
+	 * Backfill de bans ya desactivados: los minimiza y les pone `unbannedAt` si les falta
+	 * (sin esa fecha el TTL no los borraría nunca). Se corre al arrancar; es idempotente.
+	 */
+	async minimizeInactiveBans(): Promise<number> {
+		await this.model.updateMany({ active: false, unbannedAt: { $exists: false } }, { $set: { unbannedAt: new Date() } });
+		const res = await this.model.updateMany(
+			{
+				active: false,
+				$or: [{ emailMasks: { $exists: true } }, { lastLoginAt: { $exists: true } }, { reason: { $exists: true } }],
+			},
+			{ $unset: MINIMIZE_ON_DEACTIVATE }
+		);
+		return res.modifiedCount ?? 0;
+	}
+
+	/**
 	 * Listado paginado de bans (orden estable por `bannedAt` + `id`), con `total`.
 	 * `q` filtra por los campos NO sensibles (userId, reason, source, externalId, emailMasks);
-	 * nunca por los hashes (PII proxy). `limit` se clampa SIEMPRE.
+	 * nunca por los hashes (PII proxy). Los bans inactivos están minimizados, así que no
+	 * matchean por `reason` ni por `emailMasks`. `limit` se clampa SIEMPRE.
 	 */
 	async listBans(
 		opts: { activeOnly?: boolean; limit?: number; offset?: number; q?: string } = {},

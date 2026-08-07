@@ -58,7 +58,7 @@ export class BanEndpoints {
 			tag: "ModerationService/Bans",
 			summary: "Lista bans",
 			description:
-				"Solo admin global. No expone los hashes completos de email/IP (PII proxy); devuelve contadores, máscaras (`gp***@g***.com`) y prefijos de hash para correlación visual.",
+				"Solo admin global. No expone los hashes completos de email/IP (PII proxy); devuelve contadores, máscaras (`gp***@g***.com`) y prefijos de hash para correlación visual. Los bans levantados quedan minimizados: sin máscaras, sin motivo y sin último login.",
 			schema: { querystring: BS.ListBansQuery, response: { 200: BS.ListBansResponse } },
 		},
 	})

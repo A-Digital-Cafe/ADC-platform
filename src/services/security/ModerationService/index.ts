@@ -1,3 +1,4 @@
+import type { Model } from "mongoose";
 import { BaseService } from "../../BaseService.js";
 import type MongoProvider from "../../../providers/object/mongo/index.js";
 import type RedisProvider from "../../../providers/queue/redis/index.js";
@@ -10,7 +11,7 @@ import type { IModerationService } from "@common/types/identity/IModerationServi
 
 import { assertCanManageUser } from "../../core/IdentityManagerService/domain/hierarchy.js";
 import { ModerationError } from "@common/types/custom-errors/ModerationError.ts";
-import { banSchema } from "./domain/ban.js";
+import { buildBanSchema, DEFAULT_BAN_RETENTION_DAYS } from "./domain/ban.js";
 import { BanRepository } from "./dao/BanRepository.js";
 import { DiscordSyncRunner } from "./sync/DiscordSyncRunner.js";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
@@ -18,7 +19,11 @@ import { BanEndpoints } from "./endpoints/bans.js";
 
 interface ModerationPrivateConfig {
 	discord?: { syncEnabled?: boolean | string; syncIntervalMs?: number };
+	retention?: { banRetentionDays?: number | string };
 }
+
+/** Cada cuánto se buscan bans temporales vencidos para desactivarlos (y minimizarlos). */
+const EXPIRED_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export interface ModerationInternalApi {
 	// Hot-path lookups (login flow, sin auth)
@@ -55,6 +60,7 @@ export default class ModerationService extends BaseService implements IModeratio
 	#authedRepo: BanRepository | null = null;
 	#identityService: IIdentityManagerService | null = null;
 	#sync: DiscordSyncRunner | null = null;
+	#expiredSweep: ReturnType<typeof setInterval> | null = null;
 
 	constructor(kernel: Kernel, options?: any) {
 		super(kernel, options);
@@ -66,12 +72,15 @@ export default class ModerationService extends BaseService implements IModeratio
 		await super.start(kernelKey);
 		await this.#waitConnected(this.#mongoProvider);
 
-		const BanModel = this.#mongoProvider.createModel<BanRecord>("Ban", banSchema);
+		const BanModel = this.#mongoProvider.createModel<BanRecord>("Ban", buildBanSchema(this.#retentionSeconds()));
+		await this.#ensureIndexes(BanModel);
 		const redis = this.#tryGet<RedisProvider>("provider", "queue/redis");
 		if (!redis) this.logger.logWarn("[ModerationService] Redis no disponible. Lookups serán Mongo-only.");
 
 		this.#repo = new BanRepository(BanModel, redis, this.logger);
 		await this.#repo.warmupRedisCache();
+		await this.#minimizeInactive();
+		this.#startExpiredSweep();
 
 		this.#identityService = this.#tryGet<IIdentityManagerService>("service", "IdentityManagerService");
 		this.#authedRepo = this.#identityService
@@ -100,6 +109,10 @@ export default class ModerationService extends BaseService implements IModeratio
 		await super.stop(kernelKey);
 		await this.#sync?.stop();
 		this.#sync = null;
+		if (this.#expiredSweep) {
+			clearInterval(this.#expiredSweep);
+			this.#expiredSweep = null;
+		}
 	}
 
 	/**
@@ -145,6 +158,42 @@ export default class ModerationService extends BaseService implements IModeratio
 	#requireRepo(): BanRepository {
 		if (!this.#repo) throw new Error("ModerationService no inicializado");
 		return this.#repo;
+	}
+
+	#retentionSeconds(): number {
+		const days = Number((this.config?.private as ModerationPrivateConfig | undefined)?.retention?.banRetentionDays);
+		return (Number.isFinite(days) && days > 0 ? days : DEFAULT_BAN_RETENTION_DAYS) * 24 * 60 * 60;
+	}
+
+	/** Ver `buildBanSchema`: los índices se sincronizan acá para que un cambio del TTL no rompa el arranque. */
+	async #ensureIndexes(model: Model<BanRecord>): Promise<void> {
+		try {
+			await model.syncIndexes();
+		} catch (err: any) {
+			this.logger.logWarn(`[ModerationService] syncIndexes de bans falló: ${err?.message || err}`);
+		}
+	}
+
+	async #minimizeInactive(): Promise<void> {
+		try {
+			const n = await this.#requireRepo().minimizeInactiveBans();
+			if (n) this.logger.logInfo(`[ModerationService] ${n} ban(s) inactivos minimizados`);
+		} catch (err: any) {
+			this.logger.logWarn(`[ModerationService] minimización de bans inactivos falló: ${err?.message || err}`);
+		}
+	}
+
+	#startExpiredSweep(): void {
+		const sweep = async () => {
+			try {
+				const n = await this.#requireRepo().deactivateExpiredBans();
+				if (n) this.logger.logInfo(`[ModerationService] ${n} ban(s) vencidos desactivados y minimizados`);
+			} catch (err: any) {
+				this.logger.logWarn(`[ModerationService] barrido de bans vencidos falló: ${err?.message || err}`);
+			}
+		};
+		void sweep();
+		this.#expiredSweep = setInterval(() => void sweep(), EXPIRED_SWEEP_INTERVAL_MS);
 	}
 
 	/** Crea ban anti-evasión a partir de un usuario; recolecta email/linkedEmails e IPs recientes (3h). */

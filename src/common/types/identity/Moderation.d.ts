@@ -13,14 +13,17 @@ export interface BanRecord {
 	/**
 	 * Máscaras de los emails baneados (`gp***@g***.com`) para identificación en UI.
 	 * No reversibles; pueden faltar en registros anteriores a su introducción.
+	 *
+	 * Esta y las dos de abajo (`reason`, `lastLoginAt`) se borran al levantar el bloqueo:
+	 * en un ban inactivo no existen, por eso son opcionales.
 	 */
 	emailMasks?: string[];
 	/** Hashes de IPs usadas en las últimas 3h al momento del ban */
 	ipHashes: string[];
 	/** Razón legible (NO PII; texto del moderador o reason del modlog) */
-	reason: string;
+	reason?: string;
 	/** Fecha del último login conocido (para auditoría) */
-	lastLoginAt: Date | null;
+	lastLoginAt?: Date | null;
 	bannedAt: Date;
 	/** null = permanente */
 	expiresAt: Date | null;

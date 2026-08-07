@@ -58,7 +58,8 @@
 			"syncIntervalMs": 86400000
 		},
 		"retention": {
-			"loginIpTtlSeconds": 10800
+			"loginIpTtlSeconds": 10800,
+			"banRetentionDays": "${BAN_RETENTION_DAYS:-180}"
 		}
 	}
 }
