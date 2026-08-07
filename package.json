@@ -16,10 +16,10 @@
 	],
 	"scripts": {
 		"postinstall": "node scripts/sync-presets.mjs",
-		"start": "cross-env NODE_ENV=production bun src/index.ts",
-		"dev": "cross-env NODE_ENV=development bun src/index.ts",
+		"start": "bun scripts/generate-public-env.ts && cross-env NODE_ENV=production bun src/index.ts",
+		"dev": "bun scripts/generate-public-env.ts && cross-env NODE_ENV=development bun src/index.ts",
 		"dev:tests": "cross-env NODE_ENV=development ENABLE_TESTS=true bun src/index.ts",
-		"start:prodtests": "cross-env NODE_ENV=production ADC_LOCAL_PROD=true ENABLE_TESTS=true PROD_PORT=3000 bun src/index.ts",
+		"start:prodtests": "bun scripts/generate-public-env.ts && cross-env NODE_ENV=production ADC_LOCAL_PROD=true ENABLE_TESTS=true PROD_PORT=3000 bun src/index.ts",
 		"lint": "eslint src --ext .ts --max-warnings 0",
 		"lint:fix": "eslint src --ext .ts --fix",
 		"typecheck": "bash scripts/recursive-typecheck.sh && knip --exports",
@@ -31,7 +31,7 @@
 		"create:service": "node scripts/create-service.mjs",
 		"create:utility": "node scripts/create-utility.mjs",
 		"create:provider": "node scripts/create-provider.mjs",
-		"build:ui": "node scripts/build-ui-libraries.mjs"
+		"build:ui": "bun scripts/generate-public-env.ts && node scripts/build-ui-libraries.mjs"
 	},
 	"keywords": [
 		"kernel",

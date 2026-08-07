@@ -154,7 +154,8 @@ this.logger.logOk("Success");
 1. **Config vs Modules**: `config.json` declara dependencias, `package.json` declara paquetes npm
 2. **Global Providers**: Set `"global": true` en config del provider para compartir entre instancias
 3. **Provider Reference**: Acceder providers por **nombre** (ej: `"mongo"`, `"file-storage"`), no por tipo
-4. **Clone fresco**: `**/utils/react-jsx.ts` y `**/src/components.d.ts` son **generados y gitignored**, así que `bun run build:ui` es prerequisito del typecheck. Un `Cannot find module '@ui-library/utils/react-jsx'` es un build faltante, no un import roto
+4. **Clone fresco**: `**/utils/react-jsx.ts`, `**/src/components.d.ts` y `src/common/utils/public-env.generated.ts` son **generados y gitignored**, así que `bun run build:ui` es prerequisito del typecheck. Un `Cannot find module '@ui-library/utils/react-jsx'` es un build faltante, no un import roto
+5. **Identidad del despliegue**: CUIT, nombre legal, teléfono, contacto y el QR del Data Fiscal llegan por variables `ADC_PUBLIC_*` (ver `.env.example` y `@common/utils/public-env-vars.ts`), nunca hardcodeadas. Se leen con `publicEnv("clave")`, que sirve igual en apps y en la UI library. **No usar los `define` de rspack/vite ni el `env` de Stencil**: ninguno sustituye igual y Stencil deja `Env` como import en runtime, así que el valor queda `undefined` sin avisar
 
 > Gotchas específicos de UI (Stencil `shadow: false`, React 19 + custom elements, orden de imports) en [docs/architecture/ui-federation.md](docs/architecture/ui-federation.md).
 

@@ -2,8 +2,9 @@ import type { CommentsSectionSubmitDetail } from "@ui-library/utils/react-jsx";
 import type { SessionResponse } from "@ui-library/utils/session";
 import { canComment, canDeleteSocial } from "../utils/permissions";
 import type { useArticleComments, DraftChangeDetail, RequestAttachmentDetail } from "../hooks/useArticleComments";
+import { publicEnv } from "@common/utils/public-env.js";
 
-const DISCORD_URL = "https://discord.gg/vShXpyWTTq";
+const DISCORD_URL = publicEnv("discordUrl");
 
 interface Props {
 	readonly session: SessionResponse;

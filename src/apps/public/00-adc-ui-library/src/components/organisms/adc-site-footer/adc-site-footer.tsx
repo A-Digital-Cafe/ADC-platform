@@ -1,5 +1,6 @@
 import { Component, Prop, State } from "@stencil/core";
 import { IS_DEV } from "@common/utils/url-utils.js";
+import { publicEnv } from "@common/utils/public-env.js";
 
 type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help" | "status";
 
@@ -60,6 +61,20 @@ function footerUrl(path: string, target: FooterHost): string {
 	return IS_DEV ? `${proto()}//${host()}:${devPort}${path}` : `${proto()}//${prodHost}${path}`;
 }
 
+/**
+ * Identificador del Formulario 960/D, el `qr=` del enlace que genera ARCA en
+ * «Data Fiscal → Banner en sitio web» (`ADC_PUBLIC_DATA_FISCAL_QR`).
+ *
+ * Sin configurar, el logo no se renderiza: resuelve a un CUIT y un nombre concretos, así que un
+ * despliegue que no puso el suyo no puede mostrar el de otra persona.
+ */
+const DATA_FISCAL_QR = publicEnv("dataFiscalQr");
+
+/** País del visitante según Cloudflare, inyectado por el provider HTTP. `null` si no se sabe. */
+function visitorCountry(): string | null {
+	return (globalThis as typeof globalThis & { __ADC_COUNTRY__?: string }).__ADC_COUNTRY__ ?? null;
+}
+
 function fallbackLocale(): "es" | "en" {
 	const language = (adcI18n.getLocale?.() || globalThis.document?.documentElement?.lang || globalThis.navigator?.language || "").toLowerCase();
 	return language.startsWith("en") ? "en" : "es";
@@ -111,6 +126,41 @@ export class AdcSiteFooter {
 		return FALLBACK_LABELS[fallbackLocale()][key];
 	}
 
+	/**
+	 * Formulario 960/D. La RG (AFIP) 4042-E lo exige en la página principal de quien vende online
+	 * y a la vista en el punto de pago; como el footer va en todas, alcanza con ponerlo acá.
+	 *
+	 * Se oculta sólo cuando consta que el visitante NO está en Argentina: el logo no le dice nada
+	 * a quien mira desde afuera. Si el país no se pudo determinar se muestra igual — no verlo en
+	 * Argentina es un incumplimiento, y verlo de más es apenas ruido visual.
+	 *
+	 * El logo se sirve desde `common/public` y no desde afip.gob.ar a propósito: enlazar la imagen
+	 * remota haría que el navegador de cada visitante contacte a un tercero en cada página, que es
+	 * justo lo que la política de cookies dice que no pasa. El enlace sí es a ARCA, pero sólo se
+	 * sigue si alguien lo aprieta.
+	 *
+	 * Va fuera del flujo (`absolute`) para no correr ni un píxel el contenido centrado del footer.
+	 *
+	 * **El `http://` del enlace no es un descuido: `qr.afip.gob.ar` no atiende en 443.** Es el
+	 * enlace que ARCA entrega y redirige solo a `https://servicioscf.afip.gob.ar`. Pasarlo a
+	 * `https` lo deja muerto por timeout, y el salto en claro no expone nada: el token de la URL
+	 * publica exactamente los datos que este logo existe para publicar.
+	 */
+	private dataFiscalComponent() {
+		const country = visitorCountry();
+		if (!DATA_FISCAL_QR || (country && country !== "AR")) return null;
+		return (
+			<a
+				href={`http://qr.afip.gob.ar/?qr=${DATA_FISCAL_QR}`}
+				target="_F960AFIPInfo"
+				rel="noopener noreferrer"
+				class="absolute right-4 top-1/2 -translate-y-1/2"
+			>
+				<img src="/data-fiscal.jpg" alt="Formulario 960/D — Data Fiscal (ARCA)" width="36" height="49" loading="lazy" />
+			</a>
+		);
+	}
+
 	private helpLinksComponent() {
 		return (
 			<nav class="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-sm" aria-label={this.translateFooter("aria")}>
@@ -135,18 +185,20 @@ export class AdcSiteFooter {
 	render() {
 		if (this.lowerSign) {
 			return (
-				<footer class="py-4 text-center opacity-80 border-t border-gray-200 shrink-0 min-h-24 cv-auto">
+				<footer class="relative py-4 text-center opacity-80 border-t border-gray-200 shrink-0 min-h-24 cv-auto">
 					<slot></slot>
 					{this.helpLinksComponent()}
 					{this.signComponent()}
+					{this.dataFiscalComponent()}
 				</footer>
 			);
 		}
 		return (
-			<footer class="py-4 text-center opacity-80 border-t border-gray-200 shrink-0 min-h-24 cv-auto">
+			<footer class="relative py-4 text-center opacity-80 border-t border-gray-200 shrink-0 min-h-24 cv-auto">
 				{this.signComponent()}
 				{this.helpLinksComponent()}
 				<slot></slot>
+				{this.dataFiscalComponent()}
 			</footer>
 		);
 	}

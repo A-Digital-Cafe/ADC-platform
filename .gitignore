@@ -70,3 +70,7 @@ temp-ui
 src/common/docker/adc-haraka-core/dkim/
 # Certificado STARTTLS del MTA (cert.pem/key.pem), también por entorno.
 src/common/docker/adc-haraka-core/tls/
+
+# Identidad pública del despliegue, generada desde .env (ver scripts/generate-public-env.ts)
+src/common/utils/public-env.generated.ts
+

@@ -89,7 +89,7 @@ export function hashEmails(emails: ReadonlyArray<string | undefined | null>): st
 /**
  * Máscara GDPR-friendly de un email para mostrar en UI de moderación:
  * conserva la(s) primera(s) letra(s) del local-part y la inicial del dominio + TLD.
- * `gpsmurfs@gmail.com` → `gp***@g***.com`. No es reversible.
+ * `alguien@ejemplo.com` → `al***@e***.com`. No es reversible.
  */
 function maskEmail(rawEmail: string): string | null {
 	const normalized = normalizeEmail(rawEmail);

@@ -140,6 +140,10 @@
       "name": "@adc-platform/content-service",
       "version": "1.0.0",
     },
+    "presets/help/apps/help": {
+      "name": "@adc-platform/help",
+      "version": "1.0.0",
+    },
     "presets/my-account/apps/my-account": {
       "name": "@adc-platform/my-account",
       "version": "1.0.0",
@@ -182,10 +186,6 @@
     },
     "src/apps/public/community-home": {
       "name": "@adc-platform/community-home",
-      "version": "1.0.0",
-    },
-    "src/apps/public/help": {
-      "name": "@adc-platform/help",
       "version": "1.0.0",
     },
     "src/apps/test/00-web-ui-library": {
@@ -439,7 +439,7 @@
 
     "@adc-platform/file-storage-provider": ["@adc-platform/file-storage-provider@workspace:src/providers/files/file-storage"],
 
-    "@adc-platform/help": ["@adc-platform/help@workspace:src/apps/public/help"],
+    "@adc-platform/help": ["@adc-platform/help@workspace:presets/help/apps/help"],
 
     "@adc-platform/image-editor": ["@adc-platform/image-editor@workspace:presets/adc-image-editor/services/ImageEditorService"],
 

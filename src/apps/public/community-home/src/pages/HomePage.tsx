@@ -1,6 +1,19 @@
+import { publicEnv } from "@common/utils/public-env.js";
+
+/** Vacío si el despliegue no configuró `ADC_PUBLIC_DISCORD_URL`: ahí no se ofrece el enlace. */
+const DISCORD_URL = publicEnv("discordUrl");
+
+/** Redes de la marca. Las que no estén configuradas no se muestran, en vez de quedar rotas. */
+const SOCIAL_LINKS = [
+	{ label: "Discord", href: DISCORD_URL },
+	{ label: "Twitch", href: publicEnv("socialTwitch") },
+	{ label: "YouTube", href: publicEnv("socialYoutube") },
+	{ label: "Instagram", href: publicEnv("socialInstagram") },
+	{ label: "Donaciones", href: publicEnv("donationsUrl") },
+].filter((link) => link.href);
+
 const BRAND = {
 	name: "Abby's Digital Cafe",
-	discordVanity: "vShXpyWTTq",
 	description:
 		"Abby's Digital Cafe es una comunidad destinada a programadores y estudiantes, enfocada en aprender nuevas tecnologías y compartir código de forma libre 🧡",
 	slogan: "Una taza de código con tintes de amistad",
@@ -22,9 +35,11 @@ export function HomePage() {
 
 				<h2 className="text-2xl font-heading mt-8 mb-2">🧡 Únete a nuestro servidor de discord 🧡</h2>
 				<adc-text>Trae tu taza y comparte código con nosotr@s.</adc-text>
-				<adc-button href={`https://discord.gg/${BRAND.discordVanity}`} class="mt-4">
-					Entrar al Discord
-				</adc-button>
+				{DISCORD_URL && (
+					<adc-button href={DISCORD_URL} class="mt-4">
+						Entrar al Discord
+					</adc-button>
+				)}
 
 				<adc-quote class="pr-16">{BRAND.slogan}</adc-quote>
 			</section>
@@ -72,11 +87,11 @@ export function HomePage() {
 			<section className="text-center space-y-4 mt-12" aria-label="Redes sociales">
 				<h2 className="text-2xl font-heading">Nuestras redes</h2>
 				<div className="flex justify-center gap-3 flex-wrap">
-					<adc-button href={`https://discord.gg/${BRAND.discordVanity}`}>Discord</adc-button>
-					<adc-button href="https://twitch.tv/digital_cafe">Twitch</adc-button>
-					<adc-button href="https://youtube.com/@a_digital_cafe">YouTube</adc-button>
-					<adc-button href="https://www.instagram.com/a.digital.cafe">Instagram</adc-button>
-					<adc-button href="https://ceneka.net/digital_cafe">Donaciones</adc-button>
+					{SOCIAL_LINKS.map(({ label, href }) => (
+						<adc-button key={label} href={href}>
+							{label}
+						</adc-button>
+					))}
 				</div>
 			</section>
 		</div>

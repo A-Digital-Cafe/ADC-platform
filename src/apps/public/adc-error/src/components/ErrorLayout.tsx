@@ -1,5 +1,6 @@
 import React from "react";
 import { getUrl } from "@common/utils/url-utils.js";
+import { publicEnv } from "@common/utils/public-env.js";
 
 const HOME_URL = getUrl(3024, "adigitalcafe.com");
 
@@ -28,7 +29,7 @@ export function ErrorLayout({ children }: { readonly children: React.ReactNode }
 				brand-name="Abby's Digital Cafe"
 				brand-slogan="Una taza de código con tintes de amistad"
 				creator-name="Abbytec"
-				creator-href="https://abbytec.dev.ar/"
+				creator-href={publicEnv("creatorUrl")}
 			/>
 		</div>
 	);

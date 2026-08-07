@@ -1,3 +1,4 @@
+import { publicEnv } from "../public-env.js";
 /**
  * Builder transversal de Schema.org (`application/ld+json`) para los
  * microfronts de ADC.
@@ -54,12 +55,8 @@ export const ADC_BRAND: SeoSiteConfig = {
 		"Abby's Digital Cafe es una comunidad destinada a programadores y estudiantes, enfocada en aprender nuevas tecnologías y compartir código de forma libre 🧡",
 	inLanguage: "es-419",
 	logoUrl: "https://adigitalcafe.com/logo.webp",
-	sameAs: [
-		"https://discord.com/invite/vShXpyWTTq",
-		"https://twitch.tv/digital_cafe",
-		"https://youtube.com/@a_digital_cafe",
-		"https://github.com/abbytec",
-	],
+	// Los perfiles no configurados se filtran: un `sameAs` con cadena vacía es JSON-LD inválido.
+	sameAs: [publicEnv("discordUrl"), publicEnv("socialTwitch"), publicEnv("socialYoutube"), publicEnv("socialGithub")].filter(Boolean),
 	searchUrlTemplate: "https://adigitalcafe.com/articles?q={search_term_string}",
 };
 

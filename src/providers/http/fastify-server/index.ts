@@ -16,12 +16,14 @@ import {
 	ALLOWED_CORS_HEADERS,
 	ALLOWED_HTTP_METHODS,
 	applySecurityHeaders,
+	countryFromRequest,
 	createCorsOriginGuard,
 	getAllowHeader,
 	getBodyLimitBytes,
 	getCspNonce,
 	getRawBodyLimitBytes,
 	isAllowedHttpMethod,
+	injectCountry,
 	isCspNonceEnabled,
 	isSafeStaticPath,
 	resolveTrustProxy,
@@ -721,6 +723,38 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	 * inyectaron SEOService y el modules-manager. Registrado antes, esas inyecciones
 	 * posteriores quedarían sin sellar y el navegador las bloquearía.
 	 */
+	/**
+	 * Publica el país del visitante como `window.__ADC_COUNTRY__`. Se registra antes que el
+	 * sellador de nonce para que el `<script>` que inserta quede sellado y el navegador lo ejecute.
+	 *
+	 * El `Vary` no es opcional: sin él, una caché intermedia serviría el HTML de un visitante
+	 * argentino a uno de afuera, y al revés.
+	 */
+	#installCountryInjector(): void {
+		this.app.addHook("onSend", (request, reply, payload, done) => {
+			try {
+				const contentType = String(reply.getHeader("content-type") ?? "");
+				if (!contentType.includes("text/html")) return done(null, payload);
+
+				// El `Vary` va SIEMPRE, aunque no haya país: si sólo se marcara la respuesta que
+				// lleva el script, una caché podría guardar la versión sin país y devolvérsela a
+				// alguien cuyo país sí conocemos.
+				reply.header("Vary", [reply.getHeader("Vary"), "CF-IPCountry"].filter(Boolean).join(", "));
+
+				const country = countryFromRequest(request as unknown as Parameters<typeof countryFromRequest>[0]);
+				if (!country) return done(null, payload);
+
+				let html: string;
+				if (typeof payload === "string") html = payload;
+				else if (Buffer.isBuffer(payload)) html = payload.toString("utf8");
+				else return done(null, payload);
+				return done(null, injectCountry(html, country));
+			} catch {
+				return done(null, payload);
+			}
+		});
+	}
+
 	#installCspNonceSealer(): void {
 		if (!isCspNonceEnabled()) return;
 		this.app.addHook("onSend", (request, reply, payload, done) => {
@@ -752,6 +786,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		}
 
 		try {
+			this.#installCountryInjector();
 			this.#installCspNonceSealer();
 			// Esperar a que el middleware esté listo antes de iniciar
 			await this.app.listen({ port, host: "0.0.0.0" });
