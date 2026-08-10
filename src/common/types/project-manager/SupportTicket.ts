@@ -1,23 +1,25 @@
 /**
  * Tipo de ticket de soporte que un usuario puede abrir:
  * reclamos, sugerencias, reportes de seguridad (bug bounty),
- * solicitudes de datos (GDPR / takedown de terceros) y
- * solicitudes de quien ejerce la responsabilidad parental sobre un menor.
+ * solicitudes de datos (GDPR / takedown de terceros),
+ * solicitudes de quien ejerce la responsabilidad parental sobre un menor y
+ * requerimientos de autoridades públicas (judiciales, administrativas o regulatorias).
  *
  * Contrato F/B: lo consumen el frontend de `status` (formulario) y el backend
  * del PM (creación del issue). Por eso vive en `@common`.
  * @public
  */
-export type SupportTicketType = "complaint" | "suggestion" | "security" | "data" | "expansion" | "minor";
+export type SupportTicketType = "complaint" | "suggestion" | "security" | "data" | "expansion" | "minor" | "authority";
 
 /**
  * Tipos que se aceptan **sin sesión**: los canales que los documentos legales
  * ofrecen a "cualquier persona", tenga o no cuenta —quien reporta contenido de
- * un tercero y quien ejerce la responsabilidad parental sobre un menor, que por
- * definición no es titular de la cuenta afectada—.
+ * un tercero, quien ejerce la responsabilidad parental sobre un menor (que por
+ * definición no es titular de la cuenta afectada) y una autoridad pública, que
+ * no tiene ni tiene por qué tener cuenta—.
  * @public
  */
-export const ANONYMOUS_TICKET_TYPES: ReadonlySet<SupportTicketType> = new Set<SupportTicketType>(["data", "minor"]);
+export const ANONYMOUS_TICKET_TYPES: ReadonlySet<SupportTicketType> = new Set<SupportTicketType>(["data", "minor", "authority"]);
 
 /**
  * Ticket abierto tal como lo ve una cola de moderación de otro módulo (hoy el panel
@@ -46,6 +48,7 @@ export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
 	data: "DATOS",
 	expansion: "AMPLIACIÓN",
 	minor: "MENOR DE EDAD",
+	authority: "AUTORIDADES",
 };
 
 /**
@@ -71,7 +74,56 @@ export const TICKET_TEMPLATES: Partial<Record<SupportTicketType, string>> = {
 		"Qué pedís (supresión de la cuenta y sus datos, retiro de un contenido, otra cosa):\n\n" +
 		"País de residencia del menor (determina la edad mínima aplicable):\n\n" +
 		"No hace falta que adjuntes documentación en este primer mensaje: si necesitamos acreditar el vínculo te lo pedimos por este mismo canal.\n",
+	authority:
+		"Organismo y unidad (fuerza, juzgado, fiscalía, organismo de control):\n\n" +
+		"Carátula y número de expediente o actuación:\n\n" +
+		"Norma que faculta el requerimiento:\n\n" +
+		"Funcionario/a firmante, cargo y forma de contacto OFICIAL (dominio institucional):\n\n" +
+		"Alcance exacto (cuenta, URL, rango temporal). Un pedido de 'todo lo que tenga esa persona' se devuelve para acotar:\n\n" +
+		"Plazo de respuesta requerido:\n\n" +
+		"¿Existe prohibición de notificar al titular? Si es así, indicá la norma y el plazo:\n\n" +
+		"Adjuntá el oficio o resolución. Un pedido informal (llamado, mensaje, correo sin instrumento) no se procesa: ver https://help.adigitalcafe.com/authority-requests\n",
 };
+
+/**
+ * Retención post-resolución por tipo de ticket. El reloj arranca en `closedAt`.
+ *
+ * Existe porque la anonimización sólo corría en la cascada de baja (que necesita `userId`) y los
+ * tickets anónimos —`data`, `minor`, `authority`— no tienen titular de cuenta: sin esto no se
+ * borran nunca. `minor` es el único que además borra el cuerpo, porque su texto libre es, por
+ * diseño de la plantilla, la identidad de un menor y su vínculo familiar recogidos de alguien
+ * que no es el interesado.
+ * @public
+ */
+export interface SupportTicketRetention {
+	/** Días desde `closedAt` tras los que se borran los datos de contacto de quien reportó. */
+	anonymizeAfterDays: number;
+	/** Si además se reemplaza el cuerpo libre (el dato sensible está ahí, no en las etiquetas). */
+	scrubBody: boolean;
+	/** Días desde `closedAt` tras los que se borra el ticket entero. `null` = nunca. */
+	purgeAfterDays: number | null;
+}
+
+/** @public Política vigente. Los números de acá son los que publica `/privacy` §5. */
+export const SUPPORT_TICKET_RETENTION: Record<SupportTicketType, SupportTicketRetention> = {
+	minor: { anonymizeAfterDays: 30, scrubBody: true, purgeAfterDays: 180 },
+	data: { anonymizeAfterDays: 90, scrubBody: false, purgeAfterDays: 730 },
+	authority: { anonymizeAfterDays: 365, scrubBody: false, purgeAfterDays: null },
+	complaint: { anonymizeAfterDays: 180, scrubBody: false, purgeAfterDays: null },
+	suggestion: { anonymizeAfterDays: 180, scrubBody: false, purgeAfterDays: null },
+	expansion: { anonymizeAfterDays: 180, scrubBody: false, purgeAfterDays: null },
+	security: { anonymizeAfterDays: 365, scrubBody: false, purgeAfterDays: null },
+};
+
+/**
+ * Tope duro para un ticket que nadie cerró: sin `closedAt` el reloj no arranca nunca. Sólo se
+ * aplica a `minor`, el único cuyo contenido no debería sobrevivir a un olvido administrativo.
+ * @public
+ */
+export const MINOR_TICKET_MAX_OPEN_DAYS = 365;
+
+/** @public Texto con el que se reemplaza un cuerpo purgado por retención. */
+export const RETENTION_SCRUBBED_BODY = "(contenido eliminado por política de retención)";
 
 /** @public */
 export interface CreateSupportTicketInput {

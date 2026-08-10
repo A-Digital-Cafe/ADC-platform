@@ -40,11 +40,15 @@ export const LEGAL_DOCUMENTS = {
 		href: "/privacy",
 		requiresAcceptance: true,
 		// La 2026-08-08 tuvo erratas/ampliaciones antes de entrar en vigencia (leyenda AAIP,
-		// derechos self-service, plazos de archivo, alcance de la rectificación y de la baja). Se
-		// corrige en lugar de versionar porque el documento todavía NO rige y nadie pudo aceptar el
-		// texto viejo: una versión nueva pediría re-aceptar algo que nadie aceptó. Queda en git.
+		// derechos self-service, plazos de archivo, alcance de la rectificación y de la baja) y una
+		// segunda tanda el 2026-08-09: plazos de retención de correo y de tickets ahora que el código
+		// los aplica, §6 sin nombrar el algoritmo de hashing (ya no es PBKDF2) y §13 nueva sobre datos
+		// de colaboradores. Se corrige en lugar de versionar porque el documento todavía NO rige: una
+		// versión nueva pediría re-aceptar algo que nadie aceptó, y todo lo agregado amplía derechos o
+		// informa de más, nunca recorta. Contrapartida asumida: las altas posteriores al 2026-08-08
+		// llevan sellado el hash anterior, recuperable del historial de git. Queda en git.
 		// sha256sum presets/help/apps/help/src/pages/PrivacyPage.tsx
-		contentHash: "c2132ee2706566a8572f3a12c67f983bca48fb88679499e79d6693eb8d7d4ccb",
+		contentHash: "037e46794f87b523fe7cdf8c6deb5a8fac5ac590bfebfbe2e2821fdb48ced1c6",
 	},
 	cookies: {
 		id: "cookies",
@@ -53,8 +57,11 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/cookies",
 		requiresAcceptance: false,
+		// Corregida el 2026-08-09 sin bump por el mismo criterio que privacy: la lista de terceros de
+		// §6 se acortó (React y las fotos de Discord dejaron de servirse desde un CDN ajeno), así que
+		// el texto pasa a declarar MENOS terceros de los que declaraba. No rige hasta el 2026-09-07.
 		// sha256sum presets/help/apps/help/src/pages/CookiesPage.tsx
-		contentHash: "965d6c50ecc7eddcd53fd50d971c00291bdb46f0d32ba323c5d57fd155ec4f18",
+		contentHash: "43d35b17282c42002173acc6e910961a2be16ef1082d416af1c78d6ecfa20dcc",
 	},
 	dpa: {
 		id: "dpa",
