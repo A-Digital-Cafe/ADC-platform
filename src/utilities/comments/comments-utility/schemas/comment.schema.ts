@@ -53,6 +53,9 @@ function buildCommentSchema(connection: Connection): Schema<CommentDoc> {
 
 	schema.index({ targetType: 1, targetId: 1, parentId: 1, _id: -1 });
 	schema.index({ threadRootId: 1, _id: 1 });
+	// Export de datos personales: `authorId` + orden cronológico descendente sin sort en memoria
+	// (el `_id` es un UUID, así que no sirve como proxy de recencia).
+	schema.index({ authorId: 1, createdAt: -1 });
 
 	return schema;
 }

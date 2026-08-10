@@ -1,22 +1,15 @@
 # comments-utility
 
-Factory de `CommentsManager` con soporte de threading, replies, reactions y drafts persistentes (autosave).
-Cada servicio host instancia el suyo con:
-
-- `mongoConnection` + `collectionName` (drafts en `${collectionName}_drafts`).
-- `attachmentsManager?` (opcional) para validar `attachmentIds` referenciados en `blocks`.
-- `permissionChecker(action, ctx, comment?)`: `action ∈ "list"|"create"|"reply"|"edit"|"delete"|"react"|"moderate"`.
-- `maxThreadDepth`, `maxBlocksPerComment`, `editWindowMs`, `reactionDocLimit`.
+Factory de `CommentsManager` con threading, replies, reactions y drafts persistentes (autosave). Cada servicio host
+instancia el suyo con `mongoConnection` + `collectionName` (drafts en `${collectionName}_drafts`), `attachmentsManager?`
+(valida los `attachmentIds` de `blocks`), `permissionChecker(action, ctx, comment?)` — `action ∈ "list"|"create"|"reply"|"edit"|"delete"|"react"|"moderate"` —
+y los topes `maxThreadDepth` / `maxBlocksPerComment` / `editWindowMs`.
 
 ## API
 
-- `list(ctx, { targetType, targetId, parentId?, cursor?, limit? })`
-- `getThread(ctx, threadRootId, { cursor?, limit? })`
-- `create(ctx, { targetType, targetId, parentId?, blocks, attachmentIds?, label?, meta?, idempotencyKey? })`
-- `update(ctx, commentId, { blocks, attachmentIds? })`
-- `delete(ctx, commentId)`
-- `react(ctx, commentId, emoji)` / `unreact(ctx, commentId, emoji)`
+- `list(ctx, { targetType, targetId, parentId?, cursor?, limit? })` / `getThread(ctx, threadRootId, opts?)`
+- `create(ctx, { targetType, targetId, parentId?, blocks, attachmentIds?, label?, meta? })` / `update(ctx, id, { blocks, attachmentIds? })` / `delete(ctx, id)`
+- `react(ctx, id, emoji)` / `unreact(ctx, id, emoji)` — `getById(ctx, id)` / `count(ctx, target)`
 - `saveDraft(ctx, key, payload)` / `getDraft(ctx, key)` / `deleteDraft(ctx, key)`
-- `getById(ctx, commentId)` / `count(ctx, target)`
-- Cascadas de confianza (kernelKey, sin checker): `purgeByTarget(key, targetType, targetId)` y
-  `anonymizeByAuthor(key, userId)` (blanquea `authorId`/`authorName` y reacciones; purga de cuenta)
+- Frontera de confianza (`kernelKey`, sin checker): `purgeByTarget`, `anonymizeByAuthor` (blanquea autoría y reacciones;
+  purga de cuenta) y `listByAuthor(key, userId, limit?)` (export de datos personales: crudo, recientes primero, tope 1000)

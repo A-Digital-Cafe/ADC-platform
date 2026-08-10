@@ -14,6 +14,7 @@ export type {
 	UpdateInput,
 	ListOptions,
 	ThreadOptions,
+	AuthoredCommentExport,
 } from "./managers/CommentsManager.js";
 export { DraftsRepository, buildDraftId } from "./helpers/drafts.js";
 export type { DraftKey, DraftPayload } from "./helpers/drafts.js";

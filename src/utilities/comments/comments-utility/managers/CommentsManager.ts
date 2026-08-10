@@ -66,8 +66,44 @@ export interface ThreadOptions {
 	limit?: number;
 }
 
+/** Proyección cruda de un comentario propio para el export de datos personales. */
+export interface AuthoredCommentExport {
+	id: string;
+	targetType: string;
+	targetId: string;
+	parentId: string | null;
+	threadRootId: string;
+	depth: number;
+	blocks: Block[];
+	attachmentIds: string[];
+	label: CommentLabel | null;
+	createdAt: string;
+	updatedAt: string | null;
+	edited: boolean;
+	deleted: boolean;
+}
+
+type AuthoredCommentDoc = Pick<
+	CommentDoc,
+	| "_id"
+	| "targetType"
+	| "targetId"
+	| "parentId"
+	| "threadRootId"
+	| "depth"
+	| "blocks"
+	| "attachmentIds"
+	| "label"
+	| "createdAt"
+	| "updatedAt"
+	| "edited"
+	| "deleted"
+>;
+
 const DEFAULT_PAGE_LIMIT = 20;
 const MAX_PAGE_LIMIT = 100;
+/** Tope duro del export por autor: acota el trabajo aunque el caller pida más. */
+const MAX_AUTHOR_EXPORT = 1000;
 // Caracteres de control C0 (\u0000–\u001F) y DEL (\u007F) no permitidos en emojis.
 // eslint-disable-next-line no-control-regex
 const EMOJI_DENY = /[\u0000-\u001F\u007F]/;
@@ -540,5 +576,59 @@ export class CommentsManager {
 		}
 
 		return res.modifiedCount ?? 0;
+	}
+
+	/**
+	 * ⚠️ Lectura de TODA la actividad de un autor sin `permissionChecker`, para el export de
+	 * datos personales (art. 14 Ley 25.326 / arts. 15 y 20 RGPD). Protegida por la `kernelKey`
+	 * del bounded context: sin ese guard sería un enumerador de la actividad de cualquiera.
+	 * Devuelve el dato crudo del titular (los más recientes primero, con tope duro) y NO pasa
+	 * por la hidratación: resolver adjuntos/avatares aplicaría permisos de terceros y el export
+	 * quiere lo que el titular escribió. Las reacciones quedan afuera: son de otros usuarios.
+	 */
+	async listByAuthor(kernelKey: symbol, userId: string, limit = MAX_AUTHOR_EXPORT): Promise<AuthoredCommentExport[]> {
+		if (!this.#attachmentsKernelKey || kernelKey !== this.#attachmentsKernelKey) {
+			throw new Error("Acceso denegado: kernel key inválida");
+		}
+		if (!userId) return [];
+		const capped = Number.isFinite(limit) && limit > 0 ? Math.min(MAX_AUTHOR_EXPORT, Math.floor(limit)) : MAX_AUTHOR_EXPORT;
+
+		const docs = await this.#model
+			.find(
+				{ authorId: userId },
+				{
+					targetType: 1,
+					targetId: 1,
+					parentId: 1,
+					threadRootId: 1,
+					depth: 1,
+					blocks: 1,
+					attachmentIds: 1,
+					label: 1,
+					createdAt: 1,
+					updatedAt: 1,
+					edited: 1,
+					deleted: 1,
+				}
+			)
+			.sort({ createdAt: -1 })
+			.limit(capped)
+			.lean<AuthoredCommentDoc[]>();
+
+		return docs.map((doc) => ({
+			id: String(doc._id),
+			targetType: doc.targetType,
+			targetId: doc.targetId,
+			parentId: doc.parentId,
+			threadRootId: doc.threadRootId,
+			depth: doc.depth,
+			blocks: doc.blocks ?? [],
+			attachmentIds: doc.attachmentIds ?? [],
+			label: doc.label ?? null,
+			createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : String(doc.createdAt),
+			updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+			edited: !!doc.edited,
+			deleted: !!doc.deleted,
+		}));
 	}
 }
