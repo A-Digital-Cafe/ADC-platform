@@ -52,8 +52,11 @@ const BASE_MANAGEMENT_ROLES: Array<BaseRole> = [
 		hierarchy: RoleHierarchy.MANAGER,
 		permissions: [
 			{ resource: RESOURCE_NAME, action: CRUDXAction.CRUD, scope: IdentityScopes.ALL },
-			// Global-only: gestión de sesiones (force logout) + lectura del audit log.
-			{ resource: SECURITY_RESOURCE_NAME, action: CRUDXAction.CRUD, scope: SecurityScopes.ALL },
+			// Global-only: gestión de sesiones (force logout), lectura del audit log e instrucción
+			// del registro de brechas. ALL y no CRUD porque toda la máquina de estados del registro
+			// (avanzar el incidente, congelar la audiencia, despachar el aviso) exige EXECUTE, y sin
+			// eso el rol que responde los incidentes puede abrirlos pero no instruirlos.
+			{ resource: SECURITY_RESOURCE_NAME, action: CRUDXAction.ALL, scope: SecurityScopes.ALL },
 		],
 	},
 	{

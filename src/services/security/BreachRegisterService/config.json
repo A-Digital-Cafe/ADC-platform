@@ -1,0 +1,48 @@
+{
+	"kernelMode": 56,
+	"name": "BreachRegisterService",
+	"uiName": "Core",
+	"version": "1.0.0",
+	"failOnError": false,
+	"privileges": ["audit:write", "identity:internal", "idle:register", "notifications:broadcast"],
+	"providers": [
+		{
+			"name": "object/mongo",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"host": "${MONGO_HOST:-localhost:27017}",
+				"user": "${MONGO_USER:-admin}",
+				"password": "${MONGO_PASSWORD:-password}",
+				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"db": "adc-breach"
+			}
+		}
+	],
+	"services": [
+		{
+			"name": "EndpointManagerService",
+			"version": "latest",
+			"optional": true
+		},
+		{
+			"name": "IdentityManagerService",
+			"version": "latest",
+			"optional": true
+		},
+		{
+			"name": "AuditLogService",
+			"version": "latest",
+			"optional": true
+		},
+		{
+			"name": "OperationsService",
+			"version": "latest",
+			"optional": true
+		}
+	],
+	"private": {
+		"authorityDeadlineHours": "${BREACH_AUTHORITY_DEADLINE_HOURS:-72}",
+		"reminderLeadHours": "${BREACH_REMINDER_LEAD_HOURS:-12}"
+	}
+}

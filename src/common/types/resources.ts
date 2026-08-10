@@ -93,6 +93,7 @@ const SECURITY_SCOPES: ScopeDef[] = [
 	{ key: "sessions", value: SecurityScopes.SESSIONS },
 	{ key: "audit", value: SecurityScopes.AUDIT },
 	{ key: "audit_log", value: SecurityScopes.AUDIT_LOG },
+	{ key: "breach", value: SecurityScopes.BREACH },
 ];
 
 /** Modules scopes — alineados con ModulesScopes en types/modules/permissions.ts */

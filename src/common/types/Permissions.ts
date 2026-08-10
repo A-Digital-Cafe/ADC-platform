@@ -100,6 +100,7 @@ export const P = buildAllPermissions() as {
 		readonly SESSIONS: ScopePermissions<"security">;
 		readonly AUDIT: ScopePermissions<"security">;
 		readonly AUDIT_LOG: ScopePermissions<"security">;
+		readonly BREACH: ScopePermissions<"security">;
 	};
 	readonly MODULES: {
 		readonly RUNTIME: ScopePermissions<"modules">;

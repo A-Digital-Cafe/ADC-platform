@@ -5,6 +5,14 @@
 Si encontrás una vulnerabilidad, **no abras un issue público** ni la divulgues
 hasta que esté resuelta (_coordinated disclosure_).
 
+> Esta política cubre las vulnerabilidades **entrantes**. Si además hay indicio de que datos
+> personales se expusieron, perdieron o alteraron, se abre en paralelo el procedimiento de
+> **incidentes de datos personales** (notificación a la AAIP en 72 h y aviso a las personas
+> afectadas cuando el riesgo es alto), descrito en
+> [`docs/guides/breach-response.md`](../docs/guides/breach-response.md) y publicado en
+> [`/privacy` §11](https://adigitalcafe.com/privacy#incidentes). Una vulnerabilidad reportada y no
+> explotada no es una brecha; una que sí se explotó, sí.
+
 ## Versiones soportadas
 
 | Versión | Soporte         |

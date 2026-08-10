@@ -59,6 +59,14 @@ export interface PlatformApp {
 	 */
 	headerMenuExpose?: string;
 	/**
+	 * Clave del módulo expuesto en `federationExposes` que default-exporta un panel de
+	 * **administración de plataforma**, consumido por el host `adc-admin-panel` como una tab
+	 * (ej. `./ModerationPanel` de Drive). Si la app está offline, la tab no se muestra.
+	 */
+	adminPanelExpose?: string;
+	/** Rótulo de la tab en el panel de administración (ej. `Drive`). */
+	adminPanelLabel?: string;
+	/**
 	 * Hostname de producción del `remoteEntry.js` (ej: `community.adigitalcafe.com`).
 	 * Por defecto se deriva como `{subdomain}.adigitalcafe.com`.
 	 */
@@ -163,10 +171,13 @@ const DEFAULT_APPS: PlatformApp[] = [
 		iconTag: "adc-icon-app-drive",
 		remoteName: "adc_drive",
 		settingsExpose: "./AccountSettings",
+		adminPanelExpose: "./ModerationPanel",
+		adminPanelLabel: "Drive",
 	},
 	{ id: "editor", label: "Image Editor", devPort: 3034, subdomain: "editor" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
 	{ id: "modules", label: "Modules Manager", devPort: 3038, subdomain: "modules" },
+	{ id: "admin", label: "Administración", devPort: 3046, subdomain: "admin" },
 	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
 	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
 	{
@@ -231,6 +242,15 @@ export function resolvePlatformPath(appId: string, path: string): string | null 
  */
 export function getAccountSettingsApps(): PlatformApp[] {
 	return getPlatformApps().filter((a) => !!a.settingsExpose && !!a.remoteName);
+}
+
+/**
+ * Apps que aportan una tab al panel de administración (`adminPanelExpose` + `remoteName`).
+ * Igual que los paneles de cuenta: la app offline no rompe el host, sólo no aporta su tab.
+ * @public
+ */
+export function getAdminPanelApps(): PlatformApp[] {
+	return getPlatformApps().filter((a) => !!a.adminPanelExpose && !!a.remoteName);
 }
 
 /** @public */

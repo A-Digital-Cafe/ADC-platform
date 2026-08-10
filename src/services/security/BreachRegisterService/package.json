@@ -1,0 +1,10 @@
+{
+	"name": "@adc/breach-register-service",
+	"license": "ISC",
+	"author": "abbytec",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Personal-data breach register and guided notification procedure (art. 33.5 GDPR)",
+	"type": "module",
+	"main": "index.ts"
+}

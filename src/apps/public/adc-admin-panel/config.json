@@ -1,0 +1,20 @@
+{
+	"uiModule": {
+		"name": "adc-admin-panel",
+		"uiNamespace": "adc-platform",
+		"framework": "react",
+		"outputDir": "dist-ui",
+		"isHost": true,
+		"isRemote": false,
+		"uiDependencies": ["adc-ui-library"],
+		"devPort": 3046,
+		"sharedLibs": ["react", "tailwind"],
+		"i18n": true,
+		"hosting": [
+			{
+				"domains": ["adigitalcafe.com"],
+				"subdomains": ["admin"]
+			}
+		]
+	}
+}

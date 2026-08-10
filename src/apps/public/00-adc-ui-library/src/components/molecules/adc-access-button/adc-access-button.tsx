@@ -1,5 +1,8 @@
 import { Component, Prop, State, Event, EventEmitter, Listen, Element } from "@stencil/core";
 import { getUrl, isPrivateHost } from "@common/utils/url-utils.js";
+import { hasBitfieldPermission } from "@common/utils/perms.js";
+import { SecurityScopes } from "@common/types/security/permissions.js";
+import { PlanScopes } from "@common/types/plans/permissions.js";
 import {
 	authMarkerFor,
 	broadcastAuthChange,
@@ -28,6 +31,13 @@ export interface AccessMenuItem {
 	icon?: string;
 }
 const port = () => (globalThis.location?.port ? `:${globalThis.location?.port}` : "");
+
+/** Bit `moderate` del recurso `drive` (ver DRIVE_SCOPES en @common/types/resources.ts). */
+const DRIVE_MODERATE_SCOPE = 1 << 1;
+// Bits de acción literales: importar `CRUDXAction` arrastraría `bitflags.ts` con extensión `.ts`,
+// que el tsconfig de la UI library no admite (TS5097).
+const ACTION_READ = 1;
+const ACTION_EXECUTE = 16;
 
 /**
  * Botón de acceso que muestra:
@@ -64,6 +74,12 @@ export class AdcAccessButton {
 
 	/** URL del panel de módulos (sólo admins globales) */
 	@Prop() modulesAdminUrl: string = "";
+
+	/** Texto del acceso al panel de administración general */
+	@Prop() generalAdminText: string = "Admin - General";
+
+	/** URL del panel de administración general */
+	@Prop() generalAdminUrl: string = "";
 
 	@Prop() redirectAfterLogin: boolean = true;
 
@@ -185,6 +201,28 @@ export class AdcAccessButton {
 
 	private getDefaultModulesAdminUrl(): string {
 		return getUrl(3038, "modules.adigitalcafe.com");
+	}
+
+	private getDefaultGeneralAdminUrl(): string {
+		return getUrl(3046, "admin.adigitalcafe.com");
+	}
+
+	/**
+	 * El panel general lo administran roles que **no** son Admin global: Data Manager gestiona
+	 * planes y Security Manager instruye incidentes. Gatearlo por `isAdmin` —como el de módulos—
+	 * dejaría a esos roles sin ninguna vía de acceso, así que se pregunta por sus permisos.
+	 */
+	private canAccessGeneralAdmin(): boolean {
+		if (!this.user || this.user.orgId) return false;
+		if (this.user.isAdmin) return true;
+		const perms = this.user.perms;
+		return (
+			hasBitfieldPermission(perms, `security.${SecurityScopes.BREACH}.${ACTION_READ}`) ||
+			hasBitfieldPermission(perms, `security.${SecurityScopes.AUDIT_LOG}.${ACTION_READ}`) ||
+			hasBitfieldPermission(perms, `plans.${PlanScopes.CATALOG}.${ACTION_READ}`) ||
+			hasBitfieldPermission(perms, `plans.${PlanScopes.OVERRIDES}.${ACTION_READ}`) ||
+			hasBitfieldPermission(perms, `drive.${DRIVE_MODERATE_SCOPE}.${ACTION_EXECUTE}`)
+		);
 	}
 
 	private fetchSession(): Promise<Response> {
@@ -528,6 +566,25 @@ export class AdcAccessButton {
 										/>
 									</svg>
 									{this.modulesAdminText}
+								</a>
+							</div>
+						)}
+						{/* Panel general: brechas, auditoría, planes y moderación (no exige ser Admin global) */}
+						{this.canAccessGeneralAdmin() && (
+							<div class="border-t border-divider">
+								<a
+									href={this.generalAdminUrl || this.getDefaultGeneralAdminUrl()}
+									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
+									role="menuitem"
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
+										/>
+									</svg>
+									{this.generalAdminText}
 								</a>
 							</div>
 						)}

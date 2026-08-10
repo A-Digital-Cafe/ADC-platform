@@ -24,6 +24,7 @@ README enruta por categoría, no re-lista cada archivo).
   un módulo al kernel y por qué vía (`getMyService`/`getMyProvider` vs. casos privilegiados).
 - **[multirepo.md](multirepo.md)** — Presets: instalación, creación, extracción y convenciones.
 - **[guides/](guides/)** — Guías operativas puntuales:
+  [breach-response](guides/breach-response.md) (incidentes que afectan datos personales),
   [desktop-clients](guides/desktop-clients.md) (clientes que se publican en npm),
   [discord-oauth](guides/discord-oauth.md), [email-dns-setup](guides/email-dns-setup.md),
   [name-policy](guides/name-policy.md) (alias de correo y usernames prohibidos),
