@@ -1,4 +1,4 @@
-import type { BroadcastInput, NotifyInput } from "./Notification.ts";
+import type { BroadcastInput, NotifyInput, SegmentInput } from "./Notification.ts";
 import type { CapabilityToken } from "../../security/Capability.ts";
 
 /**
@@ -30,6 +30,30 @@ export interface INotificationService {
 	 * reanudables, dedup por `broadcastId`); sin cola, fan-out directo.
 	 */
 	broadcast(cap: CapabilityToken, input: BroadcastInput): Promise<"queued" | "direct">;
+	/**
+	 * Anuncio a la audiencia enumerada en `input.userIds`. Mismo scope que `broadcast`
+	 * (`notifications:broadcast`): quien puede anunciarle a todos puede anunciarle a
+	 * un subconjunto. Devuelve el resultado **por persona**, que es lo que un aviso
+	 * obligatorio necesita asentar como constancia.
+	 */
+	notifySegment(cap: CapabilityToken, input: SegmentInput): Promise<SegmentDispatchResult>;
+}
+
+/**
+ * Resultado de un despacho a segmento.
+ *
+ * `failedUserIds` es la diferencia entre "se despacharon N" y "a estas personas les llegó": sin
+ * saber **quién** falló, un productor obligado a avisar (una brecha de datos) no puede ni asentar
+ * el resultado individual ni reintentar sólo con quien quedó afuera. Es opcional para que una
+ * implementación vieja del servicio siga compilando; `undefined` significa "no informado", que no
+ * es lo mismo que "nadie falló" y el productor tiene que tratarlo distinto.
+ */
+export interface SegmentDispatchResult {
+	mode: "queued" | "direct";
+	/** `direct`: entregas confirmadas. `queued`: destinatarios encolados (nadie recibió nada aún). */
+	recipients: number;
+	/** Destinatarios cuya entrega directa falló. Sólo aplica a `mode: "direct"`. */
+	failedUserIds?: string[];
 }
 
 /**

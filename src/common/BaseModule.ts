@@ -11,8 +11,15 @@ import type { ModuleLoader } from "../utils/loaders/ModuleLoader.ts";
 import { safeParseJson } from "./utils/json-schema.ts";
 import { moduleConfigCheck } from "./schemas/module-config.ts";
 import type { Capability } from "./security/Capability.ts";
-import { emitNotification, emitNotificationSecure, emitBroadcast, type BroadcastEmitResult } from "./utils/notifications/emit.js";
-import type { BroadcastInput, NotifyInput } from "./types/notifications/Notification.js";
+import {
+	emitNotification,
+	emitNotificationSecure,
+	emitBroadcast,
+	emitSegment,
+	type BroadcastEmitResult,
+	type SegmentEmitResult,
+} from "./utils/notifications/emit.js";
+import type { BroadcastInput, NotifyInput, SegmentInput } from "./types/notifications/Notification.js";
 
 /**
  * Clase base abstracta para módulos que necesitan acceso al Kernel.
@@ -424,6 +431,20 @@ export abstract class BaseModule implements IModule {
 		} catch (e) {
 			this.logger.logWarn(`emitBroadcast descartado (${input.topic}): ${(e as Error).message}`);
 			return "dropped";
+		}
+	}
+
+	/**
+	 * Anuncio a la audiencia enumerada. Mismo scope que {@link emitBroadcast}
+	 * (`notifications:broadcast`). **Nunca lanza**; devuelve el resultado por persona
+	 * (`failedUserIds`), que es lo que hay que asentar cuando el aviso es una obligación.
+	 */
+	protected async emitSegment(input: SegmentInput): Promise<SegmentEmitResult> {
+		try {
+			return await emitSegment(this.#requireRegistry(), this.getCapability(), { ...input, origin: this.name });
+		} catch (e) {
+			this.logger.logWarn(`emitSegment descartado (${input.topic}): ${(e as Error).message}`);
+			return { mode: "dropped", recipients: 0 };
 		}
 	}
 }

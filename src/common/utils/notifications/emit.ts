@@ -1,6 +1,6 @@
 import type { ReadonlyModuleRegistry } from "../../../utils/registry/ReadonlyModuleRegistry.ts";
-import type { BroadcastInput, NotifyInput } from "../../types/notifications/Notification.js";
-import type { INotificationService } from "../../types/notifications/INotificationService.js";
+import type { BroadcastInput, NotifyInput, SegmentInput } from "../../types/notifications/Notification.js";
+import type { INotificationService, SegmentDispatchResult } from "../../types/notifications/INotificationService.js";
 import type { CapabilityToken } from "../../security/Capability.ts";
 
 /** Topología de cola para las notificaciones (debe coincidir con NotificationService). */
@@ -105,4 +105,16 @@ export async function emitBroadcast(
 	const service = registry.getPlatformService<INotificationService>(NOTIFY_SERVICE);
 	if (!service) return "dropped";
 	return await service.broadcast(cap, input);
+}
+
+/** Resultado de {@link emitSegment}: el del servicio más el modo `dropped` de "no se anunció". */
+export interface SegmentEmitResult extends Omit<SegmentDispatchResult, "mode"> {
+	mode: BroadcastEmitResult;
+}
+
+/** Igual que {@link emitBroadcast} pero contra la audiencia enumerada; `recipients` es 0 si se descartó. */
+export async function emitSegment(registry: ReadonlyModuleRegistry, cap: CapabilityToken, input: SegmentInput): Promise<SegmentEmitResult> {
+	const service = registry.getPlatformService<INotificationService>(NOTIFY_SERVICE);
+	if (!service) return { mode: "dropped", recipients: 0 };
+	return await service.notifySegment(cap, input);
 }

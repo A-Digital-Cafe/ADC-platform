@@ -27,6 +27,15 @@ export interface PlatformTopicDef {
 	 * oposición del art. 21 RGPD, y vaciarlo convertiría el interés legítimo en un pretexto.
 	 */
 	mandatoryChannels: readonly NotificationChannel[];
+	/**
+	 * Si el compositor genérico de anuncios puede emitirlo (default `true`).
+	 *
+	 * Aparecer en el panel de preferencias y ser redactable a mano son dos cosas distintas. Un
+	 * topic con canales obligatorios y nombre de incidente de seguridad es texto libre insilenciable
+	 * bajo una etiqueta creíble: quien lo emita tiene que ser el procedimiento que lo respalda
+	 * (el registro de brechas), no cualquiera con permiso de anuncios.
+	 */
+	broadcastable?: boolean;
 }
 
 export const PLATFORM_TOPICS = {
@@ -37,6 +46,16 @@ export const PLATFORM_TOPICS = {
 			"Aviso obligatorio cuando se publica una versión nueva de los documentos que aceptaste. El aviso en la app no se puede desactivar; el correo sí.",
 		mandatoryChannels: ["inApp"],
 	},
+	securityIncident: {
+		topic: "platform.security_incident",
+		label: "Incidentes de seguridad que afectan tus datos",
+		description:
+			"Aviso cuando un incidente afecta datos personales tuyos: qué pasó, qué datos alcanzó y qué conviene que hagas. No se puede desactivar (Privacidad §11).",
+		mandatoryChannels: ["inApp", "email"],
+		// Sólo lo emite `BreachRegisterService.notifySubjects`, con el incidente abierto y la
+		// audiencia congelada: un aviso de incidente sin expediente detrás no es un aviso.
+		broadcastable: false,
+	},
 	announcement: {
 		topic: "platform.announcement",
 		label: "Novedades y mantenimiento de la plataforma",
@@ -46,10 +65,20 @@ export const PLATFORM_TOPICS = {
 } as const satisfies Record<string, PlatformTopicDef>;
 
 /** @public Lista estable para iterar en la UI (orden: primero lo obligatorio). */
-export const PLATFORM_TOPIC_LIST: readonly PlatformTopicDef[] = [PLATFORM_TOPICS.legal, PLATFORM_TOPICS.announcement];
+export const PLATFORM_TOPIC_LIST: readonly PlatformTopicDef[] = [
+	PLATFORM_TOPICS.legal,
+	PLATFORM_TOPICS.securityIncident,
+	PLATFORM_TOPICS.announcement,
+];
 
-/** @public Topics que un anuncio broadcast puede usar. Cualquier otro se rechaza en el endpoint. */
-export const BROADCASTABLE_TOPICS: readonly NotificationTopic[] = PLATFORM_TOPIC_LIST.map((t) => t.topic);
+/**
+ * @public Topics que un anuncio broadcast puede usar. Cualquier otro se rechaza en el endpoint.
+ * Es un subconjunto de {@link PLATFORM_TOPIC_LIST}: estar en las preferencias no habilita a
+ * redactarlo a mano (ver `broadcastable`).
+ */
+export const BROADCASTABLE_TOPICS: readonly NotificationTopic[] = PLATFORM_TOPIC_LIST.filter((t) => t.broadcastable !== false).map(
+	(t) => t.topic
+);
 
 /**
  * Canales que no se pueden desactivar para un topic. Devuelve vacío para cualquier topic que no

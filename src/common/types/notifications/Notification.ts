@@ -122,6 +122,17 @@ export interface BroadcastInput {
 	data?: Record<string, unknown>;
 }
 
+/**
+ * Anuncio a un **subconjunto** de personas usuarias. Misma maquinaria que el broadcast
+ * (job firmado, chunks reanudables, dedup por `broadcastId`) pero con la audiencia
+ * enumerada por el productor: existe porque avisar de un incidente que afectó a 300
+ * cuentas no es ni una notificación 1:1 ni un anuncio a todo el mundo.
+ */
+export interface SegmentInput extends BroadcastInput {
+	/** Destinatarios. El servicio los trocea; el productor no pagina. */
+	userIds: string[];
+}
+
 /** @public Evento que viaja por el stream SSE hacia el cliente (campana del header). */
 export type NotificationStreamEvent =
 	| { type: "ready"; unread: number }
