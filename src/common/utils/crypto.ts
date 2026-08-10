@@ -5,13 +5,62 @@ export function generateId(): string {
 	return crypto.randomUUID();
 }
 
-export function hashPassword(password: string): string {
-	const salt = crypto.randomBytes(16).toString("hex");
-	const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-	return `${salt}:${hash}`;
+/**
+ * Firma mínima de `Bun.password` (argon2id nativo del runtime; `node:crypto` no expone argon2).
+ * Se declara local en vez de depender del global de `@types/bun` porque este archivo lo importa
+ * medio árbol, incluidos proyectos cuyo `tsconfig` sólo carga los tipos de node. El kernel corre
+ * siempre bajo bun, así que en runtime el global está.
+ */
+declare const Bun: {
+	password: {
+		hash(password: string, options: { algorithm: "argon2id"; memoryCost: number; timeCost: number }): Promise<string>;
+		verify(password: string, hash: string): Promise<boolean>;
+	};
+};
+
+/**
+ * Perfil argon2id: 64 MiB de memoria y 2 pasadas (recomendación OWASP). El costo en memoria es
+ * lo que le saca ventaja a PBKDF2 frente a GPU/ASIC, y encima sale más barato: ~19 ms medidos
+ * contra los ~43 ms del PBKDF2-SHA512 de 100k iteraciones que reemplaza.
+ */
+const ARGON2_MEMORY_COST = 65536;
+const ARGON2_TIME_COST = 2;
+
+/** Prefijo del PHC string de `Bun.password`; es el marcador de algoritmo que el formato viejo no tenía. */
+const ARGON2_PREFIX = "$argon2";
+
+/** Hashea una contraseña con argon2id. El PHC string resultante lleva algoritmo y parámetros dentro. */
+export async function hashPassword(password: string): Promise<string> {
+	return Bun.password.hash(password, { algorithm: "argon2id", memoryCost: ARGON2_MEMORY_COST, timeCost: ARGON2_TIME_COST });
 }
 
-export function verifyPassword(password: string, passwordHash: string): boolean {
+/**
+ * Verifica contra el formato vigente (argon2id) o el legado (PBKDF2).
+ *
+ * El prefijo se mira ANTES de delegar porque `Bun.password.verify` **lanza**
+ * (`UnsupportedAlgorithm`) ante un hash que no reconoce, en vez de devolver `false`: probar
+ * primero y catchear convertiría cada login legado en una excepción.
+ */
+export async function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
+	if (!passwordHash) return false;
+	if (passwordHash.startsWith(ARGON2_PREFIX)) {
+		try {
+			return await Bun.password.verify(password, passwordHash);
+		} catch {
+			return false;
+		}
+	}
+	return verifyLegacyPbkdf2(password, passwordHash);
+}
+
+/**
+ * Lectura del formato legado `<saltHex>:<hashHex>` (PBKDF2-SHA512, 100k, salt de 16 bytes).
+ *
+ * Es permanente, no una etapa de migración: el rehash sólo puede ocurrir cuando alguien vuelve a
+ * escribir su contraseña, y de una cuenta dormida el texto plano ya no existe en ningún lado.
+ * Quitar este camino dejaría a su titular sin poder entrar nunca más.
+ */
+function verifyLegacyPbkdf2(password: string, passwordHash: string): boolean {
 	const [salt, hash] = passwordHash.split(":");
 	if (!salt || !hash) return false;
 	const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512");
@@ -23,6 +72,15 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
 	}
 	// Comparación constant-time para evitar timing attacks
 	return computed.length === expected.length && crypto.timingSafeEqual(computed, expected);
+}
+
+/**
+ * `true` si el hash guardado quedó en el formato legado y conviene reescribirlo. Sólo tiene sentido
+ * llamarlo con la contraseña en claro a mano y ya validada (login), que es el único momento en que
+ * se puede re-derivar.
+ */
+export function needsPasswordRehash(passwordHash: string): boolean {
+	return !passwordHash?.startsWith(ARGON2_PREFIX);
 }
 
 export function generateRandomCredentials(): { username: string; password: string } {

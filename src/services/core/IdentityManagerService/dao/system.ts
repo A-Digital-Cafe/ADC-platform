@@ -31,7 +31,7 @@ export class SystemManager {
 			const systemRoleId = systemRole?.id || generateId();
 
 			const userId = generateId();
-			const passwordHash = hashPassword(password);
+			const passwordHash = await hashPassword(password);
 
 			this.#systemUser = {
 				id: userId,

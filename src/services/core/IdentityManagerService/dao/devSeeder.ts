@@ -118,7 +118,7 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 				$setOnInsert: { id: generateId(), username: seed.username, createdAt: new Date() },
 				$set: {
 					email: seed.email ?? `${seed.username}@dev.local`,
-					passwordHash: hashPassword(password),
+					passwordHash: await hashPassword(password),
 					roleIds,
 					groupIds: [],
 					orgMemberships,

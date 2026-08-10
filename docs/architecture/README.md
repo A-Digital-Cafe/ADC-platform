@@ -50,7 +50,8 @@ comportamiento runtime (instancias múltiples, hot reload, docker) está en [app
 Servicio en modo kernel para gestión centralizada de usuarios, roles, grupos y organizaciones:
 roles predefinidos (SYSTEM, Admin, Network/Security/Data/App/Config Manager, User), usuario SYSTEM
 auto-creado con credenciales aleatorias por arranque, persistencia en MongoDB (fallback a memoria si
-no hay `mongo-provider`), hashing PBKDF2 (100k iteraciones + salt) y permisos granulares por recurso,
+no hay `mongo-provider`), hashing de contraseñas con argon2id (con lectura permanente del formato
+PBKDF2 anterior y rehash al iniciar sesión) y permisos granulares por recurso,
 acción y alcance (self/group/all). Detalle en [src/services/core/IdentityManagerService/README.md](../../src/services/core/IdentityManagerService/README.md).
 
 ## Sistema de Capacidades
