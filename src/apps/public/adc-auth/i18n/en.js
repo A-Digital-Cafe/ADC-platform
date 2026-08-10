@@ -41,7 +41,12 @@ export default {
 		ageConfirm: "I declare that I am at least {{minAge}} years old, or the minimum age required in my country.",
 		ageLink: "See ages by country",
 		oauthLegalBefore: "By continuing with Discord or Google you accept the",
-		oauthLegalAfter: ", and you declare that you are at least {{minAge}} years old or the minimum age required in your country."
+		oauthLegalAfter: ", and you declare that you are at least {{minAge}} years old or the minimum age required in your country.",
+		pendingTitle: "Check your inbox",
+		pendingBody:
+			"Your account is ready. We wrote to {{email}}: open that message to confirm the address. If that mailbox already had an account, we told you there and this account stays without an email until you pick another one from My account.",
+		pendingHint: "If nothing arrives, go to My account: there you can see whether the address was linked or you need to pick another one.",
+		pendingContinue: "Continue"
 	},
 	cancelDeletion: {
 		title: "Cancel your account deletion",
@@ -81,7 +86,6 @@ export default {
 		WEAK_PASSWORD: "Password must be at least 8 characters",
 		INVALID_EMAIL: "Invalid email address",
 		USERNAME_EXISTS: "Username is already taken",
-		EMAIL_EXISTS: "Email is already registered",
 		PASSWORDS_MISMATCH: "Passwords don't match",
 		PASSWORD_TOO_SHORT: "Password must be at least 8 characters",
 		LEGAL_NOT_ACCEPTED: "You must accept the Terms and Conditions and the Privacy Policy to create an account",

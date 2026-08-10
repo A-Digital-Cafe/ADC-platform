@@ -5,6 +5,9 @@ Tu cuenta es única para toda la plataforma: con un solo inicio de sesión acced
 1. Abrí [auth.adigitalcafe.com/register](https://auth.adigitalcafe.com/register).
 2. Completá el formulario de registro con tus datos.
 3. Confirmá y ya podés usar la plataforma con tu nueva cuenta.
+4. Revisá la casilla que pusiste: el email queda vinculado recién cuando abrís el enlace que te
+   mandamos. Si esa dirección ya tenía una cuenta, te lo contamos por ahí y tu cuenta nueva queda sin
+   email hasta que elijas otra desde **My Account**.
 
 ## Iniciar sesión
 

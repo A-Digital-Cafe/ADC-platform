@@ -62,9 +62,13 @@ export const authApi = {
 	 * `legal` viaja con la versión de los documentos que el formulario mostró: el servidor la
 	 * compara con la vigente y rechaza el alta si no coinciden (pestaña vieja tras una
 	 * actualización). Así la constancia guardada prueba qué texto se aceptó, no sólo que se aceptó.
+	 *
+	 * La clave de idempotencia es un id fresco por intento, como en el resto de los clientes: con el
+	 * username, dos intentos seguidos con el mismo nombre replicaban la respuesta cacheada del
+	 * primero — y ahora que el alta responde siempre lo mismo, eso taparía el segundo intento real.
 	 */
 	register: (username: string, email: string, password: string, legal: LegalAcceptanceInput) =>
-		api.post<AuthResponse>("/register", { body: { username, email, password, legal }, idempotencyKey: username }),
+		api.post<AuthResponse>("/register", { body: { username, email, password, legal }, idempotencyKey: createClientId() }),
 
 	/**
 	 * Obtener sesión actual

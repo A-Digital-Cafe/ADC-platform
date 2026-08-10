@@ -43,7 +43,6 @@ const REGISTER_SPECIFIC_ERROR_KEYS = [
 	{ key: "WEAK_PASSWORD", severity: "error" },
 	{ key: "INVALID_EMAIL", severity: "error" },
 	{ key: "USERNAME_EXISTS", severity: "warning" },
-	{ key: "EMAIL_EXISTS", severity: "warning" },
 	{ key: "LEGAL_NOT_ACCEPTED", severity: "error" },
 	{ key: "AGE_NOT_CONFIRMED", severity: "error" },
 	{ key: "LEGAL_VERSION_MISMATCH", severity: "warning" },
@@ -67,6 +66,8 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 	const [usernameStatus, setUsernameStatus] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
 	const [acceptedTerms, setAcceptedTerms] = useState(false);
 	const [ageConfirmed, setAgeConfirmed] = useState(false);
+	/** Alta hecha: la dirección tipeada, para el aviso de "revisá tu casilla". */
+	const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
 	const checkUsernameRequest = useAbortable((signal, value: string) => identityApi.checkUsernameExists(value, signal));
 
@@ -137,8 +138,10 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 			privacyVersion: LEGAL_DOCUMENTS.privacy.version,
 		});
 
-		if (result.success && globalThis.location) {
-			redirectToReturnUrl(returnUrl);
+		// El alta responde lo mismo tenga o no cuenta esa dirección, así que no se redirige derecho:
+		// primero se explica qué pasó con el email (lo único que difiere, y que llega por correo).
+		if (result.success) {
+			setPendingEmail(email);
 		}
 
 		setLoading(false);
@@ -164,6 +167,21 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 			<div className="w-full max-w-md">
 				<adc-blur-panel variant="elevated" glow class="w-full">
 					<adc-skeleton variant="rectangular" height="364px" />
+				</adc-blur-panel>
+			</div>
+		);
+	}
+
+	if (pendingEmail) {
+		return (
+			<div className="w-full max-w-md">
+				<adc-blur-panel variant="elevated" glow class="w-full">
+					<h1 className="font-heading text-2xl font-bold text-center mb-4 text-text">{t("register.pendingTitle")}</h1>
+					<p className="text-sm text-text leading-relaxed">{t("register.pendingBody", { email: pendingEmail })}</p>
+					<p className="mt-3 text-xs text-muted leading-relaxed">{t("register.pendingHint")}</p>
+					<adc-button class="w-full flex justify-end mt-6" variant="primary" onClick={() => redirectToReturnUrl(returnUrl)}>
+						{t("register.pendingContinue")}
+					</adc-button>
 				</adc-blur-panel>
 			</div>
 		);

@@ -2,7 +2,7 @@
 
 Servicio kernel (`kernelMode: 60`) para identidad: usuarios, roles, grupos y organizaciones (multi-tenant vía `forOrg`).
 
-- Persistencia MongoDB (`object/mongo`); contraseñas PBKDF2 (100k iteraciones, salt 16 bytes)
+- Persistencia MongoDB (`object/mongo`); contraseñas con argon2id (`Bun.password`, m=64 MiB/t=2). El formato PBKDF2 anterior se sigue leyendo siempre y se rehashea al iniciar sesión (una cuenta dormida nunca migra)
 - Permisos granulares recurso/acción/alcance (`PermissionChecker`); recursos `globalOnly` (security, modules) sólo valen desde **roles globales**
 - **Jerarquía de roles** (mayor = más autoridad): nadie gestiona usuarios/roles de jerarquía ≥ a la propia ni a sí mismo (`domain/hierarchy.ts`)
 - Roles predefinidos **sincronizados en boot** desde `defaults/systemRoles.ts` (la matriz rol × permisos vive ahí)
@@ -11,5 +11,5 @@ Servicio kernel (`kernelMode: 60`) para identidad: usuarios, roles, grupos y org
 - **Bajas**: toda baja (self/admin/ban permanente) es programada (`deletionReason`) y la purga la hace el cron reanudable (stepper de composición fija, fail-closed: un purger declarado pero caído bloquea el hard delete y se reintenta) sobre avatar + PM/email/Drive/notificaciones/comunidad/suscripciones + cuotas, con constancia legal anonimizada antes del hard delete y auditoría vía `AuditLogService`
 - Sólo la baja voluntaria se cancela en los 30 días: volviendo a iniciar sesión (nativo u OAuth, la vía que no depende del correo) o con el token HMAC del email. Si ese aviso no se pudo entregar la baja se registra igual y el enlace vuelve en la respuesta — la supresión tiene plazo legal y no se bloquea
 - **Derechos del titular** (arts. 14-16 Ley 25.326 / 15-20 RGPD), todos auditados: export `POST /me/export` (agrega el `exportUserData(cap, userId)` de cada servicio, espejo de la purga; 1 cada 24 h), `/me/change-email` (password u OAuth + token de 60 min con entrega **exacta** a la casilla nueva y aviso `security.*` a la vieja) y `/me/change-username` (reglas del alta + cooldown 30 días + renombrado de los buzones, que derivan del username)
-- Dev: siembra usuarios de prueba (`defaults/devUsers.ts`); fuera de dev se purgan en cada arranque
-- Dependencias y configuración: `config.json` (env vars en `.env.example`)
+- **El email no revela quién lo usa**: el alta y `/me/change-email` responden lo mismo esté libre o tomado (`emailBinding.ts`). Libre → enlace de confirmación; tomado → aviso a su titular, sin token, y marcador `emailChangePending` sin hash para que la cuenta se vea igual. Sin transporte para esa dirección, el alta la vincula directo (asimetría que depende sólo de la política de entrega y del dominio)
+- Dev: siembra usuarios de prueba (`defaults/devUsers.ts`), purgados fuera de dev en cada arranque. Dependencias y configuración: `config.json` (env vars en `.env.example`)

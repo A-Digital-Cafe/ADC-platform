@@ -161,7 +161,11 @@ export class AuthEndpoints {
 		options: {
 			tag: "SessionManagerService/Auth",
 			summary: "Registro de nuevo usuario",
-			description: "Crea una cuenta nativa y emite tokens (login automático). Reglas de negocio adicionales en validateRegisterBody.",
+			description:
+				"Crea una cuenta nativa y emite tokens (login automático). El email NO se vincula acá: se confirma por " +
+				"correo (o, si ya pertenece a otra cuenta, se avisa a su titular y la cuenta nueva queda sin email). " +
+				"**La respuesta es idéntica en ambos casos**: no informa si una dirección está registrada. Reglas de " +
+				"negocio adicionales en validateRegisterBody.",
 			rateLimit: { max: 2, timeWindow: 3_600_000 },
 			// Validación declarativa (TypeBox): tipos/formatos antes del handler.
 			schema: { body: AS.RegisterBody, response: { 200: AS.RegisterResponse } },
@@ -181,24 +185,20 @@ export class AuthEndpoints {
 		}
 
 		try {
-			// Verificar si el usuario o email ya existe (una sola query)
 			const users = AuthEndpoints.deps.internalIdentity.users;
-			const existing = await users.existsByUsernameOrEmail(username, email);
 
-			if (existing.exists) {
-				if (existing.field === "username") {
-					throw new AuthError(409, "USERNAME_EXISTS", "El nombre de usuario ya está en uso");
-				}
-				throw new AuthError(409, "EMAIL_EXISTS", "El email ya está registrado");
+			// El username SÍ se responde: es identidad pública (un HEAD `/users/username/:u` ya lo
+			// resuelve sin sesión), así que neutralizarlo no ocultaría nada y costaría el chequeo de
+			// disponibilidad del formulario. Se evalúa ANTES que el email, del que no se responde nunca.
+			if (await users.existUserByName(username)) {
+				throw new AuthError(409, "USERNAME_EXISTS", "El nombre de usuario ya está en uso");
 			}
 
-			// Crear usuario
+			// La cuenta se crea SIN email: vincularlo acá obligaría a decir si ya estaba tomado. La
+			// constancia legal se sella en el servidor: qué versión de cada documento estaba vigente y
+			// cuándo se aceptó. Sin esto, la casilla no prueba nada.
 			const newUser = await users.createUser(username, password, []);
-
-			// Actualizar con email. La constancia legal se sella en el servidor: qué versión de cada
-			// documento estaba vigente y cuándo se aceptó. Sin esto, la casilla no prueba nada.
 			await users.updateUser(newUser.id, {
-				email,
 				metadata: {
 					createdVia: "platform",
 					createdAt: new Date().toISOString(),
@@ -206,12 +206,18 @@ export class AuthEndpoints {
 				},
 			});
 
-			// Construir usuario directamente (ya tenemos todos los datos)
-			const user = await AuthEndpoints.buildAuthenticatedUser("platform", {
-				id: newUser.id,
-				username,
-				email,
-			});
+			// Fuera de banda y DESPUÉS de que la metadata quedó escrita (la vinculación reescribe
+			// `metadata` completa y pisaría la constancia legal), pero ANTES de la línea que lanza la
+			// respuesta: las dos ramas —dirección libre o ya registrada— tienen la misma forma temporal,
+			// el mismo cuerpo y las mismas cookies. Lo que se sepa del email, se sabe por correo.
+			void AuthEndpoints.deps.internalIdentity
+				.bindEmailNeutrally(newUser.id, email, "signup")
+				.catch((bindErr: any) =>
+					AuthEndpoints.deps.logger.logWarn(`Vinculación de email del alta ${newUser.id} falló: ${bindErr?.message || bindErr}`)
+				);
+
+			// Sin `email`: todavía no es de esta cuenta y el token de sesión no debe afirmar que sí.
+			const user = await AuthEndpoints.buildAuthenticatedUser("platform", { id: newUser.id, username });
 
 			// Emitir tokens (login automático tras registro)
 			const cookies = await AuthEndpoints.getTokenCookies(ctx, user);
@@ -222,7 +228,6 @@ export class AuthEndpoints {
 					user: {
 						id: user.id,
 						username: user.username,
-						email: user.email,
 					},
 				},
 				{ cookies }

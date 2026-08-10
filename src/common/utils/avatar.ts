@@ -9,14 +9,15 @@
  *   - `"default"`           → auto-avatar determinista servido por la plataforma
  *   - `"custom"`            → usa `metadata.customAvatar.attachmentId` (servido por
  *                             `/api/identity/users/:id/avatar/raw` que redirige a S3 presigned)
- *   - `"linked:<provider>"` → usa el `providerAvatar` del `LinkedAccount` indicado
  *   - `"none"`              → sin avatar (fallback al auto-avatar en cliente)
  *
  * Si no hay selección explícita, prioridad legacy:
  *   1. `user.avatar` (columna explícita)
  *   2. `metadata.avatar` (string legacy)
  *   3. `metadata.customAvatar` si existe
- *   4. primer linkedAccount activo con providerAvatar
+ *
+ * Devuelve SIEMPRE una URL propia: la foto de una cuenta OAuth se ingiere en el alta
+ * (`IdentityManager.ingestProviderAvatar`) y se guarda como adjunto nuestro.
  */
 
 interface UserAvatarSource {
@@ -24,7 +25,6 @@ interface UserAvatarSource {
 	username?: string;
 	avatar?: string | null;
 	metadata?: Record<string, unknown> | null;
-	linkedAccounts?: Array<{ provider?: string; status?: string; providerAvatar?: string }> | null;
 }
 
 interface CustomAvatarRef {
@@ -38,6 +38,19 @@ function getCustomAvatarUrl(userId: string | undefined, ref: CustomAvatarRef | u
 
 function getDefaultAvatarUrl(user: UserAvatarSource): string {
 	return buildDefaultAvatarUrl(user.id || user.username || "default");
+}
+
+/**
+ * Una URL de avatar absoluta apunta a un tercero: las propias son siempre relativas
+ * (`/avatars/…`, `/api/identity/…`). Servirla le entrega al CDN de turno la IP de cada visitante
+ * y la página que estaba mirando, así que se ignora y la cuenta cae al auto-avatar. Es la última
+ * defensa: las cuentas viejas que todavía la tengan guardada las limpia el backfill de Identity.
+ */
+export const REMOTE_AVATAR_URL_PATTERN = "^https?://";
+const REMOTE_AVATAR_URL_REGEX = new RegExp(REMOTE_AVATAR_URL_PATTERN, "i");
+
+export function isRemoteAvatarUrl(url: string): boolean {
+	return REMOTE_AVATAR_URL_REGEX.test(url);
 }
 
 export function resolveUserAvatar(user: UserAvatarSource | null | undefined): string | undefined {
@@ -59,19 +72,14 @@ export function resolveUserAvatar(user: UserAvatarSource | null | undefined): st
 	if (source === "custom") {
 		const url = getCustomAvatarUrl(user.id, metadata?.customAvatar);
 		if (url) return url;
-	} else if (source?.startsWith("linked:")) {
-		const provider = source.slice("linked:".length);
-		const acc = user.linkedAccounts?.find((a) => a?.provider === provider && a.status === "linked" && a.providerAvatar);
-		if (acc?.providerAvatar) return acc.providerAvatar;
 	}
 
-	if (user.avatar) return user.avatar;
+	if (user.avatar && !isRemoteAvatarUrl(user.avatar)) return user.avatar;
 	const metaAvatar = metadata?.avatar;
-	if (typeof metaAvatar === "string" && metaAvatar) return metaAvatar;
+	if (typeof metaAvatar === "string" && metaAvatar && !isRemoteAvatarUrl(metaAvatar)) return metaAvatar;
 	const customUrl = getCustomAvatarUrl(user.id, metadata?.customAvatar);
 	if (customUrl) return customUrl;
-	const linked = user.linkedAccounts?.find((a) => a?.status === "linked" && a.providerAvatar)?.providerAvatar;
-	return linked || getDefaultAvatarUrl(user);
+	return getDefaultAvatarUrl(user);
 }
 
 /** Avatares por defecto en `common/public/avatars`, que se copia a todas las apps. */

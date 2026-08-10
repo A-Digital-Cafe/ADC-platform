@@ -1,11 +1,21 @@
 import type { Model } from "mongoose";
 import type { User, LinkedAccount, DeletionReason } from "@common/types/identity/User.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
-import { generateId, hashPassword, verifyPassword, sha256Hex, sha256Bytes, hmacSha256Hex, safeEqualHex, shortId } from "@common/utils/crypto.ts";
+import {
+	generateId,
+	hashPassword,
+	verifyPassword,
+	needsPasswordRehash,
+	sha256Hex,
+	sha256Bytes,
+	hmacSha256Hex,
+	safeEqualHex,
+	shortId,
+} from "@common/utils/crypto.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
-import { resolveUserAvatar } from "@common/utils/avatar.ts";
+import { REMOTE_AVATAR_URL_PATTERN, isRemoteAvatarUrl, resolveUserAvatar } from "@common/utils/avatar.ts";
 import { escapeRegex } from "@common/utils/escape.ts";
 import { buildUpdateSet } from "@common/utils/mongo-update.ts";
 import { USER_UPDATABLE_FIELDS } from "../domain/user.js";
@@ -38,8 +48,12 @@ const USERNAME_CHANGE_COOLDOWN_DAYS = 30;
 /** Cambio de email pendiente de confirmación (`metadata.emailChangePending`). */
 interface EmailChangePending {
 	newEmail: string;
-	/** SHA-256 hex del token completo (un solo uso). */
-	tokenHash: string;
+	/**
+	 * SHA-256 hex del token completo (un solo uso). **Ausente** en el marcador que deja
+	 * {@link UserManager.markEmailChangeUnconfirmable}: ahí no hay nada que confirmar y la falta
+	 * de hash es justamente lo que impide canjearlo.
+	 */
+	tokenHash?: string;
 	requestedAt: Date | string;
 	expiresAt: Date | string;
 }
@@ -145,7 +159,7 @@ export class UserManager {
 			// La credencial se valida ANTES de mirar el estado de la cuenta. Al revés el login es un
 			// oráculo: un `ACCOUNT_DISABLED` confirmaría que la cuenta existe y está baneada sin
 			// credencial y sin pasar por el contador de intentos fallidos.
-			if (!verifyPassword(password, user.passwordHash)) return { id: user.id, wrongPassword: true };
+			if (!(await verifyPassword(password, user.passwordHash))) return { id: user.id, wrongPassword: true };
 
 			// Ya probada la credencial, una baja VOLUNTARIA vigente no rechaza: volver a entrar la
 			// cancela, que es la vía que no depende del correo (y la única de las cuentas sin
@@ -158,7 +172,20 @@ export class UserManager {
 			}
 
 			target.lastLogin = new Date();
-			await this.userModel.findOneAndUpdate({ id: target.id }, { lastLogin: target.lastLogin });
+			// Rehash oportunista al hash vigente, montado sobre la escritura de `lastLogin` que este
+			// login ya hace (es el único momento con la contraseña en claro y ya validada). Va por
+			// escritura directa porque el update genérico no admite `passwordHash`. Un fallo NO puede
+			// tumbar el login —la credencial ya se validó— y no emite el aviso de "contraseña
+			// cambiada": nadie la cambió, y ese aviso se leería como alerta de compromiso.
+			const update: Record<string, unknown> = { lastLogin: target.lastLogin };
+			if (needsPasswordRehash(user.passwordHash)) {
+				try {
+					update.passwordHash = await hashPassword(password);
+				} catch (error) {
+					this.logger.logWarn(`No se pudo rehashear la contraseña de ${target.id} (sigue el hash anterior): ${error}`);
+				}
+			}
+			await this.userModel.findOneAndUpdate({ id: target.id }, update);
 
 			return target;
 		} catch (error) {
@@ -179,7 +206,7 @@ export class UserManager {
 			const user: User = {
 				id: userId,
 				username,
-				passwordHash: hashPassword(password),
+				passwordHash: await hashPassword(password),
 				roleIds: roleIds || [],
 				groupIds: [],
 				isActive: true,
@@ -280,26 +307,6 @@ export class UserManager {
 		} catch (error) {
 			this.logger.logError(`Error obteniendo usuario por email: ${error}`);
 			return null;
-		}
-	}
-
-	/**
-	 * Verifica si existe un usuario con el username O email dados (una sola query)
-	 * Retorna cuál campo ya existe para dar feedback específico
-	 */
-	async existsByUsernameOrEmail(username: string, email: string, token?: string): Promise<{ exists: boolean; field?: "username" | "email" }> {
-		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
-
-		try {
-			const doc = await this.userModel.findOne({ $or: [{ username }, { email }] });
-			if (!doc) return { exists: false };
-
-			const user = doc.toObject?.() || doc;
-			if (user.username === username) return { exists: true, field: "username" };
-			return { exists: true, field: "email" };
-		} catch (error) {
-			this.logger.logError(`Error verificando existencia de usuario: ${error}`);
-			return { exists: false };
 		}
 	}
 
@@ -572,7 +579,7 @@ export class UserManager {
 
 			if (!user) return false;
 
-			return verifyPassword(password, user.passwordHash);
+			return await verifyPassword(password, user.passwordHash);
 		} catch (error) {
 			this.logger.logError(`Error verificando password: ${error}`);
 			return false;
@@ -589,7 +596,7 @@ export class UserManager {
 		}
 
 		try {
-			const passwordHash = hashPassword(newPassword);
+			const passwordHash = await hashPassword(newPassword);
 
 			const updated = await this.userModel.findOneAndUpdate(
 				{ id: userId },
@@ -919,6 +926,22 @@ export class UserManager {
 	}
 
 	/**
+	 * Marca un pedido de email pendiente SIN token, con la misma forma y la misma vigencia que el
+	 * real. Lo usa la vinculación neutral cuando la dirección ya es de otra cuenta: no hay nada que
+	 * confirmar, pero la cuenta tiene que verse idéntica a la del caso libre hasta que el pedido
+	 * venza — si no, la propia pantalla de "Mi cuenta" sería el oráculo que el endpoint evita.
+	 */
+	async markEmailChangeUnconfirmable(userId: string, newEmail: string): Promise<void> {
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) return;
+		const userObj = (current.toObject?.() || current) as User;
+		const now = new Date();
+		const pending: EmailChangePending = { newEmail, requestedAt: now, expiresAt: new Date(now.getTime() + EMAIL_CHANGE_TOKEN_TTL_MS) };
+		const nextMeta = { ...(userObj.metadata || {}), emailChangePending: pending };
+		await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: now });
+	}
+
+	/**
 	 * Canje del token de confirmación (público, sin sesión): HMAC, vigencia, un solo uso y cuenta
 	 * activa, con el mismo error para todos los fallos. Re-chequea la unicidad al aplicar: entre el
 	 * pedido y el canje otra cuenta pudo registrar esa dirección.
@@ -938,6 +961,10 @@ export class UserManager {
 		if (!user || !user.isActive || !pending?.newEmail || typeof pending.tokenHash !== "string") throw invalid();
 		if (!safeEqualHex(pending.tokenHash, sha256Hex(rawToken))) throw invalid();
 
+		// Este 409 NO es un oráculo de existencia, a diferencia del que se sacó del alta y del pedido
+		// de cambio: para llegar acá hay que traer el token de un solo uso que se envió a ESA casilla,
+		// o sea haber probado ya que se la controla. Quien la controla puede averiguar por vías más
+		// directas si tiene cuenta; lo que no puede hacer nadie es preguntar por una casilla ajena.
 		const taken = await this.userModel.findOne({ email: pending.newEmail, id: { $ne: userId } }, { id: 1, _id: 0 }).lean();
 		if (taken) throw new AuthError(409, "EMAIL_EXISTS", "Ese email ya está registrado en otra cuenta");
 
@@ -1148,6 +1175,54 @@ export class UserManager {
 		if (!doc) return null;
 		const meta = ((doc as { metadata?: unknown }).metadata ?? {}) as { customAvatar?: { attachmentId?: string } };
 		return meta.customAvatar?.attachmentId ?? null;
+	}
+
+	/**
+	 * Cuentas que todavía guardan la URL de avatar de un tercero, con la primera de esas URLs como
+	 * pista de ingesta (misma precedencia que `resolveUserAvatar`). Sin cursor a propósito: lo
+	 * consume el backfill de `avatarIngest.ts`, que limpia lo que procesa, así que la lista se
+	 * vacía sola y volver a pedir la primera página siempre avanza.
+	 */
+	async findUsersWithRemoteAvatarPage(limit: number, token?: string): Promise<Array<{ id: string; remoteAvatarUrl?: string }>> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const remote = { $regex: REMOTE_AVATAR_URL_PATTERN, $options: "i" };
+		const docs = await this.userModel
+			.find(
+				{ $or: [{ "metadata.avatar": remote }, { "linkedAccounts.providerAvatar": remote }] },
+				{ id: 1, "metadata.avatar": 1, "linkedAccounts.providerAvatar": 1, _id: 0 }
+			)
+			.sort({ id: 1 })
+			.limit(Math.min(Math.max(limit, 1), MAX_LIST_LIMIT))
+			.lean();
+
+		const isRemote = (value: unknown): value is string => typeof value === "string" && isRemoteAvatarUrl(value);
+		return docs.map((d: any) => {
+			const metaAvatar = d.metadata?.avatar;
+			const linked = (d.linkedAccounts ?? []).map((a: any) => a?.providerAvatar).find((url: unknown) => isRemote(url));
+			return { id: d.id, remoteAvatarUrl: isRemote(metaAvatar) ? metaAvatar : linked };
+		});
+	}
+
+	/**
+	 * Deja la cuenta sin ninguna URL de avatar remota (`metadata.avatar` y los `providerAvatar` de
+	 * las cuentas vinculadas) y, si la ingesta produjo un adjunto propio, lo deja seleccionado.
+	 * Idempotente: es el cierre tanto del alta OAuth como del backfill.
+	 */
+	async clearRemoteAvatarRefs(userId: string, attachmentId: string | null = null, token?: string): Promise<void> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS);
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) return;
+		const doc = (current.toObject?.() || current) as User;
+
+		const metadata = { ...(doc.metadata || {}) } as Record<string, unknown>;
+		delete metadata.avatar;
+		if (attachmentId) {
+			metadata.customAvatar = { attachmentId };
+			metadata.avatarSource = "custom";
+		}
+		const linkedAccounts = (doc.linkedAccounts ?? []).map(({ providerAvatar: _remote, ...rest }) => rest);
+
+		await this.userModel.updateOne({ id: userId }, { metadata, linkedAccounts, updatedAt: new Date() });
 	}
 
 	// Métodos de membresía por organización

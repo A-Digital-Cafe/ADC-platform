@@ -15,16 +15,15 @@ export const PresignAvatarBody = Type.Object({
 });
 
 export const SelectAvatarBody = Type.Object({
-	source: Type.String({ description: "default | custom | none | linked:<provider>" }),
+	source: Type.String({ description: "default | custom | none" }),
 });
 
 // ── Responses ──────────────────────────────────────────────────────────────
 
 const AvatarOption = Type.Object({
-	id: Type.String({ description: "default | custom | none | linked:<provider>" }),
+	id: Type.String({ description: "default | custom | none" }),
 	label: Type.String(),
 	url: Type.Optional(Type.String()),
-	provider: Type.Optional(Type.String()),
 });
 
 export const AvatarOptionsResponse = Type.Object({

@@ -1,6 +1,7 @@
 import type { Model } from "mongoose";
 import type { UserManager, OrgManager, RoleManager } from "./dao/index.js";
 import type { DiscordGuildConfig } from "./domain/index.js";
+import type { EmailBinder } from "./emailBinding.js";
 
 /**
  * Superficies internas de IdentityManager, **separadas por scope** para least‑privilege.
@@ -16,6 +17,21 @@ export interface IdentityInternalApi {
 	organizations: OrgManager;
 	roles: RoleManager;
 	getUserIdsByRoleName(roleName: string): Promise<string[]>;
+	/**
+	 * Trae a nuestro almacenamiento el avatar que trae una cuenta OAuth (alta o vinculación) y
+	 * deja apuntada una URL propia. Vive acá porque escribe el avatar de un usuario arbitrario
+	 * y porque quien vincula (SessionManager) no debe conocer S3 ni los adjuntos.
+	 *
+	 * Best-effort: nunca lanza. Lo que NO puede pasar es que la URL del proveedor quede guardada
+	 * —la pediría el navegador de cada visitante—, así que un fallo deja la cuenta sin avatar.
+	 */
+	ingestProviderAvatar(userId: string, remoteAvatarUrl?: string): Promise<void>;
+	/**
+	 * Vincula una dirección a una cuenta **sin revelar si ya existía** (ver `emailBinding.ts`).
+	 * Vive acá y no en la superficie pública porque escribe el email de un usuario arbitrario; y
+	 * está acá (y no en el consumidor) para que SessionManager no tenga que conocer al EmailService.
+	 */
+	bindEmailNeutrally: EmailBinder;
 }
 
 /**
@@ -44,11 +60,19 @@ export type IdentityInternalWithDiscord = IdentityInternalApi & IdentityDiscordA
 type DiscordConfigPrivate = { discordGuildId?: string; discordRoleMap?: Record<string, string> };
 
 /** Construye la superficie users/orgs/roles. Los managers ya deben estar inicializados. */
-export function buildInternalApi(users: UserManager, organizations: OrgManager, roles: RoleManager): IdentityInternalApi {
+export function buildInternalApi(
+	users: UserManager,
+	organizations: OrgManager,
+	roles: RoleManager,
+	bindEmailNeutrally: EmailBinder,
+	ingestProviderAvatar: IdentityInternalApi["ingestProviderAvatar"]
+): IdentityInternalApi {
 	return {
 		users,
 		organizations,
 		roles,
+		bindEmailNeutrally,
+		ingestProviderAvatar,
 		/**
 		 * IDs de usuarios con un **rol global** por nombre (ej. `SystemRole.ADMIN`). Usa los
 		 * managers sin auth; por eso vive tras el gate (enumeraría destinatarios privilegiados).

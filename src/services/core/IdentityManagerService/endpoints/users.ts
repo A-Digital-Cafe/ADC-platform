@@ -10,7 +10,9 @@ import { assertCanManageUser, assertCanAssignRoles, assertCanGrantPermissions } 
 import { checkUsername } from "@common/utils/name-policy.js";
 import { hashEmails, maskEmails } from "@common/utils/identityHash.js";
 import { isInternalAddress, normalizeAddress } from "@common/utils/email-address.js";
+import { sanitizeUserMetadata } from "@common/utils/user-metadata.js";
 import type { MailboxRenameResult } from "@common/types/email/Email.js";
+import { EMAIL_CHANGE_TOKEN_TTL_MINUTES } from "../emails.js";
 
 /**
  * Matriz de modificabilidad de los campos de usuario:
@@ -153,9 +155,6 @@ const EXPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 /** Mismo formato de email que exige el alta (`validateRegisterBody` de SessionManagerService). */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
-/** Vigencia (minutos) del enlace de confirmación de cambio de email; espejo del TTL del DAO. */
-const EMAIL_CHANGE_TOKEN_TTL_MINUTES = 60;
-
 /**
  * `true` si la cuenta la creó un proveedor OAuth: su password es aleatorio y desconocido, así que
  * no sirve para re-autenticar. El alta nativa estampa `createdVia: "platform"`, el seed `"dev-seed"`.
@@ -179,8 +178,14 @@ function getContextRoleIds(user: NonNullable<Awaited<ReturnType<IdentityManagerS
 	return [...(user.roleIds || []), ...(scopedMembership?.roleIds || [])];
 }
 
+/**
+ * Vista segura de un usuario para responder por HTTP: sin `passwordHash` y sin el material de
+ * autenticación de la metadata (mismo criterio que el export, con el helper compartido). Aplica a
+ * TODOS sus usos, incluidos los listados admin, donde esos hashes serían de terceros.
+ */
 function sanitizeUserForContext(user: NonNullable<Awaited<ReturnType<IdentityManagerService["users"]["getUser"]>>>, callerOrgId?: string) {
-	const { passwordHash, ...safeUser } = user;
+	const { passwordHash, ...rest } = user;
+	const safeUser = rest.metadata ? { ...rest, metadata: sanitizeUserMetadata(rest.metadata) } : rest;
 	if (!callerOrgId) return safeUser;
 
 	return {
@@ -477,8 +482,10 @@ export class UserEndpoints {
 			tag: "IdentityManagerService/Users",
 			summary: "Solicita el cambio del email propio",
 			description:
-				"Verifica `currentPassword` (u OAuth: sesión viva) y envía un enlace de confirmación de un solo uso, " +
-				"válido 60 minutos, a la casilla NUEVA. El cambio se aplica recién al confirmar. " +
+				"Verifica `currentPassword` (u OAuth: sesión viva) y deja el pedido asentado. Si la dirección está libre, " +
+				"envía a la casilla NUEVA un enlace de confirmación de un solo uso válido 60 minutos y el cambio se aplica " +
+				"recién al confirmarlo; si ya pertenece a otra cuenta, el aviso va a su titular y el email propio no cambia. " +
+				"**La respuesta es la misma en los dos casos**: no informa si una dirección está registrada. " +
 				"La casilla vieja recibe en el acto el aviso de seguridad `security.email_change_requested`.",
 			rateLimit: { max: 3, timeWindow: 300_000 },
 			schema: { body: US.ChangeEmailBody, response: { 200: US.ChangeEmailResponse } },
@@ -496,15 +503,9 @@ export class UserEndpoints {
 
 		await UserEndpoints.#assertSelfReauth(user, ctx.data?.currentPassword);
 
-		// Unicidad vía superficie interna: el titular no tiene READ sobre usuarios. Mismo
-		// nivel de revelación que el alta (EMAIL_EXISTS ya existe en /auth/register).
-		const existing = await UserEndpoints.identity._internal(UserEndpoints.cap).users.getUserByEmail(newEmail);
-		if (existing && existing.id !== user.id) {
-			throw new AuthError(409, "EMAIL_EXISTS", "Ese email ya está registrado en otra cuenta");
-		}
-
-		// Fail-closed ANTES de asentar el pedido: sin transporte, el enlace no llega y el pedido es
-		// inservible.
+		// Guards de entrega, fail-closed ANTES de asentar nada. Dependen SÓLO de la política del
+		// despliegue y del dominio de la dirección —nunca de si ya existe una cuenta con ella—, así
+		// que no son un oráculo: la misma casilla libre y la misma casilla ocupada dan el mismo 503.
 		const sender = UserEndpoints.identity.getSystemEmailSender();
 		if (!sender) {
 			throw new IdentityError(503, "EMAIL_DELIVERY_UNAVAILABLE", "El envío de correos no está disponible: probá de nuevo más tarde");
@@ -523,37 +524,12 @@ export class UserEndpoints {
 			);
 		}
 
-		const { confirmToken } = await UserEndpoints.identity.users.requestEmailChange(ctx.user.id, newEmail, ctx.token!);
-		const confirmUrl = UserEndpoints.identity.buildEmailChangeConfirmUrl(confirmToken);
-		try {
-			// Directo al EmailService: la casilla NUEVA todavía no es la de la cuenta y el pipeline
-			// de notificaciones sólo entrega a la registrada. `exact` porque el enlace tiene que
-			// aterrizar en ESA casilla o no salir; `userId` va sólo para rate-limit y trazas.
-			await sender.sendSystemEmail({
-				to: newEmail,
-				userId: ctx.user.id,
-				deliveryGuarantee: "exact",
-				subject: "Confirmá tu nuevo email — Confirm your new email",
-				html:
-					`<p>Pediste usar esta casilla como email de tu cuenta de ADC Platform.</p>` +
-					`<p><a href="${confirmUrl}">Confirmar el cambio de email</a> (enlace de un solo uso, vence en ${EMAIL_CHANGE_TOKEN_TTL_MINUTES} minutos).</p>` +
-					`<p>Si no fuiste vos, ignorá este correo: sin esta confirmación el email de la cuenta no cambia.</p>` +
-					`<hr><p>You asked to use this address as your ADC Platform account email. ` +
-					`<a href="${confirmUrl}">Confirm the email change</a> (single-use link, expires in ${EMAIL_CHANGE_TOKEN_TTL_MINUTES} minutes). ` +
-					`If this wasn't you, ignore this message: without confirmation the account email does not change.</p>`,
-				text:
-					`Pediste usar esta casilla como email de tu cuenta de ADC Platform. ` +
-					`Confirmá el cambio (enlace de un solo uso, vence en ${EMAIL_CHANGE_TOKEN_TTL_MINUTES} minutos): ${confirmUrl} — ` +
-					`Si no fuiste vos, ignorá este correo. / You asked to change your ADC Platform account email. ` +
-					`Confirm here (single-use, expires in ${EMAIL_CHANGE_TOKEN_TTL_MINUTES} minutes): ${confirmUrl}`,
-			});
-		} catch {
-			// El pedido queda asentado pero sin enlace entregado: repetirlo emite un token
-			// nuevo que pisa a éste, así que no hay estado colgado que limpiar.
-			throw new IdentityError(503, "EMAIL_DELIVERY_UNAVAILABLE", "No se pudo enviar el correo de confirmación: probá de nuevo más tarde");
-		}
+		// Emisión del enlace o aviso al titular de la casilla, según corresponda: la decisión vive
+		// en Identity (`emailBinding.ts`) y nunca vuelve por la respuesta.
+		await UserEndpoints.identity._internal(UserEndpoints.cap).bindEmailNeutrally(ctx.user.id, newEmail, "change");
 
-		// Aviso a la casilla VIEJA (todavía es la registrada: el cambio no se aplicó).
+		// Aviso a la casilla VIEJA (todavía es la registrada: el cambio no se aplicó). Sale en las
+		// dos ramas, como todo lo observable desde esta cuenta.
 		void UserEndpoints.identity
 			.notifications(UserEndpoints.cap)
 			.emailChangeRequested(ctx.user.id, { maskedNewEmail: maskEmails([newEmail])[0] ?? "***" });

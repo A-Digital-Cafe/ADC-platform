@@ -32,6 +32,7 @@ import {
 import * as OAS from "./schemas/oauth.js";
 import { checkUsername, generateRandomUsername } from "@common/utils/name-policy.js";
 import { isPrivateHost } from "@common/utils/url-utils.js";
+import { resolveUserAvatar } from "@common/utils/avatar.js";
 import { buildLegalAcceptance } from "@common/utils/legal-docs.js";
 
 /** Nombre de las cookies */
@@ -291,15 +292,17 @@ export class OAuthEndpoints {
 		// Éxito → consumir token (one-time use)
 		await OAuthEndpoints.deletePendingLink(pendingToken);
 
+		// Sin `providerAvatar`: la foto del proveedor se ingiere abajo y lo que queda guardado es
+		// una URL nuestra (ver `ingestProviderAvatar`).
 		await users.linkExternalAccount(existingUser.id, {
 			provider: pendingData.provider,
 			providerId: pendingData.providerId,
 			providerUsername: pendingData.providerUsername,
-			providerAvatar: pendingData.providerAvatar,
 			status: "linked",
 			linkedAt: new Date(),
 		});
 
+		await OAuthEndpoints.requireInternalIdentity().ingestProviderAvatar(existingUser.id, pendingData.avatarIngestUrl);
 		await OAuthEndpoints.syncPendingLinkProvider(pendingData, existingUser.id);
 
 		const user = await OAuthEndpoints.buildLinkedAccountUser(existingUser, pendingData);
@@ -491,15 +494,18 @@ export class OAuthEndpoints {
 
 	private static async buildLinkedAccountUser(existingUser: InternalUser, pendingData: PendingLinkData): Promise<AuthenticatedUser> {
 		const permissions = await OAuthEndpoints.getUserPermissions(existingUser.id);
+		// Relectura: la ingesta del avatar acaba de escribir la metadata, y `resolveUserAvatar`
+		// devuelve SIEMPRE una URL propia (adjunto ingerido o auto-avatar).
+		const fresh = await OAuthEndpoints.requireInternalIdentity().users.getUser(existingUser.id);
 		return {
 			id: existingUser.id,
 			providerId: pendingData.providerId,
 			provider: pendingData.provider,
 			username: existingUser.username,
 			email: existingUser.email,
-			avatar: pendingData.providerAvatar,
+			avatar: resolveUserAvatar(fresh ?? existingUser),
 			permissions,
-			metadata: existingUser.metadata,
+			metadata: fresh?.metadata ?? existingUser.metadata,
 		};
 	}
 
@@ -652,6 +658,8 @@ export class OAuthEndpoints {
 		accessToken: string
 	): Promise<GetOrCreateUserResult> {
 		if (!OAuthEndpoints.deps.internalIdentity) {
+			// Sesión efímera sin Identity: sin almacenamiento donde ingerir el avatar, va sin foto
+			// (el cliente cae al auto-avatar) antes que filtrarle la IP del visitante al CDN.
 			return {
 				type: "authenticated",
 				user: {
@@ -660,7 +668,6 @@ export class OAuthEndpoints {
 					provider,
 					username: profile.username,
 					email: profile.email,
-					avatar: profile.avatar,
 					permissions: ["public.read"],
 				},
 			};
@@ -683,7 +690,9 @@ export class OAuthEndpoints {
 		const linkedUser = await users.findByLinkedExternalAccount(provider, profile.id);
 
 		if (linkedUser) {
-			// Ya vinculado → login directo
+			// Ya vinculado → login directo. El avatar sale de la cuenta (siempre una URL propia):
+			// el del proveedor se ingirió al vincular y volver a mirarlo en cada login pisaría la
+			// foto que la persona haya elegido después.
 			const permissions = await OAuthEndpoints.getUserPermissions(linkedUser.id);
 			return {
 				type: "authenticated",
@@ -693,7 +702,7 @@ export class OAuthEndpoints {
 					provider,
 					username: linkedUser.username,
 					email: linkedUser.email,
-					avatar: profile.avatar || linkedUser.linkedAccounts?.find((la) => la.provider === provider)?.providerAvatar,
+					avatar: resolveUserAvatar(linkedUser),
 					permissions,
 					metadata: linkedUser.metadata,
 					isActive: linkedUser.isActive,
@@ -711,7 +720,7 @@ export class OAuthEndpoints {
 						provider,
 						providerId: profile.id,
 						providerUsername: profile.username,
-						providerAvatar: profile.avatar,
+						avatarIngestUrl: profile.avatarIngestUrl,
 						email: trustedEmail,
 						accessToken,
 					},
@@ -725,6 +734,8 @@ export class OAuthEndpoints {
 		const uniqueUsername = await OAuthEndpoints.generateUniqueUsername(profile.username, users);
 		const newUser = await users.createUser(uniqueUsername, randomPassword, []);
 
+		// Ni `providerAvatar` ni `metadata.avatar`: la URL del proveedor no se guarda nunca. La foto
+		// entra por la ingesta de abajo, que la baja del CDN una vez y deja una URL nuestra.
 		await users.updateUser(newUser.id, {
 			email: trustedEmail,
 			linkedAccounts: [
@@ -732,13 +743,11 @@ export class OAuthEndpoints {
 					provider,
 					providerId: profile.id,
 					providerUsername: profile.username,
-					providerAvatar: profile.avatar,
 					status: "linked",
 					linkedAt: new Date(),
 				},
 			],
 			metadata: {
-				avatar: profile.avatar,
 				createdVia: provider,
 				// El clickwrap (`OAuthLegalNotice`, visible junto a los botones OAuth en Login y
 				// Register) avisa que continuar implica aceptar Términos/Privacidad y declarar edad.
@@ -746,7 +755,10 @@ export class OAuthEndpoints {
 			},
 		});
 
+		await OAuthEndpoints.deps.internalIdentity.ingestProviderAvatar(newUser.id, profile.avatarIngestUrl);
+
 		const defaultPermissions = await OAuthEndpoints.getDefaultPermissions();
+		const created = await users.getUser(newUser.id);
 		return {
 			type: "authenticated",
 			user: {
@@ -755,7 +767,7 @@ export class OAuthEndpoints {
 				provider,
 				username: newUser.username,
 				email: trustedEmail,
-				avatar: profile.avatar,
+				avatar: resolveUserAvatar(created ?? newUser),
 				permissions: defaultPermissions,
 			},
 		};

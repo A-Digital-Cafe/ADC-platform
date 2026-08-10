@@ -5,6 +5,7 @@ import type IdentityManagerService from "../index.js";
 import * as OS from "./schemas/organizations.js";
 import { SuccessResponse, JobAcceptedResponse } from "./schemas/common.js";
 import { checkOrgSlug as checkSlugPolicy } from "@common/utils/name-policy.js";
+import { sanitizeUserMetadata } from "@common/utils/user-metadata.js";
 import { assertCanGrantPermissions, assertCanManageUser, assertCanAssignRoles } from "../domain/hierarchy.js";
 
 import type { Organization } from "@common/types/identity/Organization.js";
@@ -209,8 +210,13 @@ export class OrgEndpoints {
 		assertReadableOrganizationAccess(ctx, org.orgId);
 
 		const { items: members } = await OrgEndpoints.identity.users.getAllUsers(ctx.token!, ctx.params.orgId);
+		// Los miembros son terceros para quien lista: además del hash de password hay que quitar el
+		// material de autenticación de `metadata`. El de `emailChangePending` es especialmente
+		// sensible acá: su presencia delata si una dirección estaba libre u ocupada, que es justo lo
+		// que el binding neutral de email existe para no revelar.
 		return members.map(({ passwordHash, ...user }) => ({
 			...user,
+			metadata: sanitizeUserMetadata(user.metadata),
 			orgMemberships: user.orgMemberships?.filter((membership) => membership.orgId === org.orgId) || [],
 		}));
 	}

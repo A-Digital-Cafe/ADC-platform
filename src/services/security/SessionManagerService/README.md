@@ -9,7 +9,7 @@ Autenticación OAuth 2.0 con Access/Refresh Tokens y rotación de secretos (`ker
 | GET    | `/api/auth/login/:provider`                 | público             | Inicia login OAuth                                                 |
 | GET    | `/api/auth/callback/:provider`              | público             | Callback OAuth                                                     |
 | POST   | `/api/auth/login`                           | público             | Login nativo (username/password)                                   |
-| POST   | `/api/auth/register`                        | público             | Registro de nuevo usuario (exige `legal`: ver abajo)               |
+| POST   | `/api/auth/register`                        | público             | Alta (exige `legal`; el email se vincula por correo, ver abajo)    |
 | GET    | `/api/auth/session`                         | público             | Verifica sesión                                                    |
 | POST   | `/api/auth/refresh`                         | público             | Renueva tokens                                                     |
 | POST   | `/api/auth/logout`                          | público             | Cierra sesión                                                      |
@@ -40,6 +40,10 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
 - **Refresh Token**: opaco, 30 días, cookie HttpOnly en `/api/auth/refresh`; rotación de un solo uso con
   ventana de gracia de 60s (el token recién rotado devuelve el par vigente: pestañas de orígenes distintos
   no pueden coordinarse entre sí). `/api/auth/refresh` devuelve `expiresAt` para renovar antes de vencer
+- **Alta sin oráculo de email**: el registro crea la cuenta SIN email y delega la vinculación en
+  `IdentityManager._internal(cap).bindEmailNeutrally` (fuera de banda). El 409 sólo existe para
+  `USERNAME_EXISTS` (identidad pública, ya resoluble por HEAD); si el email está tomado, el aviso va
+  a su titular y la respuesta —cuerpo y cookies— es idéntica a la del caso libre
 - **Rate limiting**: 3 fallos login/día = bloqueo 1h; post-desbloqueo fallo = bloqueo permanente
 - **Geo-validation**: cambio de país invalida sesión
 - **Moderación**: integra `ModerationService` (opcional, vía `IModerationService`) para bloquear logins baneados;

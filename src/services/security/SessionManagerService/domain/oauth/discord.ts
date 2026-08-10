@@ -18,11 +18,12 @@ export class DiscordOAuthProvider extends BaseOAuthProvider {
 	}
 
 	protected parseUserProfile(data: Record<string, any>): ProviderUserProfile {
-		// Discord avatar URL format
-		let avatar: string | undefined;
+		// URL del CDN de Discord: sólo para que el servidor se baje la imagen una vez y la
+		// guarde como propia (ver `avatarIngestUrl`). Nunca se persiste ni se sirve.
+		let avatarIngestUrl: string | undefined;
 		if (data.avatar) {
 			const ext = data.avatar.startsWith("a_") ? "gif" : "png";
-			avatar = `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.${ext}`;
+			avatarIngestUrl = `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.${ext}`;
 		}
 
 		return {
@@ -32,7 +33,7 @@ export class DiscordOAuthProvider extends BaseOAuthProvider {
 			// `verified` de `/users/@me`: Discord deja poner cualquier email en la cuenta,
 			// así que sin este flag el email no identifica a nadie.
 			emailVerified: data.verified === true,
-			avatar,
+			avatarIngestUrl,
 			metadata: data,
 		};
 	}

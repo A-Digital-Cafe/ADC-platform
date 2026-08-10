@@ -29,6 +29,7 @@ import type { ISubscriptionService } from "@common/types/subscriptions/index.ts"
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
 import type { IModerationService } from "@common/types/identity/IModerationService.js";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
+import type { IIdleOrchestrator } from "@common/types/operations/IIdleOrchestrator.js";
 import type { Step } from "../OperationsService/index.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
@@ -45,6 +46,14 @@ import type AttachmentsUtility from "../../../utilities/attachments/attachments-
 import type { AttachmentsManager } from "../../../utilities/attachments/attachments-utility/index.js";
 import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
 import { buildInternalApi, buildDiscordApi, type IdentityInternalApi, type IdentityAvatarApi, type IdentityDiscordApi } from "./internal.js";
+import {
+	AVATAR_ALLOWED_MIME_TYPES,
+	AVATAR_MAX_SIZE_BYTES,
+	backfillRemoteAvatars,
+	ingestProviderAvatar,
+	type AvatarIngestDeps,
+} from "./avatarIngest.js";
+import { createEmailBinder, type EmailBinder } from "./emailBinding.js";
 import type InternalS3Provider from "../../../providers/object/internal-s3-provider/index.js";
 import { userAvatarAttachmentsChecker } from "./permissions/userAvatarAttachments.js";
 import { Kernel } from "../../../kernel.ts";
@@ -58,6 +67,7 @@ import type { IAuditLogService } from "@common/types/security/AuditLog.ts";
 import type { INotificationEmailSender } from "@common/types/notifications/INotificationService.ts";
 import type { IMailboxRenamer } from "@common/types/email/Email.ts";
 import { sha256Bytes, sha256Hex } from "@common/utils/crypto.ts";
+import { sanitizeUserMetadata } from "@common/utils/user-metadata.ts";
 import LRUCache from "@adc/utils/performance/LRUCache.ts";
 
 /** Organizaciones (× modo read/write) con managers vivos a la vez. */
@@ -140,6 +150,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 	#internalUserManager: UserManager | null = null;
 	#internalOrgManager: OrgManager | null = null;
 	#internalRoleManager: RoleManager | null = null;
+
+	/** Vinculación neutral de emails (alta y rectificación); se arma en `start()`. */
+	#bindEmailNeutrally: EmailBinder | null = null;
 
 	// Discord Guild Config model (para mapeo de roles por guild)
 	#discordGuildConfigModel: Model<DiscordGuildConfig> | null = null;
@@ -398,6 +411,17 @@ export default class IdentityManagerService extends BaseService implements IIden
 				noAuth
 			);
 
+			// Vinculación neutral de emails: la usan el alta (vía `_internal`) y `/me/change-email`.
+			// Va sobre el manager INTERNO porque el alta corre pre-sesión, sin token que autorizar.
+			this.#bindEmailNeutrally = createEmailBinder({
+				users: this.#internalUserManager,
+				logger: this.logger,
+				cap: this.getCapability(),
+				getSender: () => this.getSystemEmailSender(),
+				getAudit: () => this.getAuditWriter(),
+				buildConfirmUrl: (confirmToken) => this.buildEmailChangeConfirmUrl(confirmToken),
+			});
+
 			// Inicializar roles predefinidos y usuario SYSTEM en BD local.
 			// El sync propaga cambios de systemRoles.ts a la BD (el PermissionManager
 			// se crea después con cache vacío, no hace falta invalidar acá).
@@ -465,8 +489,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 					basePath: "user-avatars",
 					subPathResolver: (ctx) => ctx.ownerId,
 					permissionChecker: userAvatarAttachmentsChecker,
-					maxSize: 2 * 1024 * 1024, // 2 MB
-					allowedMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+					// Misma política para la subida manual y para la ingesta del avatar OAuth.
+					maxSize: AVATAR_MAX_SIZE_BYTES,
+					allowedMimeTypes: AVATAR_ALLOWED_MIME_TYPES,
 					kernelKey,
 					quota: { appId: "avatars", getTracker: this.#getQuotaTracker },
 					logger: this.logger,
@@ -476,6 +501,8 @@ export default class IdentityManagerService extends BaseService implements IIden
 					`No se pudo inicializar AttachmentsManager de avatares: ${(e as Error).message}. Subida de avatares deshabilitada.`
 				);
 			}
+
+			this.#registerAvatarBackfill();
 
 			// Destinatarios de alertas de seguridad: Admins + Security Managers GLOBALES
 			// (roles con orgId nulo; el lookup por nombre a secas podría matchear roles de org).
@@ -604,7 +631,50 @@ export default class IdentityManagerService extends BaseService implements IIden
 	/** Managers de users/orgs/roles SIN auth (pre‑auth: login/registro/OAuth). Scope `identity:internal`. */
 	_internal(token: CapabilityToken): IdentityInternalApi {
 		assertScope(token, Scope.IdentityInternal);
-		return buildInternalApi(this.#internalUserManager!, this.#internalOrgManager!, this.#internalRoleManager!);
+		return buildInternalApi(
+			this.#internalUserManager!,
+			this.#internalOrgManager!,
+			this.#internalRoleManager!,
+			this.#bindEmailNeutrally!,
+			(userId, remoteAvatarUrl) => this.#ingestProviderAvatar(userId, remoteAvatarUrl)
+		);
+	}
+
+	/** Dependencias de la ingesta de avatares: managers internos + el manager de adjuntos vigente. */
+	#avatarIngestDeps(): AvatarIngestDeps {
+		return {
+			users: this.#internalUserManager!,
+			attachments: () => this.#avatarAttachmentsManager,
+			logger: this.logger,
+		};
+	}
+
+	/** Ver `IdentityInternalApi.ingestProviderAvatar`. Nunca lanza. */
+	async #ingestProviderAvatar(userId: string, remoteAvatarUrl?: string): Promise<void> {
+		if (!this.#internalUserManager) return;
+		await ingestProviderAvatar(this.#avatarIngestDeps(), userId, remoteAvatarUrl);
+		this.#permissionManager?.invalidateUser(userId);
+	}
+
+	/**
+	 * Barrido de las cuentas anteriores a la ingesta, que todavía guardan la URL del CDN del
+	 * proveedor. Va como trabajo de momento ocioso —de a lotes chicos, cada uno con su petición
+	 * saliente— y se apaga solo cuando no queda ninguna.
+	 */
+	#registerAvatarBackfill(): void {
+		try {
+			// Registrar de más: sin el orquestador el barrido simplemente no corre — no es motivo
+			// para que Identity (kernelMode 60) no arranque.
+			this.tryGetMyService<IIdleOrchestrator>("OperationsService")?.registerIdleJob(this.getCapability(), {
+				id: "avatar-remote-backfill",
+				description: "Ingesta los avatares que todavía apuntan al CDN del proveedor OAuth",
+				intervalMs: 60_000,
+				batchBudgetMs: 5_000,
+				run: (ctx) => backfillRemoteAvatars(this.#avatarIngestDeps(), ctx),
+			});
+		} catch (err: any) {
+			this.logger.logWarn(`[avatar] backfill de avatares remotos no registrado: ${err?.message || err}`);
+		}
 	}
 
 	/** Agregación de uso de avatares para cuota. Scope `identity:avatar`. */
@@ -782,6 +852,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 	async stop(kernelKey: symbol): Promise<void> {
 		this.#orgManagersCache.clear();
 		this.#regionConnections.clear();
+		this.tryGetMyService<IIdleOrchestrator>("OperationsService")?.unregisterIdleJobs(this.getCapability());
 
 		if (this.#retentionTimer) {
 			clearInterval(this.#retentionTimer);
@@ -886,13 +957,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 		if (!user) throw new Error(`Usuario ${userId} no encontrado`);
 
 		const { passwordHash: _passwordHash, ...safeUser } = user;
-		const metadata = { ...(safeUser.metadata ?? {}) } as Record<string, unknown>;
-		// Material de autenticación, no un dato personal: nunca sale en el export.
-		delete metadata.deletionCancelTokenHash;
-		if (metadata.emailChangePending && typeof metadata.emailChangePending === "object") {
-			const { tokenHash: _tokenHash, ...pendingRest } = metadata.emailChangePending as Record<string, unknown>;
-			metadata.emailChangePending = pendingRest;
-		}
+		// Material de autenticación, no un dato personal: nunca sale en el export (mismo helper que
+		// usa la sanitización de las respuestas HTTP, para que haya una sola definición).
+		const metadata = sanitizeUserMetadata(safeUser.metadata) ?? {};
 
 		const sections: Record<string, UserDataExportSection> = {
 			identity: {

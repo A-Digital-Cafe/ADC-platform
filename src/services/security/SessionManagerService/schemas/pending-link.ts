@@ -11,7 +11,8 @@ const PendingLinkDataSchema = Type.Object({
 	provider: Type.String(),
 	providerId: Type.String(),
 	providerUsername: Type.String(),
-	providerAvatar: Type.Optional(Type.String()),
+	/** URL remota a ingerir tras vincular; nunca se guarda como avatar (ver `ProviderUserProfile`). */
+	avatarIngestUrl: Type.Optional(Type.String()),
 	email: Type.String(),
 	accessToken: Type.String(),
 });

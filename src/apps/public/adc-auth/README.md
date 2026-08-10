@@ -12,3 +12,5 @@ App de autenticación para ADC Platform. Integra SessionManagerService; puerto d
 ## Características
 
 -   Clickwrap legal OAuth (Términos/Privacidad + edad) visible en `/login` y `/register`
+-   El alta no dice si un email ya está registrado: siempre termina en "revisá tu casilla" y lo que
+    corresponda llega por correo (confirmación de la dirección, o aviso a su titular)

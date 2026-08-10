@@ -74,7 +74,12 @@ export interface ProviderUserProfile {
 	email?: string;
 	/** El proveedor confirma que el email está verificado. Ausente = no verificado. */
 	emailVerified?: boolean;
-	avatar?: string;
+	/**
+	 * URL del avatar en el CDN del proveedor. Es una **pista para ingerirlo del lado del servidor**
+	 * (`IdentityInternalApi.ingestProviderAvatar`), NO un valor a persistir ni a mandar al
+	 * navegador: servirla haría que el navegador de cada visitante le pida la imagen a un tercero.
+	 */
+	avatarIngestUrl?: string;
 	/** Payload crudo del proveedor */
 	metadata?: Record<string, any>;
 }

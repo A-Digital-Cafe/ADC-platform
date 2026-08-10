@@ -41,7 +41,12 @@ export default {
 		ageConfirm: "Declaro tener al menos {{minAge}} años, o la edad mínima que exija mi país.",
 		ageLink: "Ver edades por país",
 		oauthLegalBefore: "Al continuar con Discord o Google aceptás los",
-		oauthLegalAfter: ", y declarás tener al menos {{minAge}} años o la edad mínima que exija tu país."
+		oauthLegalAfter: ", y declarás tener al menos {{minAge}} años o la edad mínima que exija tu país.",
+		pendingTitle: "Revisá tu casilla",
+		pendingBody:
+			"Tu cuenta está lista. Te escribimos a {{email}}: abrí ese correo para confirmar la dirección. Si esa casilla ya tenía una cuenta, te lo contamos ahí y esta cuenta queda sin email hasta que elijas otra desde Mi cuenta.",
+		pendingHint: "Si no te llega nada, entrá a Mi cuenta: ahí ves si la dirección quedó vinculada o si tenés que elegir otra.",
+		pendingContinue: "Continuar"
 	},
 	cancelDeletion: {
 		title: "Cancelar la baja de tu cuenta",
@@ -81,7 +86,6 @@ export default {
 		WEAK_PASSWORD: "La contraseña debe tener al menos 8 caracteres",
 		INVALID_EMAIL: "El email no es válido",
 		USERNAME_EXISTS: "El nombre de usuario ya está en uso",
-		EMAIL_EXISTS: "El email ya está registrado",
 		PASSWORDS_MISMATCH: "Las contraseñas no coinciden",
 		LEGAL_NOT_ACCEPTED: "Tenés que aceptar los Términos y Condiciones y la Política de Privacidad para crear una cuenta",
 		AGE_NOT_CONFIRMED: "Tenés que confirmar que cumplís con la edad mínima",

@@ -16,14 +16,13 @@ interface PresignBody {
 }
 
 interface SelectBody {
-	source: string; // "default" | "custom" | "linked:<provider>" | "none"
+	source: string; // "default" | "custom" | "none"
 }
 
 interface AvatarOption {
-	id: string; // "default" | "custom" | "linked:<provider>" | "none"
+	id: string; // "default" | "custom" | "none"
 	label: string;
 	url?: string; // URL para preview
-	provider?: string;
 }
 
 const AVATAR_RATE_LIMIT = { max: 5, timeWindow: 60_000 };
@@ -75,9 +74,12 @@ export class AvatarEndpoints {
 
 	/**
 	 * Lista las opciones de avatar disponibles para el usuario:
-	 *  - cada `linkedAccount` con `providerAvatar`
-	 *  - opción `custom` (si tiene attachment subido)
-	 *  - opción `none` (fallback al auto-avatar)
+	 *  - opción `default` (auto-avatar determinista)
+	 *  - opción `custom` (si tiene attachment subido; incluye el avatar OAuth ya ingerido)
+	 *  - opción `none` (sin avatar)
+	 *
+	 * No hay opción por proveedor: su foto se ingiere al vincular y queda como `custom`. Ofrecer la
+	 * URL del CDN haría que el navegador de quien mire el perfil se la pida a un tercero.
 	 */
 	@RegisterEndpoint({
 		method: "GET",
@@ -86,7 +88,7 @@ export class AvatarEndpoints {
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Lista opciones de avatar del usuario actual",
-			description: "Incluye `default` (auto-avatar), cuentas vinculadas con avatar, `custom` (si hay) y `none`.",
+			description: "Incluye `default` (auto-avatar), `custom` (si hay avatar propio, incluido el ingerido del proveedor) y `none`.",
 			schema: { response: { 200: AS.AvatarOptionsResponse } },
 		},
 	})
@@ -102,17 +104,6 @@ export class AvatarEndpoints {
 		};
 		const options: AvatarOption[] = [defaultOption];
 
-		for (const acc of user.linkedAccounts ?? []) {
-			if (acc.status === "linked" && acc.providerAvatar) {
-				options.push({
-					id: `linked:${acc.provider}`,
-					label: acc.provider.charAt(0).toUpperCase() + acc.provider.slice(1),
-					provider: acc.provider,
-					url: acc.providerAvatar,
-				});
-			}
-		}
-
 		if (metadata.customAvatar?.attachmentId) {
 			options.push({
 				id: "custom",
@@ -123,12 +114,9 @@ export class AvatarEndpoints {
 
 		options.push({ id: "none", label: "Sin avatar" });
 
-		const fallbackLinked = user.linkedAccounts?.find((a) => a.status === "linked" && a.providerAvatar);
-
 		let selected;
 		if (typeof metadata.avatarSource === "string") selected = metadata.avatarSource;
 		else if (metadata.customAvatar?.attachmentId) selected = "custom";
-		else if (fallbackLinked) selected = `linked:${fallbackLinked.provider}`;
 		else selected = "default";
 		return { options, selected };
 	}
@@ -253,7 +241,7 @@ export class AvatarEndpoints {
 	}
 
 	/**
-	 * Selecciona la fuente de avatar a usar: `default`, `custom`, `linked:<provider>` o `none`.
+	 * Selecciona la fuente de avatar a usar: `default`, `custom` o `none`.
 	 */
 	@RegisterEndpoint({
 		method: "PUT",
@@ -262,7 +250,7 @@ export class AvatarEndpoints {
 		options: {
 			tag: "IdentityManagerService/Avatars",
 			summary: "Selecciona la fuente de avatar",
-			description: "Fuente válida: `default`, `custom`, `none` o `linked:<provider>`.",
+			description: "Fuente válida: `default`, `custom` o `none`.",
 			rateLimit: AVATAR_RATE_LIMIT,
 			skipIdempotency: true,
 			schema: { body: AS.SelectAvatarBody, response: { 200: AS.AvatarSourceResponse } },
@@ -284,12 +272,6 @@ export class AvatarEndpoints {
 		} else if (raw === "custom") {
 			if (!meta.customAvatar?.attachmentId) {
 				throw new IdentityError(400, "NO_CUSTOM_AVATAR", "No hay avatar custom subido");
-			}
-		} else if (raw.startsWith("linked:")) {
-			const provider = raw.slice("linked:".length);
-			const acc = user.linkedAccounts?.find((a) => a.provider === provider && a.status === "linked");
-			if (!acc?.providerAvatar) {
-				throw new IdentityError(400, "INVALID_PROVIDER", `No hay avatar para el proveedor ${provider}`);
 			}
 		} else {
 			throw new IdentityError(400, "INVALID_SOURCE", "Fuente inválida");

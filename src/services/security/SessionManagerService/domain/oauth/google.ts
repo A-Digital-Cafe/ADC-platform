@@ -26,7 +26,8 @@ export class GoogleOAuthProvider extends BaseOAuthProvider {
 			// `verified_email` es el campo del endpoint v2 en uso; `email_verified` es el de
 			// OIDC, por si el endpoint cambia. Sin ninguno de los dos, el email no se confía.
 			emailVerified: data.verified_email === true || data.email_verified === true,
-			avatar: data.picture,
+			// URL en el CDN de Google: pista de ingesta, no se persiste (ver `avatarIngestUrl`).
+			avatarIngestUrl: data.picture,
 			metadata: data,
 		};
 	}
