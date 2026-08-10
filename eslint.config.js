@@ -14,6 +14,8 @@ export default [
       'src/common/docker/adc-haraka-core/**',
       '**/dist-ui/**',
       '**/dist/**',
+      // Generado por scripts/build-vendor-esm.mjs (React auto-hospedado): es un bundle de terceros.
+      'src/common/public/vendor/**',
     ],
   },
   {

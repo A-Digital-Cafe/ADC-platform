@@ -1,15 +1,22 @@
 import type { RegisteredUIModule } from "../../types.js";
 import type { ImportMap } from "../../../../../interfaces/modules/IUIModule.js";
 
-const REACT_VERSION = "19.2.6";
-
+/**
+ * React se sirve desde el propio origen (`scripts/build-vendor-esm.mjs` lo empaqueta en
+ * `common/public/vendor/react/`, que la UI federation ya publica en `/` para todas las apps).
+ *
+ * Antes apuntaba a `esm.sh`: eso le entregaba la IP de cada visitante a un tercero en **cada**
+ * carga de página, antes de que la persona hiciera nada. Auto-hospedarlo lo elimina del todo y
+ * permite sacar ese dominio del CSP. Las rutas son relativas a propósito: cada app las resuelve
+ * contra su propio origen, sin cruzar subdominios ni puertos.
+ */
 function getReactImports(): Record<string, string> {
 	return {
-		react: `https://esm.sh/react@${REACT_VERSION}`,
-		"react-dom": `https://esm.sh/react-dom@${REACT_VERSION}`,
-		"react-dom/client": `https://esm.sh/react-dom@${REACT_VERSION}/client`,
-		"react/jsx-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-runtime`,
-		"react/jsx-dev-runtime": `https://esm.sh/react@${REACT_VERSION}/jsx-dev-runtime`,
+		react: "/vendor/react/react.js",
+		"react-dom": "/vendor/react/react-dom.js",
+		"react-dom/client": "/vendor/react/react-dom-client.js",
+		"react/jsx-runtime": "/vendor/react/jsx-runtime.js",
+		"react/jsx-dev-runtime": "/vendor/react/jsx-dev-runtime.js",
 	};
 }
 

@@ -16,8 +16,8 @@
 	],
 	"scripts": {
 		"postinstall": "node scripts/sync-presets.mjs",
-		"start": "bun scripts/generate-public-env.ts && bun scripts/build-license-notices.mjs && bun scripts/build-legal-pdfs.ts && cross-env NODE_ENV=production bun src/index.ts",
-		"dev": "bun scripts/generate-public-env.ts && cross-env NODE_ENV=development bun src/index.ts",
+		"start": "bun scripts/generate-public-env.ts && bun scripts/build-license-notices.mjs && bun scripts/build-vendor-esm.mjs && bun scripts/build-legal-pdfs.ts && cross-env NODE_ENV=production bun src/index.ts",
+		"dev": "bun scripts/generate-public-env.ts && bun scripts/build-vendor-esm.mjs && cross-env NODE_ENV=development bun src/index.ts",
 		"dev:tests": "cross-env NODE_ENV=development ENABLE_TESTS=true bun src/index.ts",
 		"start:prodtests": "bun scripts/generate-public-env.ts && cross-env NODE_ENV=production ADC_LOCAL_PROD=true ENABLE_TESTS=true PROD_PORT=3000 bun src/index.ts",
 		"lint": "eslint src --ext .ts --max-warnings 0",
@@ -31,7 +31,7 @@
 		"create:service": "node scripts/create-service.mjs",
 		"create:utility": "node scripts/create-utility.mjs",
 		"create:provider": "node scripts/create-provider.mjs",
-		"build:ui": "bun scripts/generate-public-env.ts && bun scripts/build-license-notices.mjs && node scripts/build-ui-libraries.mjs",
+		"build:ui": "bun scripts/generate-public-env.ts && bun scripts/build-license-notices.mjs && bun scripts/build-vendor-esm.mjs && node scripts/build-ui-libraries.mjs",
 		"build:legal": "bun scripts/generate-public-env.ts && bun scripts/build-legal-pdfs.ts",
 		"build:licenses": "bun scripts/build-license-notices.mjs"
 	},
@@ -59,12 +59,12 @@
 		"proxy-addr": "^2.0.7",
 		"react": "^19.2.8",
 		"react-dom": "^19.2.8",
-		"vite": "^8.2.0",
-		"vue": "^3.5.40"
+		"vite": "^8.2.1",
+		"vue": "^3.5.41"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
-		"@module-federation/runtime-tools": "^2.4.0",
+		"@module-federation/runtime-tools": "^2.8.2",
 		"@originjs/vite-plugin-federation": "^1.4.1",
 		"@rspack/cli": "^2.0.3",
 		"@rspack/core": "^2.0.3",
@@ -82,9 +82,9 @@
 		"autoprefixer": "^10.5.4",
 		"cross-env": "^10.1.0",
 		"css-loader": "^7.1.4",
-		"eslint": "^10.3.0",
+		"eslint": "^10.8.1",
 		"knip": "^6.13.1",
-		"postcss": "^8.5.23",
+		"postcss": "^8.5.26",
 		"postcss-loader": "^8.2.1",
 		"style-loader": "^4.0.0",
 		"tailwindcss": "^4.3.3",
@@ -96,10 +96,10 @@
 		"baseline-browser-mapping": "^2.9.19",
 		"@babel/core": "^7.29.6",
 		"esbuild": "^0.28.1",
-		"js-yaml": "^4.2.0",
-		"postcss": "^8.5.23",
+		"js-yaml": "^4.3.1",
+		"postcss": "^8.5.26",
 		"qs": "^6.15.2",
-		"vite": "^8.2.0",
+		"vite": "^8.2.1",
 		"brace-expansion": "^5.0.9",
 		"devalue": "^5.8.1",
 		"fast-uri": "^3.1.5",
@@ -108,7 +108,9 @@
 		"nodemailer": "^9.0.1",
 		"path-to-regexp": "0.1.13",
 		"rollup": "^4.62.2",
-		"serialize-javascript": "^7.0.6"
+		"serialize-javascript": "^7.0.6",
+		"body-parser": "^1.20.6",
+		"svgo": "^4.0.2"
 	},
 	"resolutions": {
 		"@fastify/ajv-compiler/ajv": "^8.18.0",

@@ -43,9 +43,11 @@ function getDefaultCsp(nonce?: string): string {
 	// como por la IP de LAN (probar desde el móvil). La gramática CSP no admite
 	// comodines en hosts IP, así que fuera de producción se abren los esquemas
 	// `http:`/`ws:` completos en vez de enumerar orígenes.
+	// `esm.sh` salió de la lista: React se sirve desde el propio origen (`/vendor/react/`), así que
+	// ya no hay ningún CDN de módulos que contactar — ni siquiera para permitirlo.
 	const connectSrc = isRealProduction()
-		? `connect-src 'self' https://esm.sh ${CF_ANALYTICS_BEACON} https://*.adigitalcafe.com wss://*.adigitalcafe.com`
-		: "connect-src 'self' http: ws: https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
+		? `connect-src 'self' ${CF_ANALYTICS_BEACON} https://*.adigitalcafe.com wss://*.adigitalcafe.com`
+		: "connect-src 'self' http: ws: https://*.adigitalcafe.com wss://*.adigitalcafe.com";
 	// Sin `'unsafe-eval'`: nada del runtime lo necesita. rspack compila con `devtool: false` en
 	// **producción**, y ni Stencil, ni Vue (se resuelve el build runtime-only), ni el runtime de
 	// Module Federation usan `eval`/`new Function`. Si algún día se declaran remotes MF por
@@ -62,8 +64,8 @@ function getDefaultCsp(nonce?: string): string {
 	// `'unsafe-inline'`.
 	const inlineScript = nonce ? `'nonce-${nonce}'` : "'unsafe-inline'";
 	const scriptSrc = isRealProduction()
-		? `script-src 'self' ${inlineScript} https://esm.sh ${CF_ANALYTICS_SCRIPT} https://*.adigitalcafe.com`
-		: `script-src 'self' ${inlineScript} https://esm.sh http: https://*.adigitalcafe.com`;
+		? `script-src 'self' ${inlineScript} ${CF_ANALYTICS_SCRIPT} https://*.adigitalcafe.com`
+		: `script-src 'self' ${inlineScript} http: https://*.adigitalcafe.com`;
 	return [
 		"default-src 'self'",
 		"base-uri 'self'",
