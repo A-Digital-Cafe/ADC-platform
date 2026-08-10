@@ -15,7 +15,7 @@ export interface DevUserSeed {
 	email?: string;
 	/** Roles globales por nombre (se resuelven a roles con `orgId: null`). */
 	globalRoles?: SystemRole[];
-	/** Roles dentro de la organización de desarrollo (`orgId: DEV_ORG_ID`). */
+	/** Roles dentro de la organización de desarrollo (`orgId: DEV_ORG_SLUG`). */
 	orgRoles?: SystemRole[];
 }
 
@@ -26,7 +26,6 @@ export interface DevUserSeed {
  * se matchean por `orgId`, así que mantenerlos iguales simplifica el login en dev).
  */
 export const DEV_ORG_SLUG = "dev-org";
-export const DEV_ORG_ID = DEV_ORG_SLUG;
 
 /**
  * Usuarios de prueba para dev. Agregá entradas acá para tener más usuarios con

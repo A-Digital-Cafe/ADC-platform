@@ -23,7 +23,7 @@ export interface OrgLimitsInfo {
 	memberDefault: { tierBytes: number; overrideBytes: number | null; effectiveBytes: number };
 }
 
-export interface OrgMemberUsage {
+interface OrgMemberUsage {
 	userId: string;
 	username?: string;
 	totalBytes: number;

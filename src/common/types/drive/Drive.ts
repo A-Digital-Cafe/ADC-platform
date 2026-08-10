@@ -40,7 +40,7 @@ export interface DriveLabel {
  * archivo se purga definitivamente (sin papelera, libera cuota) cuando todos
  * los suscritos confirmaron la descarga, o al vencer `ttlHours` como respaldo.
  */
-export interface DriveFolderTransferConfig {
+interface DriveFolderTransferConfig {
 	enabled: boolean;
 	autoDelete: boolean;
 	ttlHours: number;

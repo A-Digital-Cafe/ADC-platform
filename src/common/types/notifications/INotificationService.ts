@@ -90,7 +90,7 @@ export interface SystemEmailDeliveryPolicy {
  * - `"exact"`: exactamente `to`, sin puentear jamás. Para los que prueban el control de esa
  *   casilla (confirmación de cambio de email); puentear haría la verificación un trámite vacío.
  */
-export type SystemEmailDeliveryGuarantee = "best-effort" | "any-mailbox" | "exact";
+type SystemEmailDeliveryGuarantee = "best-effort" | "any-mailbox" | "exact";
 
 export interface SystemEmailInput {
 	/** Dirección personal del usuario (la que conoce el IdentityManager). */

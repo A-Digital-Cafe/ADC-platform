@@ -112,7 +112,7 @@ export interface EntitlementsDTO {
 }
 
 /** Estado de un job de inferencia (espejo del poll genérico `/api/jobs/:id`). */
-export type InferenceJobStatus = "queued" | "running" | "completed" | "failed";
+type InferenceJobStatus = "queued" | "running" | "completed" | "failed";
 
 /** @public Resultado de encolar/consultar un job de eliminación de fondo o sticker. */
 export interface InferenceJobDTO {

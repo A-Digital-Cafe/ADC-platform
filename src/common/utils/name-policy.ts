@@ -23,7 +23,7 @@ interface RawPolicy {
 	randomUsername?: { adjectives?: string[]; animals?: string[]; digits?: number };
 }
 
-export interface NamePolicy {
+interface NamePolicy {
 	/** Alias con clave normalizada: local-part suelto o dirección completa. */
 	aliases: Map<string, string>;
 	reserved: Set<string>;
@@ -62,7 +62,7 @@ let cachedMtimeMs = -1;
  * colapsen al mismo texto. Se aplica a los términos de la lista y al candidato,
  * así la comparación es simétrica.
  */
-export function normalizeName(value: string): string {
+function normalizeName(value: string): string {
 	return value
 		.toLowerCase()
 		.replaceAll(/[4@]/g, "a")
@@ -112,7 +112,7 @@ function parsePolicy(raw: RawPolicy): NamePolicy {
  * veces por ruta, una reescritura entre medio dejaría el contenido nuevo cacheado
  * bajo el `mtime` viejo (o al revés, el viejo bajo el nuevo, que no se recupera).
  */
-export function getNamePolicy(): NamePolicy {
+function getNamePolicy(): NamePolicy {
 	let fd: number | undefined;
 	try {
 		fd = openSync(POLICY_PATH, "r");

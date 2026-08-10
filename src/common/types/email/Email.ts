@@ -143,7 +143,7 @@ export interface MailAccount {
 }
 
 /** Entrada del historial de direcciones de un buzón. */
-export interface MailboxAddressChange {
+interface MailboxAddressChange {
 	address: string;
 	changedAt: Date;
 }

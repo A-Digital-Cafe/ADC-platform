@@ -22,6 +22,7 @@
 		{ "name": "📦 project-management", "path": "presets/project-management" },
 		{ "name": "📦 SEO", "path": "presets/SEO" },
 		{ "name": "📦 status", "path": "presets/status" },
+		{ "name": "🎮 games", "path": "presets/games" },
 		{ "name": "💻 adc-drive-agent", "path": "desktop/adc-drive-agent" },
 	],
 	"settings": {

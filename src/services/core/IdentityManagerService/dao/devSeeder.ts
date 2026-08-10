@@ -5,7 +5,7 @@ import type { Role } from "@common/types/identity/Role.ts";
 import type { Organization } from "@common/types/identity/Organization.ts";
 import { generateId, hashPassword } from "@common/utils/crypto.ts";
 import type { RoleManager } from "./roles.js";
-import { DEV_USERS, DEV_ORG_ID, DEV_ORG_SLUG, type DevUserSeed } from "../defaults/devUsers.ts";
+import { DEV_USERS, DEV_ORG_SLUG, type DevUserSeed } from "../defaults/devUsers.ts";
 
 interface DevSeederDeps {
 	userModel: Model<User>;
@@ -38,9 +38,9 @@ export async function purgeDevUsers(deps: DevPurgeDeps): Promise<void> {
 	const { userModel, roleModel, orgModel, logger } = deps;
 
 	const users = await userModel.deleteMany({ "metadata.createdVia": DEV_SEED_MARKER });
-	const org = await orgModel.deleteMany({ orgId: DEV_ORG_ID, "metadata.createdVia": DEV_SEED_MARKER });
+	const org = await orgModel.deleteMany({ orgId: DEV_ORG_SLUG, "metadata.createdVia": DEV_SEED_MARKER });
 	// Roles de la org dev (los globales reales tienen orgId null).
-	const roles = await roleModel.deleteMany({ orgId: DEV_ORG_ID });
+	const roles = await roleModel.deleteMany({ orgId: DEV_ORG_SLUG });
 
 	const removed = (users.deletedCount ?? 0) + (org.deletedCount ?? 0) + (roles.deletedCount ?? 0);
 	if (removed > 0) {
@@ -67,9 +67,9 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 
 	// 1. Org de desarrollo con orgId estable (= slug) para login directo.
 	await orgModel.updateOne(
-		{ orgId: DEV_ORG_ID },
+		{ orgId: DEV_ORG_SLUG },
 		{
-			$setOnInsert: { orgId: DEV_ORG_ID, createdAt: new Date() },
+			$setOnInsert: { orgId: DEV_ORG_SLUG, createdAt: new Date() },
 			$set: {
 				slug: DEV_ORG_SLUG,
 				region: "default/default",
@@ -84,7 +84,7 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 	);
 
 	// 2. Roles predefinidos de la org en la BD local.
-	await roles.initializePredefinedRoles(DEV_ORG_ID);
+	await roles.initializePredefinedRoles(DEV_ORG_SLUG);
 
 	// Resuelve roleIds por nombre dentro de un contexto (orgId null = global).
 	const resolveRoleIds = async (names: readonly string[] | undefined, orgId: string | null): Promise<string[]> => {
@@ -109,8 +109,8 @@ export async function seedDevUsers(deps: DevSeederDeps): Promise<void> {
 			return;
 		}
 		const roleIds = await resolveRoleIds(seed.globalRoles, null);
-		const orgRoleIds = await resolveRoleIds(seed.orgRoles, DEV_ORG_ID);
-		const orgMemberships = orgRoleIds.length ? [{ orgId: DEV_ORG_ID, roleIds: orgRoleIds, joinedAt: new Date() }] : [];
+		const orgRoleIds = await resolveRoleIds(seed.orgRoles, DEV_ORG_SLUG);
+		const orgMemberships = orgRoleIds.length ? [{ orgId: DEV_ORG_SLUG, roleIds: orgRoleIds, joinedAt: new Date() }] : [];
 
 		await userModel.updateOne(
 			{ username: seed.username },

@@ -52,7 +52,7 @@ export function createSeatGate(resolvePlans: PlanResolver): SeatGate {
  * Vive acá y no en el módulo de `PlanService` por lo mismo que el resto del archivo: importar
  * desde el servicio arrastraría el grafo del kernel a cualquier tsconfig que lo toque.
  */
-export type EntitlementsReader = (subject: PlanSubject) => Promise<EntitlementsDTO | null>;
+type EntitlementsReader = (subject: PlanSubject) => Promise<EntitlementsDTO | null>;
 
 /** @public Construye un {@link EntitlementsReader} a partir del getter lazy del consumidor. */
 export function createEntitlementsReader(getEntitlements: EntitlementsGetter): EntitlementsReader {

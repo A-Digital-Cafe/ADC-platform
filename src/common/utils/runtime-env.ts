@@ -16,7 +16,7 @@ export function isRealProduction(): boolean {
  * `bun run start:prodtests` ejercita los caminos de producción en la máquina del desarrollador.
  * Es la única razón legítima para correr con `NODE_ENV=production` y seguridad degradada.
  */
-export function isLocalProdRun(): boolean {
+function isLocalProdRun(): boolean {
 	return process.env.NODE_ENV === "production" && process.env.ADC_LOCAL_PROD === "true";
 }
 

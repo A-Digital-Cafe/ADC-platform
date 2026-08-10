@@ -12,10 +12,10 @@ import type { EndpointMetricRow } from "@common/types/endpoints/IEndpointMetrics
  * Cortes (ms) del histograma de latencia. Escala logarítmica: interesa el orden de magnitud
  * de la cola, no el milisegundo exacto. La clase extra del final es "≥ 10 s" (sin techo).
  */
-export const LATENCY_BOUNDS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000];
+const LATENCY_BOUNDS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000];
 export const HIST_SLOTS = LATENCY_BOUNDS.length + 1;
 
-/** Contadores crudos de un endpoint en un tramo de tiempo. Todo campo es aditivo salvo `maxMs`. */
+/** Contadores crudos de un endpoint en un tramo de tiempo. Cada campo es aditivo salvo `maxMs`. */
 export interface MetricAggregate {
 	count: number;
 	sumMs: number;
@@ -41,8 +41,8 @@ export const emptyAggregate = (): MetricAggregate => ({
 	errByStatus: {},
 });
 
-/** Clase del histograma a la que pertenece una latencia (la última absorbe todo lo que se pasa). */
-export function slotOf(ms: number): number {
+/** Clase del histograma a la que pertenece una latencia (la última absorbe el resto de lo que se pasa). */
+function slotOf(ms: number): number {
 	for (let i = 0; i < LATENCY_BOUNDS.length; i++) if (ms < LATENCY_BOUNDS[i]) return i;
 	return LATENCY_BOUNDS.length;
 }
@@ -82,7 +82,7 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * linealmente dentro de ella. El error queda acotado por el ancho de la clase (~2.5x), que
  * alcanza para responder "¿la cola está mal?" sin persistir cada muestra.
  */
-export function percentile(hist: number[], samples: number, q: number): number {
+function percentile(hist: number[], samples: number, q: number): number {
 	if (samples <= 0) return 0;
 	const target = samples * q;
 	let acc = 0;

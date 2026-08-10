@@ -71,7 +71,7 @@ const measuredHourSchema = new Schema<MeasuredHourDoc>(
 export const METRICS_SCHEMAS = { hourly: hourlySchema, measuredHour: measuredHourSchema };
 
 /** Lo que la ventana devuelve por endpoint: el total sumado más su reparto hora a hora. */
-export interface WindowEntry {
+interface WindowEntry {
 	owner: string;
 	agg: MetricAggregate;
 	/** Llamadas por hora, alineado con `covered` de la ventana. */
@@ -159,8 +159,14 @@ export class MetricsStore {
 	/** Lee las horas archivadas de la ventana y las suma por endpoint, guardando el reparto horario. */
 	async readWindow(hours: string[]): Promise<WindowRead> {
 		const [docs, measured] = await Promise.all([
-			this.#hourly.find({ hour: { $in: hours } }).lean<LeanHourly[]>().exec(),
-			this.#measured.find({ _id: { $in: hours } }).lean<MeasuredHourDoc[]>().exec(),
+			this.#hourly
+				.find({ hour: { $in: hours } })
+				.lean<LeanHourly[]>()
+				.exec(),
+			this.#measured
+				.find({ _id: { $in: hours } })
+				.lean<MeasuredHourDoc[]>()
+				.exec(),
 		]);
 		// El eje conserva el orden cronológico de `hours`, no el que devuelva Mongo.
 		const measuredSet = new Set(measured.map((m) => m._id));

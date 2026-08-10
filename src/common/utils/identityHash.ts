@@ -8,7 +8,7 @@ import { createHmac } from "node:crypto";
  *    se usa una pepper de desarrollo y se loguea un warning en el primer uso.
  *  - Email se normaliza ANTES del hash:
  *      - trim + lowercase
- *      - se elimina todo después del primer '+' en el local-part
+ *      - se elimina lo que esté después del primer '+' en el local-part
  *      - para Gmail / GoogleMail (incluye `googlemail.com`), se eliminan los puntos del local-part
  *  - IP se normaliza:
  *      - IPv4 mapped IPv6 (`::ffff:1.2.3.4`) → IPv4
@@ -22,7 +22,7 @@ const DEV_FALLBACK_PEPPER = "adc-dev-insecure-pepper-change-me";
 let warnedAboutDevPepper = false;
 
 function getPepper(): string {
-	const pepper = process.env.BAN_HASH_PEPPER || Bun.env?.BAN_HASH_PEPPER;
+	const pepper = process.env.BAN_HASH_PEPPER;
 	if (pepper && pepper.length >= 16) return pepper;
 	if (!warnedAboutDevPepper) {
 		warnedAboutDevPepper = true;

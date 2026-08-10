@@ -14,7 +14,7 @@ export const ADC_DOCUMENT_MIME = "application/x-adc-document";
 export const ADC_DOCUMENT_EXT = "adcdoc";
 
 /** Fusión de celdas de una tabla extendida (coordenadas 0-based sobre `rows`). */
-export interface TableMerge {
+interface TableMerge {
 	row: number;
 	col: number;
 	rowSpan: number;
@@ -53,7 +53,7 @@ export type DocumentBlock =
 export type PageSizeId = "a4" | "letter" | "legal";
 
 /** Márgenes de página en cm. */
-export interface PageMargins {
+interface PageMargins {
 	top: number;
 	right: number;
 	bottom: number;

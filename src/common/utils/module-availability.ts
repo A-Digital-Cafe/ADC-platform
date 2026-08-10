@@ -49,10 +49,9 @@ function platformWindow(): PlatformWindow {
 }
 
 /** Mensajes predefinidos (espejo de MAINTENANCE_MESSAGES en el core). */
-export const MAINTENANCE_MESSAGES: Record<string, string> = {
+const MAINTENANCE_MESSAGES: Record<string, string> = {
 	unavailable: "Esta aplicación no está disponible temporalmente.",
-	updating:
-		"Estamos trabajando en una actualización para esta aplicación. Actualizá este sitio más tarde para continuar en donde estabas.",
+	updating: "Estamos trabajando en una actualización para esta aplicación. Actualizá este sitio más tarde para continuar en donde estabas.",
 	repairs: "Estamos realizando reparaciones en esta aplicación. Volvé a intentarlo en unos minutos.",
 };
 

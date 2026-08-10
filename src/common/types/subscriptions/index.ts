@@ -17,7 +17,7 @@ export type GatewayId = "mercadopago" | "paypal";
 
 export type SubjectType = "user" | "org";
 
-export type SubscriptionStatus =
+type SubscriptionStatus =
 	/** Alta creada, esperando el primer pago aprobado. */
 	| "pending"
 	| "active"

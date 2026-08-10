@@ -796,6 +796,23 @@ export class AttachmentsManager {
 	}
 
 	/**
+	 * ⚠️ Blanquea el `uploadedBy` de todos los adjuntos de un usuario, sin tocar el objeto en S3.
+	 * Es la contracara de {@link forceDeleteByOwner} para el contenido que **sobrevive** a la baja:
+	 * cuando un artículo publicado se anonimiza en vez de borrarse, el `uploadedBy` de sus adjuntos
+	 * seguía guardando el userId en claro, y un join por `ownerId` devolvía la autoría que la
+	 * anonimización acababa de quitar. Misma convención que `CommentsManager.anonymizeByAuthor`:
+	 * cadena vacía, irreversible. No libera cuota —el objeto sigue ocupando lugar—, pero deja de
+	 * imputarse a nadie en {@link aggregateUsageByUser}. Para cascadas de confianza.
+	 * Devuelve la cantidad de documentos modificados.
+	 */
+	@OnlyKernel()
+	async anonymizeByUploader(_kernelKey: symbol, userId: string): Promise<number> {
+		if (!userId) return 0;
+		const res = await this.#model.updateMany({ uploadedBy: userId }, { $set: { uploadedBy: "" } });
+		return res.modifiedCount ?? 0;
+	}
+
+	/**
 	 * Uso real por (usuario, contexto) de los attachments `ready` de ESTA
 	 * colección/app. Alimenta `computeUsage` del registro en StorageQuotaService
 	 * (reconciliación). Protegido por `@OnlyKernel()`.
@@ -803,7 +820,9 @@ export class AttachmentsManager {
 	@OnlyKernel()
 	async aggregateUsageByUser(_kernelKey: symbol): Promise<Array<{ userId: string; orgId: string | null; bytes: number; count: number }>> {
 		const rows = await this.#model.aggregate<{ _id: { u: string; o: string | null }; bytes: number; count: number }>([
-			{ $match: { status: "ready" } },
+			// `uploadedBy: ""` son adjuntos de cuentas dadas de baja (ver `anonymizeByUploader`): el
+			// archivo sigue existiendo pero ya no se imputa a nadie, y agruparlo crearía un usuario fantasma.
+			{ $match: { status: "ready", uploadedBy: { $ne: "" } } },
 			{ $group: { _id: { u: "$uploadedBy", o: { $ifNull: ["$orgId", null] } }, bytes: { $sum: "$size" }, count: { $sum: 1 } } },
 		]);
 		return rows.map((r) => ({ userId: String(r._id.u), orgId: r._id.o ?? null, bytes: r.bytes, count: r.count }));

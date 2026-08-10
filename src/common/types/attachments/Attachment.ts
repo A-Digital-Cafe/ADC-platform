@@ -24,7 +24,7 @@ export type AttachmentStatus = "pending" | "ready" | "retained";
  *   con su tag inline en el objeto (que por eso expande 16 B por chunk). Permite
  *   servir `Range` descifrando sólo los chunks pedidos (ver `crypto/chunked.ts`).
  */
-export interface AttachmentEncryption {
+interface AttachmentEncryption {
 	scheme: "aes-256-gcm" | "aes-256-gcm-chunked";
 	/** `aes-256-gcm`: IV del objeto (base64, 12 bytes). `aes-256-gcm-chunked`: prefijo de IV (base64, 8 bytes); el IV de cada chunk es prefijo ‖ índice BE de 4 bytes. */
 	iv: string;

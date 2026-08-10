@@ -16,7 +16,7 @@
 export const UNLIMITED = -1;
 
 /** Qué clase de restricción impone la feature. */
-export type FeatureKind =
+type FeatureKind =
 	/** Consumo medido en una ventana temporal (exports/mes, envíos/día). */
 	| "quota"
 	/** Tope instantáneo, sin ventana (bytes totales, capas por proyecto). */
@@ -30,10 +30,10 @@ export type FeatureKind =
 export type MeterWindow = "day" | "month" | "total";
 
 /** Unidad del valor, para formatear en la UI y en la página de precios. */
-export type FeatureUnit = "bytes" | "count" | "px";
+type FeatureUnit = "bytes" | "count" | "px";
 
 /** Cómo escala el valor en el eje organización. */
-export type OrgScaling = "fixed" | "perSeat";
+type OrgScaling = "fixed" | "perSeat";
 
 /** Declaración de una feature por parte del módulo que la implementa. */
 export interface FeatureDef {
@@ -57,7 +57,7 @@ export interface FeatureDef {
 export type FeatureValue = number | boolean | string;
 
 /** Valor que escala con los asientos pagos: `base + perSeat × paidSeats`. */
-export interface ScaledValue {
+interface ScaledValue {
 	base: number;
 	/** Incremento por asiento pago. Ausente o `0` ⇒ equivale a un valor plano. */
 	perSeat?: number;

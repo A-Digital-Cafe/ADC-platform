@@ -7,7 +7,7 @@ import type { LoadSemaphore } from "../../../../../utils/system/LoadSemaphore.ts
 import type { ISEOService } from "../../../../../common/types/SEO/Service.js";
 
 /** Ver {@link UIFederationContext.deferredBuilds}. */
-export interface DeferredBuildPolicy {
+interface DeferredBuildPolicy {
 	/**
 	 * Módulos cuyo build NO puede diferirse porque alguien espera su `buildStatus`: UI libraries,
 	 * remotes y lo nombrado en un `uiDependencies` ajeno. El resto son hojas.

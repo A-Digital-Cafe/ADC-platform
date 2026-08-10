@@ -10,7 +10,7 @@ import { Logger } from "../../utils/logger/Logger.js";
  */
 
 export type ModuleKind = "service" | "provider" | "utility" | "app";
-export type ModuleTier = "core" | "feature" | "app" | "infra";
+type ModuleTier = "core" | "feature" | "app" | "infra";
 
 /**
  * Scopes que un módulo **jamás** puede obtener en su businessCap vía `privileges`,
@@ -34,7 +34,7 @@ const TESTS_ENABLED = process.env.ENABLE_TESTS === "true" || process.env.NODE_EN
 export const INFRA_CAP_SCOPES: readonly Scope[] = [Scope.Lifecycle, Scope.RegistryWrite, Scope.ModuleLoader];
 
 const TIER_DEFAULTS: Record<ModuleTier, readonly Scope[]> = {
-	// Todo scope privilegiado (identity:*, moderation:internal, http:raw, orchestrator,
+	// Scopes privilegiados (identity:*, moderation:internal, http:raw, orchestrator,
 	// storage:register) es **opt-in por servicio** vía `config.json` → `privileges`.
 	// Por defecto un módulo sólo recibe su ciclo de vida.
 	core: [Scope.Lifecycle],
@@ -45,7 +45,7 @@ const TIER_DEFAULTS: Record<ModuleTier, readonly Scope[]> = {
 };
 
 /** Deriva el tier de un módulo por su tipo y ruta de origen. */
-export function tierForPath(path: string, kind: ModuleKind): ModuleTier {
+function tierForPath(path: string, kind: ModuleKind): ModuleTier {
 	if (kind === "app") return "app";
 	if (kind === "provider" || kind === "utility") return "infra";
 	const p = path.replaceAll("\\", "/");

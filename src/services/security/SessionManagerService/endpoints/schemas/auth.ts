@@ -19,7 +19,7 @@ export const LoginBody = Type.Object({
  * Las versiones que manda el cliente son las que su página mostró; el handler las contrasta con
  * las vigentes y rechaza el alta si no coinciden.
  */
-export const LegalAcceptanceBody = Type.Object({
+const LegalAcceptanceBody = Type.Object({
 	acceptedTerms: Type.Boolean({ description: "Casilla de aceptación de Términos y Política de Privacidad" }),
 	ageConfirmed: Type.Boolean({ description: "Autodeclaración de edad mínima" }),
 	termsVersion: Type.String({ minLength: 1, maxLength: 32 }),
@@ -34,9 +34,7 @@ export const RegisterBody = Type.Object({
 });
 
 export const SwitchOrgBody = Type.Object({
-	orgId: Type.Optional(
-		Type.Union([Type.String(), Type.Null()], { description: "Organización destino; null/omitir = acceso personal" })
-	),
+	orgId: Type.Optional(Type.Union([Type.String(), Type.Null()], { description: "Organización destino; null/omitir = acceso personal" })),
 });
 
 // ── Responses ──────────────────────────────────────────────────────────────

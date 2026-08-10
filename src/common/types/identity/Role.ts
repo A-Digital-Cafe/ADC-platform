@@ -4,7 +4,7 @@ import { Permission } from "./Permission.js";
  * Jerarquía por defecto para roles sin `hierarchy` (roles custom pre-existentes).
  * Equivale al nivel de un usuario estándar.
  */
-export const DEFAULT_ROLE_HIERARCHY = 100;
+const DEFAULT_ROLE_HIERARCHY = 100;
 
 /** Niveles de jerarquía de los roles del sistema (mayor = más autoridad). */
 export const RoleHierarchy = {

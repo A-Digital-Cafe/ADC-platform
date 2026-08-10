@@ -10,7 +10,7 @@ import { publicEnv } from "../public-env.js";
  */
 
 /** Configuración de marca compartida por todos los microfronts. */
-export interface SeoBrand {
+interface SeoBrand {
 	/** Origen absoluto del sitio, sin slash final. Ej: `https://adigitalcafe.com`. */
 	origin: string;
 	/** Nombre de la marca / organización. */
@@ -34,7 +34,7 @@ export interface SeoSiteConfig extends SeoBrand {
 }
 
 /** Datos para un nodo `Article`. */
-export interface ArticleGraphInput {
+interface ArticleGraphInput {
 	path: string;
 	title: string;
 	description?: string;

@@ -25,7 +25,7 @@ export type BugBountySeverity = "low" | "medium" | "high" | "critical";
 export const BUG_BOUNTY_SEVERITIES: readonly BugBountySeverity[] = ["low", "medium", "high", "critical"] as const;
 
 /** Una variante de recompensa: tier de pago durante N días. */
-export interface BugBountyReward {
+interface BugBountyReward {
 	tier: Exclude<AccountTier, "free">;
 	/** Duración del upgrade en días (mínimo garantizado; el admin puede ampliar). */
 	days: number;
@@ -72,14 +72,14 @@ export type RewardPreference = "plus" | "pro";
  * sólo tenía `rejected`— publica en un log abierto que quien acertó, pero
  * segundo, reportó cualquier cosa.
  */
-export type BugBountyPublicStatus = "received" | "triaging" | "in_progress" | "resolved" | "duplicate" | "rejected";
+type BugBountyPublicStatus = "received" | "triaging" | "in_progress" | "resolved" | "duplicate" | "rejected";
 
 /**
  * Estado público por **clave canónica** de columna del tablero de tickets.
  * Es la fuente de verdad: las columnas que el servicio reconcilia
  * (ver `TICKETS_BOARD_COLUMNS`) tienen estas keys estables.
  */
-export const BUG_BOUNTY_COLUMN_STATUS: Record<string, BugBountyPublicStatus> = {
+const BUG_BOUNTY_COLUMN_STATUS: Record<string, BugBountyPublicStatus> = {
 	security: "received",
 	triaging: "triaging",
 	in_progress: "in_progress",

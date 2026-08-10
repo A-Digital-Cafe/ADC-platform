@@ -31,7 +31,7 @@ docs/                  # Documentación on-demand (índice: docs/README.md)
 | `bun run start` | Producción (puerto 80) |
 | `bun run typecheck` | TypeScript check + knip unused exports — **sale 1 por baseline** (knip reporta exports sin usar); el exit code NO es señal de fallo, hay que leer la salida |
 | `bun run extra-checks` | Archivos grandes + knip dependencies sin usar |
-| `bun run lint` | ESLint (zero warnings). Cubre **sólo `src`**: los presets se typechequean pero nunca se lintean |
+| `bun run lint` | ESLint (zero warnings). Cubre `src` **y `presets`**: los presets no tienen config ni ESLint propios, así que se lintean con la config de la raíz al pasar por el monorepo (desde un clon suelto del preset, no corre) |
 | `bun run lint:fix` | ESLint con auto-fix |
 | `bun run build:ui` | Compilar Stencil UI library |
 | `bun run proto:gen` | Generar código desde protobuf (buf) |

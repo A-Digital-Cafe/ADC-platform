@@ -73,8 +73,8 @@ export const retentionHours = (): number => config.retentionHours;
 /** Comienzo (ms) de la hora UTC que contiene `at`. Las horas UTC caen en múltiplos exactos de `HOUR_MS`. */
 export const hourStartMs = (at: number = Date.now()): number => Math.floor(at / HOUR_MS) * HOUR_MS;
 /** Etiqueta `YYYY-MM-DDTHH` de una hora: la que nombra su hash en Redis. */
-export const hourLabel = (startMs: number): string => new Date(startMs).toISOString().slice(0, 13);
-export const hashOf = (hour: string): string => `${HASH_PREFIX}${hour}`;
+const hourLabel = (startMs: number): string => new Date(startMs).toISOString().slice(0, 13);
+const hashOf = (hour: string): string => `${HASH_PREFIX}${hour}`;
 
 let currentHour = hourLabel(hourStartMs());
 let nextRolloverMs = hourStartMs() + HOUR_MS;

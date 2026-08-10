@@ -24,4 +24,5 @@ export const SecurityScopes = {
 	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3), // 15
 } as const;
 
+/** @public */
 export type SecurityScopeValue = (typeof SecurityScopes)[keyof typeof SecurityScopes];

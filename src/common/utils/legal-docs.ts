@@ -43,12 +43,14 @@ export const LEGAL_DOCUMENTS = {
 		// derechos self-service, plazos de archivo, alcance de la rectificación y de la baja) y una
 		// segunda tanda el 2026-08-09: plazos de retención de correo y de tickets ahora que el código
 		// los aplica, §6 sin nombrar el algoritmo de hashing (ya no es PBKDF2) y §13 nueva sobre datos
-		// de colaboradores. Se corrige en lugar de versionar porque el documento todavía NO rige: una
+		// de colaboradores. Y una tercera el 2026-08-10: la inscripción en el RNBD en §1, y el servidor
+		// STUN de Google —que el túnel P2P ya usaba sin declararlo— en §7 y en el párrafo del túnel.
+		// Se corrige en lugar de versionar porque el documento todavía NO rige: una
 		// versión nueva pediría re-aceptar algo que nadie aceptó, y todo lo agregado amplía derechos o
 		// informa de más, nunca recorta. Contrapartida asumida: las altas posteriores al 2026-08-08
 		// llevan sellado el hash anterior, recuperable del historial de git. Queda en git.
 		// sha256sum presets/help/apps/help/src/pages/PrivacyPage.tsx
-		contentHash: "037e46794f87b523fe7cdf8c6deb5a8fac5ac590bfebfbe2e2821fdb48ced1c6",
+		contentHash: "e1af1c65773cd7144a359caf199a009c3ba6231090372c7da2ecc51efeaffbac",
 	},
 	cookies: {
 		id: "cookies",
@@ -60,8 +62,10 @@ export const LEGAL_DOCUMENTS = {
 		// Corregida el 2026-08-09 sin bump por el mismo criterio que privacy: la lista de terceros de
 		// §6 se acortó (React y las fotos de Discord dejaron de servirse desde un CDN ajeno), así que
 		// el texto pasa a declarar MENOS terceros de los que declaraba. No rige hasta el 2026-09-07.
+		// Corregida otra vez el 2026-08-10, esta vez sumando uno: el servidor STUN de Google que el
+		// túnel P2P del Drive contacta al abrir una transferencia entre dispositivos.
 		// sha256sum presets/help/apps/help/src/pages/CookiesPage.tsx
-		contentHash: "43d35b17282c42002173acc6e910961a2be16ef1082d416af1c78d6ecfa20dcc",
+		contentHash: "9008e667402fa4aa9a1d08fe745152332a0d0151550afb6169412231f112b9e0",
 	},
 	dpa: {
 		id: "dpa",

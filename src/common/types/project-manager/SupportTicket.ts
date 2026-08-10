@@ -61,7 +61,8 @@ export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
  * @public
  */
 export const TICKET_TEMPLATES: Partial<Record<SupportTicketType, string>> = {
-	security: "Pasos de reproducción:\n1.\n2.\n\nImpacto (a quién/qué afecta):\n\nAlcance (URL/endpoint/componente):\n\nSeveridad estimada (CVSS si tenés):\n",
+	security:
+		"Pasos de reproducción:\n1.\n2.\n\nImpacto (a quién/qué afecta):\n\nAlcance (URL/endpoint/componente):\n\nSeveridad estimada (CVSS si tenés):\n",
 	expansion:
 		"Organización (nombre y enlace, si tiene):\n\n" +
 		"A qué se dedica:\n\n" +
@@ -189,7 +190,7 @@ export interface SelectOption {
 	label: string;
 }
 
-export interface StringValidator {
+interface StringValidator {
 	required?: boolean;
 	minLength?: number;
 	maxLength?: number;

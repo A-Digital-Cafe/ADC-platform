@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
  * Mantener una única constante evita que el layout JS y las clases `lg:` se
  * desincronicen.
  */
-export const COMPACT_QUERY = "(max-width: 1023.98px)";
+const COMPACT_QUERY = "(max-width: 1023.98px)";
 
 /**
  * Hook React para media queries: devuelve si la query matchea y se re-renderiza
@@ -15,7 +15,7 @@ export const COMPACT_QUERY = "(max-width: 1023.98px)";
  * @example
  * const compact = useMediaQuery(COMPACT_QUERY);
  */
-export function useMediaQuery(query: string): boolean {
+function useMediaQuery(query: string): boolean {
 	const [matches, setMatches] = useState(() => globalThis.matchMedia?.(query).matches ?? false);
 
 	useEffect(() => {
