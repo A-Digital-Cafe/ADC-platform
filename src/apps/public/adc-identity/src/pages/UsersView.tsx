@@ -11,7 +11,7 @@ import { DataTable, type Column } from "../components/DataTable.tsx";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal.tsx";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { toast } from "@ui-library/utils/toast";
-import { BanUserModal, UserFormModal } from "../components/UserModals/index.ts";
+import { BanUserModal, DeleteUserModal, UserFormModal } from "../components/UserModals/index.ts";
 import { UnbanModal } from "../components/UnbanModal.tsx";
 import { ClientUser } from "@common/types/identity/User.ts";
 import type { ContextMenuItem } from "@ui-library/utils/react-jsx";
@@ -241,17 +241,6 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		setSubmitting(false);
 	};
 
-	const handleDelete = async () => {
-		if (!deleteConfirm) return;
-		clearErrors();
-		const result = await identityApi.deleteUser(deleteConfirm.id, isScopedOrgView ? orgId : undefined);
-		if (result.success) {
-			setDeleteConfirm(null);
-			toast.success(t("common.deleted"));
-			loadData();
-		}
-	};
-
 	const handleRevokeSessions = async () => {
 		if (!revokeTarget) return;
 		clearErrors();
@@ -261,6 +250,9 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 	};
 
 	const isUserBanned = (user: ClientUser): boolean => !user.isActive && !!user.metadata && !!(user.metadata as any).bannedAt;
+
+	/** Baja programada pendiente: la cuenta se purga sola al vencer la retención si nadie la reactiva. */
+	const isDeletionScheduled = (user: ClientUser): boolean => !!(user.metadata as any)?.scheduledDeletionAt;
 
 	// ── Menú contextual "⋮" (acciones sensibles fuera del alcance de un mis-click) ──
 	const canModerate = !!isAdmin && !orgId && updatable;
@@ -325,16 +317,24 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 		{
 			key: "isActive",
 			label: t("users.status"),
-			render: (u) =>
-				isUserBanned(u) ? (
-					<adc-badge color="red" dot>
-						{t("users.banned")}
-					</adc-badge>
-				) : (
-					<adc-badge color={u.isActive ? "green" : "red"} dot>
-						{u.isActive ? t("users.active") : t("users.inactive")}
-					</adc-badge>
-				),
+			render: (u) => (
+				<div className="flex flex-wrap items-center gap-1">
+					{isUserBanned(u) ? (
+						<adc-badge color="red" dot>
+							{t("users.banned")}
+						</adc-badge>
+					) : (
+						<adc-badge color={u.isActive ? "green" : "red"} dot>
+							{u.isActive ? t("users.active") : t("users.inactive")}
+						</adc-badge>
+					)}
+					{isDeletionScheduled(u) && (
+						<adc-badge color="orange" size="sm" title={t("users.deletionScheduledHint")}>
+							{t("users.deletionScheduled")}
+						</adc-badge>
+					)}
+				</div>
+			),
 		},
 		...(isAdmin && !orgId
 			? [
@@ -427,10 +427,15 @@ export function UsersView({ perms, orgId, isAdmin, isScopedOrgView = false, orga
 			)}
 
 			{deleteConfirm && (
-				<DeleteConfirmModal
-					message={t("users.deleteConfirm", { name: deleteConfirm.username })}
+				<DeleteUserModal
+					user={deleteConfirm}
+					orgId={isScopedOrgView ? orgId : undefined}
 					onClose={() => setDeleteConfirm(null)}
-					onConfirm={handleDelete}
+					onDeleted={() => {
+						setDeleteConfirm(null);
+						toast.success(t("common.deleted"));
+						loadData();
+					}}
 				/>
 			)}
 

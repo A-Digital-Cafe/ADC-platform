@@ -40,8 +40,16 @@ export const identityApi = {
 			params: { orgId },
 			idempotencyData: { userId, orgId: orgId ?? null, data },
 		}),
-	deleteUser: (userId: string, orgId?: string) =>
-		api.delete(`/users/${assertSafeId(userId, "userId")}`, { params: { orgId }, idempotencyData: { userId, orgId: orgId ?? null } }),
+	/**
+	 * Baja de un usuario. En contexto de organización sólo quita la membresía; en global programa la
+	 * baja a 30 días con la cascada de purga. `immediate` adelanta esa cascada y es irreversible:
+	 * sólo lo manda el modal de la vista de usuarios, con la casilla desmarcada por defecto.
+	 */
+	deleteUser: (userId: string, orgId?: string, immediate?: boolean) =>
+		api.delete(`/users/${assertSafeId(userId, "userId")}`, {
+			params: { orgId, immediate: immediate ? "true" : undefined },
+			idempotencyData: { userId, orgId: orgId ?? null, immediate: immediate ?? false },
+		}),
 
 	/**
 	 * Página de roles + `total` (para paginar). `q` (mín. 2 chars) filtra por

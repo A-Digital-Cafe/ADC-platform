@@ -115,7 +115,17 @@ export default {
 		searchPlaceholder: "Buscar usuarios...",
 		addUser: "Agregar Usuario",
 		editUser: "Editar Usuario",
-		deleteConfirm: '¿Estás seguro de eliminar al usuario "{{name}}"? Esta acción no se puede deshacer.',
+		deleteTitle: 'Dar de baja a "{{name}}"',
+		deleteOrgBody: '¿Quitar a "{{name}}" de esta organización? Pierde el acceso y los roles de la organización; su cuenta de plataforma no se toca.',
+		deleteGlobalBody:
+			"Se programa la baja de la cuenta en 30 días. Queda desactivada ya mismo y, al vencer el plazo, se purgan sus datos en todos los servicios. Hasta entonces se revierte reactivando la cuenta.",
+		deleteImmediate: "Purgar ya mismo, sin esperar los 30 días",
+		deleteImmediateWarning:
+			"Irreversible: se borran los datos en cascada y no hay reactivación posible. Si un paso falla, el proceso continúa solo en la próxima corrida (cada 6 h).",
+		deleteAuditUnavailable: "El registro de auditoría no está disponible: la baja administrativa no se ejecuta hasta que vuelva.",
+		deleteError: "No se pudo dar de baja al usuario",
+		deletionScheduled: "Baja programada",
+		deletionScheduledHint: "La cuenta se purga al vencer la retención; reactivala para cancelarla.",
 		noUsers: "No se encontraron usuarios",
 		usernamePlaceholder: "nombre_usuario",
 		emailPlaceholder: "usuario@ejemplo.com",
@@ -260,6 +270,7 @@ export default {
 			sessions: "Sesiones",
 			audit: "Auditoría",
 			audit_log: "Registro de auditoría (datos personales)",
+			breach: "Incidentes de datos personales",
 		},
 		modules: {
 			runtime: "Runtime (start/stop)",

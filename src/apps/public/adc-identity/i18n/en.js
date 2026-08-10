@@ -114,7 +114,17 @@ export default {
 		searchPlaceholder: "Search users...",
 		addUser: "Add User",
 		editUser: "Edit User",
-		deleteConfirm: 'Are you sure you want to delete user "{{name}}"? This action cannot be undone.',
+		deleteTitle: 'Delete user "{{name}}"',
+		deleteOrgBody: 'Remove "{{name}}" from this organization? They lose the organization\'s access and roles; their platform account is untouched.',
+		deleteGlobalBody:
+			"The account deletion is scheduled in 30 days. It is deactivated right away and, once the term expires, its data is purged across every service. Until then it can be reverted by reactivating the account.",
+		deleteImmediate: "Purge right now, without waiting the 30 days",
+		deleteImmediateWarning:
+			"Irreversible: data is deleted in cascade and the account cannot be reactivated. If a step fails, the process resumes on its own in the next run (every 6h).",
+		deleteAuditUnavailable: "The audit log is unavailable: administrative deletion does not run until it is back.",
+		deleteError: "The user could not be deleted",
+		deletionScheduled: "Deletion scheduled",
+		deletionScheduledHint: "The account is purged once retention expires; reactivate it to cancel.",
 		noUsers: "No users found",
 		usernamePlaceholder: "username",
 		emailPlaceholder: "user@example.com",
@@ -259,6 +269,7 @@ export default {
 			sessions: "Sessions",
 			audit: "Audit",
 			audit_log: "Audit log (personal data)",
+			breach: "Personal-data incidents",
 		},
 		modules: {
 			runtime: "Runtime (start/stop)",
