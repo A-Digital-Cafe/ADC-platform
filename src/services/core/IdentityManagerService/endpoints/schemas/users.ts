@@ -77,6 +77,33 @@ export const ChangePasswordBody = Type.Object({
 	newPassword: Type.String({ minLength: 8, maxLength: 256, description: "Nueva contraseña (mín. 8)" }),
 });
 
+/** Body del pedido de cambio de email propio. `currentPassword` es opcional SÓLO para cuentas creadas por OAuth. */
+export const ChangeEmailBody = Type.Object({
+	newEmail: Type.String({ minLength: 5, maxLength: 254, description: "Nueva dirección de email (recibe el enlace de confirmación)" }),
+	currentPassword: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Contraseña actual (obligatoria salvo cuentas creadas por OAuth)" })),
+});
+
+export const ChangeEmailResponse = Type.Object({
+	success: Type.Boolean(),
+	expiresInMinutes: Type.Number({ description: "Vigencia del enlace de confirmación enviado a la casilla nueva" }),
+});
+
+/** Body del canje público del token de confirmación de cambio de email. */
+export const EmailChangeTokenBody = Type.Object({
+	token: Type.String({ minLength: 32, maxLength: 512, description: "Token de confirmación recibido en la casilla nueva" }),
+});
+
+/** Body del cambio de username propio (mismas reglas del alta + cooldown de 30 días). */
+export const ChangeUsernameBody = Type.Object({
+	newUsername: Type.String({ minLength: 3, maxLength: 30, description: "Nuevo nombre de usuario (3-30 caracteres)" }),
+	currentPassword: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Contraseña actual (obligatoria salvo cuentas creadas por OAuth)" })),
+});
+
+export const ChangeUsernameResponse = Type.Object({
+	success: Type.Boolean(),
+	username: Type.String({ description: "Username vigente tras el cambio" }),
+});
+
 export const CreateUserBody = Type.Object({
 	username: Type.String({ minLength: 3, maxLength: 32 }),
 	password: Type.String({ minLength: 8, maxLength: 256 }),
@@ -101,7 +128,22 @@ export const PreferencesBody = Type.Record(Type.String(), Type.Unknown(), {
 });
 
 export const DeleteSelfBody = Type.Object({
-	reason: Type.Optional(Type.String({ maxLength: 1000, description: "Motivo de la baja (opcional)" })),
+	reason: Type.Optional(Type.String({ maxLength: 1000, description: "Motivo de la baja (opcional, texto libre)" })),
+});
+
+/** Query del DELETE admin: filtro org + variante inmediata de la baja. */
+export const DeleteUserQuery = Type.Object({
+	orgId: Type.Optional(Type.String({ description: "Filtra por organización (solo admin global)" })),
+	immediate: Type.Optional(
+		Type.Union([Type.Literal("true"), Type.Literal("false")], {
+			description: "true = ejecuta la cascada de purga ya mismo en vez de esperar los 30 días de retención",
+		})
+	),
+});
+
+/** Body del canje público del token de arrepentimiento (cancela una baja voluntaria). */
+export const CancelDeletionTokenBody = Type.Object({
+	token: Type.String({ minLength: 32, maxLength: 512, description: "Token de cancelación recibido por email" }),
 });
 
 // ── Responses ──────────────────────────────────────────────────────────────
@@ -123,6 +165,14 @@ export const PublicAvatarsResponse = Type.Object({
 export const DeleteSelfResponse = Type.Object({
 	success: Type.Boolean(),
 	scheduledDeletionInDays: Type.Number(),
+	/** `false` si el aviso con el enlace de arrepentimiento no se pudo entregar. La baja se registró igual. */
+	noticeDelivered: Type.Boolean(),
+	/**
+	 * Enlace de arrepentimiento, presente SÓLO cuando el aviso no pudo entregarse: el
+	 * cliente debe mostrarlo para que la persona lo guarde. Volver a iniciar sesión
+	 * durante los 30 días también cancela la baja.
+	 */
+	cancelUrl: Type.Union([Type.String(), Type.Null()]),
 });
 
 /** Body para otorgar un upgrade temporal de tier (recompensa de bug bounty). */

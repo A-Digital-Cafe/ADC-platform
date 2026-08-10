@@ -19,7 +19,7 @@
 
 import { getPlatformAppOrigin, getPlatformApps, type PlatformApp } from "./platform-links.js";
 
-/** Metadatos de un tutorial dentro del manifiesto de una app. */
+/** @public Metadatos de un tutorial dentro del manifiesto de una app. */
 export interface TutorialMeta {
 	/** Identificador estable; el markdown vive en `tutorials/<slug>.md`. */
 	slug: string;
@@ -36,7 +36,7 @@ interface TutorialIndex {
 	tutorials: TutorialMeta[];
 }
 
-/** Tutoriales descubiertos de una app concreta. */
+/** @public Tutoriales descubiertos de una app concreta. */
 export interface AppTutorials {
 	app: PlatformApp;
 	tutorials: TutorialMeta[];
@@ -70,6 +70,7 @@ function isValidMeta(value: unknown): value is TutorialMeta {
 /**
  * Manifiesto de tutoriales de una app, o `[]` si no publica ninguno. Tolera
  * 404, fallback SPA (HTML en vez de JSON), errores de red y JSON malformado.
+ * @public
  */
 export function fetchAppTutorials(app: PlatformApp): Promise<TutorialMeta[]> {
 	const registry = getRegistry();
@@ -101,6 +102,7 @@ export function fetchAppTutorials(app: PlatformApp): Promise<TutorialMeta[]> {
  * Catálogo completo: sondea en paralelo todas las apps conocidas del registry
  * de plataforma y devuelve solo las que publican tutoriales, en el orden del
  * registry.
+ * @public
  */
 export async function fetchTutorialsCatalog(): Promise<AppTutorials[]> {
 	const apps = getPlatformApps();
@@ -111,6 +113,7 @@ export async function fetchTutorialsCatalog(): Promise<AppTutorials[]> {
 /**
  * Markdown crudo de un tutorial, o `null` si no existe. Mismo criterio
  * tolerante que el manifiesto (el fallback SPA devuelve HTML → `null`).
+ * @public
  */
 export function fetchTutorialMarkdown(app: PlatformApp, slug: string): Promise<string | null> {
 	const registry = getRegistry();

@@ -87,6 +87,11 @@ export interface StorageUsageSnapshot {
 	totalCount: number;
 	apps: Record<string, StorageAppUsage>;
 	effectiveLimit: number;
+	/**
+	 * El límite es el del **plan base** por una caída del motor de planes, no el del contratado.
+	 * Sólo frena subidas nuevas; lo ya guardado sigue accesible.
+	 */
+	degraded?: boolean;
 	updatedAt?: string;
 }
 

@@ -7,8 +7,8 @@ import { showError } from "@ui-library/utils/error-handler";
 import { useAbortable } from "@ui-library/utils/use-abortable";
 import { getBaseUrl } from "@common/utils/url-utils.js";
 import { LEGAL_DOCUMENTS, MIN_AGE } from "@common/utils/legal-docs.js";
-import { resolvePlatformPath } from "@ui-library/utils/platform-links";
 import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
+import { LEGAL_LINKS, OAuthLegalNotice } from "../components/OAuthLegalNotice.tsx";
 
 /** Pattern de username válido: alfanumérico + _ . - entre 3 y 32 caracteres. */
 const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,32}$/;
@@ -48,13 +48,6 @@ const REGISTER_SPECIFIC_ERROR_KEYS = [
 	{ key: "AGE_NOT_CONFIRMED", severity: "error" },
 	{ key: "LEGAL_VERSION_MISMATCH", severity: "warning" },
 ];
-
-/** URLs absolutas a los documentos legales, que viven en la app `help` (otro origen). */
-const LEGAL_LINKS = {
-	terms: resolvePlatformPath("help", LEGAL_DOCUMENTS.terms.href) ?? LEGAL_DOCUMENTS.terms.href,
-	privacy: resolvePlatformPath("help", LEGAL_DOCUMENTS.privacy.href) ?? LEGAL_DOCUMENTS.privacy.href,
-	ages: resolvePlatformPath("help", `${LEGAL_DOCUMENTS.terms.href}#edad-minima`) ?? LEGAL_DOCUMENTS.terms.href,
-};
 
 /** Base URL for API calls */
 const API_BASE = getBaseUrl(3000);
@@ -179,7 +172,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 	return (
 		<div className="w-full max-w-md">
 			<adc-blur-panel variant="elevated" glow class="w-full">
-				<h1 className="font-heading text-2xl font-bold text-center mb-6 text-text">{t("register.title") || "Crear Cuenta"}</h1>
+				<h1 className="font-heading text-2xl font-bold text-center mb-6 text-text">{t("register.title", undefined, "Crear Cuenta")}</h1>
 
 				{/* Handler de errores específicos del formulario (validación, duplicados) */}
 				<adc-custom-error variant="callout" keys={JSON.stringify(REGISTER_SPECIFIC_ERROR_KEYS)} class="mb-4" />
@@ -187,7 +180,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 				<form onSubmit={handleSubmit} className="space-y-4">
 					<div>
 						<label htmlFor="username" className="block text-base font-medium mb-1 text-text">
-							{t("register.username") || "Nombre de Usuario"}
+							{t("register.username", undefined, "Nombre de Usuario")}
 						</label>
 						<adc-input
 							inputId="username"
@@ -195,7 +188,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							value={username}
 							required
 							autocomplete="username"
-							placeholder={t("register.usernamePlaceholder") || "tu_usuario"}
+							placeholder={t("register.usernamePlaceholder", undefined, "tu_usuario")}
 							hint={usernameStatus === "checking" ? t("register.usernameChecking") : undefined}
 							success={usernameStatus === "available" ? t("register.usernameAvailable") : undefined}
 							error={usernameStatus === "unavailable" ? t("register.usernameUnavailable") : undefined}
@@ -205,7 +198,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 
 					<div>
 						<label htmlFor="email" className="block text-base font-medium mb-1 text-text">
-							{t("register.email") || "Email"}
+							{t("register.email", undefined, "Email")}
 						</label>
 						<adc-input
 							inputId="email"
@@ -220,7 +213,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 
 					<div>
 						<label htmlFor="password" className="block text-base font-medium mb-1 text-text">
-							{t("register.password") || "Contraseña"}
+							{t("register.password", undefined, "Contraseña")}
 						</label>
 						<adc-input
 							inputId="password"
@@ -251,7 +244,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 
 					<div>
 						<label htmlFor="confirmPassword" className="block text-base font-medium mb-1 text-text">
-							{t("register.confirmPassword") || "Confirmar Contraseña"}
+							{t("register.confirmPassword", undefined, "Confirmar Contraseña")}
 						</label>
 						<adc-input
 							inputId="confirmPassword"
@@ -282,13 +275,13 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 								onChange={(e) => setAcceptedTerms((e.target as HTMLInputElement).checked)}
 							/>
 							<p id="acceptTermsLabel" className="text-xs text-muted leading-relaxed mt-0!">
-								{t("register.acceptTermsBefore") || "He leído y acepto los"}{" "}
+								{t("register.acceptTermsBefore", undefined, "He leído y acepto los")}{" "}
 								<a href={LEGAL_LINKS.terms} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-									{t("register.termsLink") || "Términos y Condiciones"}
+									{t("register.termsLink", undefined, "Términos y Condiciones")}
 								</a>{" "}
-								{t("register.acceptTermsBetween") || "y la"}{" "}
+								{t("register.acceptTermsBetween", undefined, "y la")}{" "}
 								<a href={LEGAL_LINKS.privacy} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-									{t("register.privacyLink") || "Política de Privacidad"}
+									{t("register.privacyLink", undefined, "Política de Privacidad")}
 								</a>
 								{"."}
 							</p>
@@ -309,7 +302,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 										`Declaro tener al menos ${MIN_AGE} años, o la edad mínima que exija mi país.`}
 								</label>{" "}
 								<a href={LEGAL_LINKS.ages} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-									{t("register.ageLink") || "Ver edades por país"}
+									{t("register.ageLink", undefined, "Ver edades por país")}
 								</a>
 								{"."}
 							</p>
@@ -324,21 +317,21 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 						disabled={usernameStatus === "unavailable" || !acceptedTerms || !ageConfirmed}
 						variant="primary"
 					>
-						{loading ? t("register.submitting") || "Creando cuenta..." : t("register.submit") || "Crear Cuenta"}
+						{loading ? t("register.submitting", undefined, "Creando cuenta...") : t("register.submit", undefined, "Crear Cuenta")}
 					</adc-button>
 				</form>
 
 				<div className="mt-6 text-center">
 					<p className="text-sm text-muted">
-						{t("register.hasAccount") || "¿Ya tienes cuenta?"}{" "}
+						{t("register.hasAccount", undefined, "¿Ya tienes cuenta?")}{" "}
 						<button type="button" onClick={onNavigateToLogin} className="text-accent hover:underline font-medium">
-							{t("register.login") || "Inicia sesión"}
+							{t("register.login", undefined, "Inicia sesión")}
 						</button>
 					</p>
 				</div>
 
 				<div className="mt-6 pt-6 border-t border-divider">
-					<p className="text-sm text-center text-muted mb-4">{t("register.orRegisterWith") || "O regístrate con"}</p>
+					<p className="text-sm text-center text-muted mb-4">{t("register.orRegisterWith", undefined, "O regístrate con")}</p>
 					<div className="flex gap-3 justify-center">
 						<a
 							href={getOAuthUrl("discord")}
@@ -374,23 +367,7 @@ export function Register({ onNavigateToLogin, returnUrl }: RegisterProps) {
 							Google
 						</a>
 					</div>
-					{/*
-					 * El alta por OAuth no pasa por el formulario, así que no puede exigir las casillas.
-					 * Este aviso es el clickwrap de ese camino: el servidor graba la misma constancia
-					 * con `via: "oauth"` al crear la cuenta.
-					 */}
-					<p className="mt-4 text-[11px] text-center text-muted leading-relaxed">
-						{t("register.oauthLegalBefore") || "Al continuar con Discord o Google aceptás los"}{" "}
-						<a href={LEGAL_LINKS.terms} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-							{t("register.termsLink") || "Términos y Condiciones"}
-						</a>{" "}
-						{t("register.acceptTermsBetween") || "y la"}{" "}
-						<a href={LEGAL_LINKS.privacy} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-							{t("register.privacyLink") || "Política de Privacidad"}
-						</a>
-						{t("register.oauthLegalAfter", { minAge: String(MIN_AGE) }) ||
-							`, y declarás tener al menos ${MIN_AGE} años o la edad mínima que exija tu país.`}
-					</p>
+					<OAuthLegalNotice t={t} />
 				</div>
 			</adc-blur-panel>
 		</div>

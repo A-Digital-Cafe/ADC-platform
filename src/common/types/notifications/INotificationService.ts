@@ -40,7 +40,33 @@ export interface INotificationService {
 export interface INotificationEmailSender {
 	/** Envía un email transaccional del sistema (no-reply) al usuario destinatario. */
 	sendSystemEmail(input: SystemEmailInput): Promise<void>;
+	/**
+	 * Política vigente, para rechazar ANTES de mutar lo que después no se va a poder entregar (ej.
+	 * verificar una casilla externa con el envío externo deshabilitado). Opcional: un EmailService
+	 * viejo no la expone y el productor cae en la garantía de entrega, que es el backstop real.
+	 */
+	getDeliveryPolicy?(): SystemEmailDeliveryPolicy;
 }
+
+/** Qué puede entregar hoy el servicio de correo. */
+export interface SystemEmailDeliveryPolicy {
+	/** `true` si sólo se entrega a buzones del dominio de la plataforma. */
+	internalOnly: boolean;
+	/** Dominio raíz de la plataforma (`<usuario>@<raíz>`, `<usuario>@<org>.<raíz>`). */
+	rootDomain: string;
+}
+
+/**
+ * Qué tiene que garantizar la entrega para darla por buena:
+ *
+ * - `"best-effort"` (default): con `internalOnly` puentea al buzón de plataforma y, sin buzón,
+ *   omite en silencio. Correcto para avisos: una notificación no debe romper a su productor.
+ * - `"any-mailbox"`: alguna casilla del titular (la registrada o su buzón de plataforma), o lanza.
+ *   Para correos que son la única vía de acción que le queda a la persona (enlace de baja).
+ * - `"exact"`: exactamente `to`, sin puentear jamás. Para los que prueban el control de esa
+ *   casilla (confirmación de cambio de email); puentear haría la verificación un trámite vacío.
+ */
+export type SystemEmailDeliveryGuarantee = "best-effort" | "any-mailbox" | "exact";
 
 export interface SystemEmailInput {
 	/** Dirección personal del usuario (la que conoce el IdentityManager). */
@@ -53,4 +79,12 @@ export interface SystemEmailInput {
 	subject: string;
 	html: string;
 	text?: string;
+	/**
+	 * Cabeceras extra. Existe por `List-Unsubscribe`/`List-Unsubscribe-Post` (RFC 2369 y 8058): la
+	 * baja de un envío masivo tiene que estar en la cabecera para que el cliente de correo la
+	 * ofrezca como acción propia. Las controla el productor; el `EmailService` sólo las transporta.
+	 */
+	headers?: Record<string, string>;
+	/** Garantía de entrega exigida (default `"best-effort"`). Ver {@link SystemEmailDeliveryGuarantee}. */
+	deliveryGuarantee?: SystemEmailDeliveryGuarantee;
 }

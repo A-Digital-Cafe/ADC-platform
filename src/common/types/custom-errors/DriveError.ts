@@ -26,6 +26,8 @@ type ExpectedDriveErrorTypes =
 	| "LINK_EXPIRED"
 	// El enlace existe pero no se puede servir ahora (cupo del dueño agotado)
 	| "LINK_UNAVAILABLE"
+	// Suspensión preventiva por reporte de un tercero (451, RFC 7725)
+	| "CONTENT_SUSPENDED"
 	// PIN de carpetas
 	| "PIN_REQUIRED"
 	| "PIN_INVALID"
@@ -57,7 +59,8 @@ type ExpectedDriveErrorTypes =
 	// Cupo mensual del túnel entre dispositivos (pool aparte del de descarga)
 	| "TUNNEL_QUOTA_EXCEEDED";
 
-type UnexpectedDriveErrorTypes = "DRIVE_UNAVAILABLE";
+// AUDIT_UNAVAILABLE: la recuperación admin es fail-closed — sin audit log persistente no se ejecuta
+type UnexpectedDriveErrorTypes = "DRIVE_UNAVAILABLE" | "AUDIT_UNAVAILABLE";
 
 type DriveErrorTypes = ExpectedDriveErrorTypes | UnexpectedDriveErrorTypes;
 

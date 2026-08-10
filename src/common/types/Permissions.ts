@@ -75,6 +75,7 @@ export const P = buildAllPermissions() as {
 	};
 	readonly DRIVE: {
 		readonly RECOVER: ScopePermissions<"drive">;
+		readonly MODERATE: ScopePermissions<"drive">;
 	};
 	readonly PROJECT_MANAGER: {
 		readonly PROJECTS: ScopePermissions<"project-manager">;
@@ -98,6 +99,7 @@ export const P = buildAllPermissions() as {
 	readonly SECURITY: {
 		readonly SESSIONS: ScopePermissions<"security">;
 		readonly AUDIT: ScopePermissions<"security">;
+		readonly AUDIT_LOG: ScopePermissions<"security">;
 	};
 	readonly MODULES: {
 		readonly RUNTIME: ScopePermissions<"modules">;

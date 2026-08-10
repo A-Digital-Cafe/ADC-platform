@@ -97,6 +97,7 @@ interface ContentLinkInfo {
  * degrada a "sin acceso" (401/403) o "inexistente" (404) por su cuenta. El
  * backend ya oculta borradores (`listed:false`) y rutas privadas (`public:false`)
  * a quien no es su autor / no tiene el rol, devolviendo 403.
+ * @public
  */
 export const contentLinkAPI = {
 	getArticle: async (slug: string): Promise<ContentLinkInfo> => {

@@ -19,12 +19,8 @@ export interface AppAvailability {
 	since?: number;
 }
 
-export interface AvailabilityResponse {
-	/** Apps deshabilitadas, indexadas por nombre base de la app (carpeta). */
-	disabled: Record<string, AppAvailability>;
-}
-
-interface PlatformBanner {
+/** @public Aviso a mostrar bajo el header (lo pinta `adc-banner-host`). */
+export interface PlatformBanner {
 	bannerId: string;
 	scope: "app" | "global";
 	appName?: string | null;
@@ -34,6 +30,7 @@ interface PlatformBanner {
 	until?: string | null;
 }
 
+/** @public */
 export interface PlatformState {
 	disabled: Record<string, AppAvailability>;
 	/** Apps caídas (nombres base): front caído o algún service de su grupo amigable caído. */
@@ -79,6 +76,7 @@ function kernelApiBase(): string {
  * Estado de plataforma: lee el global inyectado por el kernel (prod, 0 fetch) o lo pide
  * UNA vez (dev), cacheándolo en `window` para compartirlo con `adc-banner-host`. `force`
  * re-consulta sin cache (usado al volver de mantenimiento).
+ * @public
  */
 export function loadPlatformState(force = false): Promise<PlatformState> {
 	const win = platformWindow();
@@ -96,14 +94,9 @@ export function loadPlatformState(force = false): Promise<PlatformState> {
 	return p;
 }
 
-/** Compat: estado de disponibilidad (apps deshabilitadas) derivado del estado de plataforma. */
-export function fetchModuleAvailability(force = false): Promise<AvailabilityResponse> {
-	return loadPlatformState(force).then((s) => ({ disabled: s.disabled }));
-}
-
 /** Devuelve la info de mantenimiento si la app (por nombre base) está deshabilitada. */
 export async function isAppUnavailable(appBaseName: string): Promise<AppAvailability | null> {
-	const { disabled } = await fetchModuleAvailability();
+	const { disabled } = await loadPlatformState();
 	return disabled[appBaseName] ?? null;
 }
 
@@ -174,7 +167,7 @@ function isSafeReturnUrl(raw: string): boolean {
  */
 export async function returnToAppIfAvailable(appBaseName: string, returnUrl: string | null | undefined): Promise<boolean> {
 	if (!appBaseName || !returnUrl || !isSafeReturnUrl(returnUrl)) return false;
-	const { disabled } = await fetchModuleAvailability(true);
+	const { disabled } = await loadPlatformState(true);
 	if (disabled[appBaseName]) return false; // sigue deshabilitada
 	globalThis.location?.replace(returnUrl);
 	return true;

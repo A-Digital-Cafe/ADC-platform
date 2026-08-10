@@ -15,8 +15,10 @@ import type { Capability } from "../../security/Capability.js";
 
 // ============ Sitemap ============
 
+/** @public */
 export type SitemapChangeFreq = "always" | "hourly" | "daily" | "weekly" | "monthly" | "yearly" | "never";
 
+/** @public */
 export interface SitemapEntry {
 	path: string;
 	lastmod?: string | Date;
@@ -24,6 +26,7 @@ export interface SitemapEntry {
 	priority?: number;
 }
 
+/** @public */
 export type SitemapPath = string | SitemapEntry;
 export type SitemapPathSource = SitemapPath[] | (() => SitemapPath[] | Promise<SitemapPath[]>);
 
@@ -47,6 +50,7 @@ export interface RegisterSitemapOptions {
 
 // ============ Page Meta ============
 
+/** @public */
 export interface OgImageMeta {
 	url: string;
 	width?: number;
@@ -54,6 +58,7 @@ export interface OgImageMeta {
 	alt?: string;
 }
 
+/** @public */
 export interface OgMeta {
 	title?: string;
 	description?: string;
@@ -64,6 +69,7 @@ export interface OgMeta {
 	image?: OgImageMeta;
 }
 
+/** @public */
 export interface TwitterMeta {
 	card?: "summary" | "summary_large_image" | "app" | "player";
 	title?: string;
@@ -73,6 +79,7 @@ export interface TwitterMeta {
 	creator?: string;
 }
 
+/** @public */
 export interface ArticleMeta {
 	publishedTime?: string | Date;
 	modifiedTime?: string | Date;
@@ -84,6 +91,7 @@ export interface ArticleMeta {
 /**
  * Branding para la autogeneración de OG images cuando una página no declara
  * `og.image`. Las apps lo pasan en `defaults.ogBrand` al registrar su SEO.
+ * @public
  */
 export interface OgBrandConfig {
 	/** Color de fondo de la imagen (CSS color). Default `#ffffff`. */
@@ -116,12 +124,14 @@ export interface PageMeta {
 	ogBrand?: OgBrandConfig;
 }
 
+/** @public */
 export interface PageMetaResolverContext {
 	host: string;
 	path: string;
 	params: Record<string, string>;
 }
 
+/** @public */
 export type PageMetaResolver = (ctx: PageMetaResolverContext) => PageMeta | null | Promise<PageMeta | null>;
 
 export interface PageMetaEntry {
@@ -140,18 +150,21 @@ export interface RegisterPageMetaOptions {
 
 // ============ llms.txt ============
 
+/** @public */
 export interface LlmsLink {
 	title: string;
 	description?: string;
 	href: string;
 }
 
+/** @public */
 export interface LlmsSection {
 	title: string;
 	description?: string;
 	links: LlmsLink[];
 }
 
+/** @public */
 export interface LlmsContext {
 	host: string;
 	origin: string;
@@ -178,6 +191,7 @@ export interface RegisterLlmsOptions {
  * Subconjunto mínimo del FastifyServerProvider que el SEOService necesita
  * para enganchar el hook de inyección. Se tipa de forma laxa para evitar
  * que el contrato público dependa del módulo concreto del provider.
+ * @public
  */
 export interface ISeoFastifyProvider {
 	getApp(token: Capability): { addHook(name: "onSend", handler: (...args: any[]) => any): void };

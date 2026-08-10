@@ -5,7 +5,7 @@ export {
 	createCorsOriginGuard,
 	getAllowHeader,
 	isAllowedHttpMethod,
-	isPlatformOrigin,
+	/** @public */ isPlatformOrigin,
 	warnIfCorsAllowlistEmpty,
 } from "./cors.js";
 export { applySecurityHeaders } from "./headers.js";

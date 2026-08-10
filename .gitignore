@@ -74,3 +74,8 @@ src/common/docker/adc-haraka-core/tls/
 # Identidad pública del despliegue, generada desde .env (ver scripts/generate-public-env.ts)
 src/common/utils/public-env.generated.ts
 
+# Avisos de licencia de terceros: se derivan del árbol de dependencias instalado
+# (ver scripts/build-license-notices.mjs). Versionarlos garantiza que queden viejos.
+src/common/public/licenses.txt
+src/common/public/licenses.json
+

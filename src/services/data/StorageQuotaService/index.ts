@@ -3,7 +3,7 @@ import { BaseService } from "@services/BaseService.js";
 import { EnableEndpoints, DisableEndpoints } from "@services/core/EndpointManagerService/index.js";
 import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.js";
 import { OnlyKernel } from "@adc/utils/decorators/OnlyKernel.ts";
-import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
+import { Scope, assertScope, type Capability, type CapabilityToken } from "@common/security/Capability.ts";
 import { Kernel } from "@kernel";
 import type { QuotaTracker, QuotaTrackerGetter, StorageLimitOverride } from "@common/types/storage/quota.ts";
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.ts";
@@ -139,6 +139,17 @@ export default class StorageQuotaService extends BaseService implements IStorage
 	registerApp(token: Capability, app: RegisteredApp): void {
 		assertScope(token, Scope.StorageRegister);
 		this.quota.registerApp(app);
+	}
+
+	/**
+	 * Purga los contadores de uso del usuario en todos los contextos (cascada de baja de Identity,
+	 * que prueba scope `identity:internal`). Idempotente.
+	 */
+	async purgeUserData(cap: CapabilityToken, userId: string): Promise<void> {
+		assertScope(cap, Scope.IdentityInternal);
+		if (!userId) return;
+		const removed = await this.quota.purgeUserUsage(userId);
+		if (removed > 0) this.logger.logInfo(`StorageQuota: ${removed} contador(es) de uso del usuario ${userId} purgados`);
 	}
 
 	/** En contexto org, el usuario objetivo debe ser miembro de la org del caller. */

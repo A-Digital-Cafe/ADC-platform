@@ -26,8 +26,9 @@ export const I18N_STATE_SCRIPT = `	const STORAGE_KEY = 'language';
 		return browserLang.split('-')[0];
 	}
 
-	// Función t() global para traducciones
-	globalThis.t = function(key, params, namespace) {
+	// Función t() global. Sin traducción devuelve \`fallback\`, o la clave si no se pasó uno
+	// (lo que hace visible el faltante en pantalla).
+	globalThis.t = function(key, params, namespace, fallback) {
 		const state = globalThis.__ADC_I18N__;
 		// Si no se especifica namespace, usar el primero cargado
 		const ns = namespace || Object.keys(state.translations)[0] || 'default';
@@ -39,11 +40,12 @@ export const I18N_STATE_SCRIPT = `	const STORAGE_KEY = 'language';
 			if (value && typeof value === 'object' && k in value) {
 				value = value[k];
 			} else {
-				return key;
+				value = null;
+				break;
 			}
 		}
 
-		if (typeof value !== 'string') return key;
+		if (typeof value !== 'string') value = fallback == null ? key : fallback;
 
 		if (params) {
 			return value.replace(/\\{\\{(\\w+)\\}\\}/g, (_, p) => params[p] ?? \`{{\${p}}}\`);

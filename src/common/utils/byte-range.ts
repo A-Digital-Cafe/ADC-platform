@@ -11,7 +11,7 @@
  * `EndpointManagerService/parts/http.ts`.
  */
 
-/** Rango pedido, ya acotado al tamaño real del recurso. */
+/** @public Rango pedido, ya acotado al tamaño real del recurso. */
 export interface ByteRange {
 	start: number;
 	end: number;
@@ -24,6 +24,7 @@ export interface ByteRange {
  * - `"unsatisfiable"`: rango fuera del recurso ⇒ `416`.
  *
  * Sólo un rango: los multipart no los pide ningún cliente de la plataforma.
+ * @public
  */
 export function parseByteRange(header: string | undefined, size: number): ByteRange | "unsatisfiable" | null {
 	if (!header || size <= 0) return null;
@@ -50,10 +51,13 @@ export function parseByteRange(header: string | undefined, size: number): ByteRa
 	return { start, end };
 }
 
-/** Bytes que se van a transferir para ese `Range` (el recurso entero si no hay rango válido). */
-export function rangeLength(header: string | undefined, size: number): number {
-	const parsed = parseByteRange(header, size);
-	if (parsed === null) return size;
-	if (parsed === "unsatisfiable") return 0;
-	return parsed.end - parsed.start + 1;
+/**
+ * @public Bytes que salen por la red para un rango ya parseado: el recurso entero si no hubo rango,
+ * el tramo si lo hubo, y cero si es insatisfacible (un `416` no transfiere ni cobra). Toma el
+ * resultado de `parseByteRange` y no el header porque quien responde ya tiene el rango.
+ */
+export function rangeLength(range: ByteRange | "unsatisfiable" | null, size: number): number {
+	if (range === null) return size;
+	if (range === "unsatisfiable") return 0;
+	return range.end - range.start + 1;
 }

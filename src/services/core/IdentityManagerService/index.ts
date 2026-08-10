@@ -1,6 +1,6 @@
 import type { Connection, Model } from "mongoose";
 import { BaseService } from "../../BaseService.js";
-import type { IdentityStats, OrgScopedManagers } from "./types.js";
+import type { BilingualNote, IdentityStats, OrgScopedManagers, UserDataExportDocument, UserDataExportSection } from "./types.js";
 import type MongoProvider from "../../../providers/object/mongo/index.js";
 import { userSchema, groupSchema, roleSchema, organizationSchema, regionSchema, discordGuildConfigSchema } from "./domain/index.js";
 import type { DiscordGuildConfig } from "./domain/index.js";
@@ -13,8 +13,13 @@ import {
 	SystemManager,
 	RegionManager,
 	OrgManager,
+	LegalAcceptanceArchiver,
+	buildLegalAcceptanceArchiveSchema,
+	LEGAL_ACCEPTANCE_ARCHIVE_DEFAULT_RETENTION_DAYS,
+	type LegalAcceptanceArchiveRecord,
 	type SessionRevoker,
 	type SubscriptionCanceller,
+	type SelfDeletionCancelledHook,
 } from "./dao/index.js";
 import { seedDevUsers, purgeDevUsers } from "./dao/devSeeder.js";
 import { SystemRole } from "./defaults/systemRoles.js";
@@ -49,6 +54,10 @@ import { createQuotaTrackerGetter } from "../../data/StorageQuotaService/index.j
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.js";
 import { createSeatGate, type SeatGate } from "@common/types/plans/consumers.js";
 import type { IPlanService } from "@common/types/plans/IPlanService.js";
+import type { IAuditLogService } from "@common/types/security/AuditLog.ts";
+import type { INotificationEmailSender } from "@common/types/notifications/INotificationService.ts";
+import type { IMailboxRenamer } from "@common/types/email/Email.ts";
+import { sha256Bytes, sha256Hex } from "@common/utils/crypto.ts";
 import LRUCache from "@adc/utils/performance/LRUCache.ts";
 
 /** Organizaciones (× modo read/write) con managers vivos a la vez. */
@@ -67,6 +76,24 @@ interface CachedOrgManagers {
  * después de Identity. Las corridas siguientes van por el interval de 6h.
  */
 const INITIAL_RETENTION_PURGE_DELAY_MS = 5 * 60 * 1000;
+
+/** Versión del formato del export de datos personales (subir ante cambios incompatibles). */
+const USER_DATA_EXPORT_FORMAT_VERSION = 1;
+
+/**
+ * Composición FIJA de los pasos de la cascada de purga, en orden estable e independiente de qué
+ * preset esté cargado. Cambiarla cambia el hash de composición: los docs viejos del stepper dejan
+ * de reanudarse y la cascada re-corre completa (seguro: los purgers son idempotentes).
+ * StorageQuotaService va aparte y ÚLTIMO (excepción de ciclo, ver `#getUserDataPurgers`).
+ */
+const USER_DATA_PURGER_CANDIDATES: ReadonlyArray<{ service: string; method: string }> = [
+	{ service: "ProjectManagerService", method: "purgeUserPrivateData" },
+	{ service: "EmailService", method: "purgeUserData" },
+	{ service: "DriveService", method: "purgeUserPrivateData" },
+	{ service: "NotificationService", method: "purgeUserData" },
+	{ service: "content-service", method: "purgeUserData" },
+	{ service: "SubscriptionService", method: "purgeUserData" },
+];
 
 /**
  * Servicio opcional capaz de purgar datos privados de un usuario tras la
@@ -146,6 +173,21 @@ export default class IdentityManagerService extends BaseService implements IIden
 		this.logger.logInfo(`[Identity] ${revoked} sesión(es) revocadas para ${userId} (${reason})`);
 	};
 
+	/**
+	 * Avisa y deja rastro cuando la baja se cancela al volver a entrar. Best-effort y sin `await`:
+	 * cancelar es la dirección benigna y no puede bloquearse por notificaciones o auditoría caídas.
+	 */
+	readonly #onSelfDeletionCancelled: SelfDeletionCancelledHook = (userId: string, via: "login") => {
+		void this.notifications(this.getCapability()).accountDeletionCancelled(userId);
+		void this.getAuditWriter()?.record(this.getCapability(), {
+			action: "identity.cancel-deletion",
+			actorUserId: userId,
+			targetUserId: userId,
+			targetResource: "identity:user",
+			context: { via },
+		});
+	};
+
 	/** Lazy-load singleton de `ISessionManagerService`; `null` si todavía no está cargado. */
 	#resolveSessionManager(): ISessionManagerService | null {
 		if (!this.#sessionManager) {
@@ -187,6 +229,15 @@ export default class IdentityManagerService extends BaseService implements IIden
 	#initialPurgeTimer: ReturnType<typeof setTimeout> | null = null;
 	#tierGrantTimer: ReturnType<typeof setInterval> | null = null;
 
+	/** Archivo anonimizado de constancias de aceptación legal (paso final de la purga). */
+	#legalArchiver: LegalAcceptanceArchiver | null = null;
+
+	/** Base de la página pública de cancelación de baja (adc-auth `/cancel-deletion`). */
+	#cancelDeletionUrlBase = "";
+
+	/** Base de la página pública de confirmación de cambio de email (adc-auth `/confirm-email`). */
+	#emailChangeConfirmUrlBase = "";
+
 	readonly #mongoProvider: MongoProvider;
 
 	// IOperationsService for stepper support in cascade DAOs
@@ -208,6 +259,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 	/** Tracker de cuota lazy: StorageQuotaService carga después (kernelMode mayor). */
 	readonly #getQuotaTracker: QuotaTrackerGetter;
 
+	/** Resolver lazy de StorageQuotaService (excepción de ciclo: ver constructor). */
+	readonly #getStorageQuotaService: () => IStorageQuotaService | undefined;
+
 	/** Gate de asientos lazy: PlanService carga después (kernelMode mayor). */
 	readonly #seatGate: SeatGate;
 
@@ -215,9 +269,10 @@ export default class IdentityManagerService extends BaseService implements IIden
 		super(kernel, options);
 		// Excepción de ciclo: Identity NO puede declarar StorageQuotaService (StorageQuota
 		// depende de Identity), así que resuelve por nombre fijo vía el reader del kernel.
-		this.#getQuotaTracker = createQuotaTrackerGetter(() =>
-			kernel.getReadonlyRegistry().getService<IStorageQuotaService>("StorageQuotaService")
-		);
+		// `getPlatformService` (identidad pinneada en boot): el purger de contadores le
+		// reenvía la capability de Identity, y para eso el nombre a secas no alcanza.
+		this.#getStorageQuotaService = () => kernel.getReadonlyRegistry().getPlatformService<IStorageQuotaService>("StorageQuotaService");
+		this.#getQuotaTracker = createQuotaTrackerGetter(this.#getStorageQuotaService);
 		// Mismo ciclo con PlanService (declara Identity): resolución perezosa por nombre.
 		this.#seatGate = createSeatGate(() => kernel.getReadonlyRegistry().getService<IPlanService>("PlanService"));
 		this.#mongoProvider = this.getMyProvider<MongoProvider>("object/mongo");
@@ -258,6 +313,17 @@ export default class IdentityManagerService extends BaseService implements IIden
 			this.#regionManager = new RegionManager(RegionModel, OrganizationModel, this.logger, defaultRegionObjectUri, this.#getAuthVerifier);
 			await this.#regionManager.initialize();
 
+			// Secreto de baja de cuentas: firma los tokens de arrepentimiento y de cambio de email,
+			// y seudonimiza el archivo de constancias. Cada uso deriva su sub-clave por etiqueta.
+			const deletionCfg =
+				(this.config?.private as { accountDeletion?: { secret?: string; cancelUrl?: string; legalArchiveRetentionDays?: number | string } })
+					?.accountDeletion ?? {};
+			const deletionSecret = this.#resolveAccountDeletionSecret(deletionCfg.secret);
+			this.#cancelDeletionUrlBase = (deletionCfg.cancelUrl || "https://auth.adigitalcafe.com/cancel-deletion").trim();
+
+			const emailChangeCfg = (this.config?.private as { emailChange?: { confirmUrl?: string } })?.emailChange ?? {};
+			this.#emailChangeConfirmUrlBase = (emailChangeCfg.confirmUrl || "https://auth.adigitalcafe.com/confirm-email").trim();
+
 			// Inicializar managers en orden de dependencia:
 			// UserManager (independiente) → GroupManager (→ UserManager) → RoleManager (→ UserManager, GroupManager) → OrgManager (→ todos)
 			// El gate de asientos va SOLO en el manager con auth: los managers internos sirven
@@ -268,7 +334,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 				this.#getAuthVerifier,
 				this.#seatGate,
 				this.#revokeSessions,
-				this.#cancelSubscription
+				this.#cancelSubscription,
+				deletionSecret,
+				this.#onSelfDeletionCancelled
 			);
 			this.#groupManager = new GroupManager(GroupModel, this.#userManager, this.logger, this.#getAuthVerifier);
 			this.#roleManager = new RoleManager(
@@ -294,7 +362,16 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// Managers internos (sin auth verifier) para servicios de infraestructura (ISessionManagerService)
 			// Usan () => null como AuthVerifierGetter, por lo que requirePermission no aplica
 			const noAuth: () => null = () => null;
-			this.#internalUserManager = new UserManager(UserModel, this.logger, noAuth, undefined, this.#revokeSessions);
+			this.#internalUserManager = new UserManager(
+				UserModel,
+				this.logger,
+				noAuth,
+				undefined,
+				this.#revokeSessions,
+				undefined,
+				deletionSecret,
+				this.#onSelfDeletionCancelled
+			);
 			const internalGroupManager = new GroupManager(GroupModel, this.#internalUserManager, this.logger, noAuth);
 			const internalRoleManager = new RoleManager(
 				RoleModel,
@@ -426,7 +503,34 @@ export default class IdentityManagerService extends BaseService implements IIden
 			// interno (sin auth): los endpoints no tocan models (ver endpoints.md).
 			AvatarEndpoints.init(this, (userId) => this.#internalUserManager!.getAvatarAttachmentId(userId), this.#avatarAttachmentsManager);
 
+			// Archivo anonimizado de constancias legales, que el paso final de la purga escribe
+			// ANTES del hard delete. Índices con syncIndexes() (ver `buildLegalAcceptanceArchiveSchema`).
+			const legalRetentionDays = Number(deletionCfg.legalArchiveRetentionDays);
+			const legalRetentionSecs =
+				(Number.isFinite(legalRetentionDays) && legalRetentionDays > 0
+					? legalRetentionDays
+					: LEGAL_ACCEPTANCE_ARCHIVE_DEFAULT_RETENTION_DAYS) *
+				24 *
+				60 *
+				60;
+			const legalArchiveModel = this.#mongoProvider.createModel<LegalAcceptanceArchiveRecord>(
+				"LegalAcceptanceArchive",
+				buildLegalAcceptanceArchiveSchema(legalRetentionSecs)
+			);
+			try {
+				await legalArchiveModel.syncIndexes();
+			} catch (err: any) {
+				this.logger.logWarn(`syncIndexes de legal_acceptance_archive falló: ${err?.message || err}`);
+			}
+			this.#legalArchiver = new LegalAcceptanceArchiver(
+				legalArchiveModel,
+				sha256Bytes(`legal-acceptance-archive:${deletionSecret}`),
+				this.logger
+			);
+
 			// Cron de retención: purga usuarios con `metadata.scheduledDeletionAt < now`.
+			// TODA baja (voluntaria, administrativa o por ban) pasa por acá: el único hard
+			// delete es el último paso del stepper, condicional a que la baja siga vigente.
 			// La corrida inicial se DIFIERE: Identity carga antes que los presets con datos
 			// privados (Drive, PM, Email); purgar un usuario vencido en pleno boot borraría
 			// su registro sin ejecutar esos purgers (datos huérfanos irrecuperables).
@@ -697,8 +801,191 @@ export default class IdentityManagerService extends BaseService implements IIden
 		await super.stop(kernelKey);
 		this.#systemManager?.clearSystemUser(kernelKey);
 		this.#authVerifier = null;
+		this.#legalArchiver = null;
 
 		this.logger.logOk("IdentityManagerService detenido");
+	}
+
+	/**
+	 * `ACCOUNT_DELETION_SECRET`, o uno de desarrollo (público) con warning. Misma política que la
+	 * pepper de bans: en producción hay que setearlo o los tokens son forjables.
+	 */
+	#resolveAccountDeletionSecret(raw?: string): string {
+		const secret = raw?.trim();
+		if (secret) return secret;
+		this.logger.logWarn(
+			"[Identity] ACCOUNT_DELETION_SECRET no configurado: usando un secreto de desarrollo. " +
+				"Configuralo en producción (openssl rand -hex 32) o los tokens de cancelación de baja serán forjables."
+		);
+		return "adc-identity-dev-account-deletion-secret";
+	}
+
+	buildCancelDeletionUrl(cancelToken: string): string {
+		const sep = this.#cancelDeletionUrlBase.includes("?") ? "&" : "?";
+		return `${this.#cancelDeletionUrlBase}${sep}token=${encodeURIComponent(cancelToken)}`;
+	}
+
+	buildEmailChangeConfirmUrl(confirmToken: string): string {
+		const sep = this.#emailChangeConfirmUrlBase.includes("?") ? "&" : "?";
+		return `${this.#emailChangeConfirmUrlBase}${sep}token=${encodeURIComponent(confirmToken)}`;
+	}
+
+	/**
+	 * `EmailService` si está cargado y sabe enviar (duck-typing, resuelto EN CADA USO porque el
+	 * preset es recargable). Existe porque la confirmación de cambio de email va a una casilla que
+	 * NO es la registrada, y el pipeline de notificaciones sólo entrega a la de la cuenta.
+	 */
+	getSystemEmailSender(): INotificationEmailSender | null {
+		const svc = this.tryGetMyService<Partial<INotificationEmailSender>>("EmailService");
+		if (svc && typeof svc.sendSystemEmail === "function") return svc as INotificationEmailSender;
+		return null;
+	}
+
+	/**
+	 * `EmailService` si además sabe renombrar buzones: la dirección de plataforma se deriva del
+	 * username, así que cambiarlo arrastra la casilla. Sin el preset no hay casilla que arrastrar.
+	 */
+	getMailboxRenamer(): IMailboxRenamer | null {
+		const svc = this.tryGetMyService<Partial<IMailboxRenamer>>("EmailService");
+		if (svc && typeof svc.renameUserMailboxes === "function") return svc as IMailboxRenamer;
+		return null;
+	}
+
+	/**
+	 * `AuditLogService` resuelto EN CADA USO (opcional y recargable), `null` si no está cargado.
+	 * Cada endpoint elige fail-closed (baja administrativa) o best-effort según el riesgo.
+	 */
+	getAuditWriter(): IAuditLogService | null {
+		return this.tryGetMyService<IAuditLogService>("AuditLogService") ?? null;
+	}
+
+	/**
+	 * Cascada de purga YA (variante `immediate` de la baja administrativa). No sirve para saltear
+	 * la retención: el guard del stepper y el borrado condicional hacen no-op si la baja no está
+	 * vigente. Un fallo queda logueado y el cron de 6h retoma desde el paso fallido.
+	 */
+	async purgeDueUserNow(userId: string): Promise<void> {
+		try {
+			await this.#purgeUserResumable(userId, this.#getUserDataPurgers());
+		} catch (err: any) {
+			this.logger.logWarn(`Purga inmediata de ${userId} incompleta (la retoma el cron): ${err?.message || err}`);
+		}
+	}
+
+	/**
+	 * Documento del export de datos personales (portabilidad, art. 14 Ley 25.326 / arts. 15 y 20
+	 * RGPD): la sección de identidad se arma acá y el resto sale de `exportUserData(cap, userId)`
+	 * en cada servicio — espejo del contrato de purga (`#getUserDataPurgers`), misma resolución
+	 * perezosa y mismo handshake `identity:internal`. Una sección que falla se declara
+	 * `available: false` en vez de abortar el export completo.
+	 */
+	async buildUserDataExport(userId: string): Promise<UserDataExportDocument> {
+		const users = this.#internalUserManager;
+		if (!users) throw new Error("IdentityManagerService no inicializado");
+		const user = await users.getUser(userId);
+		if (!user) throw new Error(`Usuario ${userId} no encontrado`);
+
+		const { passwordHash: _passwordHash, ...safeUser } = user;
+		const metadata = { ...(safeUser.metadata ?? {}) } as Record<string, unknown>;
+		// Material de autenticación, no un dato personal: nunca sale en el export.
+		delete metadata.deletionCancelTokenHash;
+		if (metadata.emailChangePending && typeof metadata.emailChangePending === "object") {
+			const { tokenHash: _tokenHash, ...pendingRest } = metadata.emailChangePending as Record<string, unknown>;
+			metadata.emailChangePending = pendingRest;
+		}
+
+		const sections: Record<string, UserDataExportSection> = {
+			identity: {
+				available: true,
+				data: {
+					profile: {
+						id: safeUser.id,
+						username: safeUser.username,
+						email: safeUser.email ?? null,
+						avatar: safeUser.avatar ?? null,
+						isActive: safeUser.isActive,
+						roleIds: safeUser.roleIds,
+						groupIds: safeUser.groupIds,
+						permissions: safeUser.permissions ?? [],
+						orgMemberships: safeUser.orgMemberships ?? [],
+						createdAt: safeUser.createdAt,
+						updatedAt: safeUser.updatedAt,
+						lastLogin: safeUser.lastLogin ?? null,
+					},
+					legalAcceptance: (metadata.legalAcceptance as Record<string, unknown> | undefined) ?? null,
+					linkedAccounts: (safeUser.linkedAccounts ?? []).map((a) => ({
+						provider: a.provider,
+						providerId: a.providerId,
+						providerUsername: a.providerUsername ?? null,
+						providerAvatar: a.providerAvatar ?? null,
+						status: a.status,
+						linkedAt: a.linkedAt,
+						unlinkedAt: a.unlinkedAt ?? null,
+					})),
+					metadata,
+				},
+				note: {
+					es: "Perfil, constancia de aceptación legal, cuentas vinculadas (sin tokens de acceso) y metadata de la cuenta. La contraseña y su hash no se exportan nunca.",
+					en: "Profile, legal acceptance record, linked accounts (without access tokens) and account metadata. The password and its hash are never exported.",
+				},
+			},
+		};
+
+		// Misma lista que la purga en cascada + SessionManagerService (sesiones activas), resuelta
+		// fresca en cada export: apunta a la instancia vigente aunque el preset se haya recargado.
+		const candidates: Array<{ service: string; section: string }> = [
+			{ service: "SessionManagerService", section: "sessions" },
+			{ service: "DriveService", section: "drive" },
+			{ service: "EmailService", section: "email" },
+			{ service: "ProjectManagerService", section: "projectManagement" },
+			{ service: "NotificationService", section: "notifications" },
+			{ service: "SubscriptionService", section: "subscription" },
+			{ service: "content-service", section: "community" },
+		];
+		const notLoaded: BilingualNote = {
+			es: "Servicio no disponible en este despliegue: no hay datos que exportar en esta sección.",
+			en: "Service not available in this deployment: there is no data to export in this section.",
+		};
+		const failed: BilingualNote = {
+			es: "Esta sección no pudo generarse en este intento; reintentá el export más tarde o contactá soporte.",
+			en: "This section could not be generated this time; retry the export later or contact support.",
+		};
+
+		const cap = this.getCapability();
+		for (const { service, section } of candidates) {
+			const instance = this.tryGetMyService<Record<string, unknown>>(service);
+			const fn = instance?.exportUserData;
+			if (typeof fn !== "function") {
+				sections[section] = { available: false, note: notLoaded };
+				continue;
+			}
+			try {
+				const data = await (fn as (cap: CapabilityToken, u: string) => Promise<unknown>).call(instance, cap, userId);
+				sections[section] = { available: true, data };
+			} catch (err: any) {
+				this.logger.logWarn(`Export de datos: sección ${section} (${service}) falló para ${userId}: ${err?.message || err}`);
+				sections[section] = { available: false, note: failed };
+			}
+		}
+
+		return {
+			format: "adc-user-data-export",
+			formatVersion: USER_DATA_EXPORT_FORMAT_VERSION,
+			generatedAt: new Date().toISOString(),
+			userId: safeUser.id,
+			username: safeUser.username,
+			notes: {
+				es:
+					"Export de tus datos personales (art. 14 Ley 25.326 / arts. 15 y 20 RGPD) en JSON estructurado de lectura mecánica, una sección por servicio. " +
+					"No incluye credenciales ni secretos (contraseñas y sus hashes, tokens, claves de cifrado) ni binarios (archivos de Drive, adjuntos de correo, avatar), " +
+					"que se descargan desde cada app. Cada sección declara sus topes y qué quedó afuera.",
+				en:
+					"Export of your personal data (sec. 14 of Argentine Act 25.326 / arts. 15 & 20 GDPR) as machine-readable structured JSON, one section per service. " +
+					"It excludes credentials and secrets (passwords and their hashes, tokens, encryption keys) and binaries (Drive files, mail attachments, avatar), " +
+					"which can be downloaded from each app. Each section declares its caps and what was left out.",
+			},
+			sections,
+		};
 	}
 
 	/**
@@ -713,9 +1000,12 @@ export default class IdentityManagerService extends BaseService implements IIden
 	}
 
 	/**
-	 * Resuelve perezosamente los servicios opcionales que almacenan datos
-	 * privados del usuario (project-manager, email, ...) para purgarlos en
-	 * cascada. No falla si los presets no están cargados.
+	 * Un purger por candidato de {@link USER_DATA_PURGER_CANDIDATES} + StorageQuotaService al final.
+	 *
+	 * FAIL-CLOSED: un candidato declarado en el `config.json` pero no cargado al correr su paso
+	 * LANZA (el usuario sigue "due" y el cron reintenta cada 6h); sin esto, un preset caído durante
+	 * la purga terminaba en hard delete con sus datos huérfanos para siempre. El único caso que se
+	 * omite es el candidato NO declarado (despliegue que quitó el módulo).
 	 */
 	#getUserDataPurgers(): UserDataPurger[] {
 		if (!this.#kernelKey) return []; // aún no iniciado
@@ -724,25 +1014,41 @@ export default class IdentityManagerService extends BaseService implements IIden
 		// handshake ya no depende de una master key compartida entre módulos.
 		const cap = this.getCapability();
 
-		const candidates: Array<{ service: string; method: string }> = [
-			{ service: "ProjectManagerService", method: "purgeUserPrivateData" },
-			{ service: "EmailService", method: "purgeUserData" },
-			{ service: "DriveService", method: "purgeUserPrivateData" },
-		];
-
-		// Resolución fresca en cada corrida (cada 6h): barata, y siempre apunta a la
-		// instancia vigente aunque el preset haya cargado tarde o se haya recargado.
-		const purgers: UserDataPurger[] = [];
-		for (const { service, method } of candidates) {
-			const instance = this.tryGetMyService<Record<string, unknown>>(service);
-			const fn = instance?.[method];
-			if (typeof fn === "function") {
-				purgers.push({
-					name: service,
-					run: (userId: string) => (fn as (cap: CapabilityToken, u: string) => Promise<void>).call(instance, cap, userId),
-				});
-			}
+		const declared = new Set<string>();
+		for (const svc of (this.config?.services as Array<{ name?: string }> | undefined) ?? []) {
+			if (svc?.name) declared.add(svc.name);
 		}
+
+		const purgers: UserDataPurger[] = USER_DATA_PURGER_CANDIDATES.map(({ service, method }) => ({
+			name: service,
+			run: async (userId: string) => {
+				// Resolución fresca EN CADA paso: apunta a la instancia vigente tras una recarga.
+				const instance = this.tryGetMyService<Record<string, unknown>>(service);
+				const fn = instance?.[method];
+				if (typeof fn !== "function") {
+					if (!declared.has(service)) {
+						this.logger.logDebug(`Retention purge: ${service} no declarado en este despliegue; paso omitido`);
+						return;
+					}
+					throw new Error(`purger ${service} declarado pero no disponible: la purga de ${userId} espera a que vuelva`);
+				}
+				await (fn as (cap: CapabilityToken, u: string) => Promise<void>).call(instance, cap, userId);
+			},
+		}));
+
+		// StorageQuotaService no puede declararse en config.json (ciclo: él declara a Identity), así
+		// que va por el reader del kernel, con el mismo contrato y el mismo fail-closed. ÚLTIMO a
+		// propósito: borra los contadores DESPUÉS de que los demás soltaron lo que miden.
+		purgers.push({
+			name: "StorageQuotaService",
+			run: async (userId: string) => {
+				const quota = this.#getStorageQuotaService();
+				if (typeof quota?.purgeUserData !== "function") {
+					throw new Error(`purger StorageQuotaService no disponible: la purga de ${userId} espera a que vuelva`);
+				}
+				await quota.purgeUserData(cap, userId);
+			},
+		});
 		return purgers;
 	}
 
@@ -807,15 +1113,40 @@ export default class IdentityManagerService extends BaseService implements IIden
 
 	/**
 	 * Ejecuta la purga en cascada de un usuario como pipeline reanudable.
-	 * Pasos (orden estable): [purgers de datos privados…, limpieza de moderación,
-	 * borrado del registro de usuario]. El stepper salta los ya completados.
+	 * Pasos (orden estable): [avatar custom, purgers de datos privados…, limpieza de
+	 * moderación, constancia legal + borrado del registro de usuario]. El stepper
+	 * salta los ya completados.
+	 *
+	 * Carrera con la cancelación: se re-verifica que la baja siga vigente al arrancar y en el paso
+	 * final (el hard delete es además condicional a nivel de query). Si se cancela con la cascada
+	 * ya corrida, la purga ABORTA antes del hard delete: la cuenta sobrevive, pero lo que los
+	 * purgers ya borraron no se restaura (la solicitud de baja lo autorizó).
 	 */
 	async #purgeUserResumable(userId: string, purgers: UserDataPurger[]): Promise<void> {
 		const internalUserManager = this.#internalUserManager;
 		if (!internalUserManager) return;
 
+		// La baja pudo cancelarse entre el listado de vencidos y esta corrida (o la anterior, si
+		// ésta es una reanudación).
+		const dueUser = await internalUserManager.findDueUser(userId);
+		if (!dueUser) {
+			this.logger.logInfo(`Retention purge: baja de ${userId} ya no vigente (cancelada/reactivada); se omite`);
+			return;
+		}
+
 		const steps: Step[] = [
-			// 0..N-1: purga de datos privados en cada servicio opcional (PM, email…).
+			// 0: avatar custom (docs + objetos S3), que el hard delete no borra: sin este paso el
+			// adjunto queda huérfano en el bucket. Va ANTES de los purgers para que la liberación
+			// de cuota preceda a la purga de contadores, y es fail-closed como ellos.
+			async () => {
+				const avatars = this.#avatarAttachmentsManager;
+				if (!avatars || !this.#kernelKey) {
+					throw new Error(`manager de avatares no disponible: la purga de ${userId} espera a que vuelva`);
+				}
+				const removed = await avatars.forceDeleteByOwner(this.#kernelKey, "user-avatar", userId);
+				if (removed > 0) this.logger.logInfo(`Retention purge: ${removed} avatar(es) custom de ${userId} eliminados`);
+			},
+			// 1..N: purga de datos privados en cada servicio opcional (PM, email…).
 			// Estos métodos ya son idempotentes en cascada, por lo que reejecutarlos es seguro.
 			...purgers.map((purger) => async () => {
 				await purger.run(userId);
@@ -830,15 +1161,39 @@ export default class IdentityManagerService extends BaseService implements IIden
 					this.logger.logWarn(`Retention purge: limpieza moderación de ${userId}: ${e?.message || e}`);
 				}
 			},
-			// N+1 (último): borrar el registro de usuario. Hasta aquí el usuario sigue "due".
+			// N+1 (último): constancia legal anonimizada + hard delete CONDICIONAL. Hasta acá el
+			// usuario sigue "due"; si la baja se canceló a mitad de cascada, el paso aborta.
 			async () => {
-				await internalUserManager.deleteUser(userId);
+				const user = await internalUserManager.findDueUser(userId);
+				if (!user) {
+					throw new Error(`baja de ${userId} cancelada a mitad de cascada: se preserva la cuenta (lo ya purgado no se restaura)`);
+				}
+				// La constancia va ANTES del borrado y su fallo corta el paso: no se borra un
+				// usuario sin preservar la prueba de su consentimiento (defensa posterior).
+				await this.#legalArchiver?.archiveForUser(user);
+				const deleted = await internalUserManager.hardDeleteDueUser(userId);
+				if (!deleted) {
+					throw new Error(`baja de ${userId} cancelada durante el borrado: se preserva la cuenta`);
+				}
 			},
 		];
 
-		const failedStep = await this.#operationsService.stepper(0, "retention-purge", userId, steps);
+		// Identidad del doc del stepper: el avance persistido es POSICIONAL, así que sólo puede
+		// reanudarse sobre un pipeline idéntico. El hash de composición en el `cmd` invalida los
+		// docs viejos si un deploy cambia la lista de pasos, y el `scheduledDeletionAt` en el `id`
+		// evita que una baja NUEVA herede pasos "completados" de la anterior dentro del TTL de 48h.
+		// Los docs huérfanos expiran solos.
+		const composition = sha256Hex(["avatar", ...purgers.map((p) => p.name), "moderation", "legal-archive+hard-delete"].join("|")).slice(
+			0,
+			12
+		);
+		const scheduledAtRaw = (dueUser.metadata as Record<string, unknown> | undefined)?.scheduledDeletionAt;
+		const scheduledAtMs = new Date(scheduledAtRaw as string | number | Date).getTime();
+		const requestId = `${userId}.${Number.isFinite(scheduledAtMs) ? scheduledAtMs : 0}`;
+
+		const failedStep = await this.#operationsService.stepper(0, `retention-purge#${composition}`, requestId, steps);
 		if (failedStep !== null) {
-			const err = new Error(`retention-purge falló en el paso ${failedStep}`);
+			const err = new Error(`retention-purge falló en el paso ${failedStep} (${steps.length} pasos, composición ${composition})`);
 			(err as any).failedStep = failedStep;
 			throw err;
 		}

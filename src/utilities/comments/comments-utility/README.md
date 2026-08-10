@@ -18,3 +18,5 @@ Cada servicio host instancia el suyo con:
 - `react(ctx, commentId, emoji)` / `unreact(ctx, commentId, emoji)`
 - `saveDraft(ctx, key, payload)` / `getDraft(ctx, key)` / `deleteDraft(ctx, key)`
 - `getById(ctx, commentId)` / `count(ctx, target)`
+- Cascadas de confianza (kernelKey, sin checker): `purgeByTarget(key, targetType, targetId)` y
+  `anonymizeByAuthor(key, userId)` (blanquea `authorId`/`authorName` y reacciones; purga de cuenta)

@@ -147,7 +147,7 @@ export function planKey(axis: PlanAxis, tier: string): string {
 	return `${axis}:${tier}`;
 }
 
-/** `true` si el valor viene expresado como escalable por asiento. */
+/** @public `true` si el valor viene expresado como escalable por asiento. */
 export function isScaledValue(value: PlanFeatureValue): value is ScaledValue {
 	return typeof value === "object" && value !== null && "base" in value;
 }
@@ -168,12 +168,12 @@ export function resolveFeatureValue(value: PlanFeatureValue, paidSeats = 0): Fea
 	return value.base + (value.perSeat ?? 0) * seats;
 }
 
-/** `true` si el límite numérico no tiene tope. */
+/** @public `true` si el límite numérico no tiene tope. */
 export function isUnlimited(limit: FeatureValue): boolean {
 	return limit === UNLIMITED;
 }
 
-/** Unidades restantes de un límite numérico (`Infinity` si es ilimitado). */
+/** @public Unidades restantes de un límite numérico (`Infinity` si es ilimitado). */
 export function remaining(limit: number, used: number): number {
 	return isUnlimited(limit) ? Number.POSITIVE_INFINITY : Math.max(0, limit - used);
 }

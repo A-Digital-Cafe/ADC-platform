@@ -2,7 +2,7 @@ import { Component, Prop, State } from "@stencil/core";
 import { IS_DEV } from "@common/utils/url-utils.js";
 import { publicEnv } from "@common/utils/public-env.js";
 
-type FooterLinkKey = "privacy" | "terms" | "cookies" | "contact" | "team" | "help" | "status";
+type FooterLinkKey = "privacy" | "terms" | "cookies" | "licenses" | "contact" | "team" | "help" | "status";
 
 interface ADCGlobal {
 	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
@@ -22,6 +22,9 @@ const FOOTER_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string; target: Fo
 	{ key: "privacy", path: "/privacy", target: "help" },
 	{ key: "terms", path: "/terms", target: "help" },
 	{ key: "cookies", path: "/cookies", target: "help" },
+	// Aviso de licencias del código de terceros que va en el bundle. Va en el pie de
+	// TODAS las apps porque todas sirven ese código; el listado lo genera el build.
+	{ key: "licenses", path: "/licenses", target: "help" },
 	{ key: "contact", path: "/contact", target: "help" },
 	{ key: "team", path: "/team", target: "help" },
 	{ key: "help", path: "/", target: "help" },
@@ -34,6 +37,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		privacy: "Privacidad",
 		terms: "Términos",
 		cookies: "Cookies",
+		licenses: "Licencias",
 		contact: "Contacto",
 		team: "Equipo",
 		help: "Ayuda",
@@ -44,6 +48,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		privacy: "Privacy",
 		terms: "Terms",
 		cookies: "Cookies",
+		licenses: "Licenses",
 		contact: "Contact",
 		team: "Team",
 		help: "Help",

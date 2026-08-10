@@ -8,11 +8,13 @@
 
 import type { QuotaTracker } from "./quota.ts";
 import type { RegisteredApp } from "@services/data/StorageQuotaService/dao/QuotaManager.js";
-import type { Capability } from "../../security/Capability.ts";
+import type { Capability, CapabilityToken } from "../../security/Capability.ts";
 
 export interface IStorageQuotaService {
 	/** Tracker estable para que los AttachmentsManager reporten uso. */
 	readonly tracker: QuotaTracker;
 	/** Registra una app consumidora. Requiere capability con scope `storage:register`. */
 	registerApp(token: Capability, app: RegisteredApp): void;
+	/** Purga los contadores de uso de un usuario (cascada de baja). Scope `identity:internal`. */
+	purgeUserData(cap: CapabilityToken, userId: string): Promise<void>;
 }

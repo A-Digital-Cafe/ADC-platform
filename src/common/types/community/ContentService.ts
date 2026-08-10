@@ -6,11 +6,13 @@
  * (que vive como preset opcional en `presets/community-content/`).
  */
 
+/** @public */
 export interface PublishedSitemapSlug {
 	slug: string;
 	updatedAt?: Date;
 }
 
+/** @public */
 export interface ArticleSEO {
 	slug: string;
 	title: string;
@@ -23,6 +25,7 @@ export interface ArticleSEO {
 	pathSlug?: string;
 }
 
+/** @public */
 export interface PathSEO {
 	slug: string;
 	title: string;

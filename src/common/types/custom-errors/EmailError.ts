@@ -23,6 +23,8 @@ type EmailErrorTypes =
 	// Política de entrega
 	| "EXTERNAL_SEND_DISABLED"
 	| "RECIPIENT_NOT_FOUND"
+	// No hay ninguna casilla del titular a la que entregar (garantía `any-mailbox`)
+	| "NO_DELIVERABLE_MAILBOX"
 	// Auth
 	| "INVALID_WEBHOOK_SECRET"
 	// Infra

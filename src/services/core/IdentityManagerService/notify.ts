@@ -39,6 +39,101 @@ export class NotifyManager {
 	}
 
 	/**
+	 * Avisa a la casilla ACTUAL (el cambio aún no se aplicó) que se pidió cambiar el email. Es la
+	 * ventana de reacción ante un pedido hostil con sesión robada: sale en el momento del pedido,
+	 * antes de que el token pueda canjearse.
+	 */
+	async emailChangeRequested(userId: string, opts: { maskedNewEmail: string }): Promise<void> {
+		if (!userId) return;
+		await this.#emit({
+			userId,
+			topic: "security.email_change_requested",
+			title: "Pediste cambiar el email de tu cuenta",
+			body: "Enviamos un enlace de confirmación a la casilla nueva. Si no fuiste vos, cambiá tu contraseña y contactá a soporte de inmediato.",
+			channels: ["inApp", "email"],
+			linkApp: "my-account",
+			link: "/settings/privacy-security",
+			data: { maskedNewEmail: opts.maskedNewEmail },
+		});
+	}
+
+	/** Confirmación de que el email de la cuenta cambió (el canal email ya llega a la casilla nueva). */
+	async emailChanged(userId: string): Promise<void> {
+		if (!userId) return;
+		await this.#emit({
+			userId,
+			topic: "security.email_changed",
+			title: "El email de tu cuenta fue cambiado",
+			body: "Si no fuiste vos, contactá a soporte de inmediato.",
+			channels: ["inApp", "email"],
+			linkApp: "my-account",
+			link: "/settings/privacy-security",
+		});
+	}
+
+	/**
+	 * Aviso de cambio de username. Si con él se renombró la casilla hay que decirlo: la dirección
+	 * desde la que la persona escribe y a la que recibe cambió, y eso no se descubre solo.
+	 */
+	async usernameChanged(userId: string, opts?: { mailboxRenamed?: boolean }): Promise<void> {
+		if (!userId) return;
+		await this.#emit({
+			userId,
+			topic: "security.username_changed",
+			title: "Tu nombre de usuario fue cambiado",
+			body:
+				(opts?.mailboxRenamed ? "Tu dirección de correo de la plataforma se actualizó al nombre nuevo. " : "") +
+				"Si no fuiste vos, contactá a soporte de inmediato.",
+			channels: ["inApp", "email"],
+			linkApp: "my-account",
+			link: "/settings/privacy-security",
+		});
+	}
+
+	/**
+	 * Aviso de baja programada. Sólo canal email: la cuenta ya no puede entrar a ver la bandeja.
+	 * La baja VOLUNTARIA recuerda las dos vías de arrepentimiento (volver a entrar y el enlace de
+	 * un solo uso); la administrativa no es cancelable por la persona y va sin ninguna.
+	 */
+	async accountDeletionScheduled(
+		userId: string,
+		opts: { scheduledFor?: Date | string | null; cancelUrl?: string | null; byAdmin?: boolean }
+	): Promise<void> {
+		if (!userId) return;
+		const fecha = opts.scheduledFor ? new Date(opts.scheduledFor).toISOString().slice(0, 10) : null;
+		const cuando = fecha ? ` el ${fecha}` : " en 30 días";
+		const base = opts.byAdmin
+			? `Un administrador dio de baja tu cuenta. Se eliminará definitivamente${cuando}, junto con tus datos personales.`
+			: `Registramos tu solicitud de baja. Tu cuenta quedó desactivada y se eliminará definitivamente${cuando}, junto con tus datos personales.`;
+		let arrepentimiento = "";
+		if (!opts.byAdmin) {
+			arrepentimiento = " Si te arrepentís, volvé a iniciar sesión antes de esa fecha y tu cuenta queda como estaba";
+			arrepentimiento += opts.cancelUrl ? ", o cancelá la baja desde el botón de este correo (enlace de un solo uso)." : ".";
+		}
+		await this.#emit({
+			userId,
+			topic: "account.deletion_scheduled",
+			title: "Tu cuenta va a ser eliminada",
+			body: base + arrepentimiento,
+			channels: ["email"],
+			// URL absoluta a la página pública de cancelación (sin `linkApp`: no es ruta interna).
+			link: opts.cancelUrl ?? undefined,
+		});
+	}
+
+	/** Confirmación de que la baja fue cancelada y la cuenta reactivada. */
+	async accountDeletionCancelled(userId: string): Promise<void> {
+		if (!userId) return;
+		await this.#emit({
+			userId,
+			topic: "account.deletion_cancelled",
+			title: "La baja de tu cuenta fue cancelada",
+			body: "Tu cuenta vuelve a estar activa y no se va a eliminar. Si no pediste esta cancelación, contactá a soporte de inmediato.",
+			channels: ["inApp", "email"],
+		});
+	}
+
+	/**
 	 * Alerta de seguridad para el equipo (Admins + Security Managers globales),
 	 * topic `security.alert`: ban aplicado/levantado, rol modificado/eliminado,
 	 * usuario eliminado, sesiones revocadas. Best-effort y sin lanzar; excluye al

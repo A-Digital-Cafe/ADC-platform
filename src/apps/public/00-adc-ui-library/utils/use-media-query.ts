@@ -30,7 +30,7 @@ export function useMediaQuery(query: string): boolean {
 	return matches;
 }
 
-/** Atajo para el corte compacto (mobile o ventana angosta). Ver {@link COMPACT_QUERY}. */
+/** @public Atajo para el corte compacto (mobile o ventana angosta). Ver {@link COMPACT_QUERY}. */
 export function useIsCompact(): boolean {
 	return useMediaQuery(COMPACT_QUERY);
 }

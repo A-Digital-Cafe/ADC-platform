@@ -17,6 +17,16 @@ export const PUBLIC_ENV_VARS = {
 	operatorLegalName: "ADC_PUBLIC_OPERATOR_LEGAL_NAME",
 	operatorTaxId: "ADC_PUBLIC_OPERATOR_TAX_ID",
 	operatorCountry: "ADC_PUBLIC_OPERATOR_COUNTRY",
+	/**
+	 * Domicilio del responsable, en una línea. Lo exigen el art. 6 inc. b de la Ley 25.326 y la
+	 * Res. 104/2005 SCT (Res. GMC Mercosur 21/04) para comercio electrónico: "Argentina" no es un
+	 * domicilio. **No tiene por qué ser el domicilio particular**: sirve uno comercial o
+	 * constituido a efectos de notificaciones, que es lo habitual. Vacío = las páginas legales
+	 * omiten el dato en vez de inventarlo.
+	 */
+	operatorAddress: "ADC_PUBLIC_OPERATOR_ADDRESS",
+	/** Condición frente al IVA (ej. "Monotributista"). Acompaña al domicilio en las páginas legales. */
+	operatorTaxStatus: "ADC_PUBLIC_OPERATOR_TAX_STATUS",
 	operatorPhone: "ADC_PUBLIC_OPERATOR_PHONE",
 	contactEmail: "ADC_PUBLIC_CONTACT_EMAIL",
 	discordHandle: "ADC_PUBLIC_DISCORD_HANDLE",

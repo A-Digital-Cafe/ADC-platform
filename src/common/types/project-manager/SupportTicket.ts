@@ -1,20 +1,51 @@
 /**
  * Tipo de ticket de soporte que un usuario puede abrir:
- * reclamos, sugerencias, reportes de seguridad (bug bounty) y
- * solicitudes de datos (GDPR / takedown de terceros).
+ * reclamos, sugerencias, reportes de seguridad (bug bounty),
+ * solicitudes de datos (GDPR / takedown de terceros) y
+ * solicitudes de quien ejerce la responsabilidad parental sobre un menor.
  *
  * Contrato F/B: lo consumen el frontend de `status` (formulario) y el backend
  * del PM (creación del issue). Por eso vive en `@common`.
+ * @public
  */
-export type SupportTicketType = "complaint" | "suggestion" | "security" | "data" | "expansion";
+export type SupportTicketType = "complaint" | "suggestion" | "security" | "data" | "expansion" | "minor";
 
-/** Label visible por tipo de ticket (usado por el form de `status` y el backend). */
+/**
+ * Tipos que se aceptan **sin sesión**: los canales que los documentos legales
+ * ofrecen a "cualquier persona", tenga o no cuenta —quien reporta contenido de
+ * un tercero y quien ejerce la responsabilidad parental sobre un menor, que por
+ * definición no es titular de la cuenta afectada—.
+ * @public
+ */
+export const ANONYMOUS_TICKET_TYPES: ReadonlySet<SupportTicketType> = new Set<SupportTicketType>(["data", "minor"]);
+
+/**
+ * Ticket abierto tal como lo ve una cola de moderación de otro módulo (hoy el panel
+ * de Drive, sobre los reportes `data`).
+ *
+ * **No lleva el email de quien reportó.** La cola existe para decidir sobre el
+ * contenido; quién denunció no hace falta para eso y su dato de contacto sólo debe
+ * verse en el ticket, donde el acceso ya está acotado.
+ * @public
+ */
+export interface OpenTicketEntry {
+	ticketKey: string;
+	title: string;
+	/** ISO 8601. */
+	createdAt: string;
+	columnKey: string;
+	/** Cuerpo del ticket en texto plano: es de donde se saca el enlace reportado. */
+	description: string;
+}
+
+/** @public Label visible por tipo de ticket (usado por el form de `status` y el backend). */
 export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
 	complaint: "RECLAMO",
 	suggestion: "SUGERENCIA",
 	security: "SEGURIDAD",
 	data: "DATOS",
 	expansion: "AMPLIACIÓN",
+	minor: "MENOR DE EDAD",
 };
 
 /**
@@ -24,6 +55,7 @@ export const TICKET_TYPE_LABELS: Record<SupportTicketType, string> = {
  * La de `expansion` no es decorativa: la ampliación de una organización se otorga a
  * criterio de la plataforma, y estos son los datos sobre los que se decide. Pedirlos
  * en el formulario evita el ida y vuelta de "contame más".
+ * @public
  */
 export const TICKET_TEMPLATES: Partial<Record<SupportTicketType, string>> = {
 	security: "Pasos de reproducción:\n1.\n2.\n\nImpacto (a quién/qué afecta):\n\nAlcance (URL/endpoint/componente):\n\nSeveridad estimada (CVSS si tenés):\n",
@@ -33,8 +65,15 @@ export const TICKET_TEMPLATES: Partial<Record<SupportTicketType, string>> = {
 		"Cantidad de personas y para qué usan la plataforma:\n\n" +
 		"Compromisos sociales o códigos de conducta que siguen:\n\n" +
 		"Qué límite se les queda corto y por qué:\n",
+	minor:
+		"Nombre de usuario o email de la cuenta del menor:\n\n" +
+		"Vínculo con el menor (madre, padre, tutor/a legal):\n\n" +
+		"Qué pedís (supresión de la cuenta y sus datos, retiro de un contenido, otra cosa):\n\n" +
+		"País de residencia del menor (determina la edad mínima aplicable):\n\n" +
+		"No hace falta que adjuntes documentación en este primer mensaje: si necesitamos acreditar el vínculo te lo pedimos por este mismo canal.\n",
 };
 
+/** @public */
 export interface CreateSupportTicketInput {
 	type: SupportTicketType;
 	title: string;
@@ -52,22 +91,26 @@ export interface CreateSupportTicketInput {
 	rewardPreference?: "plus" | "pro";
 }
 
-/** Límites de los campos opcionales de bug bounty. */
+/** @public Límites de los campos opcionales de bug bounty. */
 export const BUG_BOUNTY_FIELD_CONSTRAINTS = {
 	creditName: { max: 80 },
 } as const;
 
+/** @public */
 export interface SupportTicketIssueResponse {
 	ticketId: string;
 	ticketKey: string;
 	message: string;
 }
 
+/** @public */
 export interface SupportTicketCaller {
-	userId: string;
+	/** `null` en tickets anónimos (tipo `data` sin sesión). */
+	userId: string | null;
 	email?: string;
 }
 
+/** @public */
 export interface SupportTicketConfig {
 	supportTicketsProjectId?: string;
 	/** Proyecto compartido de org-management; fallback cuando no hay uno específico. */
@@ -101,7 +144,7 @@ export interface StringValidator {
 	pattern?: RegExp;
 }
 
-/** Validators para support tickets (F/B) */
+/** @public Validators para support tickets (F/B) */
 export const SUPPORT_TICKET_VALIDATORS: Record<string, StringValidator> = {
 	title: {
 		required: true,
@@ -120,6 +163,7 @@ export const SUPPORT_TICKET_VALIDATORS: Record<string, StringValidator> = {
 	},
 };
 
+/** @public */
 export function validateStringField(
 	value: string,
 	validator: StringValidator

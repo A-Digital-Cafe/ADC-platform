@@ -494,4 +494,51 @@ export class CommentsManager {
 		const res = await this.#model.deleteMany({ targetType, targetId });
 		return res.deletedCount ?? 0;
 	}
+
+	/**
+	 * ⚠️ Anonimización masiva de la AUTORÍA de un usuario, sin `permissionChecker`
+	 * (cascadas de confianza: purga de cuenta tras retención). Blanquea `authorId`,
+	 * borra `authorName` (username denormalizado, que si no sobreviviría en texto
+	 * plano al hard delete de la cuenta) y quita su id de las reacciones. El contenido
+	 * se conserva —los hilos de terceros siguen legibles—, misma filosofía que la
+	 * anonimización de artículos publicados. Protegida por la `kernelKey` del bounded
+	 * context. Idempotente. Devuelve la cantidad de comentarios cuya autoría se limpió.
+	 */
+	async anonymizeByAuthor(kernelKey: symbol, userId: string): Promise<number> {
+		if (!this.#attachmentsKernelKey || kernelKey !== this.#attachmentsKernelKey) {
+			throw new Error("Acceso denegado: kernel key inválida");
+		}
+		if (!userId) return 0;
+
+		const res = await this.#model.updateMany({ authorId: userId }, { $set: { authorId: "" }, $unset: { authorName: "" } });
+
+		// Reacciones: los emojis son claves dinámicas de un Mixed, así que no hay `$pull`
+		// genérico — se reescriben sólo los docs donde el id aparece en algún array.
+		const reacted = await this.#model
+			.find(
+				{
+					$expr: {
+						$anyElementTrue: {
+							$map: {
+								input: { $objectToArray: { $ifNull: ["$reactions", {}] } },
+								as: "r",
+								in: { $in: [userId, { $cond: [{ $isArray: "$$r.v" }, "$$r.v", []] }] },
+							},
+						},
+					},
+				},
+				{ reactions: 1 }
+			)
+			.lean<Array<{ _id: string; reactions?: Record<string, string[]> }>>();
+		for (const doc of reacted) {
+			const next: Record<string, string[]> = {};
+			for (const [emoji, users] of Object.entries(doc.reactions ?? {})) {
+				const filtered = (Array.isArray(users) ? users : []).filter((id) => id !== userId);
+				if (filtered.length) next[emoji] = filtered;
+			}
+			await this.#model.updateOne({ _id: doc._id }, { $set: { reactions: next } });
+		}
+
+		return res.modifiedCount ?? 0;
+	}
 }

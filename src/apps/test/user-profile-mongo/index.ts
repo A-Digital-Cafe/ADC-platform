@@ -57,13 +57,15 @@ export default class UserProfileApp extends BaseApp {
 		try {
 			const token = await this.#getSystemToken();
 
-			// Borrar usuarios (en orden inverso para evitar dependencias)
+			// Dar de baja usuarios (en orden inverso para evitar dependencias). El hard
+			// delete ya no existe como camino directo: la baja programada con retención 0
+			// deja la cuenta vencida y el cron de retención la purga con su cascada.
 			for (const userId of [...this.testData.userIds].reverse()) {
 				try {
-					await this.identityManager.users.deleteUser(userId, token);
-					Logger.ok(`[${this.name}] ✓ Usuario eliminado: ${userId}`);
+					await this.identityManager.users.scheduleAdminDeletion(userId, 0, token);
+					Logger.ok(`[${this.name}] ✓ Usuario dado de baja (lo purga el cron de retención): ${userId}`);
 				} catch (e: any) {
-					Logger.warn(`[${this.name}] No se pudo eliminar usuario ${userId}: ${e.message}`);
+					Logger.warn(`[${this.name}] No se pudo dar de baja al usuario ${userId}: ${e.message}`);
 				}
 			}
 
@@ -238,9 +240,9 @@ export default class UserProfileApp extends BaseApp {
 				}
 			}
 
-			// Usuario limitado NO puede eliminar
+			// Usuario limitado NO puede eliminar (la baja administrativa exige DELETE)
 			try {
-				await this.identityManager.users.deleteUser(limitedUser.id, limitedToken);
+				await this.identityManager.users.scheduleAdminDeletion(limitedUser.id, 0, limitedToken);
 				Logger.error(`[${this.name}] ✗ Usuario limitado pudo eliminar (NO debería poder)`);
 			} catch (authError: any) {
 				if (authError instanceof AuthorizationError) {

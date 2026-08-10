@@ -3,13 +3,29 @@ import { useState, useEffect } from "react";
 import { Login } from "./pages/Login.tsx";
 import { Register } from "./pages/Register.tsx";
 import { AuthLayout } from "./components/AuthLayout.tsx";
+import { TokenActionPage } from "./components/TokenActionPage.tsx";
+import { identityPublicApi } from "./utils/auth-api.ts";
 import { DEFAULT_RETURN_URL, sanitizeReturnUrl } from "./utils/safe-url.ts";
 
-type Page = "login" | "register";
+type Page = "login" | "register" | "cancel-deletion" | "confirm-email";
 
 function getReturnUrl(): string {
 	const params = new URLSearchParams(globalThis.location?.search);
 	return sanitizeReturnUrl(params.get("returnUrl"));
+}
+
+/** Rutas de la app. `/cancel-deletion` y `/confirm-email` canjean tokens que llegan por email. */
+function pageFromPath(path: string | undefined): Page {
+	switch (path) {
+		case "/register":
+			return "register";
+		case "/cancel-deletion":
+			return "cancel-deletion";
+		case "/confirm-email":
+			return "confirm-email";
+		default:
+			return "login";
+	}
 }
 
 export default function App() {
@@ -17,12 +33,11 @@ export default function App() {
 	const [returnUrl, setReturnUrl] = useState<string>(DEFAULT_RETURN_URL);
 
 	useEffect(() => {
-		const path = globalThis.location?.pathname;
 		setReturnUrl(getReturnUrl());
-		setPage(path === "/register" ? "register" : "login");
+		setPage(pageFromPath(globalThis.location?.pathname));
 
 		const handlePopState = () => {
-			setPage(globalThis.location?.pathname === "/register" ? "register" : "login");
+			setPage(pageFromPath(globalThis.location?.pathname));
 			setReturnUrl(getReturnUrl());
 		};
 
@@ -37,13 +52,25 @@ export default function App() {
 		setPage(to);
 	};
 
-	return (
-		<AuthLayout>
-			{page === "login" ? (
-				<Login onNavigateToRegister={() => navigate("register")} returnUrl={returnUrl} />
-			) : (
-				<Register onNavigateToLogin={() => navigate("login")} returnUrl={returnUrl} />
-			)}
-		</AuthLayout>
-	);
+	let content;
+	if (page === "cancel-deletion") {
+		content = (
+			<TokenActionPage i18nPrefix="cancelDeletion" submit={identityPublicApi.cancelDeletion} onNavigateToLogin={() => navigate("login")} />
+		);
+	} else if (page === "confirm-email") {
+		content = (
+			<TokenActionPage
+				i18nPrefix="confirmEmail"
+				submit={identityPublicApi.confirmEmailChange}
+				errorMessages={{ EMAIL_EXISTS: "emailTaken" }}
+				onNavigateToLogin={() => navigate("login")}
+			/>
+		);
+	} else if (page === "register") {
+		content = <Register onNavigateToLogin={() => navigate("login")} returnUrl={returnUrl} />;
+	} else {
+		content = <Login onNavigateToRegister={() => navigate("register")} returnUrl={returnUrl} />;
+	}
+
+	return <AuthLayout>{content}</AuthLayout>;
 }

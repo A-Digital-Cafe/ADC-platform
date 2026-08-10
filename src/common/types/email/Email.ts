@@ -1,10 +1,12 @@
+import type { CapabilityToken } from "../../security/Capability.ts";
+
 /** Dirección de correo (RFC 5322 simplificada). */
 export interface EmailAddress {
 	name?: string;
 	address: string;
 }
 
-/** Carpetas del buzón. */
+/** @public Carpetas del buzón. */
 export type EmailFolder = "inbox" | "sent" | "drafts" | "spam" | "trash";
 
 /** Dirección del flujo del mensaje. */
@@ -93,6 +95,7 @@ export interface EmailMessage {
  * requerido en los schemas. Nunca se usa para resolver una organización: quien distingue el ámbito
  * es `MailAccount.scope`. Además está reservado como slug (`checkOrgSlug`), porque la resolución de
  * organizaciones acepta `orgId` **o** `slug`.
+ * @public
  */
 export const PERSONAL_ORG_ID = "personal";
 
@@ -115,10 +118,48 @@ export interface MailAccount {
 	 */
 	address: string;
 	displayName: string;
+	/**
+	 * Direcciones anteriores del buzón, en orden cronológico (la parte local se deriva
+	 * del username, así que cambia con él). Es el registro que permite atribuir un
+	 * correo salido de `viejo@<raíz>` a la cuenta que hoy se llama distinto: sin él,
+	 * renombrar el username borraría la procedencia de lo ya enviado.
+	 *
+	 * Se conserva sólo la dirección y el momento del cambio (nada de contenido), se
+	 * acota a las últimas {@link MAILBOX_ADDRESS_HISTORY_LIMIT} y se purga junto con la
+	 * cuenta en la baja del titular.
+	 */
+	previousAddresses?: MailboxAddressChange[];
 	/** Contador incremental de almacenamiento usado (bytes). */
 	storageUsedBytes: number;
 	createdAt: Date;
 	updatedAt: Date;
+}
+
+/** Entrada del historial de direcciones de un buzón. */
+export interface MailboxAddressChange {
+	address: string;
+	changedAt: Date;
+}
+
+/** @public Tope del historial de direcciones por buzón (minimización: no hace falta más). */
+export const MAILBOX_ADDRESS_HISTORY_LIMIT = 10;
+
+/** Resultado de renombrar los buzones de un usuario (o del pre-flight `dryRun`). */
+export interface MailboxRenameResult {
+	/** Buzones cuya dirección cambió (o cambiaría, en `dryRun`). */
+	renamed: Array<{ from: string; to: string }>;
+	/** Buzones cuya dirección destino ya está ocupada por otro titular. */
+	conflicts: Array<{ from: string; to: string }>;
+}
+
+/**
+ * Superficie que el `EmailService` expone a IdentityManager para mantener las
+ * direcciones alineadas con el username. Se resuelve por duck-typing (el preset de
+ * correo es opcional) y exige capability con scope `identity:internal`, igual que el
+ * export y la purga de datos personales.
+ */
+export interface IMailboxRenamer {
+	renameUserMailboxes(cap: CapabilityToken, userId: string, newUsername: string, opts?: { dryRun?: boolean }): Promise<MailboxRenameResult>;
 }
 
 /** Registro de un envío para enforcement de cuota diaria. */

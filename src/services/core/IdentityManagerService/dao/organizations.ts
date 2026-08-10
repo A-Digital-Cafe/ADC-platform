@@ -58,12 +58,12 @@ export class OrgManager {
 			throw new IdentityError(400, "REGION_NOT_FOUND", `Región no existe: ${regionPath}`);
 		}
 
-		// Validar slug
+		// Validar slug (formato + reservados) contra la política de nombres.
 		const normalizedSlug = slug.toLowerCase().trim();
-		if (!/^[a-z0-9-]+$/.test(normalizedSlug)) {
-			throw new IdentityError(400, "INVALID_FIELD", `Slug inválido: ${slug}. Solo letras minúsculas, números y guiones`);
-		}
 		const rejection = checkOrgSlug(normalizedSlug);
+		if (rejection?.reason === "format") {
+			throw new IdentityError(400, "INVALID_FIELD", `Slug inválido: ${slug}. Solo letras minúsculas, números y guiones (sin empezar ni terminar en guión)`);
+		}
 		if (rejection) {
 			throw new IdentityError(403, "FORBIDDEN", `Slug reservado: '${rejection.term}' está reservado por la plataforma`);
 		}

@@ -33,6 +33,9 @@ export async function resolveNativeLoginUser(
 ): Promise<User> {
 	if (!profile) throw new AuthError(401, "INVALID_CREDENTIALS", "Credenciales inválidas");
 
+	// `authenticate` sólo devuelve `isActive: false` con la contraseña YA validada (y nunca para una
+	// baja voluntaria vigente, que se cancela al entrar): quien ve este error es el titular de una
+	// cuenta baneada o dada de baja, no alguien probando usernames. No invertir ese orden.
 	if ("isActive" in profile && profile.isActive === false) {
 		throw new AuthError(403, "ACCOUNT_DISABLED", "Cuenta desactivada");
 	}

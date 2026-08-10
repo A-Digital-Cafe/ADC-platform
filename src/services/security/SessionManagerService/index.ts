@@ -20,20 +20,14 @@ import { GeoIPValidator } from "./domain/security/GeoIPValidator.js";
 import { SessionManager } from "./domain/session/manager.js";
 import { OAuthProviderRegistry, PlatformAuthProvider } from "./domain/oauth/index.js";
 import { resolveUserAvatar } from "@common/utils/avatar.ts";
-import {
-	LEGAL_DOCUMENT_LIST,
-	MIN_LEGAL_NOTICE_DAYS,
-	currentLegalVersions,
-	legalNoticeDays,
-	type LegalDocument,
-} from "@common/utils/legal-docs.js";
+import { LEGAL_DOCUMENTS, MIN_LEGAL_NOTICE_DAYS, currentLegalVersions, legalNoticeDays, type LegalDocument } from "@common/utils/legal-docs.js";
 import { PLATFORM_TOPICS } from "@common/utils/notifications/platform-topics.js";
 import { openPermissions, sealPermissions } from "./domain/security/perm-cache.js";
 
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
 import { OAuthEndpoints } from "./endpoints/oauth.js";
-import { SessionAdminEndpoints } from "./endpoints/sessions.js";
+import { SessionAdminEndpoints, maskIp } from "./endpoints/sessions.js";
 import { LegalEndpoints } from "./endpoints/legal.js";
 
 // Decoradores
@@ -152,10 +146,11 @@ export default class SessionManagerService extends BaseService implements ISessi
 	}
 
 	/**
-	 * Detecta el despliegue de una versión nueva de los Términos o de la Política de Privacidad y
-	 * la anuncia. Este servicio es el que valida la aceptación, así que es el que sabe qué versión
-	 * está vigente; el aviso existe para que publicar el documento y comunicarlo no sean dos cosas
-	 * que dependan de acordarse.
+	 * Detecta el despliegue de una versión nueva de CUALQUIER documento legal versionado y la
+	 * anuncia. Este servicio es el que valida la aceptación, así que es el que sabe qué versión está
+	 * vigente; el aviso existe para que publicar el documento y comunicarlo no dependan de
+	 * acordarse. Los informativos (cookies, DPA) entran igual —Privacidad §7 y DPA §15 prometen el
+	 * mismo preaviso de ≥{@link MIN_LEGAL_NOTICE_DAYS} días—, sólo que sin exigir re-aceptación.
 	 *
 	 * La marca de "ya avisado" vive en Redis y no en Mongo a propósito: no vale un modelo nuevo
 	 * para un par de strings, y el peor caso de perder la clave es un aviso repetido —que para un
@@ -164,25 +159,29 @@ export default class SessionManagerService extends BaseService implements ISessi
 	 */
 	async #checkLegalDocsVersion(): Promise<void> {
 		if (!this.#redis || !this.#identityService) return;
-		const current = currentLegalVersions();
+		const docs: readonly LegalDocument[] = Object.values(LEGAL_DOCUMENTS);
+		const current: Record<string, string> = Object.fromEntries(docs.map((doc) => [doc.id, doc.version]));
 		try {
 			const key = "legal:announced-versions";
 			const raw = await this.#redis.get(key);
 			// La clave la escribe sólo este método, así que un JSON.parse directo alcanza: si viniera
 			// corrupta, el catch de abajo la trata como "no avisar" y el siguiente arranque la resella.
-			const previous = raw ? (JSON.parse(raw) as Partial<typeof current>) : null;
+			const previous = raw ? this.#parseAnnouncedVersions(raw) : null;
 
 			// Primer arranque con la clave vacía: sellar sin avisar. Si no, cada Redis nuevo
 			// dispararía una alerta por un cambio que no ocurrió.
-			if (!previous?.termsVersion || !previous.privacyVersion) {
+			if (!previous || Object.keys(previous).length === 0) {
 				await this.#redis.set(key, JSON.stringify(current));
 				return;
 			}
 
-			const changed = LEGAL_DOCUMENT_LIST.filter((doc) =>
-				doc.id === "terms" ? previous.termsVersion !== current.termsVersion : previous.privacyVersion !== current.privacyVersion
-			);
-			if (changed.length === 0) return;
+			// Un documento visto por primera vez se sella sin anunciar, igual que el primer arranque:
+			// sólo anuncia un CAMBIO de versión respecto de lo ya sellado.
+			const changed = docs.filter((doc) => previous[doc.id] && previous[doc.id] !== doc.version);
+			if (changed.length === 0) {
+				if (raw !== JSON.stringify(current)) await this.#redis.set(key, JSON.stringify(current));
+				return;
+			}
 
 			// Sellar sólo si el aviso salió: si se descartó, el próximo arranque lo reintenta. Un
 			// aviso repetido lo deduplica `NotificationService`; uno perdido no lo recupera nadie.
@@ -191,6 +190,22 @@ export default class SessionManagerService extends BaseService implements ISessi
 		} catch (err: any) {
 			this.logger.logWarn(`Chequeo de versión de documentos legales falló: ${err?.message || err}`);
 		}
+	}
+
+	/**
+	 * Versiones ya anunciadas, tolerando el formato viejo (`{termsVersion, privacyVersion}`): sin
+	 * esta compatibilidad, el primer arranque tras ampliar el anunciador trataría a terms/privacy
+	 * como "nunca vistos" y sellaría sin detectar un cambio desplegado en esa misma ventana.
+	 */
+	#parseAnnouncedVersions(raw: string): Record<string, string> {
+		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		const out: Record<string, string> = {};
+		if (typeof parsed.termsVersion === "string") out.terms = parsed.termsVersion;
+		if (typeof parsed.privacyVersion === "string") out.privacy = parsed.privacyVersion;
+		for (const [id, version] of Object.entries(parsed)) {
+			if (typeof version === "string" && id in LEGAL_DOCUMENTS) out[id] = version;
+		}
+		return out;
 	}
 
 	/**
@@ -217,11 +232,15 @@ export default class SessionManagerService extends BaseService implements ISessi
 		}
 
 		const detail = changed.map((doc) => `${doc.label} (rige desde el ${doc.effectiveFrom})`).join(" y ");
+		// Los informativos se anuncian igual, pero sin prometer una re-aceptación que nunca se pide.
+		const requiresAcceptance = changed.some((doc) => doc.requiresAcceptance);
 		const mode = await this.emitBroadcast({
 			broadcastId: `legal:${changed.map((doc) => `${doc.id}@${doc.version}`).join("+")}`,
 			topic: PLATFORM_TOPICS.legal.topic,
 			title: "Actualizamos nuestros documentos legales",
-			body: `Cambió: ${detail}. Podés leer el texto nuevo ahora; a partir de esa fecha te vamos a pedir que lo aceptes para seguir usando la plataforma.`,
+			body: requiresAcceptance
+				? `Cambió: ${detail}. Podés leer el texto nuevo ahora; a partir de esa fecha te vamos a pedir que lo aceptes para seguir usando la plataforma.`
+				: `Cambió: ${detail}. Podés leer el texto nuevo ahora; rige desde esa fecha, sin necesidad de volver a aceptar nada.`,
 			link: changed[0].href,
 			// Ruta de la app `help`: que la resuelva el cliente según entorno en vez de clavar un dominio.
 			linkApp: "help",
@@ -529,6 +548,32 @@ export default class SessionManagerService extends BaseService implements ISessi
 		const revoked = await this.#tokenService.revokeAllUserTokens(userId);
 		if (revoked > 0) this.logger.logInfo(`[SessionManager] ${revoked} sesión(es) revocadas para ${userId}`);
 		return revoked;
+	}
+
+	/**
+	 * Sesiones activas para el export de datos (derecho de acceso, art. 14 Ley 25.326 / art. 15
+	 * RGPD). Espejo del contrato de purga: el caller prueba scope `identity:internal`. La IP va
+	 * enmascarada como en la vista admin y los tokens nunca salen: son credenciales, no datos.
+	 */
+	async exportUserData(cap: CapabilityToken, userId: string): Promise<unknown> {
+		assertScope(cap, Scope.IdentityInternal);
+		const repo = this.#refreshTokenRepo;
+		if (!userId || !repo) return { activeSessions: [] };
+		const tokens = await repo.listForUser(userId);
+		return {
+			activeSessions: tokens.map((t) => ({
+				deviceId: t.deviceId,
+				createdAt: new Date(t.createdAt).toISOString(),
+				expiresAt: new Date(t.expiresAt).toISOString(),
+				country: t.country,
+				userAgent: t.userAgent,
+				ip: maskIp(t.ipAddress),
+			})),
+			note: {
+				es: "IP parcialmente enmascarada (la misma vista que el panel de seguridad). Los tokens de sesión no se exportan: son credenciales, no datos personales.",
+				en: "Partially masked IP (same view as the security panel). Session tokens are not exported: they are credentials, not personal data.",
+			},
+		};
 	}
 
 	/**

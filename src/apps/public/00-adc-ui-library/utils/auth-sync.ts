@@ -1,6 +1,7 @@
 import { IS_DEV, getDevUrl } from "@common/utils/url-utils.js";
 import { appendCsrfHeader } from "./csrf.js";
 import { noteSessionExpiry } from "./auth-refresh.js";
+import { clearPlatformLinkCache } from "./platform-links.js";
 
 export type AuthChangeType = "logout" | "login";
 
@@ -59,6 +60,10 @@ export function setStoredAuthMarker(userId: string | null): void {
 }
 
 export function broadcastAuthChange(type: AuthChangeType): void {
+	// Los enlaces de plataforma se resuelven según la sesión (un mismo enlace pasa de `ok` a
+	// `denied`), así que su caché no puede sobrevivir al cambio.
+	clearPlatformLinkCache();
+
 	if (typeof BroadcastChannel !== "undefined") {
 		try {
 			const channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
@@ -78,15 +83,21 @@ export function broadcastAuthChange(type: AuthChangeType): void {
 
 export function setupAuthSync(onRemoteAuthChange: () => void): () => void {
 	let channel: BroadcastChannel | undefined;
+	// La pestaña que recibe el aviso no pasó por `broadcastAuthChange`: invalida su propia caché
+	// antes de que el consumidor re-renderice.
+	const handleRemote = () => {
+		clearPlatformLinkCache();
+		onRemoteAuthChange();
+	};
 	const storageListener = (ev: StorageEvent) => {
-		if (ev.key === AUTH_EVENT_KEY && ev.newValue) onRemoteAuthChange();
+		if (ev.key === AUTH_EVENT_KEY && ev.newValue) handleRemote();
 	};
 
 	if (typeof BroadcastChannel !== "undefined") {
 		try {
 			channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
 			channel.onmessage = (ev) => {
-				if (ev.data === "logout" || ev.data === "login") onRemoteAuthChange();
+				if (ev.data === "logout" || ev.data === "login") handleRemote();
 			};
 		} catch {
 			channel = undefined;

@@ -43,6 +43,7 @@ export interface EmailOrgTierLimits {
 /**
  * Piso del plan gratuito: fallback sin `PlanService` (degradar al tier base es
  * la convención de la plataforma) y default `free` que el backend registra.
+ * @public
  */
 export const EMAIL_USER_BASE_LIMITS: EmailUserTierLimits = {
 	storageBytes: 250 * MB,

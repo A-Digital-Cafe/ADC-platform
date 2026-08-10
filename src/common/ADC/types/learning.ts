@@ -46,6 +46,7 @@ export type Block =
 type PathItemType = "article" | "path";
 export type PathItemLevel = "critico" | "importante" | "opcional";
 
+/** @public */
 export interface PathItem {
 	slug: string;
 	type: PathItemType;

@@ -37,7 +37,7 @@ export function createClientId(): string {
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** Genera un identificador corto de 12 caracteres hexadecimales. */
+/** @public Genera un identificador corto de 12 caracteres hexadecimales. */
 export function shortId(): string {
 	return createClientId().replaceAll("-", "").slice(0, 12);
 }

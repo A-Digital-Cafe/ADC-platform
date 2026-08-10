@@ -1,7 +1,7 @@
 import type { Model } from "mongoose";
-import type { User, LinkedAccount } from "@common/types/identity/User.ts";
+import type { User, LinkedAccount, DeletionReason } from "@common/types/identity/User.ts";
 import type { ILogger } from "../../../../interfaces/utils/ILogger.js";
-import { generateId, hashPassword, verifyPassword } from "@common/utils/crypto.ts";
+import { generateId, hashPassword, verifyPassword, sha256Hex, sha256Bytes, hmacSha256Hex, safeEqualHex, shortId } from "@common/utils/crypto.ts";
 import { type AuthVerifierGetter, PermissionChecker } from "@common/types/auth-verifier.ts";
 import { IdentityScopes, RESOURCE_NAME } from "@common/types/identity/permissions.ts";
 import { CRUDXAction } from "@common/types/Actions.ts";
@@ -12,6 +12,7 @@ import { USER_UPDATABLE_FIELDS } from "../domain/user.js";
 import { type AccountTier, type TierGrant, isTierGrantActive } from "@common/types/tiers.ts";
 import { UNLIMITED } from "@common/types/plans/index.ts";
 import { IdentityError } from "@common/types/custom-errors/IdentityError.ts";
+import { AuthError } from "@common/types/custom-errors/AuthError.ts";
 import type { SeatGate } from "@common/types/plans/consumers.js";
 
 export type UserAuthenticationResult = Partial<User> | { id: string; isActive: boolean } | { id: string; wrongPassword: boolean } | null;
@@ -24,6 +25,24 @@ const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 50;
 /** Máximo duro de un listado de usuarios (una respuesta sin límite es un DoS accidental). */
 const MAX_LIST_LIMIT = 500;
+
+/** Corta a propósito: el token viaja a una casilla todavía NO verificada. */
+const EMAIL_CHANGE_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * El username es identidad pública y de él se deriva la dirección de correo: rotarlo sin freno
+ * habilita suplantaciones y rompe referencias. 30 días permite rectificar sin rotar.
+ */
+const USERNAME_CHANGE_COOLDOWN_DAYS = 30;
+
+/** Cambio de email pendiente de confirmación (`metadata.emailChangePending`). */
+interface EmailChangePending {
+	newEmail: string;
+	/** SHA-256 hex del token completo (un solo uso). */
+	tokenHash: string;
+	requestedAt: Date | string;
+	expiresAt: Date | string;
+}
 
 /**
  * Corta las sesiones vivas de una cuenta que se acaba de desactivar. Lo provee el
@@ -40,6 +59,29 @@ export type SessionRevoker = (userId: string, reason: string) => Promise<void>;
  */
 export type SubscriptionCanceller = (userId: string) => Promise<void>;
 
+/**
+ * Aviso de que una baja voluntaria se canceló al volver a entrar. Lo provee el servicio (que sí
+ * puede resolver notificaciones y auditoría); el DAO sólo lo dispara, best-effort y sin `await`.
+ */
+export type SelfDeletionCancelledHook = (userId: string, via: "login") => void;
+
+/**
+ * `true` si la cuenta está inactiva sólo porque su titular pidió irse y la ventana de
+ * arrepentimiento no venció.
+ *
+ * Excluye las cuentas con `bannedAt` —un ban temporal conserva la metadata de una baja previa, y
+ * sin este guard volver a entrar levantaría la sanción— y la retención ya vencida, donde la purga
+ * puede estar corriendo y reactivar sería peor que rechazar.
+ */
+function hasPendingSelfDeletion(user: Pick<User, "isActive" | "metadata">): boolean {
+	if (user.isActive) return false;
+	const meta = (user.metadata ?? {}) as Record<string, unknown>;
+	if (meta.bannedAt || meta.deletionReason !== ("self" satisfies DeletionReason)) return false;
+	const scheduled = meta.scheduledDeletionAt;
+	if (typeof scheduled !== "string" && !(scheduled instanceof Date)) return false;
+	return new Date(scheduled).getTime() > Date.now();
+}
+
 export class UserManager {
 	readonly #permissionChecker: PermissionChecker;
 
@@ -49,18 +91,31 @@ export class UserManager {
 
 	readonly #cancelSubscription: SubscriptionCanceller;
 
+	readonly #onSelfDeletionCancelled: SelfDeletionCancelledHook;
+
+	/** Firma los tokens de arrepentimiento. `null` = sin secreto: no se emiten y el canje falla. */
+	readonly #cancelTokenKey: Uint8Array | null;
+
+	/** Sub-clave del mismo secreto para los tokens de cambio de email. `null` = flujo deshabilitado. */
+	readonly #emailChangeKey: Uint8Array | null;
+
 	constructor(
 		private readonly userModel: Model<any>,
 		private readonly logger: ILogger,
 		getAuthVerifier: AuthVerifierGetter = () => null,
 		seatGate: SeatGate = async () => null,
 		revokeSessions: SessionRevoker = async () => {},
-		cancelSubscription: SubscriptionCanceller = async () => {}
+		cancelSubscription: SubscriptionCanceller = async () => {},
+		deletionSecret?: string,
+		onSelfDeletionCancelled: SelfDeletionCancelledHook = () => {}
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "UserManager", RESOURCE_NAME);
 		this.#seatGate = seatGate;
 		this.#revokeSessions = revokeSessions;
 		this.#cancelSubscription = cancelSubscription;
+		this.#onSelfDeletionCancelled = onSelfDeletionCancelled;
+		this.#cancelTokenKey = deletionSecret ? sha256Bytes(`account-deletion-cancel:${deletionSecret}`) : null;
+		this.#emailChangeKey = deletionSecret ? sha256Bytes(`email-change-confirm:${deletionSecret}`) : null;
 	}
 
 	/**
@@ -87,15 +142,25 @@ export class UserManager {
 
 			if (!user) return null;
 
-			if (!user?.isActive) return { id: user.id, isActive: false };
+			// La credencial se valida ANTES de mirar el estado de la cuenta. Al revés el login es un
+			// oráculo: un `ACCOUNT_DISABLED` confirmaría que la cuenta existe y está baneada sin
+			// credencial y sin pasar por el contador de intentos fallidos.
+			if (!verifyPassword(password, user.passwordHash)) return { id: user.id, wrongPassword: true };
 
-			const valid = verifyPassword(password, user.passwordHash);
-			if (!valid) return { id: user.id, wrongPassword: true };
+			// Ya probada la credencial, una baja VOLUNTARIA vigente no rechaza: volver a entrar la
+			// cancela, que es la vía que no depende del correo (y la única de las cuentas sin
+			// email). Ban y baja administrativa siguen rechazando.
+			let target = user;
+			if (!target.isActive) {
+				if (!hasPendingSelfDeletion(target)) return { id: target.id, isActive: false };
+				target = await this.#clearScheduledDeletion(target);
+				this.#onSelfDeletionCancelled(target.id, "login");
+			}
 
-			user.lastLogin = new Date();
-			await this.userModel.findOneAndUpdate({ id: user.id }, { lastLogin: user.lastLogin });
+			target.lastLogin = new Date();
+			await this.userModel.findOneAndUpdate({ id: target.id }, { lastLogin: target.lastLogin });
 
-			return user;
+			return target;
 		} catch (error) {
 			this.logger.logError(`Error autenticando usuario: ${error}`);
 			return null;
@@ -529,8 +594,10 @@ export class UserManager {
 			const updated = await this.userModel.findOneAndUpdate(
 				{ id: userId },
 				{
-					passwordHash,
-					updatedAt: new Date(),
+					$set: { passwordHash, updatedAt: new Date() },
+					// Es el remedio que recomienda la alerta `security.email_change_requested`, así que
+					// invalida el cambio pendiente: si no, el token de la sesión robada vive 60 min más.
+					$unset: { "metadata.emailChangePending": "" },
 				}
 			);
 
@@ -546,15 +613,56 @@ export class UserManager {
 	}
 
 	/**
-	 * Elimina un usuario
-	 * @param token Token de autenticación (requerido para verificar permisos)
+	 * Baja ADMINISTRATIVA: mismo flujo que la voluntaria (desactivar + revocar sesiones + cancelar
+	 * débito + `scheduledDeletionAt`), NUNCA un borrado directo — la cascada la hace siempre el
+	 * stepper. `retentionDays = 0` la deja vencida ya mismo (variante `immediate`). No la cancela
+	 * la persona; la revierte un admin reactivando vía PUT.
 	 */
-	async deleteUser(userId: string, token?: string): Promise<void> {
+	async scheduleAdminDeletion(userId: string, retentionDays = 30, token?: string): Promise<User> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.DELETE, IdentityScopes.USERS);
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
+		const userObj = (current.toObject?.() || current) as User;
+		const now = new Date();
+		const nextMeta: Record<string, unknown> = {
+			...(userObj.metadata || {}),
+			deletionRequestedAt: now,
+			deletionReason: "admin" satisfies DeletionReason,
+			scheduledDeletionAt: new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000),
+		};
+		// Un token de arrepentimiento previo deja de valer: esta baja no la cancela la persona.
+		delete nextMeta.deletionCancelTokenHash;
+
+		const updated = await this.userModel.findOneAndUpdate(
+			{ id: userId },
+			{ isActive: false, metadata: nextMeta, updatedAt: now },
+			{ new: true }
+		);
+		if (!updated) throw new Error(`Usuario ${userId} no encontrado`);
+		await this.#revokeSessionsSafe(userId, "baja administrativa");
+		try {
+			await this.#cancelSubscription(userId);
+		} catch (error) {
+			this.logger.logError(`Baja administrativa ${userId}: NO se pudo cancelar la suscripción, revisar cobro recurrente: ${error}`);
+		}
+		this.logger.logInfo(`Baja administrativa programada: ${userId} (${retentionDays}d)`);
+		return updated.toObject?.() || updated;
+	}
+
+	/**
+	 * Borrado físico CONDICIONAL: sólo si la cuenta sigue inactiva y con la retención vencida. El
+	 * filtro va en la query y no en el caller, así que ningún caller puede saltear la cascada ni
+	 * borrar una baja cancelada a último momento. Único uso legítimo: el paso final del stepper.
+	 */
+	async hardDeleteDueUser(userId: string, now: Date = new Date(), token?: string): Promise<boolean> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.DELETE, IdentityScopes.USERS);
 
 		try {
-			await this.userModel.deleteOne({ id: userId });
-			this.logger.logDebug(`Usuario eliminado: ${userId}`);
+			const res = await this.userModel.deleteOne({ id: userId, isActive: false, "metadata.scheduledDeletionAt": { $lte: now } });
+			const deleted = (res?.deletedCount ?? 0) > 0;
+			if (deleted) this.logger.logDebug(`Usuario eliminado (retención vencida): ${userId}`);
+			return deleted;
 		} catch (error) {
 			this.logger.logError(`Error eliminando usuario: ${error}`);
 			throw error;
@@ -565,7 +673,7 @@ export class UserManager {
 	 * Marca a un usuario como baneado:
 	 *  - `isActive = false`
 	 *  - `metadata.bannedAt`, `metadata.banReason`, `metadata.banExpiresAt`
-	 *  - `metadata.scheduledDeletionAt = now + 30d`
+	 *  - sólo si el ban es PERMANENTE: `metadata.scheduledDeletionAt = now + 30d`
 	 *
 	 * No toca la ban-list (lo hace el orquestador en ModerationService).
 	 * Requiere `IdentityScopes.USERS` UPDATE.
@@ -580,13 +688,21 @@ export class UserManager {
 		const now = new Date();
 		const retentionMs = (args.retentionDays ?? 30) * 24 * 60 * 60 * 1000;
 
-		const nextMeta = {
+		const nextMeta: Record<string, unknown> = {
 			...currentMeta,
 			bannedAt: now,
 			banReason: args.reason,
 			banExpiresAt: args.expiresAt ?? null,
-			scheduledDeletionAt: new Date(now.getTime() + retentionMs),
 		};
+		// Sólo el ban PERMANENTE programa la baja. Un ban TEMPORAL es una sanción de la que la
+		// cuenta tiene que sobrevivir: sin este guard, uno de 7 días sin unban manual terminaba en
+		// purga al día 30 (nada limpia `scheduledDeletionAt` al vencer el ban).
+		if (!args.expiresAt) {
+			nextMeta.deletionReason = "ban" satisfies DeletionReason;
+			nextMeta.scheduledDeletionAt = new Date(now.getTime() + retentionMs);
+			// El ban absorbe una baja voluntaria en curso: no se cancela con un enlace de email.
+			delete nextMeta.deletionCancelTokenHash;
+		}
 
 		const updated = await this.userModel.findOneAndUpdate(
 			{ id: userId },
@@ -613,6 +729,9 @@ export class UserManager {
 		delete (currentMeta as any).banReason;
 		delete (currentMeta as any).banExpiresAt;
 		delete (currentMeta as any).scheduledDeletionAt;
+		delete (currentMeta as any).deletionReason;
+		delete (currentMeta as any).deletionRequestedAt;
+		delete (currentMeta as any).deletionCancelTokenHash;
 
 		const updated = await this.userModel.findOneAndUpdate(
 			{ id: userId },
@@ -625,15 +744,20 @@ export class UserManager {
 	}
 
 	/**
-	 * Auto-eliminación: marca cuenta inactiva y programa borrado en `retentionDays` días.
-	 * El borrado físico lo realiza el cron de retención en IdentityManagerService.
+	 * Auto-eliminación: desactiva la cuenta y programa el borrado, que ejecuta el cron de retención.
 	 *
-	 * Da de baja además el débito automático **personal**: sin esto la cuenta queda
-	 * inactiva y programada para borrarse pero se le sigue cobrando todos los meses.
-	 * Las suscripciones de una organización no se tocan: son de la organización, no
-	 * de quien se va.
+	 * Emite el **token de arrepentimiento** (HMAC de un solo uso, válido hasta
+	 * `scheduledDeletionAt`) que viaja por email: la baja revoca las sesiones, así que el enlace es
+	 * la otra vía de cancelación. Da de baja además el débito automático **personal** —si no, la
+	 * cuenta queda programada para borrarse y se le sigue cobrando—; las suscripciones de una
+	 * organización no se tocan, son de la organización.
 	 */
-	async requestSelfDeletion(userId: string, reason?: string, retentionDays = 30, token?: string): Promise<User> {
+	async requestSelfDeletion(
+		userId: string,
+		note?: string,
+		retentionDays = 30,
+		token?: string
+	): Promise<{ user: User; cancelToken: string | null }> {
 		const callerId = await this.#permissionChecker.resolveUserId(token);
 		if (callerId && callerId !== userId) {
 			throw new Error(`No se puede solicitar borrado de otro usuario (caller=${callerId}, target=${userId})`);
@@ -644,11 +768,15 @@ export class UserManager {
 		const userObj = (current.toObject?.() || current) as User;
 		const currentMeta = userObj.metadata || {};
 		const now = new Date();
+		const scheduledDeletionAt = new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000);
+		const issued = this.#issueCancelToken(userId, scheduledDeletionAt);
 		const nextMeta = {
 			...currentMeta,
 			deletionRequestedAt: now,
-			deletionReason: reason || null,
-			scheduledDeletionAt: new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000),
+			deletionReason: "self" satisfies DeletionReason,
+			deletionNote: note || null,
+			scheduledDeletionAt,
+			...(issued ? { deletionCancelTokenHash: issued.tokenHash } : {}),
 		};
 		const updated = await this.userModel.findOneAndUpdate(
 			{ id: userId },
@@ -665,7 +793,239 @@ export class UserManager {
 			this.logger.logError(`Baja de cuenta ${userId}: NO se pudo cancelar la suscripción, revisar cobro recurrente: ${error}`);
 		}
 		this.logger.logInfo(`Usuario solicita borrado: ${userId}`);
+		return { user: updated.toObject?.() || updated, cancelToken: issued?.token ?? null };
+	}
+
+	/**
+	 * Limpia la metadata de baja y reactiva la cuenta. Autorizado para la propia persona o para un
+	 * admin con UPDATE; qué bajas puede cancelar la persona lo decide la capa de endpoints.
+	 */
+	async cancelScheduledDeletion(userId: string, token?: string): Promise<User> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.UPDATE, IdentityScopes.USERS, {
+			allowIf: async (callerId) => callerId === userId,
+		});
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new Error(`Usuario ${userId} no encontrado`);
+		const userObj = (current.toObject?.() || current) as User;
+		if (!(userObj.metadata as Record<string, unknown> | undefined)?.scheduledDeletionAt) {
+			throw new IdentityError(409, "NOT_CANCELLABLE", "No hay una baja programada para cancelar");
+		}
+		return this.#clearScheduledDeletion(userObj);
+	}
+
+	/**
+	 * Canje del token de arrepentimiento (público, sin sesión): HMAC, vigencia, un solo uso y baja
+	 * todavía VOLUNTARIA. Cualquier fallo responde el mismo error, sin oráculo de cuál falló.
+	 */
+	async cancelSelfDeletionByToken(rawToken: string): Promise<User> {
+		const invalid = () => new IdentityError(400, "INVALID_CANCEL_TOKEN", "El enlace de cancelación no es válido, ya se usó o venció");
+		if (!this.#cancelTokenKey) throw invalid();
+
+		const userId = this.#verifyHmacToken(this.#cancelTokenKey, rawToken);
+		if (!userId) throw invalid();
+
+		const doc = await this.userModel.findOne({ id: userId });
+		const user = (doc?.toObject?.() || doc || null) as User | null;
+		const meta = (user?.metadata ?? {}) as Record<string, unknown>;
+		if (!user || meta.deletionReason !== ("self" satisfies DeletionReason) || !meta.scheduledDeletionAt) throw invalid();
+		const storedHash = typeof meta.deletionCancelTokenHash === "string" ? meta.deletionCancelTokenHash : null;
+		if (!storedHash || !safeEqualHex(storedHash, sha256Hex(rawToken))) throw invalid();
+
+		return this.#clearScheduledDeletion(user);
+	}
+
+	/**
+	 * Cancela la baja voluntaria vigente de una cuenta que YA probó su identidad por otra vía;
+	 * `null` si no había baja cancelable. Es el equivalente OAuth de lo que hace `authenticate` en
+	 * el login nativo, y la única prueba posible para una cuenta creada por OAuth (su password es
+	 * aleatorio). Primitiva pre-auth: no verifica nada por sí misma, de ahí que quede fuera de
+	 * `PublicUserManager`.
+	 */
+	async cancelSelfDeletionOnLogin(userId: string): Promise<User | null> {
+		const doc = await this.userModel.findOne({ id: userId });
+		const user = (doc?.toObject?.() || doc || null) as User | null;
+		if (!user || !hasPendingSelfDeletion(user)) return null;
+
+		const restored = await this.#clearScheduledDeletion(user);
+		this.#onSelfDeletionCancelled(userId, "login");
+		return restored;
+	}
+
+	/** Token `base64url(userId.expiraMs.nonce).hmacHex`; se guarda sólo su SHA-256 (un solo uso). */
+	#issueCancelToken(userId: string, expiresAt: Date): { token: string; tokenHash: string } | null {
+		if (!this.#cancelTokenKey) return null;
+		return this.#issueHmacToken(this.#cancelTokenKey, userId, expiresAt);
+	}
+
+	/** Emisión genérica de un token HMAC de un solo uso (mismo formato para baja y cambio de email). */
+	#issueHmacToken(key: Uint8Array, userId: string, expiresAt: Date): { token: string; tokenHash: string } {
+		const payload = `${userId}.${expiresAt.getTime()}.${shortId()}`;
+		const token = `${Buffer.from(payload, "utf8").toString("base64url")}.${hmacSha256Hex(payload, key)}`;
+		return { token, tokenHash: sha256Hex(token) };
+	}
+
+	/**
+	 * Verifica firma y vigencia de un token emitido con `#issueHmacToken` y devuelve el
+	 * `userId` del payload, o `null` ante cualquier fallo (sin oráculo de cuál chequeo falló).
+	 */
+	#verifyHmacToken(key: Uint8Array, rawToken: string): string | null {
+		const dot = rawToken.lastIndexOf(".");
+		if (dot <= 0) return null;
+		const sig = rawToken.slice(dot + 1);
+		let payload: string;
+		try {
+			payload = Buffer.from(rawToken.slice(0, dot), "base64url").toString("utf8");
+		} catch {
+			return null;
+		}
+		if (!safeEqualHex(sig, hmacSha256Hex(payload, key))) return null;
+
+		const [userId, expiresAtMs] = payload.split(".");
+		const expiry = Number(expiresAtMs);
+		if (!userId || !Number.isFinite(expiry) || Date.now() > expiry) return null;
+		return userId;
+	}
+
+	// ── Rectificación self-service (art. 16 Ley 25.326 / art. 16 RGPD) ─────────
+
+	/**
+	 * Solicita el cambio de email propio. No toca `email`: deja el pedido en
+	 * `metadata.emailChangePending` y emite un token de un solo uso para la casilla NUEVA; el
+	 * cambio se aplica recién en {@link confirmEmailChangeByToken}, que es lo que prueba el control
+	 * de esa casilla. Un pedido nuevo pisa al anterior. Unicidad y password: capa de endpoints.
+	 */
+	async requestEmailChange(userId: string, newEmail: string, token?: string): Promise<{ confirmToken: string; expiresAt: Date }> {
+		const callerId = await this.#permissionChecker.resolveUserId(token);
+		if (callerId && callerId !== userId) {
+			throw new Error(`No se puede pedir el cambio de email de otro usuario (caller=${callerId}, target=${userId})`);
+		}
+		if (!this.#emailChangeKey) {
+			throw new IdentityError(503, "EMAIL_DELIVERY_UNAVAILABLE", "El cambio de email no está habilitado en este despliegue");
+		}
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+		const userObj = (current.toObject?.() || current) as User;
+
+		const now = new Date();
+		const expiresAt = new Date(now.getTime() + EMAIL_CHANGE_TOKEN_TTL_MS);
+		const issued = this.#issueHmacToken(this.#emailChangeKey, userId, expiresAt);
+		const pending: EmailChangePending = { newEmail, tokenHash: issued.tokenHash, requestedAt: now, expiresAt };
+		const nextMeta = { ...(userObj.metadata || {}), emailChangePending: pending };
+		await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: now });
+		this.logger.logInfo(`Cambio de email solicitado por ${userId} (pendiente de confirmación)`);
+		return { confirmToken: issued.token, expiresAt };
+	}
+
+	/**
+	 * Canje del token de confirmación (público, sin sesión): HMAC, vigencia, un solo uso y cuenta
+	 * activa, con el mismo error para todos los fallos. Re-chequea la unicidad al aplicar: entre el
+	 * pedido y el canje otra cuenta pudo registrar esa dirección.
+	 */
+	async confirmEmailChangeByToken(rawToken: string): Promise<{ user: User; previousEmail: string | null }> {
+		const invalid = () => new IdentityError(400, "INVALID_EMAIL_CHANGE_TOKEN", "El enlace de confirmación no es válido, ya se usó o venció");
+		if (!this.#emailChangeKey) throw invalid();
+
+		const userId = this.#verifyHmacToken(this.#emailChangeKey, rawToken);
+		if (!userId) throw invalid();
+
+		const doc = await this.userModel.findOne({ id: userId });
+		const user = (doc?.toObject?.() || doc || null) as User | null;
+		const meta = (user?.metadata ?? {}) as Record<string, unknown>;
+		const pending = meta.emailChangePending as EmailChangePending | undefined;
+		// Cuenta desactivada (ban/baja): el cambio pendiente deja de valer.
+		if (!user || !user.isActive || !pending?.newEmail || typeof pending.tokenHash !== "string") throw invalid();
+		if (!safeEqualHex(pending.tokenHash, sha256Hex(rawToken))) throw invalid();
+
+		const taken = await this.userModel.findOne({ email: pending.newEmail, id: { $ne: userId } }, { id: 1, _id: 0 }).lean();
+		if (taken) throw new AuthError(409, "EMAIL_EXISTS", "Ese email ya está registrado en otra cuenta");
+
+		const nextMeta = { ...meta };
+		delete nextMeta.emailChangePending;
+		const updated = await this.userModel.findOneAndUpdate(
+			{ id: userId },
+			{ email: pending.newEmail, metadata: nextMeta, updatedAt: new Date() },
+			{ new: true }
+		);
+		if (!updated) throw invalid();
+		this.logger.logInfo(`Email de ${userId} actualizado por confirmación`);
+		return { user: updated.toObject?.() || updated, previousEmail: user.email ?? null };
+	}
+
+	/**
+	 * Cambia el username propio, con cooldown de {@link USERNAME_CHANGE_COOLDOWN_DAYS} días. La
+	 * carrera de unicidad la corta el índice único (11000), no el pre-chequeo. Política de nombres
+	 * y password: capa de endpoints, igual que en el alta.
+	 */
+	async changeOwnUsername(userId: string, newUsername: string, token?: string): Promise<User> {
+		const callerId = await this.#permissionChecker.resolveUserId(token);
+		if (callerId && callerId !== userId) {
+			throw new Error(`No se puede cambiar el username de otro usuario (caller=${callerId}, target=${userId})`);
+		}
+
+		const current = await this.userModel.findOne({ id: userId });
+		if (!current) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+		const userObj = (current.toObject?.() || current) as User;
+		const meta = (userObj.metadata || {}) as Record<string, unknown>;
+
+		const rawLast = meta.lastUsernameChangeAt;
+		const lastMs = typeof rawLast === "string" || rawLast instanceof Date ? new Date(rawLast).getTime() : 0;
+		const cooldownMs = USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+		if (lastMs > 0 && Date.now() - lastMs < cooldownMs) {
+			const nextAllowedAt = new Date(lastMs + cooldownMs);
+			throw new IdentityError(429, "USERNAME_CHANGE_COOLDOWN", "Sólo se puede cambiar el nombre de usuario una vez cada 30 días", {
+				retryAfterSeconds: Math.ceil((nextAllowedAt.getTime() - Date.now()) / 1000),
+				nextAllowedAt: nextAllowedAt.toISOString(),
+			});
+		}
+
+		const now = new Date();
+		const nextMeta = { ...meta, lastUsernameChangeAt: now.toISOString() };
+		try {
+			const updated = await this.userModel.findOneAndUpdate(
+				{ id: userId },
+				{ username: newUsername, metadata: nextMeta, updatedAt: now },
+				{ new: true }
+			);
+			if (!updated) throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+			this.logger.logInfo(`Username de ${userId} cambiado a '${newUsername}'`);
+			return updated.toObject?.() || updated;
+		} catch (error: any) {
+			if (error?.code === 11000) {
+				throw new AuthError(409, "USERNAME_EXISTS", `El nombre de usuario '${newUsername}' ya está en uso`);
+			}
+			throw error;
+		}
+	}
+
+	/** Limpieza compartida de la metadata de baja + reactivación de la cuenta. */
+	async #clearScheduledDeletion(current: User): Promise<User> {
+		const nextMeta = { ...(current.metadata || {}) } as Record<string, unknown>;
+		delete nextMeta.scheduledDeletionAt;
+		delete nextMeta.deletionRequestedAt;
+		delete nextMeta.deletionReason;
+		delete nextMeta.deletionNote;
+		delete nextMeta.deletionCancelTokenHash;
+		const updated = await this.userModel.findOneAndUpdate(
+			{ id: current.id },
+			{ isActive: true, metadata: nextMeta, updatedAt: new Date() },
+			{ new: true }
+		);
+		if (!updated) throw new Error(`Usuario ${current.id} no encontrado`);
+		this.logger.logInfo(`Baja de cuenta cancelada: ${current.id}`);
 		return updated.toObject?.() || updated;
+	}
+
+	/**
+	 * Usuario sólo si su baja sigue VIGENTE (cuenta inactiva y `scheduledDeletionAt`
+	 * vencido). Guard del stepper de purga: entre el listado de vencidos y cada paso
+	 * la baja pudo cancelarse (token de arrepentimiento, reactivación admin).
+	 */
+	async findDueUser(userId: string, now: Date = new Date(), token?: string): Promise<User | null> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const doc = await this.userModel.findOne({ id: userId, isActive: false, "metadata.scheduledDeletionAt": { $lte: now } });
+		return doc?.toObject?.() || doc || null;
 	}
 
 	/**

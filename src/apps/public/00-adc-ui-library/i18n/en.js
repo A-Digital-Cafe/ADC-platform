@@ -36,6 +36,10 @@ export default {
 		CHECKOUT_FAILED: "Checkout could not be started. Please try again in a few minutes.",
 		GATEWAY_UNAVAILABLE: "No payment gateway is available right now.",
 		GATEWAY_ERROR: "The payment gateway did not respond. Please try again in a few minutes.",
+		// Billing rectification (PATCH /api/subscriptions/billing)
+		COUNTRY_NOT_SUPPORTED: "The selected country cannot be invoiced.",
+		BILLING_DATA_REQUIRED: "Fill in name and address to invoice outside Argentina.",
+		BILLING_UPDATE_FAILED: "Billing details could not be saved. Please try again in a few minutes.",
 		// Attachment errors
 		ATTACHMENT_BAD_INPUT: "Invalid attachment data",
 		ATTACHMENT_TOO_LARGE: "The file exceeds the maximum allowed size",
@@ -76,6 +80,7 @@ export default {
 		privacy: "Privacy",
 		terms: "Terms",
 		cookies: "Cookies",
+		licenses: "Licenses",
 		contact: "Contact",
 		team: "Team",
 		help: "Help",

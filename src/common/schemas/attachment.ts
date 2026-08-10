@@ -14,6 +14,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import type { AttachmentDTO } from "../types/attachments/Attachment.ts";
 
+/** @public */
 export const AttachmentDtoSchema = Type.Object(
 	{
 		id: Type.String(),

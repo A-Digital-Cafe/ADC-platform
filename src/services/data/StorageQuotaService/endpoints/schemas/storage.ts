@@ -18,6 +18,9 @@ export const UsageSnapshotResponse = Type.Object({
 	totalCount: Type.Integer({ minimum: 0 }),
 	apps: Type.Record(Type.String(), AppUsage),
 	effectiveLimit: Type.Integer({ description: "-1 = sin límite" }),
+	degraded: Type.Optional(
+		Type.Boolean({ description: "El límite es el del plan base por una caída del motor de planes; sólo frena subidas nuevas" })
+	),
 	updatedAt: Type.Optional(Type.String({ format: "date-time" })),
 });
 

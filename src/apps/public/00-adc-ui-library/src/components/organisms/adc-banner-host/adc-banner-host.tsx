@@ -1,58 +1,5 @@
 import { Component, Prop, State, Host } from "@stencil/core";
-import { isPrivateHost } from "@common/utils/url-utils.js";
-
-interface BannerData {
-	bannerId: string;
-	scope: "app" | "global";
-	appName?: string | null;
-	message: string;
-	type: "warn" | "danger" | "success";
-	from?: string | null;
-	until?: string | null;
-}
-
-interface PlatformState {
-	disabled?: Record<string, unknown>;
-	/** Apps caídas (no las consume este componente, pero debe preservarlas al cachear). */
-	down?: string[];
-	banners?: BannerData[];
-}
-
-interface PlatformWindow {
-	__ADC_PLATFORM__?: PlatformState;
-	__ADC_PLATFORM_PROMISE__?: Promise<PlatformState>;
-}
-
-function platformWindow(): PlatformWindow {
-	return globalThis as unknown as PlatformWindow;
-}
-
-/**
- * Carga el estado de plataforma una sola vez por página, compartido vía `window` con
- * el gate de mantenimiento (`@common/utils/module-availability`): en prod lo inyecta el
- * kernel (`window.__ADC_PLATFORM__`, CERO fetch); en dev se pide UNA vez a
- * `/api/modules/platform` (cacheable) y se reutiliza la misma promesa. Así agregar
- * banners al header NO genera una petición por render.
- */
-function loadBanners(apiBaseUrl: string): Promise<BannerData[]> {
-	const win = platformWindow();
-	if (win.__ADC_PLATFORM__) return Promise.resolve(win.__ADC_PLATFORM__.banners ?? []);
-	if (win.__ADC_PLATFORM_PROMISE__) return win.__ADC_PLATFORM_PROMISE__.then((s) => s?.banners ?? []);
-	const p: Promise<PlatformState> = fetch(`${apiBaseUrl}/api/modules/platform`, { credentials: "include" })
-		.then((r) => (r.ok ? r.json() : null))
-		.then((d) => {
-			const state: PlatformState = {
-				disabled: d?.disabled ?? {},
-				down: Array.isArray(d?.down) ? d.down : [],
-				banners: Array.isArray(d?.banners) ? d.banners : [],
-			};
-			win.__ADC_PLATFORM__ = state;
-			return state;
-		})
-		.catch(() => ({ disabled: {}, banners: [] }));
-	win.__ADC_PLATFORM_PROMISE__ = p;
-	return p.then((s) => s.banners ?? []);
-}
+import { loadPlatformState, type PlatformBanner } from "@common/utils/module-availability.js";
 
 /**
  * Barra de avisos bajo el header. Muestra banners globales siempre y los de app cuando
@@ -64,14 +11,10 @@ function loadBanners(apiBaseUrl: string): Promise<BannerData[]> {
 	shadow: false,
 })
 export class AdcBannerHost {
-	@Prop() apiBaseUrl: string = isPrivateHost(globalThis.location?.hostname ?? "")
-		? `${globalThis.location?.protocol}//${globalThis.location?.hostname}:3000`
-		: "";
-
 	/** App actual (nombre base) para filtrar banners de app; si vacío usa `window.__ADC_APP__`. */
 	@Prop() app: string = "";
 
-	@State() banners: BannerData[] = [];
+	@State() banners: PlatformBanner[] = [];
 	@State() dismissed: string[] = [];
 	/** Cambia en cada límite `from`/`until` para forzar re-render. */
 	@State() now: number = Date.now();
@@ -79,8 +22,8 @@ export class AdcBannerHost {
 	private timers: ReturnType<typeof setTimeout>[] = [];
 
 	async componentWillLoad() {
-		const all = await loadBanners(this.apiBaseUrl);
-		this.banners = this.relevant(all);
+		const { banners } = await loadPlatformState();
+		this.banners = this.relevant(banners);
 		this.scheduleBoundaries();
 	}
 
@@ -93,7 +36,7 @@ export class AdcBannerHost {
 		return this.app || (globalThis as { __ADC_APP__?: string }).__ADC_APP__ || "";
 	}
 
-	private relevant(all: BannerData[]): BannerData[] {
+	private relevant(all: PlatformBanner[]): PlatformBanner[] {
 		const app = this.currentApp();
 		return all.filter((b) => b.scope === "global" || (b.scope === "app" && !!b.appName && b.appName === app));
 	}
@@ -110,7 +53,7 @@ export class AdcBannerHost {
 		}
 	}
 
-	private visible(): BannerData[] {
+	private visible(): PlatformBanner[] {
 		const now = this.now;
 		return this.banners.filter((b) => {
 			if (this.dismissed.includes(b.bannerId)) return false;
@@ -120,7 +63,7 @@ export class AdcBannerHost {
 		});
 	}
 
-	private toneClass(type: BannerData["type"]): string {
+	private toneClass(type: PlatformBanner["type"]): string {
 		switch (type) {
 			case "danger":
 				return "bg-danger text-tdanger border-tdanger/50";

@@ -67,11 +67,11 @@ export class OrgEndpoints {
 	static async checkOrgSlug(ctx: EndpointCtx<{ slug: string }>) {
 		requireGlobalAccess(ctx);
 		const normalized = ctx.params.slug.toLowerCase().trim();
-		if (!/^[a-z0-9-]+$/.test(normalized)) {
-			return { available: false, reserved: false };
-		}
-		if (checkSlugPolicy(normalized)) {
-			return { available: false, reserved: true };
+		// Formato y reservados salen los dos de la política de nombres (única fuente de
+		// verdad, la misma que aplica el alta); acá sólo se traduce el motivo.
+		const rejection = checkSlugPolicy(normalized);
+		if (rejection) {
+			return { available: false, reserved: rejection.reason !== "format" };
 		}
 		const existing = await OrgEndpoints.identity.organizations.getOrganization(normalized, ctx.token!);
 		return { available: !existing };

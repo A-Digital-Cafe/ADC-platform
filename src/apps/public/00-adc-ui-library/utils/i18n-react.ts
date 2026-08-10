@@ -17,7 +17,7 @@ interface ADCGlobal {
 		loading: boolean;
 		loaded: boolean;
 	};
-	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
+	t?: (key: string, params?: Record<string, string> | null, namespace?: string, fallback?: string) => string;
 	loadTranslations?: (namespaces: string[], locale?: string) => Promise<void>;
 	getLocale?: () => string;
 	setLocale?: (locale: string) => void;
@@ -51,8 +51,11 @@ export interface UseTranslationOptions {
 }
 
 export interface UseTranslationReturn {
-	/** Translation function */
-	t: (key: string, params?: Record<string, string>) => string;
+	/**
+	 * Traduce `key`. Sin traducción devuelve `fallback`, o la propia clave si no se pasó uno (lo
+	 * que hace visible el faltante). Por eso `t(k) || "texto"` no sirve: `t()` nunca devuelve vacío.
+	 */
+	t: (key: string, params?: Record<string, string>, fallback?: string) => string;
 	/** Current locale */
 	locale: string;
 	/** Whether translations are loaded */
@@ -103,39 +106,37 @@ export function useTranslation(options: UseTranslationOptions = {}): UseTranslat
 
 	// Translation function
 	const t = useCallback(
-		(key: string, params?: Record<string, string>): string => {
+		(key: string, params?: Record<string, string>, fallback?: string): string => {
 			// Use global t() if available
 			if (customThis.t) {
 				const ns = namespaces[0];
-				return customThis.t(key, params || null, ns);
+				return customThis.t(key, params || null, ns, fallback);
 			}
 
 			// Fallback: direct lookup
 			const state = customThis.__ADC_I18N__;
-			if (!state) return key;
-
 			const ns = namespaces[0];
-			const translations = ns ? state.translations[ns] : Object.values(state.translations)[0];
-			if (!translations) return key;
+			const translations = state && (ns ? state.translations[ns] : Object.values(state.translations)[0]);
 
-			const keys = key.split(".");
 			let value: unknown = translations;
-			for (const k of keys) {
+			for (const k of key.split(".")) {
 				if (value && typeof value === "object" && k in value) {
 					value = (value as Record<string, unknown>)[k];
 				} else {
-					return key;
+					value = undefined;
+					break;
 				}
 			}
 
-			if (typeof value !== "string") return key;
+			// Sin traducción: el fallback si lo hay, si no la clave (que hace visible el faltante).
+			const text = typeof value === "string" ? value : (fallback ?? key);
 
 			// Interpolation
 			if (params) {
-				return value.replaceAll(/\{\{(\w+)\}\}/g, (_, p) => params[p] ?? `{{${p}}}`);
+				return text.replaceAll(/\{\{(\w+)\}\}/g, (_, p) => params[p] ?? `{{${p}}}`);
 			}
 
-			return value;
+			return text;
 		},
 		[namespaces, translationsVersion]
 	);

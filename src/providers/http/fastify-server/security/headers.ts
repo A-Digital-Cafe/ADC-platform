@@ -28,13 +28,23 @@ function getCspHeaderName(): string {
 	return shouldEnforceCsp() ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only";
 }
 
+/**
+ * Cloudflare Web Analytics. El beacon lo **inyecta el proxy** en el HTML de producción, así que no
+ * está en ningún bundle ni lleva el nonce de la request: sin su host en `script-src` la CSP lo
+ * bloquea y la medición no ocurre, aunque el panel de Cloudflare diga que el sitio está de alta.
+ * Alcanza con nombrarlo (un nonce no invalida las fuentes por host). Son dos hosts distintos: uno
+ * sirve el script y el otro recibe el `POST` del beacon.
+ */
+const CF_ANALYTICS_SCRIPT = "https://static.cloudflareinsights.com";
+const CF_ANALYTICS_BEACON = "https://cloudflareinsights.com";
+
 function getDefaultCsp(nonce?: string): string {
 	// En dev las apps viven en puertos distintos y se acceden tanto por `localhost`
 	// como por la IP de LAN (probar desde el móvil). La gramática CSP no admite
 	// comodines en hosts IP, así que fuera de producción se abren los esquemas
 	// `http:`/`ws:` completos en vez de enumerar orígenes.
 	const connectSrc = isRealProduction()
-		? "connect-src 'self' https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com"
+		? `connect-src 'self' https://esm.sh ${CF_ANALYTICS_BEACON} https://*.adigitalcafe.com wss://*.adigitalcafe.com`
 		: "connect-src 'self' http: ws: https://esm.sh https://*.adigitalcafe.com wss://*.adigitalcafe.com";
 	// Sin `'unsafe-eval'`: nada del runtime lo necesita. rspack compila con `devtool: false` en
 	// **producción**, y ni Stencil, ni Vue (se resuelve el build runtime-only), ni el runtime de
@@ -52,7 +62,7 @@ function getDefaultCsp(nonce?: string): string {
 	// `'unsafe-inline'`.
 	const inlineScript = nonce ? `'nonce-${nonce}'` : "'unsafe-inline'";
 	const scriptSrc = isRealProduction()
-		? `script-src 'self' ${inlineScript} https://esm.sh https://*.adigitalcafe.com`
+		? `script-src 'self' ${inlineScript} https://esm.sh ${CF_ANALYTICS_SCRIPT} https://*.adigitalcafe.com`
 		: `script-src 'self' ${inlineScript} https://esm.sh http: https://*.adigitalcafe.com`;
 	return [
 		"default-src 'self'",

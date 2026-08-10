@@ -45,10 +45,10 @@ export const PLATFORM_TOPICS = {
 	},
 } as const satisfies Record<string, PlatformTopicDef>;
 
-/** Lista estable para iterar en la UI (orden: primero lo obligatorio). */
+/** @public Lista estable para iterar en la UI (orden: primero lo obligatorio). */
 export const PLATFORM_TOPIC_LIST: readonly PlatformTopicDef[] = [PLATFORM_TOPICS.legal, PLATFORM_TOPICS.announcement];
 
-/** Topics que un anuncio broadcast puede usar. Cualquier otro se rechaza en el endpoint. */
+/** @public Topics que un anuncio broadcast puede usar. Cualquier otro se rechaza en el endpoint. */
 export const BROADCASTABLE_TOPICS: readonly NotificationTopic[] = PLATFORM_TOPIC_LIST.map((t) => t.topic);
 
 /**

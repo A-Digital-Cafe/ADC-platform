@@ -57,6 +57,22 @@ export function sha256Bytes(input: string): Uint8Array {
 	return new Uint8Array(crypto.createHash("sha256").update(input, "utf8").digest());
 }
 
+/**
+ * HMAC-SHA256 (hex) de una cadena UTF-8: firma tokens de un solo uso y seudonimiza
+ * identificadores (`userRef` del archivo de constancias). Sin la clave no se forja ni se revierte.
+ */
+export function hmacSha256Hex(input: string, key: string | Uint8Array): string {
+	return crypto.createHmac("sha256", key).update(input, "utf8").digest("hex");
+}
+
+/** Comparación constant-time de dos cadenas hex (firmas/hashes). `false` si alguna no es hex válida. */
+export function safeEqualHex(a: string, b: string): boolean {
+	if (!/^[0-9a-fA-F]+$/.test(a) || !/^[0-9a-fA-F]+$/.test(b)) return false;
+	const ba = Buffer.from(a, "hex");
+	const bb = Buffer.from(b, "hex");
+	return ba.length === bb.length && ba.length > 0 && crypto.timingSafeEqual(ba, bb);
+}
+
 // Cifrado en reposo (AES-256-GCM)
 
 const AT_REST_SCHEME = "aes-256-gcm" as const;

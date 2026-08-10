@@ -16,8 +16,8 @@ interface SessionAdminDeps {
 	notifySecurityTeam: (event: { title: string; body: string; actorId?: string; data?: Record<string, unknown> }) => void;
 }
 
-/** Enmascara una IP para la vista admin (forense sin exponer la IP completa). */
-function maskIp(ip: string): string {
+/** Enmascara una IP para la vista admin y el export de datos (forense sin exponer la IP completa). */
+export function maskIp(ip: string): string {
 	if (ip.includes(".")) {
 		const parts = ip.split(".");
 		return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : "x.x.x.x";

@@ -38,8 +38,20 @@ export enum Scope {
 	UiRegister = "ui:register",
 	/** Registrarse como app consumidora en StorageQuotaService. */
 	StorageRegister = "storage:register",
+	/**
+	 * Registrar trabajos de fondo en `OperationsService` (`registerIdleJob`). Opt-in porque
+	 * consumen CPU del proceso que atiende las requests: el planificador lo modera, pero quién
+	 * puede pedirlo se decide en el `config.json`, no en runtime.
+	 */
+	IdleRegister = "idle:register",
 	/** Registrar features vendibles en PlanService (`registerFeatures`). */
 	PlanRegister = "plans:register",
+	/**
+	 * Escribir en el audit log persistente (`AuditLogService.record/recordStrict`). Opt-in para
+	 * acotar qué módulos generan rastro; el `origin` sale del `owner` de la capability, así que un
+	 * productor no puede firmar como otro.
+	 */
+	AuditWrite = "audit:write",
 	/** Mutar el estado comercial de un plan (asientos pagos) desde el servicio de suscripciones. */
 	PlanAdmin = "plans:admin",
 	/** Anunciar a TODOS los usuarios (`NotificationService.broadcast`). Amplifica ×N: opt-in explícito. */

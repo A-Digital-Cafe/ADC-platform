@@ -66,8 +66,14 @@ const STORAGE_SCOPES: ScopeDef[] = [
 	{ key: "limits", value: 1 << 1 },
 ];
 
-/** Drive scopes — `recover` habilita la recuperación admin de "eliminados permanentemente". */
-const DRIVE_SCOPES: ScopeDef[] = [{ key: "recover", value: 1 }];
+/**
+ * Drive scopes — `recover` habilita la recuperación admin de "eliminados permanentemente";
+ * `moderate` habilita suspender el acceso a contenido ajeno reportado por un tercero.
+ */
+const DRIVE_SCOPES: ScopeDef[] = [
+	{ key: "recover", value: 1 },
+	{ key: "moderate", value: 1 << 1 },
+];
 
 /** Project Manager scopes — alineados con PMScopes en types/project-manager/permissions.ts */
 const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
@@ -86,6 +92,7 @@ const PROJECT_MANAGER_SCOPES: ScopeDef[] = [
 const SECURITY_SCOPES: ScopeDef[] = [
 	{ key: "sessions", value: SecurityScopes.SESSIONS },
 	{ key: "audit", value: SecurityScopes.AUDIT },
+	{ key: "audit_log", value: SecurityScopes.AUDIT_LOG },
 ];
 
 /** Modules scopes — alineados con ModulesScopes en types/modules/permissions.ts */

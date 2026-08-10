@@ -33,7 +33,18 @@ export interface NamePolicy {
 }
 
 /** Motivo por el que un nombre no se puede usar. */
-export type NameRejection = { reason: "reserved" | "blocked"; term: string };
+export type NameRejection = { reason: "reserved" | "blocked" | "format"; term: string };
+
+/**
+ * Alfanumérico ASCII con `.`, `_` y `-` en el medio, sin puntos consecutivos. No es cosmético: la
+ * parte local del correo se deriva del username quitando lo que no sea `[a-z0-9._-]`, así que sin
+ * este filtro "a@b" y "ab" colapsan en la MISMA casilla y la procedencia de un correo deja de ser
+ * atribuible. La longitud (3–30) la valida cada punto de entrada.
+ */
+const USERNAME_FORMAT_RX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$/;
+
+/** Slug de organización: se vuelve etiqueta de subdominio (`<slug>.<raíz>`), sin `.` ni `_`. */
+const ORG_SLUG_FORMAT_RX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
 const EMPTY_POLICY: NamePolicy = {
 	aliases: new Map(),
@@ -119,12 +130,16 @@ export function getNamePolicy(): NamePolicy {
 }
 
 /**
- * Comprueba si un username se puede usar. Devuelve `null` si es válido o el
- * motivo del rechazo. Los reservados se comparan exactos; las malas palabras,
- * por subcadena (salvo que el nombre esté en las excepciones).
+ * `null` si el username se puede usar, o el motivo: `format` (ver {@link USERNAME_FORMAT_RX}),
+ * `reserved` (exacto) o `blocked` (malas palabras por subcadena, salvo excepciones).
+ *
+ * Se aplica sólo a nombres que la persona ELIGE. En el alta por OAuth el nombre lo trae el
+ * proveedor, así que rechazar no sirve: ese flujo genera uno propio con este mismo check.
  */
 export function checkUsername(username: string): NameRejection | null {
 	const policy = getNamePolicy();
+	if (!USERNAME_FORMAT_RX.test(username) || username.includes("..")) return { reason: "format", term: username };
+
 	const normalized = normalizeName(username);
 	if (!normalized) return { reason: "blocked", term: username };
 
@@ -151,6 +166,10 @@ const SENTINEL_SLUGS = new Set(["default", "personal"]);
  * son tan indeseables como usernames.
  */
 export function checkOrgSlug(slug: string): NameRejection | null {
+	// El formato lo revalida el DAO al crear; acá va también para que el endpoint
+	// público `check-slug` no diga "disponible" sobre algo que después rechaza el alta.
+	if (!ORG_SLUG_FORMAT_RX.test(slug.trim().toLowerCase())) return { reason: "format", term: slug };
+
 	const normalized = normalizeName(slug);
 	if (!normalized) return { reason: "blocked", term: slug };
 	if (SENTINEL_SLUGS.has(normalized) || getNamePolicy().reserved.has(normalized)) return { reason: "reserved", term: normalized };
@@ -160,6 +179,7 @@ export function checkOrgSlug(slug: string): NameRejection | null {
 /**
  * Username de la plataforma al que entrega una dirección, o `null` si no es un
  * alias. Acepta subaddressing (`support+ventas@…` sigue siendo `support`).
+ * @public
  */
 export function resolveAliasTarget(address: string, rootDomain: string): string | null {
 	const policy = getNamePolicy();

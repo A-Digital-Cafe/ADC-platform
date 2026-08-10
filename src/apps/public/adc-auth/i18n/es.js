@@ -43,6 +43,31 @@ export default {
 		oauthLegalBefore: "Al continuar con Discord o Google aceptás los",
 		oauthLegalAfter: ", y declarás tener al menos {{minAge}} años o la edad mínima que exija tu país."
 	},
+	cancelDeletion: {
+		title: "Cancelar la baja de tu cuenta",
+		intro: "Estás por cancelar la baja programada de tu cuenta. Al confirmar, la cuenta se reactiva y no se borra nada.",
+		action: "Cancelar la baja",
+		working: "Cancelando...",
+		successTitle: "Tu cuenta fue reactivada",
+		successBody: "La baja quedó cancelada y tus datos no se van a borrar. Ya podés iniciar sesión con tu usuario y contraseña de siempre.",
+		goToLogin: "Iniciar sesión",
+		errorBody: "El enlace no es válido, ya se usó o venció. Si tu cuenta sigue dentro del plazo de 30 días, escribinos y lo resolvemos.",
+		missingToken: "Falta el código del enlace. Abrí el enlace exactamente como llegó en el correo.",
+		tooMany: "Demasiados intentos seguidos. Esperá un minuto y volvé a probar."
+	},
+	confirmEmail: {
+		title: "Confirmar el cambio de email",
+		intro: "Estás por confirmar esta casilla como el nuevo email de tu cuenta. Si no pediste este cambio, cerrá esta página: sin tu confirmación el email no cambia.",
+		action: "Confirmar el cambio",
+		working: "Confirmando...",
+		successTitle: "Email actualizado",
+		successBody: "Tu cuenta ya usa la casilla nueva: los avisos de la plataforma van a llegar ahí.",
+		goToLogin: "Iniciar sesión",
+		errorBody: "El enlace no es válido, ya se usó o venció (dura 60 minutos). Pedí el cambio de nuevo desde tu cuenta: se genera un enlace nuevo.",
+		emailTaken: "Esa dirección ya quedó registrada en otra cuenta. Pedí el cambio de nuevo con otra casilla.",
+		missingToken: "Falta el código del enlace. Abrí el enlace exactamente como llegó en el correo.",
+		tooMany: "Demasiados intentos seguidos. Esperá un minuto y volvé a probar."
+	},
 	errors: {
 		// Errores específicos de formulario (se muestran como callout inline)
 		MISSING_CREDENTIALS: "Usuario y contraseña son requeridos",
@@ -52,7 +77,7 @@ export default {
 		ACCOUNT_BLOCKED_TEMP: "Cuenta bloqueada temporalmente. Intenta de nuevo en {{time}}.",
 		ACCOUNT_BLOCKED_PERMANENT: "Tu cuenta ha sido bloqueada permanentemente. Contacta soporte.",
 		MISSING_FIELDS: "Usuario, email y contraseña son requeridos",
-		INVALID_USERNAME: "El nombre de usuario debe tener entre 3 y 30 caracteres",
+		INVALID_USERNAME: "El nombre de usuario debe tener entre 3 y 30 caracteres y sólo admite letras, números, punto, guion y guion bajo",
 		WEAK_PASSWORD: "La contraseña debe tener al menos 8 caracteres",
 		INVALID_EMAIL: "El email no es válido",
 		USERNAME_EXISTS: "El nombre de usuario ya está en uso",

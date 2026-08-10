@@ -12,6 +12,7 @@
 
 export type LogLevel = "info" | "ok" | "warn" | "error" | "debug";
 
+/** @public Entrada del buffer, tal cual la sirve el endpoint y la consume la tab de Logs. */
 export interface LogEntry {
 	seq: number;
 	ts: string;

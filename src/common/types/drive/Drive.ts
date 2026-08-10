@@ -8,11 +8,13 @@
  * navegación nunca los alcanza. Restaurar/vaciar opera sobre esas raíces.
  */
 
+/** @public */
 export type DriveFileStatus = "pending" | "ready";
 
-/** Colores de etiqueta soportados (alineados con `adc-badge`). */
+/** @public Colores de etiqueta soportados (alineados con `adc-badge`). */
 export type DriveLabelColor = "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "indigo" | "purple" | "pink";
 
+/** @public */
 export const DRIVE_LABEL_COLORS: readonly DriveLabelColor[] = [
 	"gray",
 	"red",
@@ -26,7 +28,7 @@ export const DRIVE_LABEL_COLORS: readonly DriveLabelColor[] = [
 	"pink",
 ];
 
-/** Etiqueta visual de una carpeta (estilo badges de project-management). */
+/** @public Etiqueta visual de una carpeta (estilo badges de project-management). */
 export interface DriveLabel {
 	name: string;
 	color: DriveLabelColor;
@@ -76,11 +78,13 @@ export interface DriveFolder {
 	 * `DRIVE_LEGAL_HOLD_RETENTION_DAYS` días; luego se purga de verdad.
 	 */
 	purgedAt?: Date | null;
+	/** Suspensión preventiva por reporte de un tercero (null/ausente = accesible). */
+	suspension?: DriveSuspension | null;
 	createdAt: Date;
 	updatedAt: Date;
 }
 
-/** Destino de un acceso directo: otro archivo del Drive o una URL web. */
+/** @public Destino de un acceso directo: otro archivo del Drive o una URL web. */
 export interface DriveShortcutTarget {
 	type: "file" | "url";
 	/** Id del archivo destino (type "file"). */
@@ -109,11 +113,47 @@ export interface DriveFile {
 	trashedFromFolderId?: string | null;
 	/** Retención legal (ver `DriveFolder.purgedAt`). */
 	purgedAt?: Date | null;
+	/** Suspensión preventiva por reporte de un tercero (null/ausente = accesible). */
+	suspension?: DriveSuspension | null;
+	/**
+	 * Última verificación de contenido contra la blocklist de hashes. `null`/ausente = nunca
+	 * verificado, que es justamente la cola que drena el barrido de fondo.
+	 *
+	 * Es una marca **por archivo** y no un cursor global a propósito: sobrevive a reinicios, a
+	 * que entren archivos nuevos en el medio y a que un lote se corte por presupuesto.
+	 */
+	verifiedAt?: Date | null;
+	/**
+	 * SHA-256 **real** del contenido en claro, calculado en el servidor. Distinto del que
+	 * declara el cliente al subir: aquél sirve para rechazar en el acto, éste es el que no se
+	 * puede falsear. Que difieran no prueba mala fe (un cliente sin `crypto.subtle` no manda
+	 * ninguno), pero un archivo cuyo hash real está bloqueado se retira igual.
+	 */
+	verifiedSha256?: string | null;
 	createdAt: Date;
 	updatedAt: Date;
 }
 
+/**
+ * Suspensión preventiva de un recurso reportado por un tercero. Mientras está
+ * presente, el resolver de acceso corta **a todo el mundo, incluido el dueño**:
+ * la medida existe para poder retirar contenido ajeno cuando llega una
+ * notificación fundada, no para restringirlo sólo a terceros. Se levanta
+ * borrando el campo.
+ * @public
+ */
+export interface DriveSuspension {
+	suspendedAt: Date;
+	/** userId de quien aplicó la medida (rol con `drive:moderate`). */
+	suspendedBy: string;
+	/** Ticket que la originó: es la trazabilidad del plazo de 30 días publicado. */
+	ticketKey?: string | null;
+	/** Motivo interno, no se expone a quien intenta acceder. */
+	reason?: string | null;
+}
+
 export type DriveResourceType = "file" | "folder";
+/** @public */
 export type DriveGranteeType = "user" | "org" | "link";
 
 export interface DriveShare {
@@ -133,6 +173,7 @@ export interface DriveShare {
 
 // ── DTOs públicos (frontend) ───────────────────────────────────────────────
 
+/** @public */
 export interface DriveFolderDTO {
 	id: string;
 	name: string;
@@ -149,6 +190,7 @@ export interface DriveFolderDTO {
 	updatedAt: string;
 }
 
+/** @public */
 export interface DriveFileDTO {
 	id: string;
 	name: string;
@@ -166,9 +208,10 @@ export interface DriveFileDTO {
 
 // ── Búsqueda ────────────────────────────────────────────────────────────────
 
-/** Categoría de tipo para el buscador (carpeta, mime agrupado o acceso directo). */
+/** @public Categoría de tipo para el buscador (carpeta, mime agrupado o acceso directo). */
 export type DriveSearchType = "folder" | "image" | "video" | "audio" | "document" | "text" | "shortcut" | "other";
 
+/** @public */
 export interface DriveSearchQuery {
 	/** Texto a buscar en el nombre (case-insensitive). */
 	q?: string;
@@ -183,6 +226,7 @@ export interface DriveSearchQuery {
 	to?: string;
 }
 
+/** @public */
 export interface DriveSearchResults {
 	folders: DriveFolderDTO[];
 	files: DriveFileDTO[];
@@ -190,7 +234,7 @@ export interface DriveSearchResults {
 
 // ── Archivos comprimidos (descarga múltiple) ───────────────────────────────
 
-/** Resultado del job de compresión: listo para auto-descargar. */
+/** @public Resultado del job de compresión: listo para auto-descargar. */
 export interface DriveArchiveDTO {
 	id: string;
 	name: string;
@@ -204,6 +248,7 @@ export interface DriveArchiveDTO {
 	expiresAt: string;
 }
 
+/** @public */
 export interface DriveShareDTO {
 	id: string;
 	resourceType: DriveResourceType;
@@ -225,27 +270,37 @@ export const DRIVE_LEGAL_HOLD_RETENTION_DAYS = 90;
 /**
  * Límites estructurales, iguales para todos los planes. Los que un plan puede mover (tamaño de
  * archivo, dispositivos, unidades remotas, transferencias, egress) salen de `utils/drive-limits.ts`.
+ * @public
  */
 export const DRIVE_MAX_FOLDER_DEPTH = 20;
+/** @public */
 export const DRIVE_NAME_MAX_LENGTH = 200;
 
-/** Mime sintético de los accesos directos (no tienen binario en S3). */
+/** @public Mime sintético de los accesos directos (no tienen binario en S3). */
 export const DRIVE_SHORTCUT_MIME = "application/x-adc-shortcut";
+/** @public */
 export const DRIVE_SHORTCUT_URL_MAX_LENGTH = 2048;
 
+/** @public */
 export const DRIVE_MAX_LABELS = 5;
+/** @public */
 export const DRIVE_LABEL_NAME_MAX_LENGTH = 24;
 
+/** @public */
 export const DRIVE_PIN_MIN_LENGTH = 4;
+/** @public */
 export const DRIVE_PIN_MAX_LENGTH = 12;
 
-/** Límites de la descarga comprimida (zip temporal). */
+/** @public Límites de la descarga comprimida (zip temporal). */
 export const DRIVE_ARCHIVE_MAX_FILES = 200;
+/** @public */
 export const DRIVE_ARCHIVE_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+/** @public */
 export const DRIVE_ARCHIVE_TTL_MS = 60 * 60 * 1000; // 1 h
 
 // ── Túnel entre dispositivos (montajes + carpeta de transferencia) ─────────
 
+/** @public */
 export type DriveDeviceKind = "browser" | "cli";
 
 /** Dispositivo registrado del usuario (agente del túnel). */
@@ -263,7 +318,7 @@ export interface DriveDeviceDTO {
 	createdAt: string;
 }
 
-/** Carpeta local montada por un agente (efímera: vive mientras el agente esté online). */
+/** @public Carpeta local montada por un agente (efímera: vive mientras el agente esté online). */
 export interface DriveMountDTO {
 	/** Id del montaje, único dentro del dispositivo (lo asigna el agente). */
 	id: string;
@@ -293,7 +348,7 @@ export interface DriveDeliveryDTO {
 	expiresAt: string;
 }
 
-/** Evento del canal SSE del túnel (server → agente). */
+/** @public Evento del canal SSE del túnel (server → agente). */
 export interface DriveTunnelEvent {
 	type: "ready" | "rpc" | "delivery" | "device.revoked" | "webrtc";
 	/** rpc: id de correlación a responder vía POST /tunnel/rpc. */
@@ -309,11 +364,12 @@ export interface DriveTunnelEvent {
 
 // ── Unidades remotas (S3 / WebDAV montadas por el cliente) ─────────────────
 
+/** @public */
 export type DriveRemoteUnitType = "s3" | "webdav";
-/** dek = cifrada en reposo con la DEK del usuario; passphrase = blob E2E opaco. */
+/** @public dek = cifrada en reposo con la DEK del usuario; passphrase = blob E2E opaco. */
 export type DriveRemoteUnitEncMode = "dek" | "passphrase";
 
-/** Metadata pública de una unidad remota (los secretos NUNCA viajan en listados). */
+/** @public Metadata pública de una unidad remota (los secretos NUNCA viajan en listados). */
 export interface DriveRemoteUnitDTO {
 	id: string;
 	name: string;
@@ -323,7 +379,7 @@ export interface DriveRemoteUnitDTO {
 	updatedAt: string;
 }
 
-/** Config en claro de una unidad S3 (solo existe cifrada en reposo). */
+/** @public Config en claro de una unidad S3 (solo existe cifrada en reposo). */
 export interface DriveRemoteS3Config {
 	endpoint: string;
 	region: string;
@@ -334,20 +390,25 @@ export interface DriveRemoteS3Config {
 	forcePathStyle?: boolean;
 }
 
-/** Config en claro de una unidad WebDAV/Nextcloud. */
+/** @public Config en claro de una unidad WebDAV/Nextcloud. */
 export interface DriveRemoteWebdavConfig {
 	baseUrl: string;
 	username: string;
 	password: string;
 }
 
+/** @public */
 export const DRIVE_REMOTE_UNIT_NAME_MAX_LENGTH = 60;
 
+/** @public */
 export const DRIVE_DEVICE_NAME_MAX_LENGTH = 60;
+/** @public */
 export const DRIVE_TUNNEL_RPC_TIMEOUT_MS = 15_000;
-/** Ventana para que ambos extremos de una transferencia se conecten. */
+/** @public Ventana para que ambos extremos de una transferencia se conecten. */
 export const DRIVE_TUNNEL_TRANSFER_MATCH_TIMEOUT_MS = 30_000;
+/** @public */
 export const DRIVE_TUNNEL_PAIRING_TTL_MS = 10 * 60 * 1000;
-/** TTL de respaldo del autoborrado de entregas (horas). */
+/** @public TTL de respaldo del autoborrado de entregas (horas). */
 export const DRIVE_TRANSFER_DEFAULT_TTL_HOURS = 48;
+/** @public */
 export const DRIVE_TRANSFER_MAX_TTL_HOURS = 14 * 24;

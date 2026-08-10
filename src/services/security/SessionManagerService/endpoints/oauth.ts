@@ -224,8 +224,9 @@ export class OAuthEndpoints {
 
 			const user = result.user;
 
-			// Bloquear cuentas baneadas/deshabilitadas (evita evasión por OAuth tras ban administrativo)
-			OAuthEndpoints.redirectIfInactiveUser(user, clearCookies);
+			// Bloquear cuentas baneadas/deshabilitadas (evita evasión por OAuth tras ban administrativo).
+			// Una baja voluntaria vigente NO bloquea: entrar la cancela (ver el método).
+			await OAuthEndpoints.redirectIfInactiveUser(user, clearCookies);
 
 			// Registrar IP del login OAuth (3h) para alimentar ban-list anti-evasión
 			await recordLoginAttemptIp(OAuthEndpoints.deps.moderation, user.id, ctx.ip, OAuthEndpoints.deps.logger);
@@ -424,8 +425,21 @@ export class OAuthEndpoints {
 		return pendingCookies;
 	}
 
-	private static redirectIfInactiveUser(user: AuthenticatedUser, clearCookies: ClearCookie[]): void {
+	/**
+	 * Corta el login de una cuenta desactivada, salvo que lo único que la desactive sea una baja
+	 * voluntaria vigente: ahí entrar por el proveedor **cancela la baja**, igual que la contraseña
+	 * en el login nativo. Es la vía que no depende del correo, y la única de las cuentas creadas
+	 * por OAuth (su password es aleatorio y su dueño no lo conoce).
+	 */
+	private static async redirectIfInactiveUser(user: AuthenticatedUser, clearCookies: ClearCookie[]): Promise<void> {
 		if (user.isActive === false) {
+			const restored = await OAuthEndpoints.deps.internalIdentity?.users.cancelSelfDeletionOnLogin(user.id);
+			if (restored) {
+				user.isActive = true;
+				user.metadata = restored.metadata;
+				OAuthEndpoints.deps.logger.logWarn(`[oauth] baja voluntaria cancelada al volver a entrar: ${user.id}`);
+				return;
+			}
 			const banReason = (user.metadata as any)?.banReason || "Cuenta deshabilitada";
 			throw UncommonResponse.redirect(buildErrorUrl("/banned", { reason: banReason }), { status: 302, clearCookies });
 		}
@@ -726,6 +740,8 @@ export class OAuthEndpoints {
 			metadata: {
 				avatar: profile.avatar,
 				createdVia: provider,
+				// El clickwrap (`OAuthLegalNotice`, visible junto a los botones OAuth en Login y
+				// Register) avisa que continuar implica aceptar Términos/Privacidad y declarar edad.
 				legalAcceptance: buildLegalAcceptance("oauth", true),
 			},
 		});
@@ -748,9 +764,10 @@ export class OAuthEndpoints {
 	/**
 	 * Genera un username único añadiendo sufijo aleatorio si hay colisión.
 	 *
-	 * Si el nombre que trae el proveedor está prohibido (reservado o con malas
-	 * palabras) NO se rechaza el login —la persona no eligió ese nombre acá—:
-	 * se le asigna uno generado del tipo `braveOtter482`.
+	 * Si el nombre del proveedor no sirve —caracteres fuera de la política (Discord/Google admiten
+	 * cosas que la plataforma no, y de este nombre se deriva una dirección de correo), longitud
+	 * fuera de 3–30, reservado o con malas palabras— NO se rechaza el login, porque la persona no
+	 * eligió ese nombre acá: se le asigna uno generado del tipo `braveOtter482`.
 	 */
 	private static async generateUniqueUsername(
 		baseUsername: string,
@@ -758,7 +775,7 @@ export class OAuthEndpoints {
 	): Promise<string> {
 		const { randomBytes, randomInt } = await import("node:crypto");
 
-		if (checkUsername(baseUsername)) {
+		if (baseUsername.length < 3 || baseUsername.length > 30 || checkUsername(baseUsername)) {
 			for (let i = 0; i < 5; i++) {
 				const candidate = generateRandomUsername((max) => randomInt(max));
 				const taken = await users.getUserByUsername(candidate);
@@ -770,15 +787,18 @@ export class OAuthEndpoints {
 		const existing = await users.getUserByUsername(baseUsername);
 		if (!existing) return baseUsername;
 
+		// El sufijo tiene que caber en los 30 caracteres del límite: se recorta la base,
+		// no el sufijo (es lo que desambigua).
+		const stem = baseUsername.slice(0, 30 - "_d".length - 8);
 		for (let i = 0; i < 5; i++) {
 			const suffix = randomBytes(3).toString("hex");
-			const candidate = `${baseUsername}_d${suffix}`;
+			const candidate = `${stem}_d${suffix}`;
 			const exists = await users.getUserByUsername(candidate);
 			if (!exists) return candidate;
 		}
 
 		// Fallback extremo
-		return `${baseUsername}_d${Date.now().toString(36)}`;
+		return `${stem}_d${Date.now().toString(36)}`;
 	}
 
 	/**

@@ -1,5 +1,6 @@
 import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 import { createAdcApi, type RequestOptions } from "@ui-library/utils/adc-fetch";
+import { createClientId } from "@common/utils/client-crypto.js";
 
 export type { SessionResponse };
 
@@ -95,4 +96,36 @@ export const authApi = {
 	 * Obtener organizaciones del usuario autenticado
 	 */
 	getUserOrgs: () => api.get<{ orgs: OrgOption[]; currentOrgId?: string }>("/user-orgs"),
+};
+
+/** API pública de identidad para canjear tokens que llegan por email (sin sesión). */
+const identityApi = createAdcApi({
+	basePath: "/api/identity",
+	devPort: 3000,
+});
+
+export const identityPublicApi = {
+	/**
+	 * Canje del token de arrepentimiento (`/cancel-deletion?token=…`). El backend responde 400
+	 * INVALID_CANCEL_TOKEN ante cualquier fallo; `silent` porque la página muestra su propio
+	 * estado en vez del toast global.
+	 */
+	cancelDeletion: (token: string) =>
+		identityApi.post<{ success: boolean }>("/users/cancel-deletion", {
+			body: { token },
+			idempotencyKey: createClientId(),
+			silent: true,
+		}),
+
+	/**
+	 * Canje del token de confirmación del cambio de email (`/confirm-email?token=…`).
+	 * Un solo uso, 60 min de vigencia; 409 EMAIL_EXISTS si la dirección se registró
+	 * en otra cuenta entre pedido y canje.
+	 */
+	confirmEmailChange: (token: string) =>
+		identityApi.post<{ success: boolean }>("/users/confirm-email-change", {
+			body: { token },
+			idempotencyKey: createClientId(),
+			silent: true,
+		}),
 };

@@ -18,5 +18,7 @@ export interface RatingStats {
 	myRating: number | null;
 }
 
+/** @public */
 export const RATING_MIN = 1;
+/** @public */
 export const RATING_MAX = 5;

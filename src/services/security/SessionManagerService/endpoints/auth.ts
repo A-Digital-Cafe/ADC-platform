@@ -592,10 +592,14 @@ export class AuthEndpoints {
 			throw new AuthError(400, "INVALID_USERNAME", "El nombre de usuario debe tener entre 3 y 30 caracteres");
 		}
 
-		// Reservados y malas palabras (src/common/config/name-policy.json). Bloquear el username
-		// bloquea también su dirección de correo, que se deriva de él. El mensaje no distingue el
-		// motivo: publicar la lista no ayuda a elegir otro nombre.
-		if (checkUsername(username)) {
+		// Formato, reservados y malas palabras (src/common/config/name-policy.json). Bloquear el
+		// username bloquea también su dirección de correo, que se deriva de él. El motivo sólo se
+		// distingue para el formato, que es accionable.
+		const rejection = checkUsername(username);
+		if (rejection?.reason === "format") {
+			throw new AuthError(400, "INVALID_USERNAME", "El nombre de usuario sólo admite letras, números, punto, guion y guion bajo");
+		}
+		if (rejection) {
 			throw new AuthError(400, "FORBIDDEN_USERNAME", "Ese nombre de usuario no está disponible");
 		}
 

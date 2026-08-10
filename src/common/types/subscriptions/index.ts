@@ -113,7 +113,7 @@ export interface Subscription {
 	updatedAt: string;
 }
 
-/** Evento de pasarela ya verificado y normalizado. */
+/** @public Evento de pasarela ya verificado y normalizado. */
 export interface NormalizedEvent {
 	gateway: GatewayId;
 	/** Identificador del evento en la pasarela. Clave de idempotencia. */

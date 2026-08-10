@@ -259,6 +259,7 @@ export default {
 		security: {
 			sessions: "Sesiones",
 			audit: "Auditoría",
+			audit_log: "Registro de auditoría (datos personales)",
 		},
 		modules: {
 			runtime: "Runtime (start/stop)",

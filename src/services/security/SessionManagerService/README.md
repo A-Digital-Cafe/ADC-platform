@@ -19,6 +19,7 @@ Autenticación OAuth 2.0 con Access/Refresh Tokens y rotación de secretos (`ker
 | POST   | `/api/auth/admin/users/:id/sessions/revoke` | `security.sessions` | Force logout (revoca refresh tokens; respeta jerarquía de roles)   |
 
 Usa `@EnableEndpoints()` y `@DisableEndpoints()` para registro automático via EndpointManagerService.
+`exportUserData(cap, userId)` (scope `identity:internal`) aporta las sesiones activas —IP enmascarada, sin tokens— al export de datos de Identity.
 
 ## Providers soportados
 
@@ -47,7 +48,8 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
   rechaza con `LEGAL_VERSION_MISMATCH` si las versiones que manda el cliente no son las vigentes de
   `@common/utils/legal-docs`. La constancia (versiones + timestamp del servidor + vía) queda en
   `metadata.legalAcceptance`; el alta por OAuth graba la misma constancia con `via: "oauth"`
-- **Cambios de documentos legales**: al detectar una versión nueva desplegada anuncia el cambio a
-  todas las personas usuarias (broadcast `platform.legal`, in-app no silenciable) y al equipo, con la
-  fecha `effectiveFrom` desde la que rige. A partir de esa fecha `/api/auth/legal/status` marca el
-  documento como pendiente y el componente `adc-legal-gate` pide la re-aceptación
+- **Cambios de documentos legales**: al detectar una versión nueva desplegada de CUALQUIER documento
+  de `LEGAL_DOCUMENTS` (incluidos los informativos: cookies, DPA) anuncia el cambio a todas las
+  personas usuarias (broadcast `platform.legal`, in-app no silenciable) y al equipo, con la fecha
+  `effectiveFrom` desde la que rige. Para terms/privacy, a partir de esa fecha `/api/auth/legal/status`
+  marca el documento como pendiente y el componente `adc-legal-gate` pide la re-aceptación

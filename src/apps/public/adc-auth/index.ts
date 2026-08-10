@@ -36,6 +36,21 @@ export default class AdcAuthApp extends AppWithSeo {
 							description: "Únete a Abby's Digital Cafe y empieza a aprender y compartir con la comunidad.",
 						},
 					},
+					// Páginas de canje de tokens por email: fuera del sitemap a propósito.
+					{
+						path: "/cancel-deletion",
+						meta: {
+							title: "Cancelar baja de cuenta",
+							description: "Cancela la baja programada de tu cuenta con el enlace del correo.",
+						},
+					},
+					{
+						path: "/confirm-email",
+						meta: {
+							title: "Confirmar cambio de email",
+							description: "Confirma el nuevo email de tu cuenta con el enlace del correo.",
+						},
+					},
 				],
 			},
 		});

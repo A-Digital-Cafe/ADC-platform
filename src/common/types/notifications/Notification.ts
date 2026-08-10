@@ -60,7 +60,7 @@ export interface NotificationPreference {
 	updatedAt: Date;
 }
 
-/** Canales por defecto cuando el usuario no fijó preferencia para un topic. */
+/** @public Canales por defecto cuando el usuario no fijó preferencia para un topic. */
 export const DEFAULT_CHANNELS: Readonly<Record<NotificationChannel, boolean>> = {
 	inApp: true,
 	email: false,
@@ -122,7 +122,7 @@ export interface BroadcastInput {
 	data?: Record<string, unknown>;
 }
 
-/** Evento que viaja por el stream SSE hacia el cliente (campana del header). */
+/** @public Evento que viaja por el stream SSE hacia el cliente (campana del header). */
 export type NotificationStreamEvent =
 	| { type: "ready"; unread: number }
 	| { type: "notification"; unread: number; notification: Notification }

@@ -7,10 +7,10 @@
 
 import type { Block, TextAlign } from "../../ADC/types/learning.ts";
 
-/** Mime del documento ADC. El binario es el JSON UTF-8 de `AdcDocument`. */
+/** @public Mime del documento ADC. El binario es el JSON UTF-8 de `AdcDocument`. */
 export const ADC_DOCUMENT_MIME = "application/x-adc-document";
 
-/** Extensión sugerida para documentos ADC. */
+/** @public Extensión sugerida para documentos ADC. */
 export const ADC_DOCUMENT_EXT = "adcdoc";
 
 /** Fusión de celdas de una tabla extendida (coordenadas 0-based sobre `rows`). */
@@ -26,6 +26,7 @@ export interface TableMerge {
  * `page-break` fuerza salto de página (visual en pantalla, real al imprimir).
  * `table-x` extiende `table` con anchos de columna, fusiones y cabeceras de fila.
  * `margin-box` agrupa otros bloques con un margen lateral propio (sangría).
+ * @public
  */
 export type DocumentBlock =
 	| Block
@@ -48,7 +49,7 @@ export type DocumentBlock =
 			blocks: DocumentBlock[];
 	  };
 
-/** Tamaños de hoja soportados (pantalla e impresión). */
+/** @public Tamaños de hoja soportados (pantalla e impresión). */
 export type PageSizeId = "a4" | "letter" | "legal";
 
 /** Márgenes de página en cm. */
@@ -59,13 +60,13 @@ export interface PageMargins {
 	left: number;
 }
 
-/** Configuración de página del documento (paginación en pantalla e impresión). */
+/** @public Configuración de página del documento (paginación en pantalla e impresión). */
 export interface PageSetup {
 	size: PageSizeId;
 	margins: PageMargins;
 }
 
-/** Envelope serializado de un `.adcdoc`. */
+/** @public Envelope serializado de un `.adcdoc`. */
 export interface AdcDocument {
 	format: "adc-document";
 	version: 1;

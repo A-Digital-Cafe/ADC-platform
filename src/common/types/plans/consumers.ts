@@ -54,7 +54,7 @@ export function createSeatGate(resolvePlans: PlanResolver): SeatGate {
  */
 export type EntitlementsReader = (subject: PlanSubject) => Promise<EntitlementsDTO | null>;
 
-/** Construye un {@link EntitlementsReader} a partir del getter lazy del consumidor. */
+/** @public Construye un {@link EntitlementsReader} a partir del getter lazy del consumidor. */
 export function createEntitlementsReader(getEntitlements: EntitlementsGetter): EntitlementsReader {
 	return async (subject) => {
 		const entitlements = getEntitlements();
@@ -74,12 +74,13 @@ export function createEntitlementsReader(getEntitlements: EntitlementsGetter): E
  * el `-1` tal cual y hoy cada consumidor lo compara como un límite normal. Mapearlo a
  * `Infinity` acá convertiría "bloquea nada" en "sin límite" para drive, project-manager y
  * email de un plumazo.
+ * @public
  */
 export function featureNumber(value: FeatureValue | undefined, fallback: number): number {
 	return typeof value === "number" ? value : fallback;
 }
 
-/** Valor de una feature de tipo `enum`; `fallback` si no está o no es string. */
+/** @public Valor de una feature de tipo `enum`; `fallback` si no está o no es string. */
 export function featureString<T extends string>(value: FeatureValue | undefined, fallback: T): T {
 	return typeof value === "string" ? (value as T) : fallback;
 }

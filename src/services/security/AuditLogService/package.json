@@ -1,0 +1,10 @@
+{
+	"name": "@adc/audit-log-service",
+	"license": "ISC",
+	"author": "abbytec",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Persistent append-only audit trail for admin actions over personal data",
+	"type": "module",
+	"main": "index.ts"
+}

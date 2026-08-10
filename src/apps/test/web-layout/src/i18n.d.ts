@@ -10,7 +10,7 @@ interface I18nState {
 declare global {
 	interface Window {
 		__ADC_I18N__: I18nState;
-		t: (key: string, params?: Record<string, string>, namespace?: string) => string;
+		t: (key: string, params?: Record<string, string>, namespace?: string, fallback?: string) => string;
 		setLocale: (locale: string) => void;
 		getLocale: () => string;
 	}

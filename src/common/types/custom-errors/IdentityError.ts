@@ -29,6 +29,23 @@ type IdentityErrorTypes =
 	| "NO_CUSTOM_AVATAR"
 	| "INVALID_PROVIDER"
 	| "INVALID_SOURCE"
+	// Baja de cuenta programada
+	| "AUDIT_UNAVAILABLE"
+	| "INVALID_CANCEL_TOKEN"
+	| "NOT_CANCELLABLE"
+	// Reactivación por PUT bloqueada: una cuenta baneada sólo vuelve por el flujo de unban
+	| "USER_BANNED"
+	// Export de datos personales (1 cada 24 h; `data.retryAfterSeconds` alimenta el Retry-After)
+	| "EXPORT_RATE_LIMITED"
+	// Rectificación self-service (art. 16 Ley 25.326 / art. 16 RGPD)
+	| "INVALID_EMAIL_CHANGE_TOKEN"
+	| "EMAIL_DELIVERY_UNAVAILABLE"
+	// El despliegue no entrega correo afuera: una casilla externa no se puede verificar todavía
+	| "EXTERNAL_EMAIL_UNAVAILABLE"
+	// El buzón de plataforma que tomaría el username nuevo ya es de otro titular
+	| "MAILBOX_ADDRESS_TAKEN"
+	// Cooldown de 30 días entre cambios de username; `data.retryAfterSeconds` alimenta el Retry-After
+	| "USERNAME_CHANGE_COOLDOWN"
 	// Validation
 	| "FORBIDDEN"
 	| "INVALID_BODY"

@@ -113,6 +113,7 @@ opt‑in**: se declara en `config.json` → `privileges`.
 | `http:raw` | `fastify.getApp()` crudo | opt‑in |
 | `storage:register` | registrarse en StorageQuotaService | opt‑in |
 | `notifications:broadcast` | `NotificationService.broadcast()` (anuncio a TODOS los usuarios) | opt‑in |
+| `audit:write` | `AuditLogService.record/recordStrict()` (audit trail persistente) | opt‑in |
 | `registry:write`, `module:loader` | mutar registry / cargar código | **sólo infra** (nunca un módulo) |
 
 ## Checklist al crear/editar un módulo

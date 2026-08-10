@@ -20,18 +20,20 @@ export function resolvePriorityFn(strategy: PriorityStrategy): PriorityScoreFn {
 	return factory(strategy);
 }
 
-/** Ordena issues in-place por score descendente según strategy. */
+/** @public Ordena issues in-place por score descendente según strategy. */
 export function sortIssuesByPriority<T extends Pick<Issue, "priority">>(issues: T[], strategy: PriorityStrategy): T[] {
 	const scoreFn = resolvePriorityFn(strategy);
 	return [...issues].sort((a, b) => scoreFn(b.priority) - scoreFn(a.priority));
 }
 
+/** @public */
 export function normalizeUrgency(v: unknown): UrgencyImportance {
 	const n = Number(v);
 	if (Number.isNaN(n)) return 0;
 	return Math.max(0, Math.min(4, Math.trunc(n))) as UrgencyImportance;
 }
 
+/** @public */
 export function normalizeDifficulty(v: unknown): Difficulty {
 	if (v === null || v === undefined || v === "") return null;
 	const n = Number(v);

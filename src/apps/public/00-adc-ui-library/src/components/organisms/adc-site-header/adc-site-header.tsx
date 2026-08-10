@@ -72,7 +72,7 @@ export class AdcSiteHeader {
 				</header>
 
 				{/* Avisos de mantenimiento/anuncios, justo debajo del header (1 fetch/página, compartido). */}
-				<adc-banner-host api-base-url={this.apiBaseUrl}></adc-banner-host>
+				<adc-banner-host></adc-banner-host>
 
 				{/* Re-aceptación de documentos legales: se pinta sola sólo si hay algo pendiente. */}
 				<adc-legal-gate></adc-legal-gate>

@@ -17,8 +17,14 @@ import type { IdentityStats, OrgScopedManagers } from "@services/core/IdentityMa
 import type { IAuthVerifier } from "../auth-verifier.ts";
 import type { CapabilityToken } from "../../security/Capability.ts";
 
-/** Superficie pública del manager de usuarios (sin las primitivas pre-auth). */
-export type PublicUserManager = Omit<UserManager, "authenticate" | "verifyUserPassword">;
+/**
+ * Superficie pública del manager de usuarios: sin las primitivas pre-auth
+ * (`authenticate`, `verifyUserPassword`, `cancelSelfDeletionOnLogin` — reactiva sin
+ * verificar nada, así que sólo puede usarla quien acaba de validar la identidad) ni el
+ * hard delete (`hardDeleteDueUser`), que es infraestructura del stepper de retención —
+ * toda baja pasa por la cascada de purga, nunca por un borrado directo.
+ */
+export type PublicUserManager = Omit<UserManager, "authenticate" | "verifyUserPassword" | "cancelSelfDeletionOnLogin" | "hardDeleteDueUser">;
 
 /**
  * Interfaz pública del IdentityManagerService. Los getters de managers exponen los

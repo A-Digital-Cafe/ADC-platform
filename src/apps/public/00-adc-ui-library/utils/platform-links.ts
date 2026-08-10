@@ -227,11 +227,13 @@ export function resolvePlatformPath(appId: string, path: string): string | null 
  * Apps que exponen un panel federado de configuración de cuenta
  * (`settingsExpose` + `remoteName`). El host `my-account` itera esta lista y
  * carga el panel de cada una bajo demanda; las que estén offline se omiten.
+ * @public
  */
 export function getAccountSettingsApps(): PlatformApp[] {
 	return getPlatformApps().filter((a) => !!a.settingsExpose && !!a.remoteName);
 }
 
+/** @public */
 export function isPlatformUrl(rawUrl: string): boolean {
 	let url: URL;
 	try {
@@ -311,7 +313,7 @@ function decodeSegment(seg: string): string {
 	}
 }
 
-/** `true` si la URL apunta a un microfront conocido de la plataforma. */
+/** @public `true` si la URL apunta a un microfront conocido de la plataforma. */
 export function isPlatformLink(rawUrl: string): boolean {
 	return resolvePlatformLink(rawUrl) !== null;
 }

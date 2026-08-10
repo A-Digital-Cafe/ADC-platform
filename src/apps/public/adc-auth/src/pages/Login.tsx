@@ -4,6 +4,7 @@ import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { getBaseUrl } from "@common/utils/url-utils.js";
 import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
+import { OAuthLegalNotice } from "../components/OAuthLegalNotice.tsx";
 
 /** Base URL for API calls */
 const API_BASE = getBaseUrl(3000);
@@ -226,6 +227,8 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 							Google
 						</a>
 					</div>
+					{/* OAuth también puede CREAR una cuenta: el clickwrap tiene que estar acá igual que en Register. */}
+					<OAuthLegalNotice t={t} />
 				</div>
 			</adc-blur-panel>
 

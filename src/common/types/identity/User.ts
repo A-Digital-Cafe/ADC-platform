@@ -48,3 +48,9 @@ export interface ClientUser {
 export interface User extends ClientUser {
 	passwordHash: string;
 }
+
+/**
+ * Origen de una baja programada (`metadata.deletionReason`). Sólo `"self"` la cancela la propia
+ * persona; `"admin"` y `"ban"` se revierten por acción administrativa (reactivación / unban).
+ */
+export type DeletionReason = "self" | "admin" | "ban";

@@ -9,17 +9,26 @@ import { executeSaga } from "./helpers/executeSaga.js";
 import { CircuitBreaker } from "./parts/CircuitBreaker.ts";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.ts";
+import type { IdleJobDefinition, IdleJobStatus, IIdleOrchestrator } from "@common/types/operations/IIdleOrchestrator.ts";
+import type { CapabilityToken } from "@common/security/Capability.ts";
+import { IdleJobs } from "./parts/IdleJobs.ts";
 
 export type { Step, SagaStep, StepFunction, StepperResult } from "./types.js";
 export { CircuitBreaker, CircuitState, type CircuitBreakerConfig } from "./parts/CircuitBreaker.ts";
 
 export const HTTP_CHECK_TTL_SECONDS = 120; // 2min
-export default class OperationsService extends BaseService implements IOperationsService {
+
+/**
+ * Coordina **cuándo** corre el trabajo de la plataforma, no cómo se hace: `httpCheck`/`stepper`
+ * para lo que alguien pidió, {@link IIdleOrchestrator} para lo que nadie está esperando.
+ */
+export default class OperationsService extends BaseService implements IOperationsService, IIdleOrchestrator {
 	public readonly name = "OperationsService";
 
 	/** Per-operation circuit breaker - used by consumers only */
 	public readonly circuitBreaker: CircuitBreaker;
 
+	readonly #idle = new IdleJobs();
 	#redis: RedisProvider | null = null;
 	#stepperModel: Model<StepperDocument> | null = null;
 
@@ -35,7 +44,11 @@ export default class OperationsService extends BaseService implements IOperation
 		const mongo = this.getMyProvider<MongoProvider>("object/mongo");
 		await mongo.whenReady();
 		this.#stepperModel = mongo.createModel<StepperDocument>("OperationStep", stepperSchema);
-		this.logger.logOk("OperationsService iniciado");
+
+		const idle = this.#idle.start((this.config?.private ?? {}) as Record<string, unknown>, this.logger);
+		this.logger.logOk(
+			`OperationsService iniciado (trabajos ociosos: turno cada ${idle.tickMs / 1000}s, ocioso = CPU ≤ ${idle.maxCpuPercent}%)`
+		);
 	}
 
 	/**
@@ -99,8 +112,28 @@ export default class OperationsService extends BaseService implements IOperation
 		}
 	}
 
+	// ── Trabajos de momentos ociosos (IIdleOrchestrator) ──────────────────────
+	// Delegación pura: el gate por scope y el planificador viven en `parts/IdleJobs.ts`.
+
+	registerIdleJob(cap: CapabilityToken, job: IdleJobDefinition): void {
+		this.#idle.registerIdleJob(cap, job);
+	}
+
+	unregisterIdleJob(cap: CapabilityToken, id: string): boolean {
+		return this.#idle.unregisterIdleJob(cap, id);
+	}
+
+	unregisterIdleJobs(cap: CapabilityToken): number {
+		return this.#idle.unregisterIdleJobs(cap);
+	}
+
+	idleJobs(): IdleJobStatus[] {
+		return this.#idle.idleJobs();
+	}
+
 	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
+		this.#idle.stop();
 		this.#redis = null;
 		this.#stepperModel = null;
 		await super.stop(kernelKey);

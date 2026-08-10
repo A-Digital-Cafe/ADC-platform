@@ -8,6 +8,7 @@
 /** Dirección con al menos un punto en el dominio (RFC 5322 simplificada). */
 const EMAIL_RX = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
 
+/** @public */
 export function isValidEmailAddress(address: string): boolean {
 	return EMAIL_RX.test(address.trim());
 }

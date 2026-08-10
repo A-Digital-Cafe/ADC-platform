@@ -46,6 +46,11 @@ export interface OverrideActorCtx {
 export interface QuotaProfile {
 	effectiveLimit: number;
 	scope: QuotaScope;
+	/**
+	 * El límite no sale del plan contratado sino de la degradación por caída del motor de planes.
+	 * Lo consume la UI para explicarlo en vez de mostrar una cuota recortada sin motivo.
+	 */
+	degraded?: boolean;
 }
 
 /**
@@ -161,11 +166,20 @@ export class LimitsManager {
 		return plans;
 	}
 
-	/** Sin motor de planes: tier del contexto contra la matriz local, sin overrides. */
+	/**
+	 * Sin motor de planes: **límites del plan base**, que es lo que prometen los Términos y lo que
+	 * ya hacen Drive, PM, correo y el editor de imágenes al degradar. Antes se leía el `accountTier`
+	 * del usuario, que contradecía el texto publicado y además puede estar vencido justo cuando el
+	 * único servicio que conoce la baja es el que no responde.
+	 *
+	 * Sólo afecta a **consumo nuevo** —la cuota se chequea al subir, no al leer—, así que nadie
+	 * pierde acceso a lo que ya tiene. El `tier` real se conserva en `scope` para que la UI diga de
+	 * qué plan se degradó, y `degraded` marca que el número no es el del plan contratado.
+	 */
 	async #fallbackProfile(userId: string, orgId: string | null): Promise<QuotaProfile> {
 		if (orgId) {
 			const tier = await this.#orgTier(orgId);
-			return { effectiveLimit: STORAGE_ORG_TIER_LIMITS[tier] ?? STORAGE_ORG_TIER_LIMITS.default, scope: { kind: "org", tier } };
+			return { effectiveLimit: STORAGE_ORG_TIER_LIMITS.default, scope: { kind: "org", tier }, degraded: true };
 		}
 		let tier: AccountTier = "free";
 		try {
@@ -173,7 +187,7 @@ export class LimitsManager {
 		} catch (e) {
 			this.#logger.logWarn(`StorageQuota: error resolviendo el tier de ${userId}: ${(e as Error).message}`);
 		}
-		return { effectiveLimit: STORAGE_USER_TIER_LIMITS[tier] ?? STORAGE_USER_TIER_LIMITS.free, scope: { kind: "personal", tier } };
+		return { effectiveLimit: STORAGE_USER_TIER_LIMITS.free, scope: { kind: "personal", tier }, degraded: true };
 	}
 
 	async #orgTier(orgId: string): Promise<OrganizationTier> {

@@ -44,6 +44,16 @@ export class QuotaManager {
 		this.#logger.logInfo(`StorageQuota: app "${app.appId}" registrada`);
 	}
 
+	/**
+	 * Borra TODOS los contadores de un usuario (personal + orgs) al purgar su cuenta. Son datos
+	 * derivados: si sobrevive contenido de org que los referencia, la reconciliación reconstruye la
+	 * fila desde `computeUsage`, ya con un id anónimo.
+	 */
+	async purgeUserUsage(userId: string): Promise<number> {
+		const res = await this.#model.deleteMany({ userId });
+		return res.deletedCount ?? 0;
+	}
+
 	/** Apps registradas con el mínimo resuelto para el contexto dado. */
 	listApps(scope: QuotaScope): StorageAppInfo[] {
 		return [...this.#apps.values()].map(({ appId, label }) => ({ appId, label, minBytes: getStorageAppMinBytes(appId, scope) }));
@@ -134,6 +144,7 @@ export class QuotaManager {
 			totalCount: doc?.totalCount ?? 0,
 			apps: doc?.apps ?? {},
 			effectiveLimit: profile.effectiveLimit,
+			degraded: profile.degraded,
 			updatedAt: doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : undefined,
 		};
 	}

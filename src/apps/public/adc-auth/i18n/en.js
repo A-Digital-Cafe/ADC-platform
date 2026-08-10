@@ -43,6 +43,31 @@ export default {
 		oauthLegalBefore: "By continuing with Discord or Google you accept the",
 		oauthLegalAfter: ", and you declare that you are at least {{minAge}} years old or the minimum age required in your country."
 	},
+	cancelDeletion: {
+		title: "Cancel your account deletion",
+		intro: "You are about to cancel the scheduled deletion of your account. Once confirmed, the account is reactivated and nothing is deleted.",
+		action: "Cancel deletion",
+		working: "Cancelling...",
+		successTitle: "Your account was reactivated",
+		successBody: "The deletion was cancelled and your data will not be removed. You can sign in with your usual username and password.",
+		goToLogin: "Sign in",
+		errorBody: "The link is not valid, was already used or expired. If your account is still within the 30-day window, contact us and we will sort it out.",
+		missingToken: "The link code is missing. Open the link exactly as it arrived in the email.",
+		tooMany: "Too many attempts in a row. Wait a minute and try again."
+	},
+	confirmEmail: {
+		title: "Confirm the email change",
+		intro: "You are about to confirm this mailbox as the new email of your account. If you did not request this change, close this page: without your confirmation the email does not change.",
+		action: "Confirm the change",
+		working: "Confirming...",
+		successTitle: "Email updated",
+		successBody: "Your account now uses the new mailbox: platform notices will arrive there.",
+		goToLogin: "Sign in",
+		errorBody: "The link is not valid, was already used or expired (it lasts 60 minutes). Request the change again from your account: a new link is issued.",
+		emailTaken: "That address was registered to another account in the meantime. Request the change again with a different mailbox.",
+		missingToken: "The link code is missing. Open the link exactly as it arrived in the email.",
+		tooMany: "Too many attempts in a row. Wait a minute and try again."
+	},
 	errors: {
 		// Form-specific errors (shown as inline callout)
 		MISSING_CREDENTIALS: "Username and password are required",
@@ -52,7 +77,7 @@ export default {
 		ACCOUNT_BLOCKED_TEMP: "Account temporarily blocked. Try again in {{time}}.",
 		ACCOUNT_BLOCKED_PERMANENT: "Your account has been permanently blocked. Contact support.",
 		MISSING_FIELDS: "Username, email and password are required",
-		INVALID_USERNAME: "Username must be between 3 and 30 characters",
+		INVALID_USERNAME: "Username must be 3–30 characters and only allows letters, numbers, dot, hyphen and underscore",
 		WEAK_PASSWORD: "Password must be at least 8 characters",
 		INVALID_EMAIL: "Invalid email address",
 		USERNAME_EXISTS: "Username is already taken",

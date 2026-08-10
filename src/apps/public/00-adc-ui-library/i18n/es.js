@@ -37,6 +37,10 @@ export default {
 		CHECKOUT_FAILED: "No se pudo iniciar la contratación. Inténtalo de nuevo en unos minutos.",
 		GATEWAY_UNAVAILABLE: "No hay ninguna pasarela de pago disponible en este momento.",
 		GATEWAY_ERROR: "La pasarela de pago no respondió. Inténtalo de nuevo en unos minutos.",
+		// Rectificación de facturación (PATCH /api/subscriptions/billing)
+		COUNTRY_NOT_SUPPORTED: "El país seleccionado no se puede facturar.",
+		BILLING_DATA_REQUIRED: "Completá nombre y domicilio para facturar fuera de Argentina.",
+		BILLING_UPDATE_FAILED: "No se pudieron guardar los datos de facturación. Probá de nuevo en unos minutos.",
 		// Errores de adjuntos
 		ATTACHMENT_BAD_INPUT: "Datos de adjunto inválidos",
 		ATTACHMENT_TOO_LARGE: "El archivo supera el tamaño máximo permitido",
@@ -77,6 +81,7 @@ export default {
 		privacy: "Privacidad",
 		terms: "Términos",
 		cookies: "Cookies",
+		licenses: "Licencias",
 		contact: "Contacto",
 		team: "Equipo",
 		help: "Ayuda",

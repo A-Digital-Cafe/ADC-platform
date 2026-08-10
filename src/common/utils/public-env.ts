@@ -1,5 +1,3 @@
-export { PUBLIC_ENV_VARS, type PublicEnvKey } from "./public-env-vars.js";
-
 import type { PublicEnvKey } from "./public-env-vars.js";
 import { PUBLIC_ENV_VALUES } from "./public-env.generated.js";
 
@@ -16,7 +14,7 @@ export function publicEnv(key: PublicEnvKey): string {
 	return PUBLIC_ENV_VALUES[key] ?? "";
 }
 
-/** URL de la política de seguridad publicada en el repositorio, o vacío si no hay repo configurado. */
+/** @public URL de la política de seguridad publicada en el repositorio, o vacío si no hay repo configurado. */
 export function securityPolicyUrl(): string {
 	const repo = publicEnv("sourceRepoUrl");
 	return repo ? `${repo.replace(/\/+$/, "")}/blob/main/.github/SECURITY.md` : "";

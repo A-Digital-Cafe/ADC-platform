@@ -8,6 +8,7 @@ import type { Project } from "@common/types/project-manager/Project.ts";
  * El foco son las columnas WIP-limitadas, que son las que declaran el trabajo en curso: se activa
  * cuando una alcanza su límite, o sobre todas las limitadas si `forced`. Sin límites WIP
  * configurados devuelve vacío incluso con `forced`: apagar el tablero entero no es un modo enfoque.
+ * @public
  */
 export function computeMutedIssueIds(project: Project, issues: Issue[], forced?: boolean): Set<string> {
 	const muted = new Set<string>();

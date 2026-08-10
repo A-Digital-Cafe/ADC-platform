@@ -68,6 +68,36 @@ recursos disponibles, considerando tu preferencia (`plus` vs `pro`).
 Para recibir la recompensa necesitás una cuenta (el beneficio se aplica a tu
 usuario). El otorgamiento lo confirma un admin/Security Manager al resolver.
 
+### Vigencia y reglas del programa
+
+- El programa es **voluntario**. Podemos modificarlo o discontinuarlo con aviso
+  publicado en esta página; **los cambios no afectan reportes ya recibidos**, que
+  se resuelven con las reglas vigentes al momento de recibirlos. Lo decimos
+  expresamente porque una promesa pública de recompensa formulada sin plazo no
+  puede quedar abierta para siempre, y preferimos fijar cómo termina antes que
+  discutirlo después.
+- La **severidad la determina ADC** y es **revisable a tu pedido**: si no estás de
+  acuerdo con la clasificación, pedilo por el mismo ticket y la mira una persona
+  con tus argumentos a la vista.
+- **En duplicados se reconoce al primero.** Ver abajo.
+
+### Duplicados
+
+Si tu reporte describe algo que ya nos habían reportado, la recompensa es del
+**primero** que lo reportó — pero eso no convierte tu hallazgo en inválido, y no
+lo tratamos como si lo fuera.
+
+El ticket se cierra como **`Duplicado`**, un estado propio y distinto de
+`Descartado`, y el log público muestra **«Duplicado de STATUS-nn»** con la clave
+del reporte original. La diferencia importa: `Descartado` es donde van los
+reportes inválidos, sin impacto demostrable o de mala fe, y ese log lo lee
+cualquiera. Que alguien haya acertado y llegado segundo no debería quedar
+registrado igual que si hubiera reportado cualquier cosa.
+
+Si el reporte original todavía no estaba resuelto cuando llegó el tuyo y aportás
+información que cambia el alcance o la severidad, decilo en el ticket: eso puede
+justificar una recompensa propia aunque el hallazgo base sea el mismo.
+
 ### Transparencia
 
 Cada ticket de seguridad entra en un **log público** (subdominio `status`) con:
@@ -102,13 +132,25 @@ No iniciaremos acciones legales ni denuncias por investigación de seguridad de
 - Limitá el impacto: detenete al confirmar la vulnerabilidad y reportá.
 - Respetá la confidencialidad hasta que publiquemos el fix.
 
+**Consideramos esta política una autorización expresa del titular del sistema a
+los fines del art. 153 bis del Código Penal argentino**, mientras te mantengas
+dentro de su alcance. Ese artículo castiga el acceso indebido a un sistema
+informático: con esta autorización, el acceso que hagas investigando de buena
+fe según estas reglas no es indebido.
+
+Esa autorización **no se extiende a la infraestructura de terceros** —Cloudflare,
+MongoDB Atlas, las pasarelas de pago, los proveedores de identidad—. Tienen sus
+propias políticas de divulgación y no podemos autorizarte en su nombre: si tu
+investigación toca uno de ellos, va por su programa, no por el nuestro.
+
 ## Alcance (scope)
 
 **Dentro:** `adigitalcafe.com` y sus subdominios, las apps de la plataforma y los
 presets de este monorepo.
-**Fuera:** servicios de terceros, DoS/volumétricos, datos de terceros, ingeniería
+**Quedan Fuera:** servicios de terceros, DoS/volumétricos, datos de terceros, ingeniería
 social, reportes automáticos de escáneres sin impacto demostrable, y
-vulnerabilidades ya conocidas/reportadas.
+vulnerabilidades ya conocidas o ya reportadas (que igual se reconocen como
+válidas — ver [Duplicados](#duplicados)).
 
 ---
 
@@ -143,6 +185,23 @@ increase them or agree on other benefits from the ticket, considering your
 | Medium / High | 1 month **plus** · or 1-10 days **pro** |
 | Critical      | 3 months **plus** · or 1 month **pro**  |
 
+**Programme terms** — the programme is voluntary and may be modified or
+discontinued with notice published on this page; **changes do not affect reports
+already received**, which are resolved under the rules in force when they came
+in. Severity is determined by ADC and is **reviewable on request** from the same
+ticket. In duplicates, the first reporter is the one rewarded.
+
+**Duplicates** — if your report describes something already reported to us, the
+reward goes to whoever reported it first — but that does not make your finding
+invalid, and we do not treat it as if it did. The ticket is closed as
+**`Duplicate`**, a status of its own and distinct from `Discarded`, and the
+public log shows **"Duplicate of STATUS-nn"** with the original report's key.
+`Discarded` is where invalid, no-impact or bad-faith reports go, and that log is
+public: being right but second should not look the same as reporting noise. If
+the original was still unresolved when yours arrived and you add information that
+changes the scope or severity, say so in the ticket — that can justify a reward
+of its own.
+
 **Transparency** — every security ticket enters a public log (`status`
 subdomain) with: ticket id, date/time, **SHA-256 hash of the description**,
 status and severity. That is all that is published at intake. The report's
@@ -158,12 +217,18 @@ survive: your handle is removed from the ticket.
 research that follows this policy: test only your own accounts; no access to
 third-party data; no DoS/DDoS; no social engineering/phishing/physical access;
 minimize impact and stop once confirmed; keep it confidential until the fix
-ships.
+ships. **We consider this policy an express authorisation by the system owner
+for the purposes of art. 153 bis of the Argentine Criminal Code** (unauthorised
+access to a computer system), as long as you stay within its scope. That
+authorisation **does not extend to third-party infrastructure** — Cloudflare,
+MongoDB Atlas, payment gateways, identity providers: they run their own
+disclosure programmes and we cannot authorise you on their behalf.
 
 **Scope** — In: `adigitalcafe.com` and subdomains, platform apps, and this
-monorepo's presets. Out: third-party services, DoS/volumetric tests,
-third-party data, social engineering, no-impact scanner output, and
-already-known issues.
+monorepo's presets. Out of scope: third-party services, DoS/volumetric tests,
+third-party data, social engineering, no-impact scanner output, and issues
+already known or already reported (still acknowledged as valid — see
+Duplicates above).
 
 Gracias por ayudar a mantener seguro el ecosistema de **ADC Platform** ·
 Thanks for helping keep the **ADC Platform** ecosystem safe.

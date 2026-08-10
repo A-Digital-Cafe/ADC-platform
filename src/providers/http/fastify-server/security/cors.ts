@@ -56,6 +56,7 @@ function originMatchesRegisteredHost(origin: string, hosts: string[]): boolean {
  * Pregunta distinta de la de CORS —que decide quién puede llamar a la API con credenciales— y por
  * eso va aparte: la usan el anti-CSRF del túnel de Drive y los headers del SSE de notificaciones
  * (que va sobre el socket hijackeado y se saltea el hook de `@fastify/cors`).
+ * @public
  */
 export function isPlatformOrigin(origin: string | undefined, registeredHosts: string[]): boolean {
 	if (!origin) return false;

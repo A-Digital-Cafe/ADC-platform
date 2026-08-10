@@ -115,6 +115,41 @@ class MyService extends BaseService {
 
 > `@Distributed` **no garantiza** ejecución en worker — `ExecutionManagerService` decide según carga.
 
+## Trabajos de momentos ociosos (`OperationsService`)
+
+Barridos que **nadie está esperando**: verificar contenido ya subido, reconciliar contadores,
+purgar. No van en un `setInterval` por módulo — cinco módulos con su propio timer no se coordinan
+y en la primera hora punta corren los cinco contra el mismo event loop.
+
+Viven en `OperationsService` junto a la idempotencia (`httpCheck`) y las sagas (`stepper`) porque
+los tres resuelven lo mismo: **cuándo** corre el trabajo, no cómo se hace. Uno garantiza que algo
+pedido pase una sola vez, otro que una secuencia se complete o se revierta, éste que lo que nadie
+pidió todavía se haga sin estorbar. La implementación está desacoplada en
+`parts/IdleJobs.ts` (gate por scope + configuración) y `parts/IdleScheduler.ts` (el planificador).
+
+```typescript
+// En start(): dependencia OPCIONAL, resuelta por nombre.
+this.tryGetMyService<IIdleOrchestrator>("OperationsService")?.registerIdleJob(this.getCapability(), {
+	id: "content-verification",
+	intervalMs: 300_000,
+	run: (ctx) => verifier.runBatch(ctx), // devuelve cuántas unidades procesó
+});
+
+// En stop(): el kernel garantiza que se llame al descargar o deshabilitar el módulo.
+this.tryGetMyService<IIdleOrchestrator>("OperationsService")?.unregisterIdleJobs(this.getCapability());
+```
+
+- Requiere el scope **`idle:register`** en `privileges`. El dueño sale de `cap.owner`: nadie
+  registra ni da de baja trabajos ajenos, y registrar dos veces el mismo `id` **reemplaza**.
+- El planificador corre **un lote por turno**, sólo con el proceso ocioso, y le pasa una
+  `AbortSignal` con presupuesto: hay que mirarla entre unidad y unidad. Devolver `0` espacia el
+  trabajo progresivamente.
+- **El avance se guarda en la base del dueño** (una marca por documento procesado), no en el
+  planificador: es lo que hace reanudable el barrido tras un reinicio.
+
+Contrato en `@common/types/operations/IIdleOrchestrator.ts`; frenos globales en las variables
+`IDLE_*` del `.env` de la raíz.
+
 ## Distribución de Responsabilidades
 
 ### Kernel

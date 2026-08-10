@@ -31,5 +31,14 @@
 				"retryDelay": 5000
 			}
 		}
-	]
+	],
+	"private": {
+		"idleTickSeconds": "${IDLE_TICK_SECONDS:-30}",
+		"idleDefaultIntervalSeconds": "${IDLE_DEFAULT_INTERVAL_SECONDS:-300}",
+		"idleBatchBudgetMs": "${IDLE_BATCH_BUDGET_MS:-2000}",
+		"idleMaxBackoffMinutes": "${IDLE_MAX_BACKOFF_MINUTES:-360}",
+		"idleMaxConsecutiveFailures": "${IDLE_MAX_CONSECUTIVE_FAILURES:-5}",
+		"idleMaxCpuPercent": "${IDLE_MAX_CPU_PERCENT:-35}",
+		"idleMaxLoadPerCore": "${IDLE_MAX_LOAD_PER_CORE:-0.7}"
+	}
 }

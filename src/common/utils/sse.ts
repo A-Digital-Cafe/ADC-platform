@@ -14,7 +14,7 @@ import type { RawResponseSink } from "./http-stream.ts";
  * `@common` no puede depender de Fastify, así que los tipos son estructurales.
  */
 
-/** Conexión SSE viva. El hub sólo ve esto; no conoce Fastify ni el socket. */
+/** @public Conexión SSE viva. El hub sólo ve esto; no conoce Fastify ni el socket. */
 export interface SseConnection {
 	/** Escribe un bloque ya formateado en el stream. */
 	send: (chunk: string) => void;
@@ -25,10 +25,10 @@ export interface SseConnection {
 /** Cadencia del comentario de keep-alive. Por debajo del timeout de inactividad de los proxies. */
 const SSE_HEARTBEAT_MS = 25_000;
 
-/** Comentario SSE de keep-alive: no llega como evento al `EventSource`, sólo mantiene vivo el socket. */
+/** @public Comentario SSE de keep-alive: no llega como evento al `EventSource`, sólo mantiene vivo el socket. */
 export const SSE_PING = ": ping\n\n";
 
-/** Serializa un evento al formato del wire (`data: <json>\n\n`). */
+/** @public Serializa un evento al formato del wire (`data: <json>\n\n`). */
 export function sseEvent(payload: unknown): string {
 	return `data: ${JSON.stringify(payload)}\n\n`;
 }
@@ -47,7 +47,7 @@ function sseHeaders(extra?: Record<string, string>): Record<string, string> {
 	};
 }
 
-/** Superficie mínima del request crudo: sólo hace falta enterarse de que el cliente cerró. */
+/** @public Superficie mínima del request crudo: sólo hace falta enterarse de que el cliente cerró. */
 export interface RawRequestSource {
 	on: (event: string, listener: () => void) => void;
 }
@@ -60,6 +60,7 @@ export interface RawRequestSource {
  *
  * Tras esto Fastify ya no administra la respuesta: todo lo que pueda fallar (autenticación,
  * resolución del dispositivo) tiene que haberse validado ANTES.
+ * @public
  */
 export function openSseStream(
 	raw: RawResponseSink,
@@ -100,6 +101,7 @@ export function openSseStream(
  *
  * `unref` para que no sostenga el proceso vivo — un intervalo referenciado deja al kernel sin
  * poder salir aunque no quede ninguna conexión.
+ * @public
  */
 export class SseHeartbeat {
 	#timer: ReturnType<typeof setInterval> | null;
