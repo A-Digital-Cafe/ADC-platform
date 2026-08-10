@@ -292,22 +292,28 @@ export class BanRepository {
 	/**
 	 * Desactiva los bans temporales ya vencidos. Los lookups ya los ignoran por `expiresAt`,
 	 * pero mientras sigan `active` no se minimizan ni entran en la ventana de retención.
+	 *
+	 * Devuelve además los `userId` afectados (sin repetir; los bans por email/IP sueltos no tienen):
+	 * desactivar la fila no reactiva la cuenta, y quien sabe a quién hay que reactivar es este
+	 * barrido. Ver `#startExpiredSweep`.
 	 */
-	async deactivateExpiredBans(): Promise<number> {
+	async deactivateExpiredBans(): Promise<{ count: number; userIds: string[] }> {
 		const query = { active: true, expiresAt: { $ne: null, $lte: new Date() } };
-		const docs = await this.model.find(query, { emailHashes: 1, ipHashes: 1, _id: 0 }).lean();
-		if (!docs.length) return 0;
+		const docs = await this.model.find(query, { emailHashes: 1, ipHashes: 1, userId: 1, _id: 0 }).lean();
+		if (!docs.length) return { count: 0, userIds: [] };
 
 		const allEmails = new Set<string>();
 		const allIps = new Set<string>();
+		const userIds = new Set<string>();
 		for (const d of docs) {
 			for (const h of d.emailHashes || []) allEmails.add(h);
 			for (const h of d.ipHashes || []) allIps.add(h);
+			if (d.userId) userIds.add(d.userId);
 		}
 
 		await this.model.updateMany(query, deactivateUpdate("expiración automática"));
 		await this.#syncRedisRemoveIfOrphan([...allEmails], [...allIps]);
-		return docs.length;
+		return { count: docs.length, userIds: [...userIds] };
 	}
 
 	/**

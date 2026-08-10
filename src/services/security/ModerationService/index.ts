@@ -80,12 +80,15 @@ export default class ModerationService extends BaseService implements IModeratio
 		this.#repo = new BanRepository(BanModel, redis, this.logger);
 		await this.#repo.warmupRedisCache();
 		await this.#minimizeInactive();
-		this.#startExpiredSweep();
 
 		this.#identityService = this.#tryGet<IIdentityManagerService>("service", "IdentityManagerService");
 		this.#authedRepo = this.#identityService
 			? new BanRepository(BanModel, redis, this.logger, () => this.#identityService!.createAuthVerifier())
 			: this.#repo;
+
+		// Después de resolver Identity: la primera pasada también reactiva cuentas (igual tolera
+		// que no esté, porque es una dependencia opcional del despliegue).
+		this.#startExpiredSweep();
 
 		const pengubot = this.#tryGet<MongoProvider>("provider", "pengubot@object/mongo");
 		if (pengubot && this.#identityService) {
@@ -186,14 +189,70 @@ export default class ModerationService extends BaseService implements IModeratio
 	#startExpiredSweep(): void {
 		const sweep = async () => {
 			try {
-				const n = await this.#requireRepo().deactivateExpiredBans();
-				if (n) this.logger.logInfo(`[ModerationService] ${n} ban(s) vencidos desactivados y minimizados`);
+				const { count, userIds } = await this.#requireRepo().deactivateExpiredBans();
+				if (count) this.logger.logInfo(`[ModerationService] ${count} ban(s) vencidos desactivados y minimizados`);
+				await this.#reactivateAfterExpiredBans(userIds);
 			} catch (err: any) {
 				this.logger.logWarn(`[ModerationService] barrido de bans vencidos falló: ${err?.message || err}`);
 			}
 		};
 		void sweep();
 		this.#expiredSweep = setInterval(() => void sweep(), EXPIRED_SWEEP_INTERVAL_MS);
+	}
+
+	/**
+	 * Reactiva las cuentas cuyo ban temporal acaba de vencer. Sin esto la fila queda inactiva pero
+	 * `isActive` sigue en `false`, así que el login sigue rechazando hasta un unban manual: la
+	 * sanción temporal se comportaba como permanente.
+	 *
+	 * Va por los managers INTERNOS (el barrido no tiene actor ni token que ofrecer) y sólo levanta
+	 * la desactivación cuando la causa es exactamente ese ban vencido: `unbanUser` borra también
+	 * `scheduledDeletionAt`/`deletionReason`/`deletionRequestedAt`/`deletionCancelTokenHash`, de modo
+	 * que reactivar a ciegas RESUCITARÍA una cuenta que pidió la baja antes de que la banearan.
+	 * Un usuario que falle no corta el resto.
+	 */
+	async #reactivateAfterExpiredBans(userIds: string[]): Promise<void> {
+		if (!userIds.length) return;
+		if (!this.#identityService) {
+			this.logger.logWarn(`[ModerationService] IdentityManagerService no disponible: ${userIds.length} cuenta(s) siguen desactivadas`);
+			return;
+		}
+		const identity = this.#identityService;
+		const internal = identity._internal(this.getCapability());
+		const now = Date.now();
+		const reactivated: string[] = [];
+
+		for (const userId of userIds) {
+			try {
+				const user = await internal.users.getUser(userId);
+				if (!user || user.isActive) continue;
+				const meta = (user.metadata ?? {}) as Record<string, unknown>;
+				if (!meta.bannedAt) continue; // inactiva por otra cosa (baja, desactivación admin)
+				const expiresAt = meta.banExpiresAt;
+				if (!expiresAt || new Date(expiresAt as string | Date).getTime() > now) continue;
+				// Con una baja programada encima NO se toca, aunque el ban haya vencido: `unbanUser`
+				// la borraría junto con la metadata del ban y la cuenta volvería de entre los muertos
+				// (o peor, con la cascada de purga ya empezada). Ahí decide un unban manual.
+				if (meta.scheduledDeletionAt) {
+					this.logger.logWarn(`[ModerationService] ${userId} tiene baja programada: el ban venció pero la reactivación queda a mano`);
+					continue;
+				}
+
+				await internal.users.unbanUser(userId);
+				identity.permissions.invalidateUser(userId);
+				reactivated.push(userId);
+			} catch (err: any) {
+				this.logger.logWarn(`[ModerationService] reactivación de ${userId} tras ban vencido falló: ${err?.message || err}`);
+			}
+		}
+
+		if (!reactivated.length) return;
+		this.logger.logInfo(`[ModerationService] ${reactivated.length} cuenta(s) reactivadas por vencimiento del ban`);
+		this.#notifySecurity({
+			title: "Bans vencidos: cuentas reactivadas",
+			body: `Vencieron ${reactivated.length} ban(s) temporal(es) y las cuentas volvieron a estar activas.`,
+			data: { userIds: reactivated },
+		});
 	}
 
 	/** Crea ban anti-evasión a partir de un usuario; recolecta email/linkedEmails e IPs recientes (3h). */
