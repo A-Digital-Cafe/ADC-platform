@@ -72,6 +72,13 @@ export interface EmailMessage {
 	read: boolean;
 	starred: boolean;
 
+	/**
+	 * Cuándo **entró** el mensaje a la papelera (`null` fuera de ella). De acá parte la retención:
+	 * `updatedAt` no sirve porque lo mueve cualquier cambio (marcar leído, destacar), así que abrir
+	 * un mensaje en la papelera le reiniciaría el plazo de borrado.
+	 */
+	trashedAt?: Date | null;
+
 	/** Programación de envío. */
 	scheduledAt?: Date | null;
 	sentAt?: Date | null;
