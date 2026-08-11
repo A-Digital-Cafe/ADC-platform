@@ -29,8 +29,12 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/terms",
 		requiresAcceptance: true,
+		// Corregida el 2026-08-10 sin bump por el mismo criterio que privacy: no rige hasta el
+		// 2026-09-07. La tabla de edad mínima por país deja de enumerar Estados miembros de la UE
+		// (ver el memo de alcance territorial en el repo privado) y pasa a una regla única de 13
+		// años; el resto de los países queda como referencia informativa, no vinculante.
 		// sha256sum presets/help/apps/help/src/pages/TermsPage.tsx
-		contentHash: "9877c497c88caaa210bd54ac0d903300061b502fdc9a1efdb55ff91c963755c7",
+		contentHash: "af5fff04d3f66786b7c67de8380ded94dba19960d4942919562f6ed40bf02d78",
 	},
 	privacy: {
 		id: "privacy",
@@ -50,7 +54,7 @@ export const LEGAL_DOCUMENTS = {
 		// informa de más, nunca recorta. Contrapartida asumida: las altas posteriores al 2026-08-08
 		// llevan sellado el hash anterior, recuperable del historial de git. Queda en git.
 		// sha256sum presets/help/apps/help/src/pages/PrivacyPage.tsx
-		contentHash: "e1af1c65773cd7144a359caf199a009c3ba6231090372c7da2ecc51efeaffbac",
+		contentHash: "f7ef8c2e06cce4e1b0a105e3299d1a36cd2a819e36399662cc664dc49c63db08",
 	},
 	cookies: {
 		id: "cookies",
@@ -65,7 +69,7 @@ export const LEGAL_DOCUMENTS = {
 		// Corregida otra vez el 2026-08-10, esta vez sumando uno: el servidor STUN de Google que el
 		// túnel P2P del Drive contacta al abrir una transferencia entre dispositivos.
 		// sha256sum presets/help/apps/help/src/pages/CookiesPage.tsx
-		contentHash: "9008e667402fa4aa9a1d08fe745152332a0d0151550afb6169412231f112b9e0",
+		contentHash: "d1e67164460e052490f802adc5bf0349c5a863af286a8c72c740fbdf73e34020",
 	},
 	dpa: {
 		id: "dpa",
@@ -74,8 +78,11 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/dpa",
 		requiresAcceptance: false,
+		// Corregida el 2026-08-10 sin bump por el mismo criterio que privacy: no rige hasta el
+		// 2026-09-07. Se excluye a organizaciones establecidas en el EEE (declaración, garantía e
+		// indemnidad), ver el memo de alcance territorial en el repo privado.
 		// sha256sum presets/help/apps/help/src/pages/DpaPage.tsx
-		contentHash: "b20fcb6c159bcd9ab20ad8681c8d3d1750690b3a43d23c568640b0ee7621d206",
+		contentHash: "63dab1fb342682b7613d5faa0f24997f5fb11a3172496ce3fc68a8dcb2b3d36d",
 	},
 } as const;
 
