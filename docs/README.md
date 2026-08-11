@@ -27,6 +27,7 @@ README enruta por categoría, no re-lista cada archivo).
   [breach-response](guides/breach-response.md) (incidentes que afectan datos personales),
   [desktop-clients](guides/desktop-clients.md) (clientes que se publican en npm),
   [discord-oauth](guides/discord-oauth.md), [email-dns-setup](guides/email-dns-setup.md),
+  [github-deploy-auth](guides/github-deploy-auth.md) (device flow para deploys y clones de presets),
   [name-policy](guides/name-policy.md) (alias de correo y usernames prohibidos),
   [ports](guides/ports.csv), [security-ci](guides/security-ci.md).
 
