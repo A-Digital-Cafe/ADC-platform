@@ -148,6 +148,12 @@ export interface BreachAffected {
 	userId: string;
 	notifiedAt: Date | null;
 	outcome: "pending" | "queued" | "sent" | "failed";
+	/**
+	 * Copia del `closedAt` del incidente, sellada al cerrarlo. Existe sólo para que la retención
+	 * de la audiencia sea la misma que la del incidente sin depender de un `$lookup`: el TTL de
+	 * Mongo mira un campo de la propia colección. `null` mientras el incidente siga abierto.
+	 */
+	closedAt: Date | null;
 }
 
 /** @public Resultados que todavía no salieron hacia nadie: son los que un reintento vuelve a tomar. */
@@ -155,6 +161,21 @@ export const BREACH_UNREACHED_OUTCOMES: readonly BreachAffected["outcome"][] = [
 
 /** Plazo del compromiso publicado en `/privacy` §11 (arts. 33-34 RGPD como compromiso propio). */
 export const BREACH_AUTHORITY_DEADLINE_HOURS = 72;
+
+/**
+ * Retención del registro del art. 33.5: **5 años desde el cierre** del incidente, no desde su
+ * detección — mientras esté abierto no vence nada, porque un incidente sin cerrar todavía es
+ * gestión y no archivo.
+ *
+ * El plazo se elige por la prescripción genérica del art. 2560 del CCyC: pasado ese tiempo, la
+ * prueba de que la decisión de notificar —o de no hacerlo— fue correcta ya no tiene a quién
+ * oponerse. La alternativa era conservarlo indefinidamente, que es más fácil de sostener
+ * técnicamente y más difícil de justificar ante el principio de limitación del plazo.
+ *
+ * Al cambiarlo: enmendar `/privacy` §5 y la actividad 16 del RAT, y volver a declarar la base
+ * «Seguridad, moderación y auditoría» en el RNBD.
+ */
+export const BREACH_DEFAULT_RETENTION_DAYS = 1825;
 
 /** @public Alta de un incidente: lo mínimo para que exista y el reloj empiece a correr. */
 export interface BreachOpenInput {

@@ -244,6 +244,9 @@ export class BreachRepository {
 
 		push.events = { at: new Date(), actorUserId, to: input.to, note: input.note?.trim().slice(0, MAX_TEXT) || "" };
 		await this.#model.updateOne({ id }, { $set: patch, $push: push });
+		// La audiencia caduca con el incidente: sin esta copia del `closedAt`, el TTL de
+		// `breach_affected` no tendría de dónde colgar y la lista sobreviviría a su prueba.
+		if (patch.closedAt) await this.#affected.updateMany({ breachId: id }, { $set: { closedAt: patch.closedAt } });
 		return this.get(id);
 	}
 
@@ -289,7 +292,7 @@ export class BreachRepository {
 		await this.#affected.deleteMany({ breachId: id });
 		if (unique.length > 0) {
 			await this.#affected.insertMany(
-				unique.map((userId) => ({ breachId: id, userId, notifiedAt: null, outcome: "pending" as const })),
+				unique.map((userId) => ({ breachId: id, userId, notifiedAt: null, outcome: "pending" as const, closedAt: null })),
 				{ ordered: false }
 			);
 		}

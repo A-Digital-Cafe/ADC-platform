@@ -59,11 +59,11 @@ const subjectsSchema = new Schema(
 );
 
 /**
- * Colección `breach_incidents`. **Sin TTL, a diferencia del audit log**: el registro del
- * art. 33.5 es la prueba de que la decisión de notificar —o de no hacerlo— fue correcta, y
- * una prueba que se autodestruye no sirve.
+ * Colección `breach_incidents`. El TTL cuelga de `closedAt`, no de `createdAt`: Mongo ignora los
+ * documentos cuyo campo indexado no es una fecha, así que **un incidente abierto no caduca nunca**
+ * y el reloj de los 5 años sólo arranca cuando se cierra. Ver `BREACH_DEFAULT_RETENTION_DAYS`.
  */
-export function buildBreachSchema(): Schema<BreachRecord> {
+export function buildBreachSchema(retentionSeconds: number): Schema<BreachRecord> {
 	const schema = new Schema<BreachRecord>(
 		{
 			id: { type: String, required: true, unique: true },
@@ -97,6 +97,8 @@ export function buildBreachSchema(): Schema<BreachRecord> {
 	schema.index({ createdAt: -1, id: -1 });
 	// Barrido del reloj de 72 h: incidentes abiertos ordenados por vencimiento.
 	schema.index({ state: 1, authorityDeadlineAt: 1 });
+	// Retención del art. 33.5: Mongo borra el incidente pasado el plazo desde su cierre.
+	schema.index({ closedAt: 1 }, { expireAfterSeconds: retentionSeconds });
 
 	return schema;
 }
@@ -105,13 +107,14 @@ export function buildBreachSchema(): Schema<BreachRecord> {
  * Colección `breach_affected`: audiencia **y** libro de entregas a la vez. Se congela antes de
  * enviar porque a quién se avisó es parte de la prueba, no un efecto del envío.
  */
-export function buildBreachAffectedSchema(): Schema<BreachAffected> {
+export function buildBreachAffectedSchema(retentionSeconds: number): Schema<BreachAffected> {
 	const schema = new Schema<BreachAffected>(
 		{
 			breachId: { type: String, required: true },
 			userId: { type: String, required: true },
 			notifiedAt: { type: Date, default: null },
 			outcome: { type: String, default: "pending" },
+			closedAt: { type: Date, default: null },
 		},
 		{ id: false, versionKey: false, autoIndex: false, collection: "breach_affected" }
 	);
@@ -120,6 +123,9 @@ export function buildBreachAffectedSchema(): Schema<BreachAffected> {
 	// Por `outcome` y no por `notifiedAt`: lo que se busca es a quién le falta el aviso, y eso
 	// incluye a los que fallaron (sin `notifiedAt`, pero tampoco pendientes de primer intento).
 	schema.index({ breachId: 1, outcome: 1 });
+	// Mismo plazo y mismo disparador que el incidente: la audiencia y su libro de entregas son
+	// parte de la misma prueba, así que se van juntos.
+	schema.index({ closedAt: 1 }, { expireAfterSeconds: retentionSeconds });
 
 	return schema;
 }

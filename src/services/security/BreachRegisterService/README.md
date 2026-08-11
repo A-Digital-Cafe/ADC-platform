@@ -2,8 +2,10 @@
 
 Registro e instrucción de incidentes que afectan datos personales (art. 33.5 RGPD;
 Res. AAIP 47/2018). Es el respaldo de lo que promete `/privacy` §11. Colección Mongo
-`breach_incidents` + `breach_affected` (db `adc-breach`), **sin TTL**: el registro es la prueba
-de que la decisión de notificar —o de no hacerlo— fue correcta.
+`breach_incidents` + `breach_affected` (db `adc-breach`), con **TTL de 5 años desde el cierre**
+(`BREACH_RETENTION_DAYS`, art. 2560 CCyC): el registro es la prueba de que la decisión de notificar
+—o de no hacerlo— fue correcta, y un incidente abierto no caduca nunca porque el TTL cuelga de
+`closedAt`.
 
 - **Instrucción**: `detected → assessing → contained → registered → authority_notified →
   subjects_notified → closed`, con salida a `no_notification`. Cada paso exige los campos sin los

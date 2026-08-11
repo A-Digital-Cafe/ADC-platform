@@ -7,6 +7,7 @@ import type { IIdleOrchestrator, IdleRunContext } from "@common/types/operations
 import type { IIdentityManagerService } from "@common/types/identity/IIdentityManagerService.ts";
 import {
 	BREACH_AUTHORITY_DEADLINE_HOURS,
+	BREACH_DEFAULT_RETENTION_DAYS,
 	type BreachAffected,
 	type BreachOpenInput,
 	type BreachRecord,
@@ -27,6 +28,7 @@ import { BreachEndpoints } from "./endpoints/breaches.ts";
 interface BreachPrivateConfig {
 	authorityDeadlineHours?: number | string;
 	reminderLeadHours?: number | string;
+	retentionDays?: number | string;
 }
 
 /** Etapa del reloj por la que ya se alertó. Cada incidente pasa por las dos, una sola vez. */
@@ -68,8 +70,9 @@ export default class BreachRegisterService extends BaseService {
 		await super.start(kernelKey);
 		await this.#waitConnected();
 
-		const incidents = this.#mongoProvider.createModel<BreachRecord>("breach_incidents", buildBreachSchema());
-		const affected = this.#mongoProvider.createModel<BreachAffected>("breach_affected", buildBreachAffectedSchema());
+		const retentionSeconds = this.#retentionSeconds();
+		const incidents = this.#mongoProvider.createModel<BreachRecord>("breach_incidents", buildBreachSchema(retentionSeconds));
+		const affected = this.#mongoProvider.createModel<BreachAffected>("breach_affected", buildBreachAffectedSchema(retentionSeconds));
 		await this.#syncIndexes(incidents);
 		await this.#syncIndexes(affected);
 		this.#repo = new BreachRepository(incidents, affected, this.#deadlineHours());
@@ -427,6 +430,12 @@ export default class BreachRegisterService extends BaseService {
 	#reminderLeadHours(): number {
 		const h = Number(this.#private().reminderLeadHours);
 		return Number.isFinite(h) && h > 0 ? h : 12;
+	}
+
+	/** Retención del registro del art. 33.5, contada desde el cierre. Ver `BREACH_DEFAULT_RETENTION_DAYS`. */
+	#retentionSeconds(): number {
+		const days = Number(this.#private().retentionDays);
+		return (Number.isFinite(days) && days > 0 ? days : BREACH_DEFAULT_RETENTION_DAYS) * 24 * 60 * 60;
 	}
 
 	async #syncIndexes(model: Model<any>): Promise<void> {

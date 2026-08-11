@@ -43,6 +43,7 @@
 	],
 	"private": {
 		"authorityDeadlineHours": "${BREACH_AUTHORITY_DEADLINE_HOURS:-72}",
-		"reminderLeadHours": "${BREACH_REMINDER_LEAD_HOURS:-12}"
+		"reminderLeadHours": "${BREACH_REMINDER_LEAD_HOURS:-12}",
+		"retentionDays": "${BREACH_RETENTION_DAYS:-1825}"
 	}
 }
