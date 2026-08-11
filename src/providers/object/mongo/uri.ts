@@ -6,8 +6,12 @@
  * configura UNA vez y cada servicio elige su base sin repetir credenciales — y sin que
  * cambiar la contraseña obligue a tocar quince archivos.
  *
- * `uri` sigue existiendo para lo que no se compone: un clúster externo, un `mongodb+srv` de
- * Atlas, la conexión por región de IdentityManagerService.
+ * Un clúster de Atlas también se compone por partes: `host` con el hostname del clúster y
+ * `srv: true` para que salga `mongodb+srv://`, que es como se resuelve un host que publica SRV
+ * y TXT pero no registro A.
+ *
+ * `uri` sigue existiendo para lo que no se compone: la conexión por región de
+ * IdentityManagerService.
  */
 
 export interface MongoUriParts {
@@ -23,8 +27,21 @@ export interface MongoUriParts {
 	db?: string;
 	/** Query de conexión: `"authSource=admin"` o `{ authSource: "admin" }`. */
 	options?: string | Record<string, string | number | boolean>;
-	/** `true` para `mongodb+srv://` (el puerto no se usa). */
-	srv?: boolean;
+	/**
+	 * `true` para `mongodb+srv://` (el puerto no se usa): es lo que pide un clúster de Atlas, cuyo
+	 * host publica SRV y TXT pero **no** registro A, así que un `mongodb://` no resuelve.
+	 *
+	 * Acepta string porque la interpolación de `config.json` siempre devuelve texto: `"false"` es
+	 * un string no vacío y por lo tanto *truthy*, así que la conversión se hace en {@link isSrv} y
+	 * nunca por verdad simple. Ver `MONGO_SRV` en los `.env.example`.
+	 */
+	srv?: boolean | string;
+}
+
+/** `srv` en forma de booleano, tolerando el texto que deja la interpolación de `config.json`. */
+export function isSrv(parts: Pick<MongoUriParts, "srv"> | undefined): boolean {
+	const v = parts?.srv;
+	return v === true || v === "true" || v === "1";
 }
 
 function normalizeOptions(options: MongoUriParts["options"]): string {
@@ -50,11 +67,12 @@ export function buildMongoUri(parts: MongoUriParts): string {
 	// Usuario y contraseña van percent-encoded: una contraseña con `@`, `:` o `/` rompe el
 	// parseo de la URI, y es justo el tipo de contraseña que genera un gestor de secretos.
 	const auth = parts.user ? `${encodeURIComponent(parts.user)}:${encodeURIComponent(parts.password ?? "")}@` : "";
+	const srv = isSrv(parts);
 	// `srv` resuelve los puertos por DNS: agregarlos ahí es un error de sintaxis.
-	const host = parts.srv || parts.host.includes(":") || !parts.port ? parts.host : `${parts.host}:${parts.port}`;
+	const host = srv || parts.host.includes(":") || !parts.port ? parts.host : `${parts.host}:${parts.port}`;
 	const query = normalizeOptions(parts.options);
 
-	return `${parts.srv ? "mongodb+srv" : "mongodb"}://${auth}${host}/${encodeURIComponent(parts.db)}${query ? `?${query}` : ""}`;
+	return `${srv ? "mongodb+srv" : "mongodb"}://${auth}${host}/${encodeURIComponent(parts.db)}${query ? `?${query}` : ""}`;
 }
 
 /** URI sin la contraseña, para logs, `getStats()` y respuestas del panel. */
