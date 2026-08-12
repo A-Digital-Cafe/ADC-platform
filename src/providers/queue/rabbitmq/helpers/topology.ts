@@ -23,6 +23,18 @@ export async function declareOperationTopology(
 ): Promise<void> {
 	const retryDelays = options?.retryDelaysMs ?? config.retryDelaysMs ?? [1000, 5000, 25000, 125000];
 
+	/**
+	 * Tipo de cola. `classic` por defecto: con un broker de un nodo, `quorum` no aporta nada y
+	 * cuesta memoria y latencia. Con un clúster sí es lo correcto (las colas espejadas están
+	 * deprecadas), y entonces se pone `RABBITMQ_QUEUE_TYPE=quorum`.
+	 *
+	 * ⚠️ **El tipo de una cola no se puede cambiar en sitio.** Redeclarar una cola existente con
+	 * otro tipo falla con `PRECONDITION_FAILED` y el consumidor no arranca. Migrar es: drenar,
+	 * borrar las colas `q.<servicio>.*` y dejar que se declaren de nuevo — en ventana de
+	 * mantenimiento, no en caliente. El retry por TTL+DLX sigue funcionando igual con quorum.
+	 */
+	const typeArg = config.queueType === "quorum" ? ({ "x-queue-type": "quorum" } as const) : {};
+
 	const svcExchange = `svc.${serviceName}`;
 	const retryExchange = `retry.${serviceName}`;
 	const dlxExchange = `dlx.${serviceName}`;
@@ -39,6 +51,7 @@ export async function declareOperationTopology(
 		queue: mainQueue,
 		durable: true,
 		arguments: {
+			...typeArg,
 			"x-dead-letter-exchange": dlxExchange,
 			"x-dead-letter-routing-key": operationName,
 		},
@@ -46,7 +59,7 @@ export async function declareOperationTopology(
 	await conn.queueBind({ queue: mainQueue, exchange: svcExchange, routingKey: operationName });
 
 	// 3. Dead-letter queue (shared per service, keyed by routing key)
-	await conn.queueDeclare({ queue: dlqQueue, durable: true });
+	await conn.queueDeclare({ queue: dlqQueue, durable: true, arguments: { ...typeArg } });
 	await conn.queueBind({ queue: dlqQueue, exchange: dlxExchange, routingKey: operationName });
 
 	// 4. Retry queues - one per backoff level
@@ -57,6 +70,8 @@ export async function declareOperationTopology(
 			queue: retryQueue,
 			durable: true,
 			arguments: {
+				// Las colas de retry se quedan CLASSIC aunque el resto sea quorum: las quorum no
+				// soportan `x-message-ttl` a nivel cola, que es justamente el mecanismo del backoff.
 				"x-message-ttl": retryDelays[level],
 				"x-dead-letter-exchange": svcExchange,
 				"x-dead-letter-routing-key": operationName,

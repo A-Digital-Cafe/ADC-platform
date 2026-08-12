@@ -1,0 +1,38 @@
+{
+	"name": "ClusterService",
+	"uiName": "Core",
+	"version": "1.0.0",
+	"kernelMode": 40,
+	"failOnError": false,
+	"providers": [
+		{
+			"name": "queue/redis",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"host": "${REDIS_HOST:-localhost}",
+				"port": "${REDIS_PORT:-6380}",
+				"password": "${REDIS_PASSWORD}",
+				"db": 0,
+				"keyPrefix": "adc:cluster:"
+			}
+		},
+		{
+			"name": "fastify-server",
+			"version": "latest",
+			"language": "typescript"
+		},
+		{
+			"name": "queue/rabbitmq",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"url": "${RABBITMQ_URL:-amqp://admin:password@localhost:5672}"
+			}
+		}
+	],
+	"private": {
+		"heartbeatSeconds": "${ADC_CLUSTER_HEARTBEAT_SECONDS:-10}",
+		"nodeTtlSeconds": "${ADC_CLUSTER_NODE_TTL_SECONDS:-30}"
+	}
+}

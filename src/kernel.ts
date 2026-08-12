@@ -11,6 +11,7 @@ import { setLifecycleRoot } from "./utils/decorators/OnlyKernel.ts";
 import { policyScopes, INFRA_CAP_SCOPES, type ModuleKind } from "./core/security/capabilityPolicy.ts";
 import { PrivilegeLedger, type PrivilegeChange } from "./core/security/PrivilegeLedger.ts";
 import { resolveSecurityProfile } from "./common/utils/runtime-env.ts";
+import { hasInvalidNodeId, isPrimary, resolveClusterIdentity } from "./common/utils/cluster-env.ts";
 import type UIFederationServiceType from "./services/core/UIFederationService/index.ts";
 
 /** Superficie que el kernel usa para inyectar capabilities en un módulo recién construido. */
@@ -246,6 +247,25 @@ export class Kernel {
 	}
 
 	/**
+	 * Identidad de este nodo, al lado del perfil de seguridad y por el mismo motivo: un secundario
+	 * que se cree primario levanta una infraestructura paralela y duplica todos los trabajos
+	 * programados, y el síntoma aparece mucho después y lejos. Que se lea en el arranque.
+	 */
+	#logBootClusterIdentity(): void {
+		const node = resolveClusterIdentity();
+		if (hasInvalidNodeId()) {
+			this.#logger.logWarn(
+				`ADC_NODE_ID="${process.env.ADC_NODE_ID}" no es un identificador válido (letras, números, guiones); se usa "${node.id}" en su lugar.`
+			);
+		}
+		const label = node.name === node.id ? node.id : `${node.name} (${node.id})`;
+		const advertise = node.advertise ? ` · anuncia=${node.advertise}` : ""
+		this.#logger.logInfo(
+			`NODE: ${label} · rol=${node.role} · sitio=${node.site} · infra=${node.infra}` + `${advertise}${node.gateway ? " · gateway=on" : ""}`
+		);
+	}
+
+	/**
 	 * Retira de la capability viva de un módulo los scopes que el gate hubiera retenido (sólo el
 	 * camino retroactivo). Corta las llamadas futuras, pero un handle privilegiado que el módulo ya
 	 * haya tomado sigue siendo suyo: por eso se reporta como incidente aunque funcione.
@@ -378,6 +398,7 @@ export class Kernel {
 		this.#logger.logInfo("Iniciando...");
 		this.#logger.logInfo(`Modo: ${this.#isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}`);
 		this.#logBootSecurityProfile();
+		this.#logBootClusterIdentity();
 		this.#logger.logDebug(`Base path: ${this.#basePath}`);
 
 		this.#presetTopics = await this.#discoverPresetTopics();
@@ -556,6 +577,16 @@ export class Kernel {
 	}
 
 	#startWatchers(): void {
+		// Los watchers son competencia EXCLUSIVA del primario. Con dos nodos sobre el mismo árbol,
+		// cada `add` lo detectarían los dos y el módulo entraría como pendiente (y se auditaría, y
+		// se notificaría a seguridad) por duplicado; con árboles separados, cada nodo detectaría lo
+		// suyo y divergirían en silencio. El hot reload de desarrollo tampoco tiene sentido en un
+		// secundario: su código lo trae el deploy, no una edición local.
+		if (!isPrimary()) {
+			this.#logger.logInfo("Nodo secundario: no se montan watchers de filesystem ni detección de módulos nuevos (los hace el primario).");
+			return;
+		}
+
 		const isStartingUp = () => this.#isStartingUp;
 
 		// Capas del core (los directorios siempre existen).
@@ -694,7 +725,24 @@ export class Kernel {
 			this.#logger.logInfo("HMR está activo.");
 			// Acá el arranque terminó de verdad (los builds que siguen corriendo son watchers, no boot).
 			bootTimeline.finish();
+			this.#markNodeReady();
 		}, 10000);
+	}
+
+	/**
+	 * Declara el nodo listo para recibir tráfico (`GET /healthz` pasa de 503 a 200).
+	 *
+	 * Se hace acá y no al terminar `start()` porque lo que un balanceador necesita saber no es que
+	 * los módulos se cargaron, sino que el proceso ya no está en modo arranque: mandarle requests
+	 * antes es exactamente lo que el drenaje durante un deploy existe para evitar.
+	 */
+	#markNodeReady(): void {
+		if (!this.#registry.hasAnyModule("service", "ClusterService")) return;
+		try {
+			this.#registry.getService<{ markReady?: () => void }>("ClusterService").markReady?.();
+		} catch (error) {
+			this.#logger.logDebug(`No se pudo marcar el nodo como listo: ${(error as Error).message}`);
+		}
 	}
 
 	/**

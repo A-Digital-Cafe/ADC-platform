@@ -18,11 +18,13 @@ export class VersionResolver {
 	 * La invalidación cuelga de la descarga de módulos (`ModuleRegistry`): cada reload, restart
 	 * y deploy/rollback pasa por un unload antes de volver a cargar, así que el camino que
 	 * lee de disco de nuevo siempre encuentra el cache frío. Sin eso, un rollback git dejaría
-	 * la resolución vieja apuntando al código anterior.
+	 * la resolución vieja apuntando al código anterior. Ese unload es **por nodo**, así que el
+	 * registry además difunde la invalidación por el bus del clúster: ver
+	 * `ModuleRegistry.#invalidateResolutions` (deploy asimétrico).
 	 */
 	static readonly #resolutionCache = new Map<string, { path: string; version: string }>();
 
-	/** Olvida las resoluciones cacheadas. La llama el registry al descargar un módulo. */
+	/** Olvida las resoluciones cacheadas. La llama el registry (unload propio o aviso de otro nodo). */
 	static invalidateResolutionCache(): void {
 		this.#resolutionCache.clear();
 	}

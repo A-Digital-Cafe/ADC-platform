@@ -8,10 +8,20 @@ import { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { IProvider } from "../../providers/BaseProvider.ts";
 import type { IUtility } from "../../utilities/BaseUtility.ts";
 import type { IService } from "../../services/BaseService.ts";
+import type { IClusterService } from "@common/types/cluster/ICluster.ts";
 
 export type ModuleType = "provider" | "utility" | "service";
 export type ModuleTypes = ModuleType | "app";
 export type Module = IProvider | IUtility | IService;
+
+/** Nombre pinneado del bus. Es el del directorio del servicio, que es lo que pinnea el boot. */
+const CLUSTER_SERVICE = "ClusterService";
+
+/** Topic del bus con el que un nodo avisa que las resoluciones memoizadas dejaron de valer. */
+const CLUSTER_TOPIC_RESOLUTION = "modules.resolution.invalidate";
+
+/** Qué módulo disparó el aviso. Sólo sirve para poder rastrearlo en el log del receptor. */
+type ResolutionInvalidation = { module: string };
 
 /**
  * Config que define la identidad (`uniqueKey`) de un módulo. **Única fuente de verdad**:
@@ -83,6 +93,9 @@ export class ModuleRegistry {
 	 */
 	readonly #platformServices = new Map<string, IModule>();
 
+	/** Baja del handler de invalidación en el bus. Se rehace con cada pin del `ClusterService`. */
+	#unsubscribeResolutionInvalidation: (() => void) | null = null;
+
 	constructor(kernelKey: symbol) {
 		this.#kernelKey = kernelKey;
 	}
@@ -94,6 +107,7 @@ export class ModuleRegistry {
 	pinPlatformService(name: string, instance: IModule, kernelKey: symbol): void {
 		if (!this.verifyKernelKey(kernelKey)) throw new Error("pinPlatformService: kernelKey inválida.");
 		this.#platformServices.set(name, instance);
+		if (name === CLUSTER_SERVICE) this.#bindResolutionInvalidation(instance);
 	}
 
 	/** `true` si el nombre se pinneó en el boot (para re-pinnear sin admitir nombres nuevos). */
@@ -520,6 +534,43 @@ export class ModuleRegistry {
 		return [...result];
 	}
 
+	/**
+	 * Olvida las resoluciones memoizadas de `VersionResolver` en este nodo y avisa al resto.
+	 *
+	 * El invariante que sostiene la memo ("todo reload/restart/rollback pasa por un unload") vale
+	 * **por nodo**: cada uno descarga sobre su propio disco. Se rompe con un deploy asimétrico —si
+	 * los archivos nuevos le llegan a un nodo que no descargó nada (filesystem compartido, o un
+	 * `git pull` hecho fuera del orquestador), ese nodo sigue resolviendo al path/versión anterior
+	 * para siempre—. El aviso es el que le da a los demás el mismo cache frío.
+	 *
+	 * El bus se resuelve por el pin en cada llamada en vez de guardarse: descargar módulos es
+	 * justo el momento en que una referencia cacheada podría ser la del `ClusterService` detenido.
+	 */
+	#invalidateResolutions(moduleName: string): void {
+		VersionResolver.invalidateResolutionCache();
+		void this.getPlatformService<IClusterService>(CLUSTER_SERVICE)?.publish<ResolutionInvalidation>(CLUSTER_TOPIC_RESOLUTION, {
+			module: moduleName,
+		});
+	}
+
+	/**
+	 * (Re)engancha al bus el efecto local de lo que difundió otro nodo. **Nunca vuelve a
+	 * publicar**: dos nodos reenviándose la invalidación es un ping-pong que no termina.
+	 *
+	 * Cuelga del pin porque ahí pasa TODA instancia del `ClusterService` —la del boot y la de
+	 * cada recarga— y los handlers viven en la instancia (`stop()` los limpia): suscribirse una
+	 * sola vez dejaría al nodo sordo en cuanto el servicio se reiniciara.
+	 */
+	#bindResolutionInvalidation(instance: IModule): void {
+		const cluster = instance as unknown as Partial<IClusterService>;
+		if (typeof cluster.subscribe !== "function") return;
+		this.#unsubscribeResolutionInvalidation?.();
+		this.#unsubscribeResolutionInvalidation = cluster.subscribe<ResolutionInvalidation>(CLUSTER_TOPIC_RESOLUTION, (event) => {
+			VersionResolver.invalidateResolutionCache();
+			this.#logger.logDebug(`Resoluciones invalidadas por aviso del nodo ${event.origin} (descargó ${event.payload?.module ?? "?"})`);
+		});
+	}
+
 	async unloadModuleByUniqueKey(moduleType: ModuleType, kernelKey: symbol, uniqueKey: string): Promise<void> {
 		if (!this.verifyKernelKey(kernelKey)) {
 			throw new Error("unloadModuleByUniqueKey: kernelKey inválida.");
@@ -531,7 +582,7 @@ export class ModuleRegistry {
 		this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name} (${uniqueKey})`);
 		// Descargar es el paso previo de todo reload/restart/rollback: el módulo se vuelve a
 		// leer de disco, así que la resolución memoizada tiene que dejar de valer.
-		VersionResolver.invalidateResolutionCache();
+		this.#invalidateResolutions(module.name);
 		await stopBoundModule(module, this.#kernelKey);
 		registry.delete(uniqueKey);
 		this.#getRefCountMap(moduleType).delete(uniqueKey);
@@ -570,7 +621,7 @@ export class ModuleRegistry {
 		if (module) {
 			const capitalizedModuleType = moduleType.charAt(0).toUpperCase() + moduleType.slice(1);
 			this.#logger.logDebug(`Removiendo ${capitalizedModuleType}: ${module.name}`);
-			VersionResolver.invalidateResolutionCache();
+			this.#invalidateResolutions(module.name);
 			await stopBoundModule(module, this.#kernelKey);
 			registry.delete(uniqueKey);
 

@@ -382,6 +382,28 @@ export abstract class BaseModule implements IModule {
 	}
 
 	/**
+	 * Igual que {@link getMyProvider} pero **tolerante**: `undefined` si el provider declarado no
+	 * está cargado (o no está declarado), en vez de lanzar.
+	 *
+	 * Para infraestructura cuya ausencia degrada en vez de romper: un broker caído tiene que
+	 * costar la funcionalidad que depende de él, no el arranque del módulo entero.
+	 */
+	protected tryGetMyProvider<P>(name: string, config?: IModuleConfig): P | undefined {
+		try {
+			const providerConfig = config || this.#findDeclared(this.config?.providers, name);
+			if (!providerConfig) return undefined;
+			const registry = this.#requireRegistry();
+			const loaded = providerConfig.custom
+				? registry.hasModule("provider", name, providerConfig.custom)
+				: registry.hasAnyModule("provider", name);
+			if (!loaded) return undefined;
+			return this.getMyProvider<P>(name, providerConfig);
+		} catch {
+			return undefined;
+		}
+	}
+
+	/**
 	 * Emite una notificación a un usuario de forma desacoplada y tolerante a fallos
 	 * (cola durable RabbitMQ → entrega directa → best-effort). **Nunca lanza**: si el
 	 * subsistema de notificaciones está caído o en mantenimiento, el módulo productor

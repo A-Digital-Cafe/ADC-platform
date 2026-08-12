@@ -13,4 +13,12 @@ export interface RabbitMQProviderConfig {
 	maxRetries?: number;
 	/** Delay per retry level in ms - forms exponential backoff via dedicated TTL queues */
 	retryDelaysMs?: number[];
+	/**
+	 * Tipo de las colas de trabajo. `classic` (default) con un broker de un nodo; `quorum` con un
+	 * clúster, donde es lo correcto (las colas espejadas están deprecadas).
+	 *
+	 * ⚠️ No se puede cambiar en caliente: redeclarar una cola existente con otro tipo falla con
+	 * `PRECONDITION_FAILED`. Migrar exige drenar y borrar las colas `q.<servicio>.*`.
+	 */
+	queueType?: "classic" | "quorum";
 }

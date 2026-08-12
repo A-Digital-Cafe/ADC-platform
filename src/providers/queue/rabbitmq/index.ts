@@ -4,6 +4,7 @@ import type { RabbitMQProviderConfig, TopologyOptions, ConsumerOptions, Operatio
 import { declareOperationTopology } from "./helpers/topology.js";
 import { publishToExchange, publishToRetryQueue } from "./helpers/publisher.js";
 import { createOperationConsumer } from "./helpers/consumer.js";
+import { createFanoutConsumer as buildFanoutConsumer, createFanoutPublisher, publishFanout as sendFanout } from "./helpers/fanout.js";
 import { redact } from "@common/utils/redact.ts";
 
 export type { RabbitMQProviderConfig, TopologyOptions, ConsumerOptions, OperationMessage } from "./types.js";
@@ -32,6 +33,8 @@ export default class RabbitMQProvider extends BaseProvider {
 	readonly #config: RabbitMQProviderConfig;
 	#publisher: Publisher | null = null;
 	readonly #consumers: Map<string, Consumer> = new Map();
+	/** Un publisher por exchange de fan-out; se crean perezosamente y se cierran en `stop()`. */
+	readonly #fanoutPublishers: Map<string, Publisher> = new Map();
 	readonly #declaredTopologies: Set<string> = new Set();
 	#stopping = false;
 
@@ -79,6 +82,8 @@ export default class RabbitMQProvider extends BaseProvider {
 			await this.#publisher.close();
 			this.#publisher = null;
 		}
+		await Promise.allSettled([...this.#fanoutPublishers.values()].map((p) => p.close()));
+		this.#fanoutPublishers.clear();
 		if (this.#connection) {
 			await this.#connection.close();
 			this.#connection = null;
@@ -124,6 +129,27 @@ export default class RabbitMQProvider extends BaseProvider {
 		headers: Record<string, string>
 	): Promise<void> {
 		await publishToRetryQueue(this.#requirePublisher(), serviceName, operationName, retryLevel, message, headers);
+	}
+
+	// ─── Fan-out entre nodos ─────────────────────────────────────────────────────
+	// Topología aparte de las colas de trabajo (efímera, sin reintentos ni DLQ): el porqué está
+	// en `helpers/fanout.ts`. La usa `ClusterService` para el bus del clúster.
+
+	/** Emite un aviso a todos los nodos suscritos al exchange. */
+	async publishFanout(exchange: string, message: Record<string, unknown>): Promise<void> {
+		let publisher = this.#fanoutPublishers.get(exchange);
+		if (!publisher) {
+			publisher = createFanoutPublisher(this.#requireConnection(), exchange);
+			this.#fanoutPublishers.set(exchange, publisher);
+		}
+		await sendFanout(publisher, exchange, message);
+	}
+
+	/** Consume el fan-out con una cola exclusiva de este nodo (se borra sola al desconectarse). */
+	createFanoutConsumer(exchange: string, queue: string, handler: (body: unknown) => Promise<void>): Consumer {
+		const consumer = buildFanoutConsumer(this.#requireConnection(), exchange, queue, handler);
+		this.#consumers.set(`fanout:${queue}`, consumer);
+		return consumer;
 	}
 
 	// ─── Consuming ───────────────────────────────────────────────────────────────
