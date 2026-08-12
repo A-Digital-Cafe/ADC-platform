@@ -7,6 +7,7 @@ import type RedisProvider from "../../../providers/queue/redis/index.js";
 import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.ts";
 import type { IModerationService } from "@common/types/identity/IModerationService.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.ts";
 import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
 import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
 export type { AuthenticatedUser, TokenVerificationResult } from "./types.js";
@@ -146,6 +147,26 @@ export default class SessionManagerService extends BaseService implements ISessi
 	}
 
 	/**
+	 * Corre `fn` sólo en el nodo que tenga el lease. Sin `OperationsService` corre igual: en un
+	 * despliegue de un nodo negarse sería peor que el trabajo duplicado que evita.
+	 */
+	async #onlyOnLeader(name: string, ttlSeconds: number, fn: () => Promise<void>): Promise<void> {
+		const ops = this.tryGetMyService<IOperationsService>("OperationsService");
+		if (ops) await ops.withLeadership(name, ttlSeconds, fn);
+		else await fn();
+	}
+
+	/**
+	 * El chequeo corre a los 30s de CADA arranque, así que un despliegue de N nodos lo dispara N
+	 * veces casi a la vez y el lease-por-turno es lo que serializa el `get`/`set` de la marca: los
+	 * que llegan después leen la versión ya sellada y no vuelven a anunciar. El `broadcastId`
+	 * determinista sigue siendo la segunda red, para el caso de arranques bien separados.
+	 */
+	async #checkLegalDocsVersion(): Promise<void> {
+		await this.#onlyOnLeader("session.legal-version-check", 600, () => this.#legalDocsVersionBatch());
+	}
+
+	/**
 	 * Detecta el despliegue de una versión nueva de CUALQUIER documento legal versionado y la
 	 * anuncia. Este servicio es el que valida la aceptación, así que es el que sabe qué versión está
 	 * vigente; el aviso existe para que publicar el documento y comunicarlo no dependan de
@@ -157,7 +178,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 	 * cambio legal es el lado seguro del error—. Sin Redis, no avisa: best-effort, nunca rompe el
 	 * arranque.
 	 */
-	async #checkLegalDocsVersion(): Promise<void> {
+	async #legalDocsVersionBatch(): Promise<void> {
 		if (!this.#redis || !this.#identityService) return;
 		const docs: readonly LegalDocument[] = Object.values(LEGAL_DOCUMENTS);
 		const current: Record<string, string> = Object.fromEntries(docs.map((doc) => [doc.id, doc.version]));
@@ -266,6 +287,10 @@ export default class SessionManagerService extends BaseService implements ISessi
 			},
 			redis: this.#redis || undefined,
 			logger: this.logger,
+			// La rotación pisa las claves compartidas de Redis: corre en un solo nodo. El TTL es
+			// holgado frente a lo que tarda (dos escrituras) para que una pausa larga del proceso no
+			// libere el lease a mitad de camino; el turno se suelta al terminar, no lo retiene.
+			runExclusive: (fn) => this.#onlyOnLeader("session.key-rotation", 3600, fn),
 		});
 
 		await this.#keyStore.init();
@@ -296,10 +321,12 @@ export default class SessionManagerService extends BaseService implements ISessi
 		// GeoIPValidator (simplificado - usa Cloudflare headers)
 		this.#geoValidator = new GeoIPValidator();
 
-		// SessionManager (para state OAuth)
+		// SessionManager (para state OAuth). Con Redis el state es compartido: el login y el callback
+		// del proveedor son requests distintos y con varios nodos no caen en el mismo proceso.
 		const isProd = process.env.NODE_ENV === "production";
 		this.#sessionManager = new SessionManager({
 			jwtProvider: this.#jwtProvider!,
+			redis: this.#redis || undefined,
 			cookieConfig: {
 				name: ACCESS_COOKIE_NAME,
 				httpOnly: true,
@@ -683,6 +710,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 		this.#keyStore?.stopRotation();
 		this.#refreshTokenRepo?.stop();
 		this.#loginTracker?.stop();
+		this.#sessionManager?.stop();
 		if (this.#legalCheckTimer) clearTimeout(this.#legalCheckTimer);
 		this.#legalCheckTimer = null;
 

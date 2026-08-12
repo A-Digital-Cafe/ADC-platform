@@ -40,6 +40,14 @@ interface KeyStoreConfig {
 	redis?: RedisProvider;
 	/** Logger para los avisos del sellado en reposo (opcional). */
 	logger?: EnvelopeLogger;
+	/**
+	 * Gate de exclusión para la rotación (opcional). Las claves de Redis son COMPARTIDAS entre
+	 * nodos, así que rotar tiene que pasar por uno solo; el KeyStore no es un módulo del kernel y
+	 * no puede elegirlo, así que lo recibe ya resuelto y sigue sin saber que existen los leases.
+	 * Si el gate decide que este nodo no rota, no invoca a `fn`. Sin gate rota siempre: con un
+	 * solo nodo negarse sería peor que la rotación duplicada que evita.
+	 */
+	runExclusive?: (fn: () => Promise<void>) => Promise<void>;
 }
 
 /**
@@ -59,6 +67,12 @@ interface KeyPair {
 type KeyRotationCallback = (keys: KeyPair) => void | Promise<void>;
 
 /**
+ * Qué pasó al intentar adoptar el par persistido. `absent` (todavía no hay nada guardado) y
+ * `unusable` (hay algo pero no abre) van separados porque sólo el segundo es una anomalía.
+ */
+type AdoptOutcome = "adopted" | "unusable" | "absent";
+
+/**
  * KeyStore - Gestión de secretos con rotación automática
  *
  * Soporta persistencia en Redis para compartir claves entre instancias.
@@ -76,6 +90,7 @@ export class KeyStore {
 	readonly #rotationCallbacks: KeyRotationCallback[] = [];
 	readonly #redis: RedisProvider | null = null;
 	readonly #logger: EnvelopeLogger | undefined;
+	readonly #runExclusive: (fn: () => Promise<void>) => Promise<void>;
 
 	constructor(config: KeyStoreConfig) {
 		this.#rotationInterval = config.rotationInterval;
@@ -83,6 +98,7 @@ export class KeyStore {
 		this.#rotatedAt = Date.now();
 		this.#redis = config.redis || null;
 		this.#logger = config.logger;
+		this.#runExclusive = config.runExclusive || ((fn) => fn());
 
 		// Inicializar con claves proporcionadas o generar nuevas
 		if (config.initialKeys?.current) {
@@ -104,29 +120,15 @@ export class KeyStore {
 		if (!this.#redis) return;
 
 		try {
-			const [sealedCurrent, sealedPrevious, rotatedAt] = await Promise.all([
-				this.#redis.get(REDIS_KEYS.CURRENT),
-				this.#redis.get(REDIS_KEYS.PREVIOUS),
-				this.#redis.get(REDIS_KEYS.ROTATED_AT),
-			]);
-
-			const current = keySeal.open(sealedCurrent, this.#logger);
-
-			if (current) {
-				this.#currentKey = current;
-				this.#currentKeyBytes = this.#stringToKey(current);
-				this.#previousKey = keySeal.open(sealedPrevious, this.#logger);
-				this.#previousKeyBytes = this.#previousKey ? this.#stringToKey(this.#previousKey) : null;
-				this.#rotatedAt = rotatedAt ? Number.parseInt(rotatedAt, 10) : Date.now();
-				return;
-			}
+			const outcome = await this.#adoptPersistedKeys();
+			if (outcome === "adopted") return;
 
 			// Sin clave utilizable: o no había ninguna, o lo guardado no abre (valor previo al
 			// cifrado, manipulado, o master key distinta). En ambos casos se persisten las de
 			// memoria, que además pisa el valor inservible. El costo es que las sesiones vivas
 			// dejan de validar y hay que volver a entrar; aceptarlo crudo no es una opción,
 			// porque justamente es lo que permitiría plantar una clave elegida por el atacante.
-			if (sealedCurrent) {
+			if (outcome === "unusable") {
 				this.#logger?.logWarn(
 					"[KeyStore] la clave de sesión guardada no se pudo abrir: se genera una nueva y se invalidan las sesiones vivas."
 				);
@@ -135,6 +137,31 @@ export class KeyStore {
 		} catch {
 			// Si Redis falla, usar claves en memoria
 		}
+	}
+
+	/**
+	 * Sincroniza el par en memoria con el que está persistido. Sólo LEE: un nodo con la memoria
+	 * atrasada no puede pisar desde acá el par que otro acabe de rotar; persistir es siempre un
+	 * paso explícito de quien llama.
+	 */
+	async #adoptPersistedKeys(): Promise<AdoptOutcome> {
+		if (!this.#redis) return "absent";
+
+		const [sealedCurrent, sealedPrevious, rotatedAt] = await Promise.all([
+			this.#redis.get(REDIS_KEYS.CURRENT),
+			this.#redis.get(REDIS_KEYS.PREVIOUS),
+			this.#redis.get(REDIS_KEYS.ROTATED_AT),
+		]);
+
+		const current = keySeal.open(sealedCurrent, this.#logger);
+		if (!current) return sealedCurrent ? "unusable" : "absent";
+
+		this.#currentKey = current;
+		this.#currentKeyBytes = this.#stringToKey(current);
+		this.#previousKey = keySeal.open(sealedPrevious, this.#logger);
+		this.#previousKeyBytes = this.#previousKey ? this.#stringToKey(this.#previousKey) : null;
+		this.#rotatedAt = rotatedAt ? Number.parseInt(rotatedAt, 10) : Date.now();
+		return "adopted";
 	}
 
 	/**
@@ -159,9 +186,43 @@ export class KeyStore {
 	}
 
 	/**
-	 * Ejecuta una rotación manual de claves
+	 * Turno de rotación: rota en el nodo que pase el gate y, en los demás, adopta lo que ese nodo
+	 * dejó persistido.
+	 *
+	 * Rotar en todos a la vez rompía el par: el segundo nodo toma como `previous` su propia
+	 * `current`, con lo que la clave recién emitida por el primero queda fuera de las dos válidas y
+	 * las sesiones vivas se caen sin aviso. Pero quedarse sin hacer nada tampoco alcanza: un nodo
+	 * que nunca vuelve a leer Redis se queda con un par viejo para siempre y rechaza los tokens que
+	 * emite el que sí rota. Por eso el turno perdido igual sincroniza.
 	 */
 	async #rotate(): Promise<void> {
+		let rotated = false;
+		try {
+			await this.#runExclusive(async () => {
+				rotated = true;
+				await this.#rotateKeyPair();
+			});
+			if (!rotated) await this.#adoptPersistedKeys();
+		} catch (err: any) {
+			// El turno se pierde y lo retoma el siguiente. Nadie espera esta promesa (la dispara el
+			// `setInterval`), así que dejarla romper sería una rejection sin dueño; y rotar a ciegas
+			// tras un Redis que parpadeó es justamente lo que parte el par.
+			this.#logger?.logWarn(`[KeyStore] el turno de rotación de claves falló: ${err?.message || err}`);
+		}
+	}
+
+	/** Genera el par nuevo, lo persiste y avisa a los listeners. Sólo lo corre el nodo que rota. */
+	async #rotateKeyPair(): Promise<void> {
+		// Rotar sobre lo persistido y no sobre memoria: si en el turno anterior rotó otro nodo, la
+		// `current` de éste está atrasada y usarla como `previous` dejaría afuera del par a la clave
+		// con la que se emitieron las sesiones que hoy están vivas.
+		const outcome = await this.#adoptPersistedKeys();
+
+		// Otro nodo ya rotó dentro de este intervalo: su turno cuenta por el de todos. Sin esto, los
+		// timers desfasados de N nodos rotarían N veces por intervalo y cada rotación acorta la
+		// ventana en la que la clave anterior sigue validando tokens ya emitidos.
+		if (outcome === "adopted" && Date.now() - this.#rotatedAt < this.#rotationInterval) return;
+
 		this.#previousKey = this.#currentKey;
 		this.#previousKeyBytes = this.#currentKeyBytes;
 		this.#currentKey = this.#generateKey();

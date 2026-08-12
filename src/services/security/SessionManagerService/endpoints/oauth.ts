@@ -153,7 +153,7 @@ export class OAuthEndpoints {
 		const returnUrl = ctx.query?.returnUrl || "";
 
 		// Generar state para CSRF protection
-		const state = OAuthEndpoints.deps.sessionManager.generateState();
+		const state = await OAuthEndpoints.deps.sessionManager.generateState();
 
 		// Preparar cookies
 		const cookies: SetCookie[] = [
@@ -207,7 +207,7 @@ export class OAuthEndpoints {
 	static async handleCallback(ctx: EndpointCtx<ProviderParams>): Promise<never> {
 		const provider = ctx.params.provider || "platform";
 		const clearCookies = OAuthEndpoints.getOAuthClearCookies();
-		const { code, returnUrl, oauthProvider, config } = OAuthEndpoints.resolveCallbackRequest(ctx, provider, clearCookies);
+		const { code, returnUrl, oauthProvider, config } = await OAuthEndpoints.resolveCallbackRequest(ctx, provider, clearCookies);
 
 		try {
 			const tokens = await oauthProvider.exchangeCode(code, config);
@@ -336,7 +336,11 @@ export class OAuthEndpoints {
 		];
 	}
 
-	private static resolveCallbackRequest(ctx: EndpointCtx<ProviderParams>, provider: string, clearCookies: ClearCookie[]): CallbackRequest {
+	private static async resolveCallbackRequest(
+		ctx: EndpointCtx<ProviderParams>,
+		provider: string,
+		clearCookies: ClearCookie[]
+	): Promise<CallbackRequest> {
 		const { code, state, error } = ctx.query || {};
 
 		if (error) {
@@ -351,7 +355,7 @@ export class OAuthEndpoints {
 		}
 
 		const stateCookie = ctx.cookies?.[STATE_COOKIE_NAME];
-		if (!stateCookie || !OAuthEndpoints.deps.sessionManager.validateState(state, stateCookie)) {
+		if (!stateCookie || !(await OAuthEndpoints.deps.sessionManager.validateState(state, stateCookie))) {
 			throw UncommonResponse.redirect(buildErrorUrl("/csrf"), { status: 302, clearCookies });
 		}
 

@@ -35,11 +35,17 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
 
 ## Seguridad
 
-- **Rotación de claves**: cada 24h, `SECRET_PREVIOUS = SECRET_CURRENT` y se genera nueva clave
+- **Rotación de claves**: cada 24h, `SECRET_PREVIOUS = SECRET_CURRENT` y se genera nueva clave. Con varios
+  nodos rota uno solo (lease `session.key-rotation` vía `OperationsService`) y los demás adoptan el par
+  que quedó en Redis: rotando todos, el segundo dejaba fuera del par la clave recién emitida por el primero
 - **Access Token**: JWT cifrado, 15 min, cookie `access_token`
 - **Refresh Token**: opaco, 30 días, cookie HttpOnly en `/api/auth/refresh`; rotación de un solo uso con
   ventana de gracia de 60s (el token recién rotado devuelve el par vigente: pestañas de orígenes distintos
   no pueden coordinarse entre sí). `/api/auth/refresh` devuelve `expiresAt` para renovar antes de vencer
+- **State OAuth**: el `state` (CSRF) vive en Redis con TTL nativo y se consume una sola vez (claim
+  atómico `SET NX` sobre `oauth:state-consumed:`), porque el login y el callback del proveedor son
+  requests distintos y con varios nodos no caen en el mismo proceso. Sin Redis usa memoria del
+  proceso, que sólo alcanza para un despliegue de un nodo
 - **Alta sin oráculo de email**: el registro crea la cuenta SIN email y delega la vinculación en
   `IdentityManager._internal(cap).bindEmailNeutrally` (fuera de banda). El 409 sólo existe para
   `USERNAME_EXISTS` (identidad pública, ya resoluble por HEAD); si el email está tomado, el aviso va
@@ -55,5 +61,7 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
 - **Cambios de documentos legales**: al detectar una versión nueva desplegada de CUALQUIER documento
   de `LEGAL_DOCUMENTS` (incluidos los informativos: cookies, DPA) anuncia el cambio a todas las
   personas usuarias (broadcast `platform.legal`, in-app no silenciable) y al equipo, con la fecha
-  `effectiveFrom` desde la que rige. Para terms/privacy, a partir de esa fecha `/api/auth/legal/status`
-  marca el documento como pendiente y el componente `adc-legal-gate` pide la re-aceptación
+  `effectiveFrom` desde la que rige. El chequeo corre a los 30s de cada arranque y en un solo nodo
+  (lease `session.legal-version-check`), para que un deploy de N nodos no dispare N anuncios. Para
+  terms/privacy, a partir de esa fecha `/api/auth/legal/status` marca el documento como pendiente y el
+  componente `adc-legal-gate` pide la re-aceptación
