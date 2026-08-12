@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 
 const RegionMetadata = Type.Record(Type.String(), Type.Unknown(), {
-	description: "Metadata extensible de la región (objectConnectionUri, cacheConnectionUri, …)",
+	description: "Metadata extensible de la región. Única clave con efecto: objectConnectionUri (Mongo de las orgs de la región)",
 });
 
 // ── Entidad ────────────────────────────────────────────────────────────────

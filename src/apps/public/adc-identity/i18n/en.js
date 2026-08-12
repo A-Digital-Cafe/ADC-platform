@@ -230,7 +230,6 @@ export default {
 		pathPlaceholder: "region/subregion",
 		pathHint: "Format: region/subregion (e.g. us/east, eu/west)",
 		objectConnectionUri: "Database URI",
-		cacheConnectionUri: "Cache URI",
 	},
 	permissions: {
 		title: "Permissions",

@@ -22,7 +22,6 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 	const [formIsGlobal, setFormIsGlobal] = useState(false);
 	const [formIsActive, setFormIsActive] = useState(true);
 	const [formObjectUri, setFormObjectUri] = useState("");
-	const [formCacheUri, setFormCacheUri] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 
 	const writable = canWrite(perms, Scope.REGIONS);
@@ -68,7 +67,6 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 		setFormIsGlobal(false);
 		setFormIsActive(true);
 		setFormObjectUri("");
-		setFormCacheUri("");
 		setModalOpen(true);
 	};
 
@@ -78,7 +76,6 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 		setFormIsGlobal(region.isGlobal);
 		setFormIsActive(region.isActive);
 		setFormObjectUri(region.metadata?.objectConnectionUri || "");
-		setFormCacheUri(region.metadata?.cacheConnectionUri || "");
 		setModalOpen(true);
 	};
 
@@ -93,7 +90,6 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 			isActive: formIsActive,
 			metadata: {
 				objectConnectionUri: formObjectUri || undefined,
-				cacheConnectionUri: formCacheUri || undefined,
 			},
 		};
 
@@ -148,20 +144,15 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 			label: t("regions.connections"),
 			render: (r) => {
 				const hasDb = !!r.metadata?.objectConnectionUri;
-				const hasCache = !!r.metadata?.cacheConnectionUri;
 				return (
 					<div className="flex gap-1">
-						{hasDb && (
+						{hasDb ? (
 							<adc-badge color="purple" size="sm">
 								DB
 							</adc-badge>
+						) : (
+							<span className="text-muted text-xs">-</span>
 						)}
-						{hasCache && (
-							<adc-badge color="orange" size="sm">
-								Cache
-							</adc-badge>
-						)}
-						{!hasDb && !hasCache && <span className="text-muted text-xs">-</span>}
 					</div>
 				);
 			},
@@ -227,10 +218,6 @@ export function RegionsView({ perms }: { readonly perms: Permission[] }) {
 								placeholder="mongodb://..."
 								onInput={(e: any) => setFormObjectUri(e.target.value)}
 							/>
-						</div>
-						<div>
-							<label className="block text-sm font-medium mb-1 text-text">{t("regions.cacheConnectionUri")}</label>
-							<adc-input value={formCacheUri} placeholder="redis://..." onInput={(e: any) => setFormCacheUri(e.target.value)} />
 						</div>
 						<FormModalFooter onCancel={() => setModalOpen(false)} submitting={submitting} />
 					</form>

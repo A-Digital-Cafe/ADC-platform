@@ -18,7 +18,13 @@ export class RegionManager {
 		private readonly logger: ILogger,
 		/** URI de conexión para la región global default (declarada en config.json). */
 		private readonly defaultObjectUri: string,
-		getAuthVerifier: AuthVerifierGetter = () => null
+		getAuthVerifier: AuthVerifierGetter = () => null,
+		/**
+		 * Aviso de que una región mutó en ESTE nodo. Opcional: sin él la cache local queda
+		 * correcta igual, pero como no tiene TTL, los demás nodos se quedan con la región vieja
+		 * (URI de conexión incluida) hasta el próximo arranque.
+		 */
+		private readonly onRegionChanged?: (path: string) => void
 	) {
 		this.#permissionChecker = new PermissionChecker(getAuthVerifier, "RegionManager", RESOURCE_NAME);
 	}
@@ -29,9 +35,45 @@ export class RegionManager {
 	 */
 	async initialize(): Promise<void> {
 		await this.#ensureDefaultRegion();
+		await this.#purgeLegacyCacheUri();
+		await this.reload();
+	}
 
+	/**
+	 * `metadata.cacheConnectionUri` se editaba desde el panel y no lo consumía nadie. Sacarlo del
+	 * schema impide escribirlo de nuevo, pero no limpia lo ya guardado: mongoose devuelve las
+	 * claves que no declara, así que un valor viejo seguiría saliendo por `GET /regions`. Y lo que
+	 * quedaría ahí es una credencial de Redis que nadie va a rotar porque nada la usa.
+	 *
+	 * `strict: false` es obligatorio, no una precaución: con el strict por defecto mongoose descarta
+	 * del update las rutas que el schema ya no declara — incluidas las de `$unset` — y la limpieza
+	 * queda en un no-op silencioso (`modifiedCount` ni siquiera vuelve).
+	 *
+	 * Idempotente y de una sola pasada; se puede borrar cuando toda la flota haya arrancado una vez.
+	 */
+	async #purgeLegacyCacheUri(): Promise<void> {
+		const result = await this.regionModel.updateMany(
+			{ "metadata.cacheConnectionUri": { $exists: true } },
+			{ $unset: { "metadata.cacheConnectionUri": "" } },
+			{ strict: false }
+		);
+
+		if (result.modifiedCount > 0) {
+			this.logger.logOk(`[RegionManager] cacheConnectionUri removido de ${result.modifiedCount} región(es): el campo ya no existe`);
+		}
+	}
+
+	/**
+	 * Relee las regiones desde Mongo. Repetible a propósito (a diferencia de `initialize()`, no
+	 * crea nada): es lo que corre cuando otro nodo avisa que una región cambió.
+	 *
+	 * Resetea `#globalRegion` antes de repoblar: si la que era global dejó de serlo, conservarla
+	 * mandaría las escrituras a la base equivocada.
+	 */
+	async reload(): Promise<void> {
 		const regions = await this.regionModel.find({ isActive: true });
 		this.#regionsCache.clear();
+		this.#globalRegion = null;
 
 		for (const region of regions) {
 			const info = this.#toRegionInfo(region);
@@ -96,6 +138,7 @@ export class RegionManager {
 		}
 
 		this.logger.logOk(`[RegionManager] Región creada: ${path}${isGlobal ? " (global)" : ""}`);
+		this.onRegionChanged?.(path);
 		return info;
 	}
 
@@ -161,8 +204,13 @@ export class RegionManager {
 
 		if (info.isGlobal) {
 			this.#globalRegion = info;
+		} else if (this.#globalRegion?.path === path) {
+			// Dejó de ser la global: el resto de los nodos lo van a ver al recargar, y este se
+			// quedaría mandando las escrituras a la base equivocada.
+			this.#globalRegion = null;
 		}
 
+		this.onRegionChanged?.(path);
 		return info;
 	}
 
@@ -191,6 +239,7 @@ export class RegionManager {
 		this.#regionsCache.delete(path);
 
 		this.logger.logDebug(`[RegionManager] Región eliminada: ${path}`);
+		this.onRegionChanged?.(path);
 	}
 
 	/**
