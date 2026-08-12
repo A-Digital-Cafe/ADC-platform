@@ -122,6 +122,32 @@ function attachPoolListeners(entry: SharedPoolEntry, physicalKey: string): void 
 }
 
 /**
+ * Espera a que un pool YA existente vuelva a estar listo.
+ *
+ * Hace falta desde que un entry caído dejó de reemplazarse (ver {@link MongoProvider}): quien
+ * llega a tomar el pool mientras el servidor está caído tiene que esperar a que el driver lo
+ * levante —o fallar dentro de un presupuesto, para que el reintento con backoff de `#connect`
+ * haga lo suyo— en vez de llevarse una `Connection` en `readyState 0` creyéndose conectado.
+ */
+function whenPoolReady(physical: Connection, timeoutMs: number): Promise<void> {
+	if (physical.readyState === 1) return Promise.resolve();
+	return new Promise<void>((resolve, reject) => {
+		const settle = (error?: Error) => {
+			clearTimeout(timer);
+			physical.off("connected", onConnected);
+			if (error) reject(error);
+			else resolve();
+		};
+		const onConnected = () => settle();
+		const timer = setTimeout(
+			() => settle(new Error(`El pool compartido ${physical.host}:${physical.port} sigue caído`)),
+			timeoutMs
+		);
+		physical.on("connected", onConnected);
+	});
+}
+
+/**
  * Contabilidad real de sockets del pool.
  *
  * El driver emite estos eventos CMAP siempre (no hay que habilitar monitoring) y son la única
@@ -151,6 +177,13 @@ const computePhysicalKey = splitMongoUri;
  * aunque el nombre de la DB en el pathname sea distinto (cada instancia trabaja
  * contra una vista lógica useDb()). Refcount por pool; se cierra solo cuando la
  * última instancia la libera.
+ *
+ * **Una `Connection` viva no se reemplaza nunca.** Es la garantía de la que cuelga todo lo demás:
+ * los servicios compilan sus modelos una sola vez en `start()` y los DAOs los guardan en campos
+ * privados, así que un objeto `Connection` nuevo los dejaría escribiendo contra el pool anterior
+ * —que nadie cierra— sin enterarse. Cuando el servidor se cae, mongoose reconecta por debajo
+ * sobre el MISMO objeto (`Connection` y `MongoClient` idénticos, `readyState` 1 → 0 → 1) y las
+ * vistas `useDb()` vuelven con él; por eso un pool caído se espera, no se reabre.
  */
 export default class MongoProvider extends BaseProvider {
 	public readonly name = "mongo-provider";
@@ -216,7 +249,7 @@ export default class MongoProvider extends BaseProvider {
 	async #acquirePhysical(physicalKey: string): Promise<SharedPoolEntry> {
 		let entry = SHARED_POOLS.get(physicalKey);
 
-		if (!entry || entry.physical.readyState === 0) {
+		if (!entry) {
 			// Coalescer carreras: si ya hay una creación en vuelo para este key, esperarla.
 			let inflight = INFLIGHT_POOLS.get(physicalKey);
 			if (!inflight) {
@@ -245,19 +278,14 @@ export default class MongoProvider extends BaseProvider {
 							Logger.warn(`[MongoProvider] Sin contadores de pool para ${redactMongoUri(physicalKey)}: ${error.message}`);
 						}
 						const physical = await pending.asPromise();
-						// Un pool caído se reemplaza, pero sus tenedores siguen existiendo: se
-						// arrastran refCount y suscriptores o quedan sin reconexión y el pool
-						// nuevo se cerraría al primer release de una instancia ajena.
-						const stale = SHARED_POOLS.get(physicalKey);
 						const fresh: SharedPoolEntry = {
 							physical,
-							refCount: stale?.refCount ?? 0,
+							refCount: 0,
 							listenersAttached: false,
 							dbViews: new Map(),
-							subscribers: new Set(stale?.subscribers),
+							subscribers: new Set(),
 							maxPoolSize,
 							minPoolSize,
-							// Contadores del cliente nuevo: el viejo se fue con sus sockets.
 							counters,
 						};
 						SHARED_POOLS.set(physicalKey, fresh);
@@ -270,6 +298,13 @@ export default class MongoProvider extends BaseProvider {
 				INFLIGHT_POOLS.set(physicalKey, inflight);
 			}
 			entry = await inflight;
+		} else if (entry.physical.readyState !== 1) {
+			// El pool existe pero está caído: se espera a que el driver lo levante sobre el MISMO
+			// objeto en vez de abrir uno nuevo (ver {@link MongoProvider}).
+			await whenPoolReady(entry.physical, this.config.serverSelectionTimeout!);
+			// Mientras esperábamos, otra instancia pudo soltar su última toma y cerrarlo: si el
+			// mapa ya no tiene ESTE entry, se rehace el camino (que ahora sí abrirá uno nuevo).
+			if (SHARED_POOLS.get(physicalKey) !== entry) return this.#acquirePhysical(physicalKey);
 		}
 
 		// El pool ya existía: sus límites los fijó quien lo abrió primero. Avisar en vez de
@@ -307,13 +342,18 @@ export default class MongoProvider extends BaseProvider {
 		entry.refCount--;
 		if (entry.refCount > 0) return;
 
+		// Se saca del mapa ANTES de esperar el cierre, no después: mientras `close()` está en vuelo
+		// el pool ya no sirve a nadie, y dejarlo visible engancharía a un `#acquirePhysical`
+		// concurrente a una conexión que se está cerrando —caso que antes tapaba el reemplazo del
+		// entry caído, que es justo lo que dejó de existir—. Borrar recién en el `finally` tendría
+		// además el efecto opuesto: si ese acquire ya abrió uno nuevo bajo la misma clave, el
+		// borrado tardío se llevaría puesto al pool nuevo.
+		SHARED_POOLS.delete(physicalKey);
 		try {
 			await entry.physical.close();
 			Logger.ok(`[MongoProvider] Pool físico cerrado: ${redactMongoUri(physicalKey)}`);
 		} catch (error: any) {
 			Logger.error(`[MongoProvider] Error cerrando pool físico: ${error.message}`);
-		} finally {
-			SHARED_POOLS.delete(physicalKey);
 		}
 	}
 
@@ -337,7 +377,23 @@ export default class MongoProvider extends BaseProvider {
 
 	async #connect(): Promise<void> {
 		if (this.connection?.readyState === 1) {
+			// Acá cae el reloj de reconexión cuando el driver ya recuperó el pool solo: se limpia el
+			// error de la caída para que `getStats()` no lo arrastre para siempre.
+			this.retryCount = 0;
+			this.lastError = undefined;
 			Logger.info(`[MongoProvider] Ya conectado a ${this.dbName}`);
+			return;
+		}
+
+		// Esta instancia YA tomó su pool: lo que sigue es una reconexión, no una primera conexión.
+		// El driver la hace por debajo sobre el MISMO objeto `Connection`, así que no hay nada que
+		// reabrir. Volver a `#acquirePhysical` acá sumaba un hold que nadie libera: el refCount
+		// quedaba inflado y `stop()` ya no cerraba el pool (sockets vivos contra el host viejo), y
+		// de paso el entry se reemplazaba por uno nuevo dejando a los servicios con sus modelos
+		// compilados sobre la `Connection` anterior.
+		if (this.physicalKey) {
+			Logger.warn(`[MongoProvider] Pool de '${this.dbName}' todavía caído; el driver sigue reintentando.`);
+			this.#scheduleReconnect();
 			return;
 		}
 

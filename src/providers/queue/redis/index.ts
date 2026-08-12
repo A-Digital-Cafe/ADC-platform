@@ -1,5 +1,6 @@
 import { RedisClient } from "bun";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
+import { Logger } from "../../../utils/logger/Logger.js";
 
 /**
  * Configuración del RedisProvider
@@ -23,6 +24,15 @@ interface SharedRedisEntry {
 // El keyPrefix se mantiene por-instancia (es lógica de cliente, no de conexión).
 const GLOBAL_KEY = Symbol.for("adc.redis.sharedPools");
 const SHARED_POOLS: Map<string, SharedRedisEntry> = ((globalThis as any)[GLOBAL_KEY] ??= new Map<string, SharedRedisEntry>());
+
+/**
+ * Reconexión del cliente de Bun. El default de `maxRetries` es 10 y **se agota**: cuando eso pasa
+ * el cliente queda muerto DENTRO del pool compartido, así que toda instancia que comparta esa
+ * clave física —y toda la que llegue después— recibe un cliente inservible sin que nada avise.
+ * Redis vuelve solo de un reinicio o de un failover de VIP; lo que no vuelve es el provider si
+ * dejó de intentar. El techo alto es, en la práctica, "seguí intentando".
+ */
+const RECONNECT_OPTIONS = { autoReconnect: true, maxRetries: 1_000_000, enableOfflineQueue: true } as const;
 
 function buildRedisUrl(cfg: RedisProviderConfig): { url: string; physicalKey: string } {
 	const { host, port, password, db } = cfg;
@@ -80,12 +90,18 @@ export default class RedisProvider extends BaseProvider {
 		let entry = SHARED_POOLS.get(physicalKey);
 
 		if (!entry) {
-			const client = new RedisClient(url, {});
+			const client = new RedisClient(url, RECONNECT_OPTIONS);
+			// Logger estático y no `this.logger`: los callbacks son del SOCKET, que sobrevive a la
+			// instancia que lo abrió (refCount). Atados a `this`, una caída de Redis se seguiría
+			// reportando con el logger de un provider ya detenido.
+			const where = `${this.#config.host}:${this.#config.port}`;
 			client.onclose = (msg) => {
-				this.logger.logDebug(`${msg.message}`);
+				// A nivel warn, no debug: perder Redis apaga rate limit, sesiones, jobs y los leases
+				// que reparten el trabajo entre nodos. Es lo último que conviene que sea invisible.
+				Logger.warn(`[RedisProvider] Conexión perdida (${where}): ${msg.message}`);
 			};
 			client.onconnect = () => {
-				this.logger.logDebug("Redis conectado");
+				Logger.ok(`[RedisProvider] Conectado (${where})`);
 			};
 
 			try {
