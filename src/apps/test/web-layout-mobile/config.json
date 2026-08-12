@@ -27,7 +27,7 @@
 				"host": "${DASHBOARD_MONGO_HOST:-localhost:27018}",
 				"user": "${MONGO_USER:-admin}",
 				"password": "${MONGO_PASSWORD:-password}",
-				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"options": "${DASHBOARD_MONGO_OPTIONS:-authSource=admin}",
 				"db": "adc-dashboard",
 				"maxRetries": 5,
 				"retryDelay": 5000
