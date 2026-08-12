@@ -11,7 +11,7 @@
 #   - clona los que falten
 #   - omite silenciosamente los que no tengas permiso para clonar
 #   - descarta las líneas que no cumplan las reglas de arriba
-#   - NO toca los que ya estén clonados (usa `git -C <dir> pull` manualmente si querés actualizar)
+#   - NO toca los que ya estén clonados (`bun run update-all` corre `git pull --ff-only` en todos)
 #
 # Ejemplos:
 # SEO       git@github.com:A-Digital-Cafe/adc-preset-seo.git       main

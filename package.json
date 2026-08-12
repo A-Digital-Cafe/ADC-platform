@@ -16,6 +16,7 @@
 	],
 	"scripts": {
 		"postinstall": "node scripts/sync-presets.mjs",
+		"update-all": "node scripts/sync-presets.mjs --update-all",
 		"start": "bun scripts/generate-public-env.ts && bun scripts/build-license-notices.mjs && bun scripts/build-vendor-esm.mjs && bun scripts/build-legal-pdfs.ts && cross-env NODE_ENV=production bun src/index.ts",
 		"dev": "bun scripts/generate-public-env.ts && bun scripts/build-vendor-esm.mjs && cross-env NODE_ENV=development bun src/index.ts",
 		"dev:tests": "cross-env NODE_ENV=development ENABLE_TESTS=true bun src/index.ts",

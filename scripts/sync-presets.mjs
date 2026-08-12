@@ -5,6 +5,11 @@ import { delimiter, isAbsolute, join, resolve, sep } from 'node:path';
 const PRESETS_FILE = 'presets/.presets.txt';
 const PRESETS_DIR = 'presets';
 
+// `--update-all` (script `bun run update-all`): además de clonar los que falten, corre
+// `git pull --ff-only` en los presets YA clonados. Sólo fast-forward a propósito: un pull
+// que mergea sobre un preset con commits locales dejaría un merge automático sin revisar.
+const UPDATE_ALL = process.argv.includes('--update-all');
+
 if (!existsSync(PRESETS_FILE)) process.exit(0);
 
 // Resolve the git executable to an absolute path so we never rely on PATH at
@@ -71,6 +76,7 @@ function isInsidePresets(dir) {
 mkdirSync(PRESETS_DIR, { recursive: true });
 
 let ok = 0, skippedExists = 0, skippedNoAccess = 0, failed = 0, invalid = 0;
+let updated = 0, upToDate = 0, updateSkipped = 0, updateFailed = 0;
 const mutableRefs = [];
 
 // Doble candado de transporte. `GIT_ALLOW_PROTOCOL` es el que manda: `protocol.allow`
@@ -250,6 +256,58 @@ function persistGithubClientId(clientId) {
   }
 }
 
+/**
+ * `git pull --ff-only` sobre un preset ya clonado (modo `--update-all`).
+ *
+ * Tres razones para NO tocar un preset, cada una con su aviso:
+ *  - ref pineada a un SHA: actualizar es cambiar el pin en .presets.txt, no un pull;
+ *  - árbol sucio: un pull sobre cambios sin commitear puede dejar un merge a medias;
+ *  - HEAD en otra rama que la declarada (o detached): estás trabajando ahí — no se pisa.
+ */
+async function updateExisting(name, dir, ref) {
+  if (SHA_RE.test(ref)) {
+    console.log(`  ⓘ ${name}: pineado a ${ref.slice(0, 12)} — se actualiza cambiando el pin, no con pull (skip)`);
+    updateSkipped++;
+    return;
+  }
+  if (git(['-C', dir, 'status', '--porcelain']).stdout?.trim()) {
+    console.log(`  ⚠ ${name}: cambios locales sin commitear (skip)`);
+    updateSkipped++;
+    return;
+  }
+  const branch = git(['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD']).stdout?.trim();
+  const target = ref || branch;
+  if (branch !== target || branch === 'HEAD') {
+    console.log(`  ⚠ ${name}: HEAD está en '${branch}' y la ref declarada es '${target}' (skip)`);
+    updateSkipped++;
+    return;
+  }
+
+  // Remoto y rama EXPLÍCITOS: sin upstream configurado (pasa en clones donde la rama se
+  // creó con `checkout <ref>`), un `pull` a secas intenta fusionar todas las ramas del
+  // fetch y muere con "no se puede hacer fast-forward en múltiples ramas".
+  const pullArgs = ['-C', dir, 'pull', '--ff-only', '--quiet', 'origin', target];
+  const before = git(['-C', dir, 'rev-parse', 'HEAD']).stdout?.trim();
+  let res = git(pullArgs);
+  if (res.status !== 0 && (await ensureGithubAuth()) !== null) {
+    res = git(pullArgs); // reintento con token (repo privado)
+  }
+  if (res.status !== 0) {
+    const detail = (res.stderr ?? '').trim().split('\n').at(-1) ?? '';
+    console.error(`  ✗ ${name}: pull falló (${detail || 'sin detalle'})`);
+    updateFailed++;
+    return;
+  }
+  const after = git(['-C', dir, 'rev-parse', 'HEAD']).stdout?.trim();
+  if (before === after) {
+    console.log(`  ✓ ${name} ya al día`);
+    upToDate++;
+  } else {
+    console.log(`  ↑ ${name}: ${before?.slice(0, 12)} → ${after?.slice(0, 12)}`);
+    updated++;
+  }
+}
+
 /** Pide autorización interactiva (una sola vez). Devuelve el token vigente, o null. */
 async function ensureGithubAuth() {
   if (githubToken || githubAuthAttempted) return githubToken;
@@ -311,8 +369,12 @@ for (const rawLine of readFileSync(PRESETS_FILE, 'utf8').split('\n')) {
   }
 
   if (existsSync(dir)) {
-    console.log(`  ✓ ${name} ya está presente (skip)`);
-    skippedExists++;
+    if (UPDATE_ALL) {
+      await updateExisting(name, dir, ref);
+    } else {
+      console.log(`  ✓ ${name} ya está presente (skip)`);
+      skippedExists++;
+    }
     continue;
   }
 
@@ -352,10 +414,15 @@ for (const rawLine of readFileSync(PRESETS_FILE, 'utf8').split('\n')) {
   }
 }
 
-console.log(
-  `Presets: ${ok} clonados, ${skippedExists} existentes, ${skippedNoAccess} sin acceso, ${failed} fallidos` +
-    (invalid ? `, ${invalid} inválidos` : '') + '.'
-);
+const invalidSuffix = invalid ? `, ${invalid} inválidos` : '';
+const summary = UPDATE_ALL
+  ? `Presets: ${updated} actualizados, ${upToDate} al día, ${updateSkipped} omitidos, ${updateFailed + failed} fallidos, ${ok} clonados, ${skippedNoAccess} sin acceso`
+  : `Presets: ${ok} clonados, ${skippedExists} existentes, ${skippedNoAccess} sin acceso, ${failed} fallidos`;
+console.log(summary + invalidSuffix + '.');
+
+if (UPDATE_ALL && updated > 0) {
+  console.log('  ⓘ Hubo actualizaciones: correr `bun install` si algún preset cambió sus dependencias.');
+}
 
 if (mutableRefs.length > 0) {
   console.warn(
