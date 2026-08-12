@@ -44,10 +44,30 @@ export interface UserKeyStoreOptions {
 /** Cache simple acotado de DEKs desenvueltas (evita scrypt/Mongo por request). */
 const KEY_CACHE_MAX = 500;
 
+/**
+ * Vigencia de una DEK cacheada. Del orden de los minutos y no de las horas: una sesión de subida o
+ * descarga hace muchos accesos seguidos y no tiene sentido re-desenvolver en cada uno, pero la
+ * ventana en la que un nodo ajeno a la purga puede seguir descifrando tiene que ser corta (el
+ * porqué, en el docstring de `UserKeyStore`). Re-desenvolver cuesta un `findById` + un AES-GCM,
+ * así que acortarla es barato.
+ */
+const KEY_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * Almacén de las DEKs envueltas, con cache en memoria acotada **y con vencimiento**.
+ *
+ * El TTL no es una micro-optimización, no sacarlo: con varios nodos kernel contra la misma base la
+ * purga de cuenta corre en uno solo (lease de líder), que borra la DEK de Mongo y de *su* memoria
+ * mientras los demás siguen con la clave en RAM y pueden descifrar los binarios del usuario hasta
+ * que la entrada caiga por presión FIFO o hasta reiniciar. Al vencer se vuelve a desenvolver desde
+ * Mongo —donde ya no está—, así que la ventana queda acotada al TTL. Hace a que la supresión del
+ * art. 16 de la Ley 25.326 se complete, no al rendimiento; si alguna vez se reemplaza, que sea por
+ * una invalidación entre nodos, no por nada.
+ */
 export class UserKeyStore {
 	readonly #model: Model<UserKeyDoc>;
 	readonly #masterKey: Buffer;
-	readonly #cache = new Map<string, Buffer>();
+	readonly #cache = new Map<string, { dek: Buffer; expiresAt: number }>();
 
 	constructor(opts: UserKeyStoreOptions) {
 		if (opts.masterKey.length !== DEK_LENGTH) throw new Error("masterKey debe ser de 32 bytes");
@@ -59,7 +79,9 @@ export class UserKeyStore {
 	async getUserKey(userId: string): Promise<Buffer> {
 		if (!userId) throw new Error("userId requerido para resolver la DEK");
 		const cached = this.#cache.get(userId);
-		if (cached) return cached;
+		if (cached && cached.expiresAt > Date.now()) return cached.dek;
+		// Vencida: descartarla ya, para que el re-cacheo entre a la cola FIFO como entrada nueva.
+		if (cached) this.#cache.delete(userId);
 
 		let doc = await this.#model.findById(userId).lean<UserKeyDoc | null>();
 		if (!doc) {
@@ -88,10 +110,23 @@ export class UserKeyStore {
 
 	#remember(userId: string, dek: Buffer): void {
 		if (this.#cache.size >= KEY_CACHE_MAX) {
-			const oldest = this.#cache.keys().next().value;
-			if (oldest !== undefined) this.#cache.delete(oldest);
+			// Barrer lo vencido antes de desalojar por FIFO: no tiene sentido tirar una clave viva
+			// mientras quedan buffers de claves ya inservibles ocupando lugar.
+			this.#dropExpired();
+			if (this.#cache.size >= KEY_CACHE_MAX) {
+				const oldest = this.#cache.keys().next().value;
+				if (oldest !== undefined) this.#cache.delete(oldest);
+			}
 		}
-		this.#cache.set(userId, dek);
+		this.#cache.set(userId, { dek, expiresAt: Date.now() + KEY_CACHE_TTL_MS });
+	}
+
+	/** Barrido perezoso, sin timer: sólo corre cuando la cota obliga a desalojar. */
+	#dropExpired(): void {
+		const now = Date.now();
+		for (const [id, entry] of this.#cache) {
+			if (entry.expiresAt <= now) this.#cache.delete(id);
+		}
 	}
 
 	#wrap(dek: Buffer): string {
