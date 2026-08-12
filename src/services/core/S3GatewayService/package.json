@@ -1,0 +1,9 @@
+{
+	"name": "@adc-platform/s3-gateway-service",
+	"license": "ISC",
+	"author": "abbytec",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"dependencies": {}
+}

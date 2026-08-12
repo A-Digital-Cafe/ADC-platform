@@ -2,7 +2,9 @@ import { isPrivateHost } from "@common/utils/url-utils.js";
 import { isRealProduction } from "@common/utils/runtime-env.ts";
 
 export const ALLOWED_HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
-export const ALLOWED_CORS_HEADERS = ["Content-Type", "Authorization", "Idempotency-Key", "X-CSRF-Token", "X-Requested-With"];
+// `Content-Disposition` está por el gateway S3: el PUT presignado lo lleva FIRMADO (SigV4), así
+// que el preflight del vhost del gateway tiene que permitirlo o el navegador bloquea la subida.
+export const ALLOWED_CORS_HEADERS = ["Content-Type", "Authorization", "Idempotency-Key", "X-CSRF-Token", "X-Requested-With", "Content-Disposition"];
 
 function parseOriginList(): string[] {
 	const raw = process.env.CORS_ALLOWED_ORIGINS || process.env.ADC_CORS_ALLOWED_ORIGINS || "";

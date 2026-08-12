@@ -1,0 +1,18 @@
+{
+	"name": "S3GatewayService",
+	"uiName": "Core",
+	"version": "1.0.0",
+	"kernelMode": 90,
+	"failOnError": false,
+	"providers": [
+		{
+			"name": "fastify-server",
+			"version": "latest",
+			"language": "typescript"
+		}
+	],
+	"private": {
+		"publicHost": "${S3_GATEWAY_PUBLIC_HOST:-}",
+		"upstream": "${S3_GATEWAY_UPSTREAM:-127.0.0.1:3900}"
+	}
+}
