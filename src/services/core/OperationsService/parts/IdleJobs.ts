@@ -13,8 +13,13 @@ import { IdleScheduler, type SchedulerConfig } from "./IdleScheduler.ts";
 export class IdleJobs implements IIdleOrchestrator {
 	#scheduler: IdleScheduler | null = null;
 
-	/** Arranca el planificador con el bloque `private` del `config.json` del servicio. */
-	start(priv: Record<string, unknown>, logger: ILogger): SchedulerConfig {
+	/**
+	 * Arranca el planificador con el bloque `private` del `config.json` del servicio.
+	 *
+	 * @param claimLeader pide el rol de "nodo que corre los trabajos de fondo" para el turno en
+	 *   curso. Lo provee el servicio, que es el dueño del lease.
+	 */
+	start(priv: Record<string, unknown>, logger: ILogger, claimLeader: () => Promise<boolean>): SchedulerConfig {
 		const config: SchedulerConfig = {
 			tickMs: positive(priv.idleTickSeconds, 30) * 1000,
 			defaultIntervalMs: positive(priv.idleDefaultIntervalSeconds, 300) * 1000,
@@ -24,7 +29,7 @@ export class IdleJobs implements IIdleOrchestrator {
 			maxCpuPercent: positive(priv.idleMaxCpuPercent, 35),
 			maxLoadPerCore: positive(priv.idleMaxLoadPerCore, 0.7),
 		};
-		this.#scheduler = new IdleScheduler(config, logger);
+		this.#scheduler = new IdleScheduler(config, logger, claimLeader);
 		this.#scheduler.start();
 		return config;
 	}

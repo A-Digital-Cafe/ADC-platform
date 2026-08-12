@@ -7,7 +7,7 @@ export {
 	type LegalAcceptanceArchiveRecord,
 } from "./legalArchive.js";
 export { RoleManager } from "./roles.js";
-export { PermissionManager } from "./permissions.js";
+export { PermissionManager, type PermissionInvalidation } from "./permissions.js";
 export { SystemManager } from "./system.js";
 export { RegionManager } from "./regions.js";
 export { OrgManager } from "./organizations.js";

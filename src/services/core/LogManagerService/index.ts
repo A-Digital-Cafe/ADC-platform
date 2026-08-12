@@ -2,12 +2,16 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { BaseService } from "../../BaseService.js";
 import { Kernel } from "../../../kernel.js";
-import { ILogManagerService } from "./types.js";
+import { ILogManagerService, type LogRequestOrigin, type NodeLogPage } from "./types.js";
 import { ModuleTypes } from "../../../utils/registry/ModuleRegistry.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { EnableEndpoints, DisableEndpoints, type EndpointCtx } from "../EndpointManagerService/index.js";
 import { AuthError } from "@common/types/custom-errors/AuthError.ts";
+import { HttpError } from "@common/types/ADCCustomError.ts";
 import { logBuffer, type LogPage, type LogQuery } from "@common/utils/log-buffer.ts";
+import { callNode, resolveNodeTarget } from "@common/utils/cluster-fanin.ts";
+import { nodeId } from "@common/utils/cluster-env.ts";
+import type { IClusterService } from "@common/types/cluster/ICluster.ts";
 import { LogsEndpoints } from "./endpoints/logs.ts";
 
 /**
@@ -160,6 +164,38 @@ export default class LogManagerService extends BaseService implements ILogManage
 	 */
 	queryBuffer(filter: LogQuery): LogPage {
 		return logBuffer.query(filter);
+	}
+
+	/**
+	 * Página de logs del nodo pedido. Sin `node` —o con el propio— es la consulta local de
+	 * siempre; con otro, se le pregunta EN VIVO por HTTP y se devuelve lo que conteste.
+	 *
+	 * Nada se agrega ni se guarda: el buffer de cada proceso sigue siendo suyo y muere con él,
+	 * que es lo que promete la política de privacidad. Un agregador que juntara los buffers de
+	 * la flota sería otra cosa —un almacén de logs— y obligaría a enmendar ese documento.
+	 */
+	async queryBufferAt(node: string | undefined, filter: LogQuery, origin: LogRequestOrigin): Promise<NodeLogPage> {
+		const cluster = this.tryGetMyService<IClusterService>("ClusterService");
+		const selfId = cluster?.self().id ?? nodeId();
+		if (!cluster) {
+			// Sin registro no hay a quién preguntarle, pero tampoco hay que fingir que el buffer
+			// local es el del nodo pedido: se responde con el propio y se avisa cuál es.
+			if (node && node !== selfId) {
+				throw new HttpError(503, "CLUSTER_UNAVAILABLE", "No se puede consultar otro nodo: ClusterService no está cargado.");
+			}
+			return { ...logBuffer.query(filter), nodeId: selfId };
+		}
+		const target = resolveNodeTarget(await cluster.nodes(), node, selfId, origin.headers);
+		if (!target) return { ...logBuffer.query(filter), nodeId: selfId };
+		return callNode<NodeLogPage>({
+			node: target,
+			origin: selfId,
+			path: "/api/logs",
+			// Los filtros ya parseados, no la query cruda: el selector de nodo se queda acá.
+			query: { level: filter.level, module: filter.module, q: filter.q, limit: filter.limit, cursor: filter.cursor },
+			headers: origin.headers,
+			clientIp: origin.ip,
+		});
 	}
 
 	/**

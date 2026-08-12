@@ -11,6 +11,10 @@ import { mergeFeatures, mergeOptionalFeatures, pendingPlansFrom } from "./shared
  *
  * Regla común a estas escrituras: nada pisa un plan editado o importado
  * (`seeded: false`); sobre esos sólo se agregan claves nuevas.
+ *
+ * Invalidan la cache local y nada más, a diferencia de `PlanWriter`: cada nodo las corre en su
+ * propio arranque con el mismo código y lo que escriben sólo agrega claves, así que avisarle al
+ * clúster sería ruido en cada boot para algo que converge solo por TTL.
  */
 export class PlanSeeder {
 	readonly #model: Model<PlanDefinitionDoc>;

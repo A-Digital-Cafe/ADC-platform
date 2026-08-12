@@ -14,7 +14,7 @@
 				"host": "${MONGO_HOST:-localhost:27017}",
 				"user": "${MONGO_USER:-admin}",
 				"password": "${MONGO_PASSWORD:-password}",
-				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"options": "${MONGO_OPTIONS:-replicaSet=rs0&authSource=admin}",
 				"db": "adc-identity",
 				"maxRetries": 5,
 				"retryDelay": 5000
@@ -26,6 +26,7 @@
 			"language": "typescript",
 			"custom": {
 				"endpoint": "${S3_ENDPOINT}",
+				"publicEndpoint": "${S3_PUBLIC_ENDPOINT:-}",
 				"region": "${S3_REGION}",
 				"accessKey": "${S3_ACCESS_KEY}",
 				"secretKey": "${S3_SECRET_KEY}",
@@ -87,6 +88,11 @@
 		},
 		{
 			"name": "AuditLogService",
+			"version": "latest",
+			"optional": true
+		},
+		{
+			"name": "ClusterService",
 			"version": "latest",
 			"optional": true
 		}

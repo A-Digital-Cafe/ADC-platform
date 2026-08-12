@@ -14,7 +14,7 @@
 				"host": "${MONGO_HOST:-localhost:27017}",
 				"user": "${MONGO_USER:-admin}",
 				"password": "${MONGO_PASSWORD:-password}",
-				"options": "${MONGO_OPTIONS:-authSource=admin}",
+				"options": "${MONGO_OPTIONS:-replicaSet=rs0&authSource=admin}",
 				"db": "adc-storage",
 				"maxRetries": 5,
 				"retryDelay": 5000
@@ -35,6 +35,10 @@
 			"name": "EndpointManagerService",
 			"version": "latest",
 			"optional": true
+		},
+		{
+			"name": "OperationsService",
+			"version": "latest"
 		}
 	],
 	"private": {

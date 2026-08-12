@@ -35,7 +35,7 @@ interface JobEntry {
 const key = (owner: string, id: string): string => `${owner}:${id}`;
 
 /**
- * Planificador de trabajos de fondo. Cuatro reglas sostienen la promesa de "pasivo":
+ * Planificador de trabajos de fondo. Cinco reglas sostienen la promesa de "pasivo":
  *
  * 1. **Un lote por turno, nunca en paralelo** — dos barridos simultáneos son carga de primer plano.
  * 2. **No corre si el proceso no está ocioso** — bajo carga el turno se saltea; el trabajo se
@@ -43,6 +43,11 @@ const key = (owner: string, id: string): string => `${owner}:${id}`;
  * 3. **Presupuesto por lote** (`AbortSignal`) — el avance lo persiste el trabajo, no el planificador.
  * 4. **Espaciado progresivo** — devolver `0` duplica la espera hasta `maxBackoffMs`, así que un
  *    sistema al día no paga por tener el barrido registrado.
+ * 5. **Un solo nodo corre los trabajos de fondo** — el planificador pide un rol sostenido y sólo
+ *    el que lo tiene elige trabajos, salvo los marcados `perNode`. Sin esto, con N nodos cada
+ *    barrido registrado se ejecuta N veces: el aviso de plazo de una brecha notifica N veces al
+ *    equipo, el backfill de avatares descarga y sube N copias, y la verificación de contenido
+ *    hashea N veces el mismo lote. Con un solo nodo no cambia nada: siempre gana el rol.
  */
 export class IdleScheduler {
 	readonly #jobs = new Map<string, JobEntry>();
@@ -54,7 +59,12 @@ export class IdleScheduler {
 
 	constructor(
 		private readonly config: SchedulerConfig,
-		private readonly logger: ILogger
+		private readonly logger: ILogger,
+		/**
+		 * Pide (o renueva) el rol de "nodo que corre los trabajos de fondo" para este turno.
+		 * Lo inyecta `OperationsService`, que es el dueño del lease; acá sólo se consulta.
+		 */
+		private readonly claimLeader: () => Promise<boolean>
 	) {
 		this.#sampler = new LoadSampler(config);
 	}
@@ -146,20 +156,39 @@ export class IdleScheduler {
 			if (this.#jobs.size === 0) return;
 			if (!this.#sampler.read().idle) return;
 
-			const entry = this.#pickDue();
+			// El rol se pide DESPUÉS del freno por carga, y a propósito: un nodo saturado no llega
+			// hasta acá, así que deja de renovar y lo suelta solo al vencer. Al revés —reservar y
+			// después mirar la carga— el nodo más ocupado del clúster se quedaría con todo el
+			// trabajo de fondo sin hacer ninguno.
+			const leading = await this.#leading();
+			const entry = this.#pickDue(leading);
 			if (entry) await this.#runBatch(entry);
 		} finally {
 			this.#ticking = false;
 		}
 	}
 
-	/** Siguiente trabajo vencido, en round-robin para que ninguno acapare los turnos. */
-	#pickDue(): JobEntry | null {
+	async #leading(): Promise<boolean> {
+		try {
+			return await this.claimLeader();
+		} catch {
+			// Sin coordinación (Redis caído) se trabaja igual. Con un solo nodo —el caso normal—
+			// plantarse sería peor que el riesgo de duplicar un barrido.
+			return true;
+		}
+	}
+
+	/**
+	 * Siguiente trabajo vencido, en round-robin para que ninguno acapare los turnos. Sin el rol de
+	 * fondo sólo se eligen los `perNode`, que son los que tienen que correr en todos los nodos.
+	 */
+	#pickDue(leading: boolean): JobEntry | null {
 		const entries = [...this.#jobs.values()];
 		const now = Date.now();
 		for (let i = 0; i < entries.length; i++) {
 			const entry = entries[(this.#cursor + i) % entries.length];
 			if (entry.running || entry.nextRunAt > now) continue;
+			if (!leading && !entry.job.perNode) continue;
 			this.#cursor = (this.#cursor + i + 1) % entries.length;
 			return entry;
 		}

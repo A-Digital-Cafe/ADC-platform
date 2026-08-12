@@ -20,6 +20,7 @@ import {
 	type SessionRevoker,
 	type SubscriptionCanceller,
 	type SelfDeletionCancelledHook,
+	type PermissionInvalidation,
 } from "./dao/index.js";
 import { seedDevUsers, purgeDevUsers } from "./dao/devSeeder.js";
 import { SystemRole } from "./defaults/systemRoles.js";
@@ -29,6 +30,7 @@ import type { ISubscriptionService } from "@common/types/subscriptions/index.ts"
 import type { ISessionManagerService } from "@common/types/identity/ISessionManagerService.js";
 import type { IModerationService } from "@common/types/identity/IModerationService.js";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.js";
+import type { IClusterService } from "@common/types/cluster/ICluster.ts";
 import type { IIdleOrchestrator } from "@common/types/operations/IIdleOrchestrator.js";
 import type { Step } from "../OperationsService/index.ts";
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
@@ -72,6 +74,14 @@ import LRUCache from "@adc/utils/performance/LRUCache.ts";
 
 /** Organizaciones (× modo read/write) con managers vivos a la vez. */
 const ORG_MANAGERS_CACHE_SIZE = 200;
+
+/**
+ * Topics del bus del clúster. Las tres caches de este servicio son por proceso: hasta que se
+ * difundieron, el nodo que NO atendió la escritura seguía autorizando con permisos viejos (hasta
+ * un minuto) y hablándole a la región vieja (para siempre: esa cache no tiene TTL).
+ */
+const CLUSTER_TOPIC_PERMISSIONS = "identity.permissions.invalidate";
+const CLUSTER_TOPIC_REGIONS = "identity.regions.changed";
 
 /** Entrada de `#orgManagersCache`: managers + la vista/dbName que hay que liberar al desalojar. */
 interface CachedOrgManagers {
@@ -269,6 +279,9 @@ export default class IdentityManagerService extends BaseService implements IIden
 	/** Conexión por URI de región: acotada por la cantidad de regiones, no por orgs. */
 	readonly #regionConnections = new Map<string, Connection>();
 
+	/** Baja de las suscripciones al bus (compuesta: este servicio escucha más de un topic). */
+	#unsubscribeCluster: (() => void) | null = null;
+
 	/** Tracker de cuota lazy: StorageQuotaService carga después (kernelMode mayor). */
 	readonly #getQuotaTracker: QuotaTrackerGetter;
 
@@ -323,7 +336,14 @@ export default class IdentityManagerService extends BaseService implements IIden
 			const defaultRegionObjectUri =
 				(this.config?.private as { defaultRegionObjectUri?: string } | undefined)?.defaultRegionObjectUri ||
 				"mongodb://localhost:27017/adc-platform";
-			this.#regionManager = new RegionManager(RegionModel, OrganizationModel, this.logger, defaultRegionObjectUri, this.#getAuthVerifier);
+			this.#regionManager = new RegionManager(
+				RegionModel,
+				OrganizationModel,
+				this.logger,
+				defaultRegionObjectUri,
+				this.#getAuthVerifier,
+				(path) => this.#onLocalRegionChange(path)
+			);
 			await this.#regionManager.initialize();
 
 			// Secreto de baja de cuentas: firma los tokens de arrepentimiento y de cambio de email,
@@ -436,11 +456,15 @@ export default class IdentityManagerService extends BaseService implements IIden
 				GroupModel,
 				OrganizationModel,
 				1000, // cache size
-				60000 // TTL 1 minuto
+				60000, // TTL 1 minuto
+				(invalidation) => void this.#cluster()?.publish(CLUSTER_TOPIC_PERMISSIONS, invalidation)
 			);
 
 			// Crear el AuthVerifier ahora que tenemos todos los componentes
 			this.#authVerifier = this.createAuthVerifier();
+
+			// Los managers ya existen: a partir de acá se pueden aplicar avisos de otros nodos.
+			this.#subscribeCluster();
 
 			// Dev: sembrar usuarios de prueba (Admin global, Admin de org, …) con roles
 			// concretos. Idempotente y declarativo (ver defaults/devUsers.ts).
@@ -833,6 +857,56 @@ export default class IdentityManagerService extends BaseService implements IIden
 		return connection;
 	}
 
+	/**
+	 * Suelta TODOS los managers por org, liberando además la vista de mongoose de cada entrada:
+	 * `clear()` no dispara el `onEvict` de la LRU (por diseño: ahí el caller tiene el valor y
+	 * decide), así que vaciarla a secas dejaría las vistas y sus modelos compilados retenidos en
+	 * el driver.
+	 */
+	#dropOrgManagers(): void {
+		for (const key of [...this.#orgManagersCache.keys()]) {
+			const cached = this.#orgManagersCache.get(key);
+			this.#orgManagersCache.delete(key);
+			if (cached) this.#mongoProvider.releaseDbView(cached.connection, cached.dbName);
+		}
+	}
+
+	// Convergencia entre nodos
+
+	/** Opcional a propósito: sin clúster cada nodo invalida lo suyo y nada más. */
+	#cluster(): IClusterService | undefined {
+		return this.tryGetMyService<IClusterService>("ClusterService");
+	}
+
+	/**
+	 * Una región mutó en este nodo. `#orgManagersCache` cachea la conexión resuelta a partir de
+	 * ella, así que hay que soltarla también acá y no sólo al recibir el aviso del bus: con un
+	 * único nodo esa cache no se invalidaba nunca (mover una org de región no la despeinaba).
+	 */
+	#onLocalRegionChange(path: string): void {
+		this.#dropOrgManagers();
+		void this.#cluster()?.publish(CLUSTER_TOPIC_REGIONS, { path });
+	}
+
+	/** Efecto local de lo que difundió otro nodo. Nunca vuelve a publicar: sería un bucle. */
+	#subscribeCluster(): void {
+		const cluster = this.#cluster();
+		if (!cluster) return;
+		this.#unsubscribeCluster?.();
+		const unsubscribes = [
+			cluster.subscribe<PermissionInvalidation>(CLUSTER_TOPIC_PERMISSIONS, (msg) => {
+				if (msg.payload) this.#permissionManager?.applyInvalidation(msg.payload);
+			}),
+			cluster.subscribe<{ path: string }>(CLUSTER_TOPIC_REGIONS, async () => {
+				// Se recarga entera y no sólo la región avisada: una alta/baja de global cambia
+				// a dónde van las escrituras de TODAS.
+				await this.#regionManager?.reload();
+				this.#dropOrgManagers();
+			}),
+		];
+		this.#unsubscribeCluster = () => unsubscribes.forEach((off) => off());
+	}
+
 	// Métodos de servicio
 
 	async getStats(token?: string): Promise<IdentityStats> {
@@ -850,7 +924,10 @@ export default class IdentityManagerService extends BaseService implements IIden
 	@OnlyKernel()
 	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
-		this.#orgManagersCache.clear();
+		// Primero la baja del bus: un handler que llegue tarde tocaría managers ya descartados.
+		this.#unsubscribeCluster?.();
+		this.#unsubscribeCluster = null;
+		this.#dropOrgManagers();
 		this.#regionConnections.clear();
 		this.tryGetMyService<IIdleOrchestrator>("OperationsService")?.unregisterIdleJobs(this.getCapability());
 
@@ -1120,25 +1197,30 @@ export default class IdentityManagerService extends BaseService implements IIden
 	}
 
 	/**
-	 * Purga usuarios con `metadata.scheduledDeletionAt <= now`.
-	 *
-	 * Cada usuario se procesa como un pipeline reanudable vía `IOperationsService.stepper`
-	 * (estado en MongoDB, TTL 48h). Si el proceso cae a mitad de la cascada, en el
-	 * siguiente tick del timer el usuario sigue "due" (aún no borrado) y el stepper
-	 * salta los pasos ya completados, reanudando los siguientes. El borrado del
-	 * registro de usuario es SIEMPRE el último paso para preservar esta propiedad.
-	 *
-	 * Nota de diseño: es una tarea de mantenimiento automática (no iniciada por el
-	 * usuario), por eso vive en el timer de retención y NO en un endpoint HTTP ni en
-	 * el JobManager (cuya cola está pensada para endpoints async). La resiliencia la
-	 * aporta el stepper (Mongo) + la re-ejecución periódica, sin requerir RabbitMQ.
+	 * Corre `fn` sólo en el nodo que tenga el lease. Sin `OperationsService` corre igual: en un
+	 * despliegue de un nodo negarse sería peor que el trabajo duplicado que evita.
 	 */
+	async #onlyOnLeader(name: string, ttlSeconds: number, fn: () => Promise<void>): Promise<void> {
+		const ops = this.tryGetMyService<IOperationsService>("OperationsService");
+		if (ops) await ops.withLeadership(name, ttlSeconds, fn);
+		else await fn();
+	}
+
 	/**
-	 * Revierte grants de tier temporales vencidos (recompensas de bug bounty).
-	 * Tarea de mantenimiento automática (como la retención): corre en su propio
-	 * timer y a través del manager interno (sin token).
+	 * Barridos de retención y de grants vencidos: escriben —y BORRAN— datos compartidos, así que
+	 * corren en un solo nodo. Dos réplicas purgando a la vez competirían por los mismos usuarios y
+	 * ejecutarían los purgers de cada módulo dos veces sobre el mismo registro.
 	 */
 	async #runTierGrantRevert(): Promise<void> {
+		await this.#onlyOnLeader("identity.tier-grant-revert", 900, () => this.#tierGrantRevertBatch());
+	}
+
+	/**
+	 * Revierte grants de tier temporales vencidos (recompensas de bug bounty). Tarea de
+	 * mantenimiento automática, como la retención: corre en su propio timer y a través del
+	 * manager interno, sin token.
+	 */
+	async #tierGrantRevertBatch(): Promise<void> {
 		const users = this.#internalUserManager;
 		if (!users) return;
 		const now = new Date();
@@ -1159,6 +1241,24 @@ export default class IdentityManagerService extends BaseService implements IIden
 	}
 
 	async #runRetentionPurge(): Promise<void> {
+		await this.#onlyOnLeader("identity.retention-purge", 1800, () => this.#retentionPurgeBatch());
+	}
+
+	/**
+	 * Purga usuarios con `metadata.scheduledDeletionAt <= now`.
+	 *
+	 * Cada usuario se procesa como un pipeline reanudable vía `IOperationsService.stepper`
+	 * (estado en MongoDB, TTL 48h). Si el proceso cae a mitad de la cascada, en el
+	 * siguiente tick del timer el usuario sigue "due" (aún no borrado) y el stepper
+	 * salta los pasos ya completados, reanudando los siguientes. El borrado del
+	 * registro de usuario es SIEMPRE el último paso para preservar esta propiedad.
+	 *
+	 * Nota de diseño: es una tarea de mantenimiento automática (no iniciada por el
+	 * usuario), por eso vive en el timer de retención y NO en un endpoint HTTP ni en
+	 * el JobManager (cuya cola está pensada para endpoints async). La resiliencia la
+	 * aporta el stepper (Mongo) + la re-ejecución periódica, sin requerir RabbitMQ.
+	 */
+	async #retentionPurgeBatch(): Promise<void> {
 		const users = this.#internalUserManager;
 		if (!users) return;
 		const purgers = this.#getUserDataPurgers();

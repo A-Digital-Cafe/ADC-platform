@@ -18,6 +18,11 @@
 			"name": "EndpointManagerService",
 			"version": "latest",
 			"optional": true
+		},
+		{
+			"name": "ClusterService",
+			"version": "latest",
+			"optional": true
 		}
 	],
 	"utilities": []

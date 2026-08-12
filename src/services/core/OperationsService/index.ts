@@ -12,11 +12,15 @@ import type { IOperationsService } from "@common/types/operations/IOperationsSer
 import type { IdleJobDefinition, IdleJobStatus, IIdleOrchestrator } from "@common/types/operations/IIdleOrchestrator.ts";
 import type { CapabilityToken } from "@common/security/Capability.ts";
 import { IdleJobs } from "./parts/IdleJobs.ts";
+import { Leadership } from "./parts/Leadership.ts";
 
 export type { Step, SagaStep, StepFunction, StepperResult } from "./types.js";
 export { CircuitBreaker, CircuitState, type CircuitBreakerConfig } from "./parts/CircuitBreaker.ts";
 
 export const HTTP_CHECK_TTL_SECONDS = 120; // 2min
+
+/** Nombre del rol de "nodo que corre los trabajos de fondo" (ver `#claimIdleRole`). */
+const IDLE_ROLE = "operations.idle-scheduler";
 
 /**
  * Coordina **cuándo** corre el trabajo de la plataforma, no cómo se hace: `httpCheck`/`stepper`
@@ -30,7 +34,10 @@ export default class OperationsService extends BaseService implements IOperation
 
 	readonly #idle = new IdleJobs();
 	#redis: RedisProvider | null = null;
+	#leadership: Leadership | null = null;
 	#stepperModel: Model<StepperDocument> | null = null;
+	/** TTL del rol de trabajos de fondo. Se calcula del intervalo de turno al arrancar. */
+	#idleRoleTtl = 120;
 
 	constructor(kernel?: any, options?: any) {
 		super(kernel, options);
@@ -41,11 +48,18 @@ export default class OperationsService extends BaseService implements IOperation
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
 		this.#redis = this.getMyProvider<RedisProvider>("queue/redis");
+		this.#leadership = new Leadership(this.#redis, this.logger);
 		const mongo = this.getMyProvider<MongoProvider>("object/mongo");
 		await mongo.whenReady();
 		this.#stepperModel = mongo.createModel<StepperDocument>("OperationStep", stepperSchema);
 
-		const idle = this.#idle.start((this.config?.private ?? {}) as Record<string, unknown>, this.logger);
+		const idle = this.#idle.start((this.config?.private ?? {}) as Record<string, unknown>, this.logger, () =>
+			this.#claimIdleRole()
+		);
+		// Cuatro turnos de holgura: el rol se renueva en cada turno, así que sólo vence si el nodo
+		// dejó de tickear (saturado, caído o apagándose). Demasiado corto lo haría rotar por un
+		// turno perdido; demasiado largo dejaría el trabajo de fondo parado tras una caída.
+		this.#idleRoleTtl = Math.max(60, Math.ceil((idle.tickMs * 4) / 1000));
 		this.logger.logOk(
 			`OperationsService iniciado (trabajos ociosos: turno cada ${idle.tickMs / 1000}s, ocioso = CPU ≤ ${idle.maxCpuPercent}%)`
 		);
@@ -112,6 +126,37 @@ export default class OperationsService extends BaseService implements IOperation
 		}
 	}
 
+	/**
+	 * Corre `fn` sólo en el nodo que consiga el lease de `name`; en los demás no hace nada y
+	 * devuelve `undefined`. Es lo que evita que cada `setInterval` que escribe se ejecute una vez
+	 * por nodo. Detalle del contrato (y por qué el trabajo tiene que seguir siendo idempotente) en
+	 * `parts/Leadership.ts`.
+	 */
+	async withLeadership<T>(name: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T | undefined> {
+		// Sin Redis (arranque degradado) no hay coordinación posible. Se corre igual: en un
+		// despliegue de un nodo —el caso normal— negarse sería peor que el riesgo que evita.
+		if (!this.#leadership) return fn();
+		return this.#leadership.withLeadership(name, ttlSeconds, fn);
+	}
+
+	/** Leases que este nodo sostiene ahora mismo. Lo lee el panel de nodos. */
+	heldLeases(): string[] {
+		return this.#leadership?.heldLeases() ?? [];
+	}
+
+	/**
+	 * Pide para este nodo el rol de "el que corre los trabajos de fondo", una vez por turno.
+	 *
+	 * Un **rol sostenido** y no un lease por turno: varios trabajos llevan en memoria del proceso
+	 * la marca de lo que ya hicieron —el aviso de plazo de una brecha, por ejemplo, recuerda a
+	 * quién ya avisó— y rotar de nodo entre turnos la volvería a cero, que es el mismo aviso
+	 * repetido que el lease venía a evitar.
+	 */
+	async #claimIdleRole(): Promise<boolean> {
+		// Sin Redis no hay coordinación: se trabaja igual, como en `withLeadership`.
+		return this.#leadership ? this.#leadership.claimLeadership(IDLE_ROLE, this.#idleRoleTtl) : true;
+	}
+
 	// ── Trabajos de momentos ociosos (IIdleOrchestrator) ──────────────────────
 	// Delegación pura: el gate por scope y el planificador viven en `parts/IdleJobs.ts`.
 
@@ -134,6 +179,13 @@ export default class OperationsService extends BaseService implements IOperation
 	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
 		this.#idle.stop();
+		// Baja explícita del rol de fondo: sin esto el trabajo del clúster queda parado hasta que
+		// venza el lease, aunque otro nodo esté listo para tomarlo ya mismo.
+		await this.#leadership?.releaseLeadership(IDLE_ROLE).catch(() => undefined);
+		// Corta los renovadores: si no, un lease de este nodo se seguiría renovando después de
+		// pararlo y ningún otro podría tomar el trabajo hasta el TTL siguiente.
+		this.#leadership?.stop();
+		this.#leadership = null;
 		this.#redis = null;
 		this.#stepperModel = null;
 		await super.stop(kernelKey);

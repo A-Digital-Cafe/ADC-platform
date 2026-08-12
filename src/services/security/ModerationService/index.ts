@@ -8,6 +8,7 @@ import type { BanRecord, BanInput, BanLookupResult } from "@common/types/identit
 import type { User } from "@common/types/identity/User.js";
 import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
 import type { IModerationService } from "@common/types/identity/IModerationService.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.ts";
 
 import { assertCanManageUser } from "../../core/IdentityManagerService/domain/hierarchy.js";
 import { ModerationError } from "@common/types/custom-errors/ModerationError.ts";
@@ -97,7 +98,8 @@ export default class ModerationService extends BaseService implements IModeratio
 				(u, a) => this.#banPlatformUser(u, a),
 				this.#identityService,
 				this.getCapability(),
-				this.logger
+				this.logger,
+				(fn) => this.#onlyOnLeader("moderation.discord-sync", 7200, fn)
 			);
 			const cfg = (this.config?.private as ModerationPrivateConfig | undefined)?.discord;
 			await this.#sync.start(pengubot, { enabled: cfg?.syncEnabled, intervalMs: cfg?.syncIntervalMs });
@@ -186,18 +188,38 @@ export default class ModerationService extends BaseService implements IModeratio
 		}
 	}
 
+	/**
+	 * Corre `fn` sólo en el nodo que tenga el lease. Sin `OperationsService` corre igual: en un
+	 * despliegue de un nodo negarse sería peor que el trabajo duplicado que evita.
+	 */
+	async #onlyOnLeader(name: string, ttlSeconds: number, fn: () => Promise<void>): Promise<void> {
+		const ops = this.tryGetMyService<IOperationsService>("OperationsService");
+		if (ops) await ops.withLeadership(name, ttlSeconds, fn);
+		else await fn();
+	}
+
 	#startExpiredSweep(): void {
 		const sweep = async () => {
 			try {
-				const { count, userIds } = await this.#requireRepo().deactivateExpiredBans();
-				if (count) this.logger.logInfo(`[ModerationService] ${count} ban(s) vencidos desactivados y minimizados`);
-				await this.#reactivateAfterExpiredBans(userIds);
+				await this.#onlyOnLeader("moderation.expired-sweep", 3600, () => this.#expiredSweepBatch());
 			} catch (err: any) {
 				this.logger.logWarn(`[ModerationService] barrido de bans vencidos falló: ${err?.message || err}`);
 			}
 		};
 		void sweep();
 		this.#expiredSweep = setInterval(() => void sweep(), EXPIRED_SWEEP_INTERVAL_MS);
+	}
+
+	/**
+	 * El barrido es idempotente (un `updateMany` por filtro y guardas por usuario en la
+	 * reactivación), así que correrlo en varios nodos no corrompe nada: repite consultas y vuelve a
+	 * loguear —y a alertar— reactivaciones que ya hizo otro nodo. El lease es para ahorrarse ese
+	 * ruido y ese trabajo, no para proteger la consistencia.
+	 */
+	async #expiredSweepBatch(): Promise<void> {
+		const { count, userIds } = await this.#requireRepo().deactivateExpiredBans();
+		if (count) this.logger.logInfo(`[ModerationService] ${count} ban(s) vencidos desactivados y minimizados`);
+		await this.#reactivateAfterExpiredBans(userIds);
 	}
 
 	/**

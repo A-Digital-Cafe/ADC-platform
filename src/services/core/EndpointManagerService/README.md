@@ -147,6 +147,8 @@ Ventana **móvil de 24 h**, no un día calendario: así a las 00:05 se sigue vie
 
 > Mongo se conecta **en segundo plano**: este servicio es `kernelMode` con `failOnError`, y esperar a la base pondría el boot entero detrás de ella. Mientras no conecte, la ventana muestra sólo la hora en curso.
 
+> Con varios nodos, el flush a Redis corre en **todos** (el acumulador es local a cada proceso y saltearlo perdería métricas), pero el cierre de hora corre en **uno solo**, tras el lease `endpoints.metrics-archive` de `OperationsService`: borra el hash horario, y dos nodos sobre la misma hora la dejarían archivada a medias.
+
 > `GET /api/jobs/:jobId` y `GET /api/csrf-token` se registran directo contra el provider HTTP, **sin** el wrapper, así que quedan fuera de las métricas y del rate limit. `/api/jobs/:jobId` resuelve la sesión por su cuenta y **sólo se la devuelve a quien encoló el job** (`job.userId`); un job sin `userId` no se sirve a nadie. Mismo 404 para "no existe" y "no es tuyo".
 
 ### 7. Abstracción del Servidor HTTP

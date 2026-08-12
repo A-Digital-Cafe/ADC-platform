@@ -7,5 +7,5 @@ Tracking centralizado del uso de almacenamiento (attachments) por **(usuario, co
 - **Mínimos por app**: siguen acá — matriz `STORAGE_APP_MIN_BYTES` por app×contexto×tier, para que una cuota agotada no rompa funcionalidad básica.
 - **Integración**: los services registran su app con `registerApp(kernelKey, { appId, label, computeUsage })` y pasan `tracker` a su `AttachmentsManager` (opción `quota`); el mínimo lo resuelve este servicio.
 - **Endpoints**: `/api/storage/usage/me`, `/api/storage/apps` (mins del contexto del caller), y `/api/storage/admin/*` incl. `orgs/:orgId/limits` (permisos `storage.usage.*` / `storage.limits.*`).
-- **Reconciliación**: `POST /api/storage/admin/reconcile` (o `STORAGE_QUOTA_RECONCILE_MS`) reconstruye contadores por contexto desde `computeUsage` de cada app.
+- **Reconciliación**: `POST /api/storage/admin/reconcile` (o `STORAGE_QUOTA_RECONCILE_MS`) reconstruye contadores por contexto desde `computeUsage` de cada app. El barrido periódico corre en un solo nodo (lease `storage-quota.reconcile` de `OperationsService`); el endpoint admin no, es manual y explícito.
 - **Purga**: la cascada de baja de cuenta de Identity invoca `purgeUserData(cap, userId)` (scope `identity:internal`), que borra los contadores del usuario en todos los contextos.

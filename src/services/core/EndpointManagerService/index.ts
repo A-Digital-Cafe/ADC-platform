@@ -271,11 +271,31 @@ export default class EndpointManagerService extends BaseService implements IEndp
 	}
 
 	/**
+	 * Corre `fn` sólo en el nodo que tenga el lease. Sin `OperationsService` corre igual: en un
+	 * despliegue de un nodo negarse sería peor que el trabajo duplicado que evita.
+	 */
+	async #onlyOnLeader(name: string, ttlSeconds: number, fn: () => Promise<void>): Promise<void> {
+		const ops = this.#operationsService;
+		if (ops) await ops.withLeadership(name, ttlSeconds, fn);
+		else await fn();
+	}
+
+	/**
+	 * El cierre de hora corre en un solo nodo: los upserts a Mongo son idempotentes, pero el barrido
+	 * además BORRA el hash horario de Redis, así que dos nodos sobre la misma hora se pisan —uno
+	 * dropea mientras el otro todavía lee— y la hora queda archivada a medias. `#archiving` sólo
+	 * cubre el propio proceso.
+	 */
+	async #archiveClosedHours(): Promise<void> {
+		await this.#onlyOnLeader("endpoints.metrics-archive", 900, () => this.#archiveClosedHoursBatch());
+	}
+
+	/**
 	 * Vuelca a Mongo cada hora ya cerrada que siga teniendo hash en Redis y lo borra, y después
 	 * poda lo que quedó fuera de la retención. Las horas candidatas se enumeran desde el reloj
 	 * (no con `KEYS`), así que el barrido es acotado y no crece con la base.
 	 */
-	async #archiveClosedHours(): Promise<void> {
+	async #archiveClosedHoursBatch(): Promise<void> {
 		const store = this.#metricsStore;
 		const redis = this.#redis;
 		if (!store || !redis || this.#archiving) return;

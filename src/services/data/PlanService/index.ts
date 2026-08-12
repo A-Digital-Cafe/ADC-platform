@@ -6,10 +6,14 @@ import { Scope, assertScope, type Capability } from "@common/security/Capability
 import type { EntitlementsProvider, FeatureDef, ModulePlanDefaults, OrgPlanSnapshot, PlanOverridesAdmin, PlanPrice } from "@common/types/plans/index.ts";
 import type { IPlanService } from "@common/types/plans/IPlanService.ts";
 import { PlanError } from "@common/types/custom-errors/PlanError.ts";
+import type { IClusterService } from "@common/types/cluster/ICluster.ts";
 import { buildPlanManagers, bootstrapPlanData, createPlanModels, type PlanManagers } from "./dao/wiring.ts";
 import type { EntitlementsManager } from "./dao/EntitlementsManager.ts";
 import { entitlementsProviderOf, overridesAdminOf } from "./dao/adapters.ts";
 import { PLAN_ENDPOINTS } from "./endpoints/index.ts";
+
+/** Topic del bus con el que un nodo avisa que las caches de planes dejaron de valer. */
+const CLUSTER_TOPIC_PLANS_INVALIDATE = "plans.invalidate";
 
 /**
  * Motor central de planes y límites.
@@ -22,6 +26,7 @@ export default class PlanService extends BaseService implements IPlanService {
 	public readonly name = "PlanService";
 
 	#managers: PlanManagers | null = null;
+	#unsubscribeCluster: (() => void) | null = null;
 	private mongoProvider!: MongoProvider;
 
 	@EnableEndpoints({ managers: () => PLAN_ENDPOINTS })
@@ -46,6 +51,7 @@ export default class PlanService extends BaseService implements IPlanService {
 			invalidate: (orgId) => this.invalidate(orgId),
 		});
 		await bootstrapPlanData(this.#managers, models, this.logger);
+		this.#subscribeCluster();
 
 		for (const endpoints of PLAN_ENDPOINTS) endpoints.init(this, kernelKey);
 		this.logger.logOk("PlanService iniciado");
@@ -115,17 +121,49 @@ export default class PlanService extends BaseService implements IPlanService {
 		await this.daos.orgAdmin.setSeats(orgId, seats, actorUserId);
 	}
 
-	/** Descarta las caches de resolución (tras editar planes, overrides o membresías). */
+	/**
+	 * Descarta las caches de resolución (tras editar planes, overrides o membresías) **en todos los
+	 * nodos**.
+	 *
+	 * Cada nodo cachea por su cuenta, así que sin el aviso el que no atendió la escritura sigue
+	 * cobrando el precio viejo, aplicando el límite de `free` a quien acaba de pagar o rechazando
+	 * por una cuota que ya se amplió, hasta que venza su TTL (30-60 s). El bus es best-effort:
+	 * acelera la convergencia, el TTL sigue siendo la red de contención.
+	 */
 	invalidate(orgId?: string): void {
+		this.#invalidateLocal(orgId);
+		void this.#cluster()?.publish(CLUSTER_TOPIC_PLANS_INVALIDATE, { orgId });
+	}
+
+	/** Sólo el efecto local: es lo que aplica el handler del bus, que no debe volver a publicar. */
+	#invalidateLocal(orgId?: string): void {
 		this.#managers?.catalog.invalidate();
 		this.#managers?.tiers.invalidate();
 		this.#managers?.overrideResolver.invalidate();
 		this.#managers?.seats.invalidate(orgId);
 	}
 
+	#subscribeCluster(): void {
+		const cluster = this.#cluster();
+		if (!cluster) return;
+		this.#unsubscribeCluster?.();
+		this.#unsubscribeCluster = cluster.subscribe<{ orgId?: string }>(CLUSTER_TOPIC_PLANS_INVALIDATE, (msg) => {
+			this.#invalidateLocal(msg.payload?.orgId);
+		});
+	}
+
+	/** Opcional a propósito: sin clúster cada nodo invalida lo suyo y converge por TTL. */
+	#cluster(): IClusterService | undefined {
+		return this.tryGetMyService<IClusterService>("ClusterService");
+	}
+
 	@DisableEndpoints()
 	async stop(kernelKey: symbol): Promise<void> {
 		await super.stop(kernelKey);
+		// Sin esto el handler sobrevive a la recarga del módulo y le invalida caches a managers
+		// que ya nadie consulta.
+		this.#unsubscribeCluster?.();
+		this.#unsubscribeCluster = null;
 		this.logger.logOk("PlanService detenido");
 	}
 }

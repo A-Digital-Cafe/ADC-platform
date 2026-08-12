@@ -12,6 +12,9 @@ export interface DiscordSyncOptions {
 	intervalMs?: number;
 }
 
+/** Envoltorio que ModerationService provee para que la pasada corra en un solo nodo del clúster. */
+type LeaderGate = (fn: () => Promise<void>) => Promise<void>;
+
 /**
  * Encapsula el sync periódico con la colección `modlogs` de pengubot.
  * Responsabilidad única: leer modlogs y emitir bans/unbans contra el `BanRepository`.
@@ -25,7 +28,8 @@ export class DiscordSyncRunner {
 		private readonly banPlatformUser: (user: User, args: Omit<BanInput, "emails" | "extraIpHashes" | "lastLoginAt">) => Promise<BanRecord>,
 		private readonly identity: IIdentityManagerService,
 		private readonly cap: Capability,
-		private readonly logger: ILogger
+		private readonly logger: ILogger,
+		private readonly leaderGate?: LeaderGate
 	) {}
 
 	async start(pengubot: MongoProvider, opts: DiscordSyncOptions): Promise<void> {
@@ -65,7 +69,17 @@ export class DiscordSyncRunner {
 		}
 	}
 
+	/**
+	 * `addBan` deduplica por source+externalId, así que la fila del ban no se duplica entre nodos;
+	 * lo que sí se repite es la desactivación de la cuenta en Identity y sus efectos (invalidación
+	 * de permisos, alertas de seguridad). Por eso la pasada entera va detrás del lease.
+	 */
 	async run(): Promise<void> {
+		const batch = () => this.#runBatch();
+		await (this.leaderGate ? this.leaderGate(batch) : batch());
+	}
+
+	async #runBatch(): Promise<void> {
 		if (!this.#adapter) return;
 		const internal = this.identity._internal(this.cap);
 

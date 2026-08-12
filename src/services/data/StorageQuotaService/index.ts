@@ -9,6 +9,7 @@ import type { QuotaTracker, QuotaTrackerGetter, StorageLimitOverride } from "@co
 import type { IStorageQuotaService } from "@common/types/storage/IStorageQuotaService.ts";
 import { StorageError } from "@common/types/custom-errors/StorageError.ts";
 import type { IPlanService } from "@common/types/plans/IPlanService.ts";
+import type { IOperationsService } from "@common/types/operations/IOperationsService.ts";
 import { storageUsageSchema, type StorageUsageDoc } from "./domain/usage.ts";
 import { QuotaManager, type RegisteredApp } from "./dao/QuotaManager.ts";
 import { LimitsManager } from "./dao/LimitsManager.ts";
@@ -107,8 +108,11 @@ export default class StorageQuotaService extends BaseService implements IStorage
 
 		const reconcileIntervalMs = Number((this.config?.private as { reconcileIntervalMs?: number } | undefined)?.reconcileIntervalMs ?? 0);
 		if (reconcileIntervalMs > 0) {
+			// El lease tiene que cubrir un barrido entero: tres intervalos, y nunca menos de 15 min
+			// porque con intervalos cortos el recorrido de attachments dura más que el propio intervalo.
+			const reconcileLeaseTtl = Math.max(900, Math.ceil((reconcileIntervalMs / 1000) * 3));
 			this.#reconcileTimer = setInterval(() => {
-				this.#quotaManager?.reconcile().catch((e) => this.logger.logWarn(`StorageQuota: reconcile periódico falló: ${e.message}`));
+				this.#runReconcile(reconcileLeaseTtl).catch((e) => this.logger.logWarn(`StorageQuota: reconcile periódico falló: ${e.message}`));
 			}, reconcileIntervalMs);
 		}
 
@@ -224,6 +228,28 @@ export default class StorageQuotaService extends BaseService implements IStorage
 			createdAt: new Date(o.createdAt).toISOString(),
 			updatedAt: new Date(o.updatedAt).toISOString(),
 		};
+	}
+
+	/**
+	 * Corre `fn` sólo en el nodo que tenga el lease. Sin `OperationsService` corre igual: en un
+	 * despliegue de un nodo negarse sería peor que el trabajo duplicado que evita.
+	 */
+	async #onlyOnLeader(name: string, ttlSeconds: number, fn: () => Promise<void>): Promise<void> {
+		const ops = this.tryGetMyService<IOperationsService>("OperationsService");
+		if (ops) await ops.withLeadership(name, ttlSeconds, fn);
+		else await fn();
+	}
+
+	/**
+	 * El reconcile escribe valores absolutos (upsert + puesta a cero), así que correrlo en varios
+	 * nodos a la vez no corrompe los contadores: lo que duplica es la CARGA, porque cada nodo
+	 * recorre los attachments de todas las apps registradas. Por eso basta un lease para dejarlo
+	 * en un solo nodo.
+	 */
+	async #runReconcile(ttlSeconds: number): Promise<void> {
+		await this.#onlyOnLeader("storage-quota.reconcile", ttlSeconds, async () => {
+			await this.#quotaManager?.reconcile();
+		});
 	}
 
 	@DisableEndpoints()

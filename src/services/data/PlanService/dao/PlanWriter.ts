@@ -3,7 +3,7 @@ import type { ILogger } from "@interfaces/utils/ILogger.js";
 import { planKey, type PlanAxis, type PlanDefinition } from "@common/types/plans/index.ts";
 import { PlanError } from "@common/types/custom-errors/PlanError.ts";
 import { seedPlans, type ImportPlanItem, type PlanDefinitionDoc, type UpdatePlanPatch } from "../domain/index.ts";
-import type { PlanCatalog } from "./PlanCatalog.ts";
+import type { InvalidateCaches } from "./OrgPlanAdmin.ts";
 import type { PlanSeeder } from "./PlanSeeder.ts";
 import { mergeFeatures, mergeOptionalFeatures } from "./shared.ts";
 
@@ -13,16 +13,20 @@ import { mergeFeatures, mergeOptionalFeatures } from "./shared.ts";
  *
  * Todas marcan el plan como editado (`seeded: false`) salvo `resetPlan`, que es
  * justamente la que lo devuelve al dominio del seed.
+ *
+ * Invalidan por el embudo del servicio y no por `catalog.invalidate()`: son cambios comerciales en
+ * caliente, y el nodo que no atendió la escritura tiene que enterarse o sigue cobrando y limitando
+ * con el plan viejo.
  */
 export class PlanWriter {
 	readonly #model: Model<PlanDefinitionDoc>;
-	readonly #catalog: PlanCatalog;
+	readonly #invalidate: InvalidateCaches;
 	readonly #seeder: PlanSeeder;
 	readonly #logger: ILogger;
 
-	constructor(model: Model<PlanDefinitionDoc>, catalog: PlanCatalog, seeder: PlanSeeder, logger: ILogger) {
+	constructor(model: Model<PlanDefinitionDoc>, invalidate: InvalidateCaches, seeder: PlanSeeder, logger: ILogger) {
 		this.#model = model;
-		this.#catalog = catalog;
+		this.#invalidate = invalidate;
 		this.#seeder = seeder;
 		this.#logger = logger;
 	}
@@ -48,7 +52,7 @@ export class PlanWriter {
 			$set: { features, memberFeatures, includedSeats, ...(clearPrice ? {} : { price }), updatedAt: new Date(), seeded: false },
 			...(clearPrice ? { $unset: { price: "" } } : {}),
 		});
-		this.#catalog.invalidate();
+		this.#invalidate();
 		// El plan completo, no sólo lo editado: el panel pinta la fila con lo que devuelve.
 		return {
 			axis,
@@ -102,7 +106,7 @@ export class PlanWriter {
 			);
 			updated.push(_id);
 		}
-		this.#catalog.invalidate();
+		this.#invalidate();
 		this.#logger.logOk(`PlanService: oferta importada sobre ${updated.length} planes`);
 		return updated;
 	}
@@ -140,7 +144,7 @@ export class PlanWriter {
 			},
 			{ upsert: true }
 		);
-		this.#catalog.invalidate();
+		this.#invalidate();
 		return composed;
 	}
 }

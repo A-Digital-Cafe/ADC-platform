@@ -17,4 +17,17 @@ export interface IOperationsService {
 	stepper(idx: number, cmd: string, id: string, steps: Step[]): Promise<StepperResult>;
 	/** Envuelve una llamada HTTP saliente con la política de resiliencia. */
 	httpCheck<T>(cmd: string, id: string | number, method: () => Promise<T>): Promise<T>;
+	/**
+	 * Corre `fn` **sólo en el nodo que consiga el lease** de `name`; en los demás devuelve
+	 * `undefined` sin ejecutar nada. Es la primitiva con la que un trabajo periódico deja de
+	 * correr una vez por nodo.
+	 *
+	 * `ttlSeconds` tiene que ser holgadamente mayor que el intervalo entre turnos del trabajo. El
+	 * lease se renueva solo mientras `fn` corre y se libera al terminar, incluso si lanza. Como es
+	 * un lease y no un candado, **`fn` tiene que seguir siendo idempotente**: en la ventana de
+	 * vencimiento dos nodos podrían solaparse.
+	 */
+	withLeadership<T>(name: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T | undefined>;
+	/** Leases que este nodo sostiene ahora mismo (diagnóstico). */
+	heldLeases(): string[];
 }

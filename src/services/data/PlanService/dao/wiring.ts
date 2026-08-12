@@ -72,7 +72,7 @@ export function buildPlanManagers(
 ): PlanManagers {
 	const catalog = new PlanCatalog(models.plans);
 	const seeder = new PlanSeeder(models.plans, catalog, deps.logger);
-	const writer = new PlanWriter(models.plans, catalog, seeder, deps.logger);
+	const writer = new PlanWriter(models.plans, deps.invalidate, seeder, deps.logger);
 
 	const tiers = new TierResolver(deps.identity);
 	const seats = new SeatCounter(deps.seatSource, deps.logger);

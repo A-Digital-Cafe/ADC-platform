@@ -1,6 +1,6 @@
 # IdentityManagerService
 
-Servicio kernel (`kernelMode: 60`) para identidad: usuarios, roles, grupos y organizaciones (multi-tenant vía `forOrg`).
+Servicio kernel (`kernelMode: 60`) para identidad: usuarios, roles, grupos y organizaciones (multi-tenant vía `forOrg`). Cada org pertenece a una **región**, que describe su backend de datos y declara una sola conexión: `metadata.objectConnectionUri` (Mongo). No hay caché por región a propósito — nada se cachea por organización y Redis se reparte por **sitio** (latencia), no por org.
 
 - Persistencia MongoDB (`object/mongo`); contraseñas con argon2id (`Bun.password`, m=64 MiB/t=2). El formato PBKDF2 anterior se sigue leyendo siempre y se rehashea al iniciar sesión (una cuenta dormida nunca migra)
 - Permisos granulares recurso/acción/alcance (`PermissionChecker`); recursos `globalOnly` (security, modules) sólo valen desde **roles globales**

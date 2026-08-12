@@ -7,6 +7,8 @@ import type LogManagerService from "../index.js";
 const LOG_LEVELS = ["info", "ok", "warn", "error", "debug"] as const;
 const MAX_Q = 100;
 const MAX_MODULE = 120;
+/** Los identificadores de nodo son slugs cortos; el tope sólo acota lo que se copia a la URL saliente. */
+const MAX_NODE = 64;
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
 
@@ -21,6 +23,9 @@ const LogsQuery = Type.Object({
 	q: Type.Optional(Type.String({ maxLength: MAX_Q, description: "Substring case-insensitive sobre mensaje y módulo" })),
 	limit: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: `1..${MAX_LIMIT} (default ${DEFAULT_LIMIT})` })),
 	cursor: Type.Optional(Type.String({ pattern: String.raw`^\d+$`, description: "`seq` de la última entrada recibida" })),
+	node: Type.Optional(
+		Type.String({ maxLength: MAX_NODE, description: "`ADC_NODE_ID` del nodo a consultar; sin él, el que atiende el request" })
+	),
 });
 
 const LogEntrySchema = Type.Object({
@@ -35,6 +40,7 @@ const LogsResponse = Type.Object({
 	logs: Type.Array(LogEntrySchema, { description: "Del más nuevo al más viejo" }),
 	nextCursor: Type.Union([Type.Integer(), Type.Null()], { description: "`seq` desde donde seguir; `null` si no hay más" }),
 	modules: Type.Array(Type.String(), { description: "Módulos vistos por el buffer, para poblar el filtro de la UI" }),
+	nodeId: Type.String({ description: "Nodo cuyo buffer se leyó: el `seq` y los módulos son suyos, no de la flota" }),
 });
 
 /** Entero de query string con clamp: el validador no coerciona, los params llegan como string. */
@@ -76,7 +82,9 @@ export class LogsEndpoints {
 			description:
 				"Ring buffer del proceso del kernel, no un almacén: sólo entran las últimas N líneas y nada sobrevive a un reinicio. " +
 				"`q` es substring (nunca se compila como regex) y `cursor` pagina hacia atrás con el `seq` de la última entrada recibida. " +
-				"No incluye lo que loguean los worker_threads, que tienen su propia copia del logger.",
+				"No incluye lo que loguean los worker_threads, que tienen su propia copia del logger. " +
+				"Con `node` se consulta EN VIVO el buffer de otro nodo del registro (reenviando la sesión de quien pregunta): " +
+				"nada se agrega ni se persiste, cada buffer sigue siendo del proceso que lo escribió.",
 			rateLimit: { max: 120, timeWindow: 60_000 },
 			schema: { querystring: LogsQuery, response: { 200: LogsResponse } },
 		},
@@ -90,6 +98,6 @@ export class LogsEndpoints {
 			limit: toInt(ctx.query.limit, 1, MAX_LIMIT) ?? DEFAULT_LIMIT,
 			cursor: toInt(ctx.query.cursor, 1, Number.MAX_SAFE_INTEGER),
 		};
-		return LogsEndpoints.service.queryBuffer(filter);
+		return LogsEndpoints.service.queryBufferAt(ctx.query.node?.trim().slice(0, MAX_NODE) || undefined, filter, ctx);
 	}
 }

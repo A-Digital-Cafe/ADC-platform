@@ -24,6 +24,13 @@ interface PermissionCacheEntry {
 }
 
 /**
+ * Qué hay que borrar de la cache. Grupo y rol viajan como `all` porque su efecto local YA es un
+ * clear total (saber a quiénes alcanzan exigiría una query): si algún día se afinan, se afina
+ * este payload con ellos.
+ */
+export type PermissionInvalidation = { scope: "user"; userId: string } | { scope: "all" };
+
+/**
  * PermissionManager - Gestión de permisos con cache LRU y bitfields
  *
  * Características:
@@ -48,7 +55,13 @@ export class PermissionManager {
 		private readonly groupModel: Model<Group>,
 		private readonly orgModel?: Model<Organization>,
 		cacheSize: number = 1000,
-		cacheTTL: number = 60000 // 1 minuto por defecto
+		cacheTTL: number = 60000, // 1 minuto por defecto
+		/**
+		 * Difusión de cada invalidación al resto del clúster. Opcional: la cache es por proceso y
+		 * sin difusión sigue siendo correcta acá; lo que se pierde es que los otros nodos autorizan
+		 * con permisos viejos hasta que les vence el TTL.
+		 */
+		private readonly onInvalidate?: (invalidation: PermissionInvalidation) => void
 	) {
 		this.#cache = new LRUCache(cacheSize);
 		this.#cacheTTL = cacheTTL;
@@ -284,11 +297,7 @@ export class PermissionManager {
 	 * Invalida cache para un usuario específico
 	 */
 	invalidateUser(userId: string): void {
-		for (const key of this.#cache.keys()) {
-			if (key.startsWith(`${userId}:`)) {
-				this.#cache.delete(key);
-			}
-		}
+		this.#invalidate({ scope: "user", userId });
 	}
 
 	/**
@@ -297,7 +306,7 @@ export class PermissionManager {
 	 */
 	invalidateGroup(_groupId: string): void {
 		// Limpiar la cache ya que requeriría query para saber qué usuarios afectar
-		this.#cache.clear();
+		this.#invalidate({ scope: "all" });
 	}
 
 	/**
@@ -306,13 +315,35 @@ export class PermissionManager {
 	 */
 	invalidateRole(_roleId: string): void {
 		// Limpiar la cache ya que requeriría query para saber qué usuarios afectar
-		this.#cache.clear();
+		this.#invalidate({ scope: "all" });
 	}
 
 	/**
 	 * Invalida la cache
 	 */
 	invalidateAll(): void {
-		this.#cache.clear();
+		this.#invalidate({ scope: "all" });
+	}
+
+	/** Efecto local + difusión. Único camino de los cuatro métodos públicos. */
+	#invalidate(invalidation: PermissionInvalidation): void {
+		this.applyInvalidation(invalidation);
+		this.onInvalidate?.(invalidation);
+	}
+
+	/**
+	 * Aplica la invalidación **sólo en este proceso**, sin difundirla. Es lo que llama el receptor
+	 * del bus: re-difundir lo que llegó de otro nodo es cómo se arma un bucle de invalidaciones.
+	 */
+	applyInvalidation(invalidation: PermissionInvalidation): void {
+		if (invalidation.scope === "all") {
+			this.#cache.clear();
+			return;
+		}
+		for (const key of this.#cache.keys()) {
+			if (key.startsWith(`${invalidation.userId}:`)) {
+				this.#cache.delete(key);
+			}
+		}
 	}
 }

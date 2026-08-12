@@ -28,6 +28,15 @@ export interface IdleJobDefinition {
 	/** Techo de duración de un lote. Pasado eso se aborta la señal y se retoma en el próximo turno. */
 	batchBudgetMs?: number;
 	/**
+	 * `true` = corre en **todos** los nodos. Por defecto un trabajo de fondo corre en uno solo: son
+	 * barridos sobre datos compartidos, y ejecutarlos N veces duplica escrituras, avisos y descargas.
+	 *
+	 * Sólo hay que marcarlo cuando lo que se procesa es del propio proceso —un buffer en memoria,
+	 * archivos del disco local— y por lo tanto ningún otro nodo puede hacerlo por éste. Marcarlo por
+	 * las dudas es exactamente el error que este campo existe para evitar.
+	 */
+	perNode?: boolean;
+	/**
 	 * Procesa **un lote** y devuelve cuántas unidades tocó. Devolver `0` ("nada pendiente") espacia
 	 * el trabajo progresivamente. Nunca lanzar por una unidad suelta: acumular y seguir, como en
 	 * `devCleanup`.
