@@ -6,6 +6,7 @@ import net from "node:net";
 import { Logger } from "../logger/Logger.ts";
 import { ILogger } from "../../interfaces/utils/ILogger.js";
 import os from "node:os";
+import { shouldRunInfraCompose } from "../../common/utils/cluster-env.js";
 
 /** Puerto publicado por un compose: dirección de host y puerto. */
 interface PublishedPort {
@@ -429,7 +430,16 @@ export class DockerManager {
 		}
 		try {
 			const entries = await fs.readdir(dockerDir, { withFileTypes: true });
-			const folders = entries.filter((e) => e.isDirectory());
+			const all = entries.filter((e) => e.isDirectory());
+
+			// Un nodo secundario NO debe levantar su propio Mongo/Redis/S3: apuntaría a una base
+			// vacía y paralela sin que nada avise. `ADC_INFRA_COMPOSE` acota qué stacks son suyos;
+			// sin la variable se levanta todo, que es el comportamiento de un despliegue de un nodo.
+			const folders = all.filter((e) => shouldRunInfraCompose(e.name));
+			const skipped = all.filter((e) => !folders.includes(e)).map((e) => e.name);
+			if (skipped.length > 0) {
+				this.#logger.logInfo(`Contenedores comunes omitidos por ADC_INFRA_COMPOSE: ${skipped.join(", ")}`);
+			}
 
 			if (folders.length === 0) {
 				this.#logger.logDebug("No hay contenedores comunes para cargar");

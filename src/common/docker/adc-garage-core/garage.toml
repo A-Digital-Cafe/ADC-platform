@@ -1,0 +1,39 @@
+# Configuración de Garage (almacenamiento de objetos S3-compatible).
+#
+# Reemplaza a MinIO, cuya edición community quedó archivada en febrero de 2026 (sin parches de
+# seguridad) y que además nunca permitió agregar discos a un pool existente. Garage crece
+# reasignando el layout **en caliente**, que es lo que hace viable sumar un nodo sin downtime.
+#
+# Acá NO van secretos: `rpc_secret` y `admin_token` llegan por `GARAGE_RPC_SECRET` y
+# `GARAGE_ADMIN_TOKEN` (ver el `.env` de la raíz), porque este archivo sí está en git.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# Cuántas copias de cada bloque guarda el clúster. Con un solo nodo tiene que ser 1.
+# Al sumar nodos se sube (3 es el valor recomendado) editando ESTA línea en todos los nodos y
+# reiniciándolos: no es un cambio en caliente, a diferencia del layout.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+# Dirección con la que este nodo se anuncia a los demás. Con un solo nodo alcanza el loopback del
+# contenedor; al sumar el segundo hay que ponerle una dirección alcanzable desde el otro host
+# (ej. "10.0.0.11:3901") y abrir el 3901 entre nodos.
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+# Tiene que coincidir con `S3_REGION` del `.env` de la raíz: la firma SigV4 incluye la región.
+s3_region = "sa-central-1"
+api_bind_addr = "[::]:3900"
+# Sufijo para el acceso por vhost (`bucket.s3.garage`). La plataforma firma en path-style
+# (`forcePathStyle: true` en `internal-s3-provider`), así que esto no se usa, pero Garage lo pide.
+root_domain = ".s3.garage"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

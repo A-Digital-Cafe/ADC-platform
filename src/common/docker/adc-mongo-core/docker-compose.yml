@@ -11,10 +11,34 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
       MONGO_INITDB_DATABASE: adc-core
+    # Replica set de UN nodo, no standalone. No es preparación especulativa: un standalone no
+    # tiene transacciones multi-documento ni change streams, así que `rs0` los desbloquea hoy —
+    # y el día que haga falta un segundo nodo se suma con `rs.add()` en caliente, sin migrar
+    # datos ni parar la plataforma.
+    #
+    # Con replicación + autorización, Mongo EXIGE un keyfile para la autenticación interna entre
+    # miembros. Se genera dentro del contenedor (nunca en git) y vive en su propio volumen: si se
+    # regenerara, un miembro agregado después no podría hablar con éste.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        if [ ! -s /etc/mongo-keyfile/keyfile ]; then
+          openssl rand -base64 756 > /etc/mongo-keyfile/keyfile
+        fi
+        chmod 400 /etc/mongo-keyfile/keyfile
+        chown mongodb:mongodb /etc/mongo-keyfile/keyfile
+        exec docker-entrypoint.sh mongod --replSet "${MONGO_REPLICA_SET:-rs0}" --keyFile /etc/mongo-keyfile/keyfile --bind_ip_all
     volumes:
       - adc_mongo_core_data:/data/db
+      - adc_mongo_core_keyfile:/etc/mongo-keyfile
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      # `isWritablePrimary` y NO un `ping`: con `--replSet`, mongod acepta conexiones mucho antes
+      # de que el set esté iniciado, y en esa ventana el driver falla con
+      # "not primary and secondaryOk=false" — justo el error que este chequeo existe para evitar.
+      # Sólo pasa a healthy DESPUÉS de que `adc-mongo-core-init` corra `rs.initiate()`.
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost:27017 --eval 'db.hello().isWritablePrimary' | grep -q true"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,8 +50,52 @@ services:
     networks:
       - adc-network
 
+  # Inicia el replica set una única vez. Es idempotente: si ya está iniciado no toca nada, así que
+  # corre en cada `compose up` sin riesgo. Depende de `service_started` y no de `service_healthy`
+  # a propósito — el healthcheck de mongo no puede pasar hasta que ESTE contenedor haga su trabajo.
+  mongo-init:
+    image: mongo:latest
+    container_name: adc-mongo-core-init
+    depends_on:
+      mongo:
+        condition: service_started
+    environment:
+      MONGO_USER: ${MONGO_USER:-admin}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      MONGO_REPLICA_SET: ${MONGO_REPLICA_SET:-rs0}
+      # Cómo se anuncia este miembro al driver. `localhost:27017` es correcto mientras la
+      # plataforma corra en el MISMO host que el contenedor (el caso de un nodo). Al sumar
+      # miembros hay que reconfigurarlo a un host alcanzable desde todos: `nodo-a:27017`.
+      MONGO_RS_MEMBER_HOST: ${MONGO_RS_MEMBER_HOST:-localhost:27017}
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          mongosh "mongodb://mongo:27017/?directConnection=true" --quiet --eval 'db.hello()' >/dev/null 2>&1 && break
+          sleep 1
+        done
+        mongosh "mongodb://$$MONGO_USER:$$MONGO_PASSWORD@mongo:27017/?directConnection=true&authSource=admin" --quiet --eval '
+          try {
+            rs.status();
+            print("[adc-mongo-core-init] replica set ya iniciado");
+          } catch (e) {
+            if (e.codeName === "NotYetInitialized") {
+              rs.initiate({ _id: process.env.MONGO_REPLICA_SET, members: [{ _id: 0, host: process.env.MONGO_RS_MEMBER_HOST }] });
+              print("[adc-mongo-core-init] replica set iniciado");
+            } else {
+              throw e;
+            }
+          }
+        ' || echo "[adc-mongo-core-init] No se pudo iniciar el replica set; la plataforma no va a poder conectarse."
+        exit 0
+    networks:
+      - adc-network
+    restart: "no"
+
 volumes:
   adc_mongo_core_data:
+  adc_mongo_core_keyfile:
 
 networks:
   adc-network:

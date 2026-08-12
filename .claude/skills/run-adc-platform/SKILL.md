@@ -20,7 +20,7 @@ fresh box: `bun --version` (1.3+), `node --version` (24+, runs the driver),
 `sudo apt-get install -y google-chrome-stable` if Chrome is missing.
 
 The kernel **auto-provisions its backing services as Docker containers** on boot
-(mongo `:27017`, redis, minio/S3 `:9000-9001`, rabbitmq, haraka) — just have the
+(mongo `:27017`, redis, Garage/S3 `:3900`, rabbitmq, haraka) — just have the
 Docker daemon running; they persist between runs. No `.env` needed (sane dev
 defaults exist).
 
@@ -106,7 +106,7 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ hom
 | `shot <url> [name]` | one-shot screenshot → `/tmp/adc-shots/<name>.png`. Accepts `--mobile`/`--device d`/`--viewport WxH` |
 | `login <who> [url] [name]` | log in (`admin`\|`orgadmin`\|`'user::pass[::orgId]'`), navigate, screenshot. Accepts viewport flags. Dev only |
 | `drive <url> [name]` | CDP session: `--login who`, `--wait sel`, `--wait-timeout ms`, `--click sel`, `--type "sel::text"`, `--eval expr`, `--settle ms`, `--mobile`/`--device d`/`--viewport WxH`. Ends in a screenshot + prints `document.title` and the real text of any console errors / exceptions |
-| `stop` | kill kernel + all rspack dev servers, free every port in ports.csv (leaves Docker S3 on :9000/:9001) |
+| `stop` | kill kernel + all rspack dev servers, free every port in ports.csv (leaves Docker S3 on :3900) |
 
 > To register a new port or seed another dev user: add the port to
 > [docs/guides/ports.csv](docs/guides/ports.csv) (`port,app,notes` — picked up
@@ -143,7 +143,7 @@ exit code is not a failure) and `bun run lint` (zero-warnings, src only).
 - **A leaked Chrome makes screenshots lie.** The CDP port is fixed (9333), so a browser left over from an earlier run would be reused by the next `drive`/`login`: stale page, stale cookies, screenshots that do not reflect the current code — it reads as a real bug. Each launch now gets a unique `--user-data-dir` and refuses to start if the port is already taken, telling you to run `stop` first.
 - **A bare foreground `sleep` is blocked in the sandboxed shell** — exits 1 silently, no output. Don't poll the kernel with a `sleep` loop; use `driver.mjs ready` (blocks internally) or wrap in `timeout … bash -c 'until <cond>; do sleep N; done'` (a `sleep` inside the until-loop is fine).
 - **`test/home` (:3002) returns 404 at `/`** — it serves under a sub-path. `smoke` counts it OK (status < 500); not a failure.
-- **Backing services are shared Docker containers**, auto-provisioned and persistent. S3 lives on `:9000/:9001` (refCount-shared) — `stop` deliberately leaves them alone.
+- **Backing services are shared Docker containers**, auto-provisioned and persistent. S3 lives on `:3900` (Garage; admin API on `:3903`) — `stop` deliberately leaves them alone.
 
 ## Troubleshooting
 

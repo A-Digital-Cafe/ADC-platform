@@ -70,13 +70,19 @@ export default class InternalS3Provider extends BaseProvider {
 	constructor(options?: any) {
 		super();
 		this.#config = {
-			endpoint: options?.endpoint || process.env.S3_ENDPOINT || "http://localhost:9000",
-			region: options?.region || process.env.S3_REGION || "us-east-1",
-			// Cuenta de servicio acotada a los buckets `adc-*`, NO el root de MinIO: la firma de
-			// cada URL presignada publica este access key, y con el root de por medio una fuga del
-			// secreto entrega el servidor entero. La provisiona `adc-minio-core/docker-compose.yml`.
-			accessKey: options?.accessKey || process.env.S3_ACCESS_KEY || "adc-platform",
-			secretKey: options?.secretKey || process.env.S3_SECRET_KEY || "adc-platform-dev",
+			endpoint: options?.endpoint || process.env.S3_ENDPOINT || "http://localhost:3900",
+			// Vacío = sin endpoint público diferenciado; ver docstring en `IS3Config`.
+			publicEndpoint: options?.publicEndpoint || process.env.S3_PUBLIC_ENDPOINT || "",
+			region: options?.region || process.env.S3_REGION || "sa-central-1",
+			// Clave de servicio con permisos sólo sobre los buckets de la plataforma, NO una
+			// credencial de administración: la firma de cada URL presignada publica este access
+			// key, y con una credencial de admin de por medio una fuga del secreto entrega el
+			// servidor entero. La provisiona `adc-garage-core/init.sh`.
+			//
+			// El formato lo impone Garage: id = `GK` + 24 hex, secreto = 32 bytes en hex. Estos
+			// defaults son de DESARROLLO y coinciden con los del compose.
+			accessKey: options?.accessKey || process.env.S3_ACCESS_KEY || "GKadc000000000000000000000",
+			secretKey: options?.secretKey || process.env.S3_SECRET_KEY || "adc0000000000000000000000000000000000000000000000000000000000000",
 			forcePathStyle: options?.forcePathStyle ?? true,
 			defaultBucket: options?.defaultBucket || process.env.S3_BUCKET || "adc-default",
 			presignTtl: options?.presignTtl ?? 900,
@@ -194,7 +200,10 @@ export default class InternalS3Provider extends BaseProvider {
 		// o ya haberse parado (recarga), y eso es indisponibilidad reintentable, no un bug. Sin
 		// tipar, el wrapper HTTP lo saneaba a un 500 `INTERNAL_ERROR` opaco.
 		if (!this.#client) throw new StorageError(503, "S3_UNAVAILABLE", "El almacenamiento de objetos no está disponible");
-		const endpoint = this.#publicEndpointFor(publicHost) ?? this.#config.endpoint;
+		// `publicEndpoint` configurado (gateway/CDN en producción) gana sobre la reescritura por
+		// `publicHost`: esa reescritura es una comodidad de dev en LAN y, con un endpoint interno
+		// privado detrás del gateway, un `Host` falseado podría elegir contra qué host se firma.
+		const endpoint = this.#config.publicEndpoint || this.#publicEndpointFor(publicHost) || this.#config.endpoint;
 		let client = this.#presignClients.get(endpoint);
 		if (!client) {
 			client = new S3Client({

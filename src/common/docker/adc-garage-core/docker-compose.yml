@@ -1,0 +1,90 @@
+services:
+  garage:
+    image: dxflrs/garage:v2.1.0
+    container_name: adc-garage-core
+    ports:
+      # 3900 (API S3) lo abre el NAVEGADOR (subidas con URL presignada), no sólo el kernel: para
+      # probar desde otro dispositivo de la LAN hay que publicarlo más allá del loopback
+      # (`S3_BIND_HOST=0.0.0.0`). Sigue cerrado por defecto — en dev corre con credenciales de
+      # desarrollo, así que exponerlo es una decisión explícita. En producción se queda en
+      # loopback: el navegador entra por `S3GatewayService`, no por acá.
+      - "${S3_BIND_HOST:-127.0.0.1}:3900:3900"
+      # 3901 es el RPC ENTRE NODOS. Con un solo nodo no hace falta abrirlo; al sumar el segundo
+      # hay que publicarlo en la interfaz de la LAN y ajustar `rpc_public_addr` en garage.toml.
+      - "${GARAGE_RPC_BIND_HOST:-127.0.0.1}:3901:3901"
+      # Admin API: sólo para el operador y para el panel de infraestructura. Nunca a la red.
+      - "127.0.0.1:3903:3903"
+    environment:
+      # Secretos fuera del garage.toml, que sí está en git. Los defaults son de DESARROLLO.
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-adc-garage-dev}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - adc_garage_core_meta:/var/lib/garage/meta
+      - adc_garage_core_data:/var/lib/garage/data
+    healthcheck:
+      # `bucket list` y NO `status`: el servidor acepta RPC mucho antes de que el layout esté
+      # aplicado, y en esa ventana NINGUNA operación S3 funciona. `bucket list` es la operación
+      # más barata que sí exige un clúster operativo, así que sólo pasa cuando
+      # `adc-garage-core-init` terminó — que es justo lo que el kernel necesita esperar.
+      #
+      # En forma EXEC, no `CMD-SHELL`: la imagen de Garage es sólo el binario, sin `/bin/sh`, y un
+      # `CMD-SHELL` falla con "stat /bin/sh: no such file or directory" en cada chequeo.
+      test: ["CMD", "/garage", "-c", "/etc/garage.toml", "bucket", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # start_period/start_interval: sin esto el PRIMER chequeo recién corre
+      # a los `interval` (10 s), así que un arranque en frío tarda ~11 s en
+      # reportarse healthy aunque el servicio esté listo en ~1 s.
+      start_period: 30s
+      start_interval: 500ms
+    restart: unless-stopped
+    logging:
+      # Retención local acotada: sin esto el json-file default crece sin tope.
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - adc-network
+
+  # Provisiona layout, clave de servicio y buckets. Idempotente: corre en cada `compose up`.
+  # Depende de `service_started` y no de `service_healthy` a propósito — el healthcheck del
+  # servidor no puede pasar hasta que ESTE contenedor termine.
+  garage-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: adc-garage-core-init
+    depends_on:
+      garage:
+        condition: service_started
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
+      GARAGE_RPC_TARGET: garage:3901
+      # Zona de replicación = sitio del nodo. Con `replication_factor` > 1, Garage reparte una
+      # copia por zona, así que esto es lo que hace que perder un sitio entero no pierda datos.
+      GARAGE_ZONE: ${ADC_NODE_SITE:-default}
+      GARAGE_CAPACITY: ${GARAGE_CAPACITY:-10G}
+      # Garage impone el formato: id = `GK` + 24 hex, secreto = 64 hex. Estos son de DESARROLLO.
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-GKadc000000000000000000000}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-adc0000000000000000000000000000000000000000000000000000000000000}
+      # Los buckets por dominio del `.env` de la raíz. El nombre tiene que empezar con `adc-`.
+      GARAGE_BUCKETS: ${GARAGE_BUCKETS:-adc-drive adc-pm adc-mail adc-articles adc-avatars}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      # Sólo lectura: el init lee `node_key.pub` para saber a qué nodo le habla. No escribe acá — ni
+      # acá ni en ningún lado, que es lo que le permite correr sin privilegios (ver el Dockerfile).
+      - adc_garage_core_meta:/var/lib/garage/meta:ro
+    networks:
+      - adc-network
+    restart: "no"
+
+volumes:
+  adc_garage_core_meta:
+  adc_garage_core_data:
+
+networks:
+  adc-network:
+    driver: bridge

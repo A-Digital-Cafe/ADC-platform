@@ -255,7 +255,7 @@ export async function stop() {
 		if (typeof (await curlStatus(port)) === "number") left.push(label);
 	}
 	if (left.length) console.log(`stop: still up -> ${left.join(", ")}`);
-	else console.log("stop: all dev ports free (S3 on :9000/:9001 left intact)");
+	else console.log("stop: all dev ports free (S3 on :3900 left intact)");
 }
 
 // ---- boot-check ---------------------------------------------------------

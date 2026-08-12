@@ -3,6 +3,14 @@ import type { Buffer } from "node:buffer";
 
 export interface IS3Config {
 	endpoint?: string;
+	/**
+	 * Endpoint contra el que se firman las URLs presignadas **para el navegador** cuando difiere
+	 * del interno (ej. `https://s3.adigitalcafe.com` servido por `S3GatewayService`, con `endpoint`
+	 * en `http://localhost:3900`). Vacío = firmar contra `endpoint`. Si está seteado gana sobre la
+	 * reescritura por `publicHost` (esa es la comodidad de dev en LAN; esto es el modo producción).
+	 * Las operaciones server-side (put/get/head/delete) siguen yendo directo a `endpoint`.
+	 */
+	publicEndpoint?: string;
 	region?: string;
 	accessKey?: string;
 	secretKey?: string;
@@ -58,9 +66,9 @@ export interface PresignUploadInput {
 	 * Host por el que el navegador llegó a la plataforma (`Host` del request, sin puerto).
 	 *
 	 * La firma SigV4 incluye el `host`, así que una URL presignada sólo sirve contra el host con
-	 * el que se firmó: con un S3 local (`http://localhost:9000`) la URL es inservible desde
+	 * el que se firmó: con un S3 local (`http://localhost:3900`) la URL es inservible desde
 	 * cualquier dispositivo que no sea la máquina de desarrollo. Pasando el host del request se
-	 * firma contra él (`http://192.168.1.152:9000`) y la subida funciona desde el celular/LAN.
+	 * firma contra él (`http://192.168.1.152:3900`) y la subida funciona desde el celular/LAN.
 	 *
 	 * Sólo se aplica si el endpoint configurado **y** el host recibido son locales/privados; con
 	 * un S3 real (producción) se ignora, y así un `Host` falseado no puede desviar la subida.
