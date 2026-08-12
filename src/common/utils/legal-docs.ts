@@ -49,12 +49,19 @@ export const LEGAL_DOCUMENTS = {
 		// los aplica, §6 sin nombrar el algoritmo de hashing (ya no es PBKDF2) y §13 nueva sobre datos
 		// de colaboradores. Y una tercera el 2026-08-10: la inscripción en el RNBD en §1, y el servidor
 		// STUN de Google —que el túnel P2P ya usaba sin declararlo— en §7 y en el párrafo del túnel.
+		// Y una cuarta el 2026-08-12, de cara al plan de escalabilidad: las filas de infraestructura propia
+		// de §7 admiten ahora varios servidores replicados (la redacción anterior daba a entender una sola
+		// máquina), la fila de logs de §5 dice "cada proceso" y se compromete a no escribirlos a disco ni
+		// mandarlos a terceros, §6 suma el régimen de réplicas y copias de seguridad (cifradas, 30 días, sin
+		// restaurar datos ya suprimidos) y §8 promete anuncio previo + re-declaración ante el RNBD si alguna
+		// vez hubiera infraestructura propia fuera del país. Cada una de esas frases habría exigido una
+		// enmienda con 30 días de preaviso el día que se sumara el segundo nodo.
 		// Se corrige en lugar de versionar porque el documento todavía NO rige: una
 		// versión nueva pediría re-aceptar algo que nadie aceptó, y todo lo agregado amplía derechos o
 		// informa de más, nunca recorta. Contrapartida asumida: las altas posteriores al 2026-08-08
 		// llevan sellado el hash anterior, recuperable del historial de git. Queda en git.
 		// sha256sum presets/help/apps/help/src/pages/PrivacyPage.tsx
-		contentHash: "f7ef8c2e06cce4e1b0a105e3299d1a36cd2a819e36399662cc664dc49c63db08",
+		contentHash: "9abe6ca74dfec78f87fedc1bb0987787986ed1268d09dfb04398e8150a0d4bd1",
 	},
 	cookies: {
 		id: "cookies",
@@ -68,8 +75,17 @@ export const LEGAL_DOCUMENTS = {
 		// el texto pasa a declarar MENOS terceros de los que declaraba. No rige hasta el 2026-09-07.
 		// Corregida otra vez el 2026-08-10, esta vez sumando uno: el servidor STUN de Google que el
 		// túnel P2P del Drive contacta al abrir una transferencia entre dispositivos.
+		// Y una tercera el 2026-08-12: §2 declara la cookie técnica `adc_build`, que fija la sesión de
+		// navegación a un nodo mientras los artefactos de UI no estén igualados entre nodos (si no, el
+		// documento sale de un nodo y sus chunks de otro → 404 intermitentes). Se declara ANTES de que
+		// exista: sólo se escribe con ADC_CLUSTER_GATEWAY=true y algún vecino vivo, o sea que con un
+		// solo nodo no se crea nunca, y la fila lo dice. Mismo criterio que las correcciones de arriba:
+		// sin bump porque el documento no rige hasta el 2026-09-07 —versionar pediría re-aceptar algo
+		// que nadie aceptó— y porque declarar una cookie de más nunca recorta lo que ya se prometió.
+		// Declararla recién el día que se encienda el segundo nodo sí habría exigido enmienda con 30
+		// días de preaviso, y esa espera bloquearía el despliegue.
 		// sha256sum presets/help/apps/help/src/pages/CookiesPage.tsx
-		contentHash: "d1e67164460e052490f802adc5bf0349c5a863af286a8c72c740fbdf73e34020",
+		contentHash: "059f77b19ad1b4717639b4f07610946c9ace83babc96ae013976470ec44d71eb",
 	},
 	dpa: {
 		id: "dpa",
@@ -81,8 +97,12 @@ export const LEGAL_DOCUMENTS = {
 		// Corregida el 2026-08-10 sin bump por el mismo criterio que privacy: no rige hasta el
 		// 2026-09-07. Se excluye a organizaciones establecidas en el EEE (declaración, garantía e
 		// indemnidad), ver el memo de alcance territorial en el repo privado.
+		// Corregida otra vez el 2026-08-12, de cara al plan de escalabilidad: §7 suma redundancia de la
+		// infraestructura y copias de seguridad cifradas a las medidas técnicas, y §8 aclara que operar
+		// sobre varios servidores propios NO es alta de subencargado (sí lo sería un alojamiento o un
+		// backup de terceros, que mantiene el aviso previo y el derecho a terminar el plan).
 		// sha256sum presets/help/apps/help/src/pages/DpaPage.tsx
-		contentHash: "63dab1fb342682b7613d5faa0f24997f5fb11a3172496ce3fc68a8dcb2b3d36d",
+		contentHash: "cd64ee99f3eb81476e684ff437fc2c29f5598517470110527ca43f91c54b025d",
 	},
 } as const;
 
