@@ -4,6 +4,7 @@ import { normalizeForConfig, getServerHost } from "../../utils/fs/path-resolver.
 import type { IBuildContext } from "../types.js";
 import { buildExposesConfig } from "./rspack-helpers.js";
 import { BUNDLER_CACHE_CONTRACT, bundlerCacheDir } from "@common/utils/bundler-cache.ts";
+import { sharedBundleInputs } from "@common/utils/build-id.ts";
 
 /** Versión de `@rspack/core` en uso: una caché escrita por otra versión no se reutiliza. */
 let cachedRspackVersion: string | null = null;
@@ -27,18 +28,20 @@ function rspackVersion(): string {
  * template, los aliases o la lista de módulos registrados termina en su contenido. Y como
  * rspack invalida por **hash** y no por mtime, regenerarla idéntica en cada boot no
  * invalida nada.
+ *
+ * Los que valen para cualquier módulo salen de `sharedBundleInputs()` y no de una lista de
+ * acá: son los mismos que componen el `build-id` del nodo, y dos listas que deberían ser una
+ * terminan divergiendo justo en el archivo que importaba.
  */
 function cacheBuildDependencies(context: IBuildContext, configPath: string, extraConfigs: string[]): string[] {
 	const { module } = context;
-	const root = process.cwd();
 	const candidates = [
 		configPath,
 		...extraConfigs,
 		path.join(module.appDir, "package.json"),
 		path.join(module.appDir, "config.json"),
 		path.join(module.appDir, "default.json"),
-		path.join(root, "package.json"),
-		path.join(root, "bun.lock"),
+		...sharedBundleInputs(),
 	];
 	// `fs.existsSync` acá y no en el build: un `buildDependencies` con un path inexistente
 	// hace que rspack descarte la caché en cada corrida (queda siempre "inválida").

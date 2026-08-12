@@ -3,13 +3,14 @@ import fastifyCors from "@fastify/cors";
 import fastifyCookie from "@fastify/cookie";
 import fastifyFormbody from "@fastify/formbody";
 import * as path from "node:path";
+import type { IncomingMessage } from "node:http";
 import { Transform } from "node:stream";
 import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
-import type { IHostBasedHttpProvider, HostOptions, HttpHandler } from "../../../interfaces/modules/providers/IHttpServer.js";
+import type { IHostBasedHttpProvider, HostOptions, HttpHandler, RequestForwarder } from "../../../interfaces/modules/providers/IHttpServer.js";
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
 import {
@@ -173,6 +174,14 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private readonly globalStaticPaths = new Map<string, string>();
 	/** Hosts en modo mantenimiento: patrón → mensaje. Sirven 503 en vez de la app. */
 	private readonly maintenanceHosts = new Map<string, string>();
+	/**
+	 * Índice lateral de rutas de host por owner. Las rutas de host viven en `RegisteredHost.routes`
+	 * (path → handler, sin dueño); este índice permite que `unregisterRoutesByOwner` también las
+	 * pode sin cambiar la forma del map que recorre el matcher.
+	 */
+	private readonly hostRoutesByOwner: { owner: string; hostPattern: string; method: string; path: string }[] = [];
+	/** Desviador del gateway entre nodos, si alguno se instaló. Ver `setRequestForwarder`. */
+	#requestForwarder: { forward: RequestForwarder; owner?: string } | null = null;
 	private defaultHost: RegisteredHost | null = null;
 	private readonly isDev = process.env.NODE_ENV === "development";
 	private apiDocsRegistered = false;
@@ -266,7 +275,22 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		// pone este wrapper: atajo por Content-Length + contador real, porque un cliente puede
 		// mandar chunked o declarar cualquier cosa. El tope por plan lo sigue poniendo cada
 		// consumidor (ej. el túnel de Drive); esto sólo evita el caso "subida infinita".
-		this.app.addContentTypeParser("application/octet-stream", (request, payload, done) => {
+		// Extraído a una constante para registrarlo dos veces; el cast en cada registro es porque
+		// TS no elige el overload con callback de `addContentTypeParser` fuera del call site.
+		//
+		// El `pipe` es eager a propósito y así se queda. Se lo acusó de dejar las subidas grandes en
+		// cero bytes cuando el handler hace `await` antes de leer el stream: es falso, y el banco que
+		// lo "probó" usaba como cliente el `node:http` de Bun, que es justamente lo que está roto.
+		// Medido con curl contra este mismo parser (Bun 1.3.14, 4 MB): 4194304 bytes en las cuatro
+		// combinaciones —con y sin `await` de I/O, con Content-Length y chunked— y el techo cortando
+		// con 413 por ambos caminos. Lo que se colgaba era el tramo SALIENTE de los proxies: el
+		// `ClientRequest` de Bun nunca emite `drain` ni mueve `writableLength`/`socket.bytesWritten`,
+		// así que un `pipeline` hacia el upstream se frenaba para siempre pasado ~1 MiB (por eso
+		// `@common/utils/http-proxy.ts` sale por `fetch`). Volver esto perezoso (arrancar el pipe
+		// recién en el primer `read`) no arreglaba aquello —se midió: seguía colgado— y sólo agrega
+		// superficie donde hoy no falta nada. El cuerpo sí se pierde, en cambio, si el handler vuelve
+		// sin `reply.hijack()` ni responder: ahí el server lo descarta y contesta 200 solo.
+		const rawStreamParser = (request: FastifyRequest, payload: IncomingMessage, done: (err: Error | null, body?: unknown) => void) => {
 			const max = getRawBodyLimitBytes();
 			const declared = Number(request.headers["content-length"]);
 			if (Number.isFinite(declared) && declared > max) {
@@ -295,10 +319,17 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			// payload quedaría sin listener. Lo trasladamos al destino, que es quien lee el
 			// consumidor. `destroy` sobre un stream ya destruido es no-op, así que el handler
 			// de arriba puede volver a tocar el payload sin riesgo.
-			payload.on("error", (err) => limiter.destroy(err));
+			payload.on("error", (err: Error) => limiter.destroy(err));
 			payload.pipe(limiter);
 			done(null, limiter);
-		});
+		};
+		this.app.addContentTypeParser("application/octet-stream", rawStreamParser as any);
+		// Catch-all con la misma semántica: sin él, cualquier Content-Type no registrado muere en
+		// un 415 ANTES de llegar a los handlers. Lo exige el gateway S3 (S3GatewayService): el PUT
+		// presignado del navegador lleva el Content-Type real del archivo (`image/png`, `video/mp4`,
+		// …) y tiene que atravesar el proxy como stream. Para los endpoints normales el cambio es
+		// benigno: un tipo inesperado ahora llega como Readable y lo rechaza la validación (400).
+		this.app.addContentTypeParser("*", rawStreamParser as any);
 
 		// Log de peticiones en desarrollo
 		if (this.isDev) {
@@ -352,6 +383,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	}
 
 	private async handleStaticRequest(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+		// El gateway entre nodos se consulta ANTES de cualquier matching local, y no como último
+		// recurso: la afinidad de conexión (el túnel de Drive habla con UN dispositivo) apunta a
+		// rutas que TAMBIÉN existen acá, y servirlas localmente sería contestar desde el nodo que no
+		// sostiene esa conexión. Sin gateway instalado no cuesta nada y el ruteo queda idéntico.
+		if (this.#requestForwarder && (await this.#tryForward(request, reply))) return;
+
 		const matchedHost = (request as any).matchedHost as RegisteredHost | undefined;
 		let urlPath = request.url.split("?")[0];
 
@@ -598,8 +635,18 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		for (let i = this.globalRoutes.length - 1; i >= 0; i--) {
 			if (this.globalRoutes[i].owner === owner) this.globalRoutes.splice(i, 1);
 		}
-		const removed = before - this.globalRoutes.length;
-		if (removed > 0) this.logger.logDebug(`Rutas globales retiradas de '${owner}': ${removed}`);
+		let removed = before - this.globalRoutes.length;
+		// También las rutas de host registradas a nombre del owner (ej. el catch-all del gateway S3).
+		for (let i = this.hostRoutesByOwner.length - 1; i >= 0; i--) {
+			const entry = this.hostRoutesByOwner[i];
+			if (entry.owner !== owner) continue;
+			this.hostRoutesByOwner.splice(i, 1);
+			if (this.registeredHosts.get(entry.hostPattern)?.routes.get(entry.method)?.delete(entry.path)) removed++;
+		}
+		// El desviador es una ruta más en lo que importa acá: sobrevivirle a su dueño dejaría un
+		// closure de una instancia muerta decidiendo a qué nodo va cada request.
+		if (this.#requestForwarder?.owner === owner) this.setRequestForwarder(null);
+		if (removed > 0) this.logger.logDebug(`Rutas retiradas de '${owner}': ${removed}`);
 		return removed;
 	}
 
@@ -684,7 +731,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		this.logger.logDebug(`Host registrado: ${hostPattern} -> ${directory} (priority: ${priority})`);
 	}
 
-	registerHostRoute(hostPattern: string, method: string, path: string, handler: HttpHandler): void {
+	registerHostRoute(hostPattern: string, method: string, path: string, handler: HttpHandler, owner?: string): void {
 		let host = this.registeredHosts.get(hostPattern);
 
 		if (!host) {
@@ -700,6 +747,9 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 		const methodMap = host.routes.get(methodUpper)!;
 		methodMap.set(path, normalizeHandler(handler));
+		if (owner && !this.hostRoutesByOwner.some((r) => r.owner === owner && r.hostPattern === hostPattern && r.method === methodUpper && r.path === path)) {
+			this.hostRoutesByOwner.push({ owner, hostPattern, method: methodUpper, path });
+		}
 		// Reordenar el Map por especificidad descendente para que rutas
 		// estáticas (e.g. `/x/draft`) ganen frente a paramétricas (`/x/:id`).
 		const sorted = Array.from(methodMap.entries()).sort(([a], [b]) => routeSpecificity(b) - routeSpecificity(a));
@@ -709,6 +759,38 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 	getRegisteredHosts(): string[] {
 		return Array.from(this.registeredHosts.keys());
+	}
+
+	/**
+	 * Reutiliza el mismo matcher que el ruteo, así que un host por defecto (`*`) hace que este nodo
+	 * "sirva" cualquier hostname: es la verdad, porque ese comodín igual atendería la request.
+	 */
+	servesHost(hostname: string): boolean {
+		return this.matchHost(hostname.split(":")[0].toLowerCase()) !== null;
+	}
+
+	hasGlobalRoute(method: string, path: string): boolean {
+		const upper = method.toUpperCase();
+		return this.globalRoutes.some((route) => route.method === upper && this.matchPath(route.path, path).matched);
+	}
+
+	setRequestForwarder(forwarder: RequestForwarder | null, owner?: string): void {
+		this.#requestForwarder = forwarder ? { forward: forwarder, owner } : null;
+		this.logger.logDebug(`Desviador entre nodos ${forwarder ? `instalado${owner ? ` [${owner}]` : ""}` : "retirado"}`);
+	}
+
+	/**
+	 * Un desviador que explota no puede llevarse puesta la request: se sirve localmente, que es el
+	 * comportamiento sin gateway. Salvo que ya haya escrito —ahí la respuesta es suya y no hay
+	 * ruteo local posible, así que se la deja terminar (o morir) sola.
+	 */
+	async #tryForward(request: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+		try {
+			return await this.#requestForwarder!.forward(request as FastifyRequest<any>, reply as FastifyReply<any>);
+		} catch (error: any) {
+			this.logger.logWarn(`Desvío entre nodos fallido (${error?.message}): se sirve localmente`);
+			return reply.raw.headersSent || reply.raw.writableEnded;
+		}
 	}
 
 	supportsHostRouting(): boolean {

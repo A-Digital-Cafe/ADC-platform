@@ -52,6 +52,13 @@ export function pipeStreamToRaw(
 
 	stream.on("end", () => finish(false));
 	stream.on("error", (error) => finish(true, error));
+	// Cortarse sin `end` es una respuesta truncada, y hay orígenes que ni siquiera avisan con
+	// `error`: el `Readable` de un `fetch` cuyo upstream cierra el socket a mitad simplemente queda
+	// destruido (medido con un `content-length` de 1 MB y 1000 bytes entregados). Sin esto la
+	// respuesta se queda a medias y el cliente espera hasta su propio timeout en vez de ver el corte.
+	stream.on("close", () => {
+		if (!stream.readableEnded) finish(true, new Error("el origen se cerró antes de terminar la respuesta"));
+	});
 	// El cliente cortó (cerró la pestaña, canceló la descarga): liberar el origen.
 	raw.on("close", () => finish(true));
 }

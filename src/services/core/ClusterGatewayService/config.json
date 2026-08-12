@@ -1,0 +1,21 @@
+{
+	"name": "ClusterGatewayService",
+	"uiName": "Core",
+	"version": "1.0.0",
+	"kernelMode": 92,
+	"failOnError": false,
+	"providers": [
+		{
+			"name": "fastify-server",
+			"version": "latest",
+			"language": "typescript"
+		}
+	],
+	"services": [
+		{
+			"name": "ClusterService",
+			"version": "latest",
+			"optional": true
+		}
+	]
+}
