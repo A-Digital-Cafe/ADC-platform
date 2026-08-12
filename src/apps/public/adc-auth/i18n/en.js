@@ -73,6 +73,16 @@ export default {
 		missingToken: "The link code is missing. Open the link exactly as it arrived in the email.",
 		tooMany: "Too many attempts in a row. Wait a minute and try again."
 	},
+	linkAccount: {
+		title: "Link your {{provider}} account",
+		intro: "An account with the email {{email}} already exists. Enter that account's password to link it with {{provider}} and sign in.",
+		hint: "For security you have 5 minutes and up to 3 attempts. If it expired, sign in with the provider again.",
+		genericProvider: "the provider",
+		password: "Password",
+		submit: "Link and sign in",
+		submitting: "Linking...",
+		backToLogin: "Back to sign in"
+	},
 	errors: {
 		// Form-specific errors (shown as inline callout)
 		MISSING_CREDENTIALS: "Username and password are required",
@@ -102,7 +112,7 @@ export default {
 		USER_NOT_FOUND: "User not found",
 		// OAuth link flow
 		NO_PENDING_LINK: "No pending account link found. Please restart the sign-in process.",
-		INVALID_PENDING_LINK: "The account link has expired or is invalid. Please sign in with Discord again.",
+		INVALID_PENDING_LINK: "The account link has expired or is invalid. Please sign in with the provider again.",
 		PASSWORD_REQUIRED: "Enter your platform password to link the account.",
 		WRONG_PASSWORD: "Incorrect password",
 		IDENTITY_NOT_AVAILABLE: "Identity service unavailable"

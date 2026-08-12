@@ -73,6 +73,16 @@ export default {
 		missingToken: "Falta el código del enlace. Abrí el enlace exactamente como llegó en el correo.",
 		tooMany: "Demasiados intentos seguidos. Esperá un minuto y volvé a probar."
 	},
+	linkAccount: {
+		title: "Vincular tu cuenta de {{provider}}",
+		intro: "Ya existe una cuenta con el email {{email}}. Ingresá la contraseña de esa cuenta para vincularla con {{provider}} y entrar.",
+		hint: "Por seguridad tenés 5 minutos y hasta 3 intentos. Si venció, volvé a iniciar sesión con el proveedor.",
+		genericProvider: "el proveedor",
+		password: "Contraseña",
+		submit: "Vincular y entrar",
+		submitting: "Vinculando...",
+		backToLogin: "Volver a iniciar sesión"
+	},
 	errors: {
 		// Errores específicos de formulario (se muestran como callout inline)
 		MISSING_CREDENTIALS: "Usuario y contraseña son requeridos",
@@ -102,7 +112,7 @@ export default {
 		USER_NOT_FOUND: "Usuario no encontrado",
 		// OAuth link flow
 		NO_PENDING_LINK: "No hay una vinculación pendiente. Reinicia el proceso de inicio de sesión.",
-		INVALID_PENDING_LINK: "El enlace de vinculación expiró o es inválido. Vuelve a iniciar sesión con Discord.",
+		INVALID_PENDING_LINK: "La vinculación expiró o es inválida. Volvé a iniciar sesión con el proveedor.",
 		PASSWORD_REQUIRED: "Ingresa tu contraseña de plataforma para vincular la cuenta.",
 		WRONG_PASSWORD: "Contraseña incorrecta",
 		IDENTITY_NOT_AVAILABLE: "Servicio de identidad no disponible"

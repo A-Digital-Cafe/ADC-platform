@@ -42,6 +42,13 @@ const PENDING_LINK_COOKIE_NAME = "oauth_pending_link";
 
 const isProd = process.env.NODE_ENV === "production";
 
+/**
+ * Base del microfront `adc-auth` (mismo criterio que `errorRedirect.ts`): el redirect de
+ * vinculación tiene que ser absoluto porque el callback OAuth corre en el host de la API
+ * (dev: localhost:3000), que no sirve el SPA de cuentas.
+ */
+const AUTH_APP_BASE = isProd ? "https://auth.adigitalcafe.com" : "http://localhost:3012";
+
 /** Max intentos de contraseña por pending link antes de consumirlo */
 const MAX_LINK_ATTEMPTS = 3;
 /** TTL del pending link en segundos (5 minutos) */
@@ -308,14 +315,21 @@ export class OAuthEndpoints {
 		const user = await OAuthEndpoints.buildLinkedAccountUser(existingUser, pendingData);
 
 		const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx as unknown as EndpointCtx<ProviderParams>, user);
+		// El clear tiene que repetir el `domain` con el que se setearon o el browser no las borra.
+		const cookieDomain = OAuthEndpoints.deps.cookieDomain || undefined;
 		const clearLinkCookies: ClearCookie[] = [
-			{ name: PENDING_LINK_COOKIE_NAME, options: { path: "/" } },
-			{ name: RETURN_URL_COOKIE_NAME, options: { path: "/" } },
+			{ name: PENDING_LINK_COOKIE_NAME, options: { path: "/", domain: cookieDomain } },
+			{ name: RETURN_URL_COOKIE_NAME, options: { path: "/", domain: cookieDomain } },
 		];
+
+		// El returnUrl vive en una cookie httpOnly que el SPA no puede leer: se resuelve acá
+		// (validado contra la allow-list) y viaja en la respuesta para que el front redirija.
+		const returnUrl = ctx.cookies?.[RETURN_URL_COOKIE_NAME] || "";
 
 		throw UncommonResponse.json(
 			{
 				success: true,
+				redirectUrl: OAuthEndpoints.getRedirectUrl(user, returnUrl),
 				user: {
 					id: user.id,
 					username: user.username,
@@ -392,7 +406,7 @@ export class OAuthEndpoints {
 			attempts: 0,
 		});
 
-		const linkRedirect = `/auth/link-account?provider=${provider}&email=${encodeURIComponent(pendingData.email)}`;
+		const linkRedirect = `${AUTH_APP_BASE}/link-account?provider=${encodeURIComponent(provider)}&email=${encodeURIComponent(pendingData.email)}`;
 		throw UncommonResponse.redirect(linkRedirect, {
 			status: 302,
 			cookies: OAuthEndpoints.buildPendingLinkCookies(pendingToken, returnUrl),
@@ -401,6 +415,10 @@ export class OAuthEndpoints {
 	}
 
 	private static buildPendingLinkCookies(pendingToken: string, returnUrl: string): SetCookie[] {
+		// Estas cookies las setea el host de la API pero las consume el POST /api/auth/link-account
+		// que sale del SPA en el subdominio auth.*: sin `domain` compartido serían host-only y en
+		// prod no viajarían. En dev queda host-only sobre `localhost`, que cubre 3012 → 3000.
+		const domain = OAuthEndpoints.deps.cookieDomain || undefined;
 		const pendingCookies: SetCookie[] = [
 			{
 				name: PENDING_LINK_COOKIE_NAME,
@@ -411,6 +429,7 @@ export class OAuthEndpoints {
 					sameSite: "lax",
 					path: "/",
 					maxAge: PENDING_LINK_TTL_SECONDS,
+					domain,
 				},
 			},
 		];
@@ -425,6 +444,7 @@ export class OAuthEndpoints {
 					sameSite: "lax",
 					path: "/",
 					maxAge: PENDING_LINK_TTL_SECONDS,
+					domain,
 				},
 			});
 		}

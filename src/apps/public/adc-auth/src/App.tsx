@@ -2,12 +2,13 @@ import "@ui-library/utils/react-jsx";
 import { useState, useEffect } from "react";
 import { Login } from "./pages/Login.tsx";
 import { Register } from "./pages/Register.tsx";
+import { LinkAccount } from "./pages/LinkAccount.tsx";
 import { AuthLayout } from "./components/AuthLayout.tsx";
 import { TokenActionPage } from "./components/TokenActionPage.tsx";
 import { identityPublicApi } from "./utils/auth-api.ts";
 import { DEFAULT_RETURN_URL, sanitizeReturnUrl } from "./utils/safe-url.ts";
 
-type Page = "login" | "register" | "cancel-deletion" | "confirm-email";
+type Page = "login" | "register" | "cancel-deletion" | "confirm-email" | "link-account";
 
 function getReturnUrl(): string {
 	const params = new URLSearchParams(globalThis.location?.search);
@@ -23,6 +24,8 @@ function pageFromPath(path: string | undefined): Page {
 			return "cancel-deletion";
 		case "/confirm-email":
 			return "confirm-email";
+		case "/link-account":
+			return "link-account";
 		default:
 			return "login";
 	}
@@ -66,6 +69,8 @@ export default function App() {
 				onNavigateToLogin={() => navigate("login")}
 			/>
 		);
+	} else if (page === "link-account") {
+		content = <LinkAccount onNavigateToLogin={() => navigate("login")} />;
 	} else if (page === "register") {
 		content = <Register onNavigateToLogin={() => navigate("login")} returnUrl={returnUrl} />;
 	} else {

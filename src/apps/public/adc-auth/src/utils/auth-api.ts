@@ -21,6 +21,8 @@ export interface AuthResponse {
 	success: boolean;
 	user?: SessionUser;
 	error?: string;
+	/** Destino post-vinculación resuelto por el backend (returnUrl validado o default) */
+	redirectUrl?: string;
 	/** Indica que el usuario debe seleccionar una organización antes de concretar el login */
 	requiresOrgSelection?: boolean;
 	userId?: string;

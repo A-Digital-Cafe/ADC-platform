@@ -5,7 +5,7 @@
 1. **Login**: Usuario hace clic en "Iniciar sesión con Discord" → redirige a Discord OAuth con scopes `identify`, `email`, `guilds.members.read`
 2. **Callback**: Discord redirige con código → se intercambia por tokens → se obtiene perfil del usuario
 3. **Linked Account**: Se busca usuario por `linkedAccounts` (provider + providerId con status `"linked"`)
-4. **Email match → Link Account**: Si el email de Discord coincide con un usuario existente, se redirige a `/auth/link-account` para que el usuario autentique con contraseña de plataforma antes de vincular (ver sección **Flujo de vinculación segura** abajo)
+4. **Email match → Link Account**: Si el email verificado del proveedor coincide con un usuario existente, se redirige a la página `/link-account` del microfront `adc-auth` (dev: `localhost:3012`, prod: `auth.adigitalcafe.com`) para que el usuario autentique con contraseña de plataforma antes de vincular (ver sección **Flujo de vinculación segura** abajo)
 5. **Usuario nuevo**: Si no hay coincidencia, se crea un usuario nuevo. Si el username ya existe, se genera un sufijo aleatorio (`username_d{hex}`) para evitar colisiones
 6. **Guild Roles**: Se llama a `GET /users/@me/guilds/{guildId}/member` con el access token para obtener los role IDs del usuario en el guild
 7. **Role Sync**: Los Discord role IDs se traducen a roles de plataforma via `discordRoleMap` (config.json o DB), y se actualizan los `roleIds` del usuario
@@ -17,9 +17,9 @@ Cuando el email de Discord coincide con un usuario existente de la plataforma, *
 
 1. El callback genera un **token opaco** (32 bytes random) y almacena los datos de Discord **server-side** en memoria
 2. El token opaco se envía como cookie httpOnly (`oauth_pending_link`, TTL 5 min)
-3. Se redirige a `/auth/link-account?provider=discord&email=...` donde el frontend muestra un formulario de contraseña
+3. Se redirige a `{authApp}/link-account?provider=discord&email=...` (página `LinkAccount` de `adc-auth`) donde el frontend muestra un formulario de contraseña
 4. El usuario envía su contraseña de plataforma → `POST /api/auth/link-account` con `{ password }`
-5. El backend verifica la contraseña, vincula la cuenta, sincroniza roles de Discord, y emite tokens de sesión
+5. El backend verifica la contraseña, vincula la cuenta, sincroniza roles de Discord, emite tokens de sesión y devuelve `redirectUrl` (el `returnUrl` validado contra la allow-list, o el destino por defecto) para que el frontend redirija
 
 ### Seguridad del endpoint link-account
 
@@ -115,7 +115,7 @@ const hasDiscord = session.user?.linkedAccounts?.some((la) => la.provider === "d
 
 ## Vinculación/Desvinculación desde Frontend
 
-- **Vincular**: Redirigir a `/api/auth/login/discord`. Si el email de Discord coincide con un usuario existente, será redirigido a `/auth/link-account` para autenticarse con contraseña antes de vincular
+- **Vincular**: Redirigir a `/api/auth/login/discord`. Si el email de Discord coincide con un usuario existente, será redirigido a la página `/link-account` de `adc-auth` para autenticarse con contraseña antes de vincular
 - **Desvincular**: Llamar al endpoint de gestión de cuenta que invoca `unlinkExternalAccount(userId, "discord")`. El registro queda con status `"unlinked"` (no se elimina)
 - **Anti-colisión**: Si un Discord ID ya está vinculado a otro usuario con status `"linked"`, se retorna error explicativo
 
