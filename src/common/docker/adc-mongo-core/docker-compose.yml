@@ -35,6 +35,15 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
       MONGO_INITDB_DATABASE: adc-core
+      # SERVER-121912: el tcmalloc que trae mongod 8.x viola el ABI de rseq y segfaultea en kernels
+      # Linux >= 6.19. No es un crash al arrancar —eso se vería enseguida—: el proceso levanta sano,
+      # sirve ~30 s y muere con SIGSEGV, sin backtrace porque lo que se rompe es el allocator. Con
+      # `restart: unless-stopped` eso es un ciclo infinito de cierres sucios sobre el volumen.
+      # `rseq=0` desactiva las restartable sequences que tcmalloc usa mal; `-SHSTK` apaga el shadow
+      # stack de CET, que es la otra mitad del cuadro en CPUs que lo soportan.
+      # mongod 8.0 detecta el kernel y se niega a arrancar; 8.2 no lo detecta y se cae, así que esto
+      # hace falta en las dos. Se puede sacar cuando la imagen traiga el tcmalloc corregido.
+      GLIBC_TUNABLES: glibc.pthread.rseq=0:glibc.cpu.hwcaps=-SHSTK
     # Replica set de UN nodo, no standalone. No es preparación especulativa: un standalone no
     # tiene transacciones multi-documento ni change streams, así que `rs0` los desbloquea hoy —
     # y el día que haga falta un segundo nodo se suma con `rs.add()` en caliente, sin migrar

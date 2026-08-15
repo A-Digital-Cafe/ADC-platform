@@ -30,6 +30,10 @@ services:
       - SETGID
       - SETUID
     pids_limit: 2048
+    # Mismo motivo que en `adc-mongo-core` (SERVER-121912): sin esto, mongod 8.x segfaultea a los
+    # ~30 s en kernels Linux >= 6.19 por el tcmalloc que viola el ABI de rseq.
+    environment:
+      GLIBC_TUNABLES: glibc.pthread.rseq=0:glibc.cpu.hwcaps=-SHSTK
     # Sin `ports`: el catálogo sólo se habla desde `mongos`.
     command:
       - mongod
@@ -155,6 +159,10 @@ services:
       # Un puerto propio, no el 27017: el shard sigue atendiendo en el suyo durante toda la
       # migración. Que convivan es lo que permite volver atrás cambiando una variable.
       - "127.0.0.1:${MONGO_MONGOS_PORT:-27018}:27017"
+    # `mongos` es el mismo binario de MongoDB y arrastra el mismo tcmalloc: SERVER-121912 lo afecta
+    # igual que a los mongod, aunque no guarde datos.
+    environment:
+      GLIBC_TUNABLES: glibc.pthread.rseq=0:glibc.cpu.hwcaps=-SHSTK
     command:
       - mongos
       - --configdb
