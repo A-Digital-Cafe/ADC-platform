@@ -74,6 +74,11 @@ interface SharedPoolEntry {
 	maxPoolSize: number;
 	minPoolSize: number;
 	counters: PoolCounters;
+	/**
+	 * Qué ya se dijo en el episodio de caída en curso (ver {@link announceOnce}). Se vacía en cada
+	 * `disconnected`, que es lo que abre un episodio nuevo.
+	 */
+	announced: Set<string>;
 }
 
 // El kernel recarga el módulo con cache-busting (?v=timestamp) en cada loadProvider,
@@ -107,6 +112,8 @@ function attachPoolListeners(entry: SharedPoolEntry, physicalKey: string): void 
 		// quién avisar (ni a quién reconectar).
 		const current = SHARED_POOLS.get(physicalKey);
 		if (!current || current.refCount <= 0) return;
+		// Empieza un episodio nuevo: lo que se anunció en el anterior vuelve a ser noticia.
+		current.announced.clear();
 		Logger.warn(`[MongoProvider] Pool desconectado: ${where()}`);
 		for (const subscriber of [...current.subscribers]) subscriber.onDisconnected();
 	});
@@ -119,6 +126,28 @@ function attachPoolListeners(entry: SharedPoolEntry, physicalKey: string): void 
 	physical.on("reconnected", () => {
 		Logger.ok(`[MongoProvider] Pool reconectado: ${where()}`);
 	});
+}
+
+/**
+ * Loguea algo UNA vez por pool físico y por episodio de caída.
+ *
+ * El pool lo comparten todos los módulos que declaran el mismo host+credenciales (en un despliegue
+ * normal son ~17), y cada uno reprograma su propia reconexión: sin esto, una sola caída imprime la
+ * misma línea 17 veces y repite la tanda en cada reintento, que es justo cuando el log tiene que
+ * poder leerse. Lo que es del POOL se dice una vez; lo que es de la instancia (su `lastError`,
+ * su timer) sigue siendo de cada una.
+ *
+ * `tag` identifica el mensaje, no su texto: dos instancias que anuncian lo mismo con distinto
+ * nombre de base comparten tag y por lo tanto una sola línea.
+ */
+function announceOnce(physicalKey: string | null, tag: string, emit: () => void): void {
+	const entry = physicalKey ? SHARED_POOLS.get(physicalKey) : undefined;
+	// Sin pool en el mapa no hay a quién agrupar (ni episodio que recordar): se dice igual, que es
+	// el modo en que esto falla hacia el lado seguro — de más, nunca de menos.
+	if (!entry) return emit();
+	if (entry.announced.has(tag)) return;
+	entry.announced.add(tag);
+	emit();
 }
 
 /**
@@ -287,6 +316,7 @@ export default class MongoProvider extends BaseProvider {
 							maxPoolSize,
 							minPoolSize,
 							counters,
+							announced: new Set(),
 						};
 						SHARED_POOLS.set(physicalKey, fresh);
 						Logger.ok(`[MongoProvider] Pool físico abierto: ${physical.host}:${physical.port}`);
@@ -392,7 +422,10 @@ export default class MongoProvider extends BaseProvider {
 		// de paso el entry se reemplazaba por uno nuevo dejando a los servicios con sus modelos
 		// compilados sobre la `Connection` anterior.
 		if (this.physicalKey) {
-			Logger.warn(`[MongoProvider] Pool de '${this.dbName}' todavía caído; el driver sigue reintentando.`);
+			// Del pool, no de esta base: las N vistas lógicas que cuelgan de él están igual de caídas.
+			announceOnce(this.physicalKey, "still-down", () =>
+				Logger.warn(`[MongoProvider] Pool ${redactMongoUri(this.physicalKey!)} todavía caído; el driver sigue reintentando.`)
+			);
 			this.#scheduleReconnect();
 			return;
 		}
@@ -432,7 +465,13 @@ export default class MongoProvider extends BaseProvider {
 	#scheduleReconnect(): void {
 		if (this.reconnectTimer) return;
 
-		Logger.info(`[MongoProvider] Programando reconexión en ${this.config.reconnectInterval}ms...`);
+		// Cada instancia arma su propio timer (es lo que la mantiene reconectando por su cuenta),
+		// pero anunciarlo es del pool: 17 módulos programando lo mismo son una línea, no diecisiete.
+		announceOnce(this.physicalKey, "reconnect", () => {
+			const shared = this.physicalKey ? SHARED_POOLS.get(this.physicalKey)?.subscribers.size : undefined;
+			const who = shared && shared > 1 ? ` (${shared} módulos sobre este pool)` : "";
+			Logger.info(`[MongoProvider] Programando reconexión en ${this.config.reconnectInterval}ms${who}...`);
+		});
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null;
 			if (!this.isDisconnecting)

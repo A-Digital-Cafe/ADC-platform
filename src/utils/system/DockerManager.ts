@@ -35,6 +35,17 @@ export interface ComposeTarget {
 	dir: string;
 }
 
+/**
+ * Mando sobre los stacks comunes: enciende, apaga y enumera. Lo entrega `Kernel.getDockerController`
+ * y lo usa el panel; el resto de la infra (composes de apps y servicios) sigue siendo del loader del
+ * módulo, que es quien conoce su ciclo de vida.
+ */
+export interface DockerController {
+	startCommonStack(name: string): Promise<boolean>;
+	stopCommonStack(name: string, graceSeconds?: number): Promise<boolean>;
+	listCommonStacks(): string[];
+}
+
 /** Vista sólo‑lectura de la infra Docker: enumera y reporta, nunca levanta ni baja nada. */
 export interface DockerInspector {
 	listComposeTargets(): ComposeTarget[];
@@ -582,6 +593,29 @@ export class DockerManager {
 			["app", this.#appDockerComposeMap],
 		];
 		return groups.flatMap(([type, map]) => Array.from(map, ([name, dir]) => ({ type, name, dir })));
+	}
+
+	/**
+	 * Levanta UN stack común por nombre. Para el panel, que en modo `manual` es el único lugar desde
+	 * el que se encienden. Devuelve `false` si ese nombre no es un stack común de este nodo.
+	 */
+	async startCommonStack(name: string): Promise<boolean> {
+		const dir = this.#commonDockerComposeMap.get(name);
+		if (!dir) return false;
+		await this.runDockerCompose(dir, name, "common");
+		return true;
+	}
+
+	/**
+	 * Baja UN stack común por nombre, **sin olvidarlo**: a diferencia de
+	 * {@link stopAllCommonDockerCompose}, que corre en el cierre del proceso y limpia el mapa, acá el
+	 * nodo sigue vivo y el panel tiene que poder volver a encenderlo.
+	 */
+	async stopCommonStack(name: string, graceSeconds?: number): Promise<boolean> {
+		const dir = this.#commonDockerComposeMap.get(name);
+		if (!dir) return false;
+		await this.stopDockerCompose(dir, graceSeconds);
+		return true;
 	}
 
 	/** `true` si se encontró el binario de docker al arrancar. */

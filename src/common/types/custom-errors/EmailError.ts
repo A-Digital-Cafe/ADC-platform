@@ -27,7 +27,10 @@ type EmailErrorTypes =
 	| "NO_DELIVERABLE_MAILBOX"
 	// Auth
 	| "INVALID_WEBHOOK_SECRET"
+	/** El grupo de direcciones de sistema pedido no existe en el catálogo. */
+	| "MAIL_GROUP_NOT_FOUND"
 	// Infra
+	| "MAIL_UNAVAILABLE"
 	| "TRANSPORT_UNAVAILABLE"
 	| "ATTACHMENTS_UNAVAILABLE";
 

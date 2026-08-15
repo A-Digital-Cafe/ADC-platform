@@ -15,17 +15,43 @@ import { normalizeAddress } from "./email-address.ts";
 
 const POLICY_PATH = fileURLToPath(new URL("../config/name-policy.json", import.meta.url));
 
+interface RawSystemAlias {
+	id?: string;
+	labels?: string[];
+	purpose?: string;
+	defaultTarget?: string;
+}
+
 interface RawPolicy {
-	aliases?: Record<string, string>;
+	systemAliases?: RawSystemAlias[];
 	reservedUsernames?: string[];
 	blockedWords?: string[];
 	allowedExceptions?: string[];
 	randomUsername?: { adjectives?: string[]; animals?: string[]; digits?: number };
 }
 
+/**
+ * Familia de direcciones de sistema que comparten destino. `soporte` y `support` son la misma
+ * casilla escrita en dos idiomas: agruparlas evita el estado imposible de que una redirija a una
+ * persona y la otra a otra, que es el tipo de diferencia que nadie nota hasta que se pierde un
+ * correo.
+ * @public
+ */
+export interface SystemAliasGroup {
+	id: string;
+	/** Local-parts que entregan en el mismo lugar (`support`, `soporte`, …). */
+	labels: string[];
+	/** Para qué es, en una línea: lo muestra el panel al lado de cada grupo. */
+	purpose: string;
+	/** Buzón al que entrega mientras nadie configure otro destino desde el panel. */
+	defaultTarget: string;
+}
+
 interface NamePolicy {
 	/** Alias con clave normalizada: local-part suelto o dirección completa. */
 	aliases: Map<string, string>;
+	/** El catálogo agrupado, para el panel y para resolver a qué grupo pertenece una dirección. */
+	groups: SystemAliasGroup[];
 	reserved: Set<string>;
 	blockedWords: string[];
 	exceptions: Set<string>;
@@ -48,6 +74,7 @@ const ORG_SLUG_FORMAT_RX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
 const EMPTY_POLICY: NamePolicy = {
 	aliases: new Map(),
+	groups: [],
 	reserved: new Set(),
 	blockedWords: [],
 	exceptions: new Set(),
@@ -77,11 +104,15 @@ function normalizeName(value: string): string {
 
 function parsePolicy(raw: RawPolicy): NamePolicy {
 	const aliases = new Map<string, string>();
-	for (const [key, target] of Object.entries(raw.aliases ?? {})) {
-		const trimmed = key.trim().toLowerCase();
-		if (!trimmed || !target) continue;
+	const groups: SystemAliasGroup[] = [];
+	for (const entry of raw.systemAliases ?? []) {
+		const id = entry.id?.trim().toLowerCase();
+		const target = entry.defaultTarget?.trim().toLowerCase();
+		const labels = (entry.labels ?? []).map((l) => l.trim().toLowerCase()).filter(Boolean);
+		if (!id || !target || labels.length === 0) continue;
+		groups.push({ id, labels, purpose: entry.purpose?.trim() ?? "", defaultTarget: target });
 		// Con `@` es una dirección completa; sin `@`, un local-part del dominio raíz.
-		aliases.set(trimmed.includes("@") ? normalizeAddress(trimmed) : trimmed, target.trim().toLowerCase());
+		for (const label of labels) aliases.set(label.includes("@") ? normalizeAddress(label) : label, target);
 	}
 
 	// Cada alias queda reservado: nadie puede registrarse como `support` si
@@ -92,6 +123,7 @@ function parsePolicy(raw: RawPolicy): NamePolicy {
 
 	return {
 		aliases,
+		groups,
 		reserved,
 		blockedWords: (raw.blockedWords ?? []).map(normalizeName).filter(Boolean),
 		exceptions: new Set((raw.allowedExceptions ?? []).map(normalizeName)),
@@ -194,6 +226,32 @@ export function resolveAliasTarget(address: string, rootDomain: string): string 
 	// Los alias sin dominio sólo aplican al dominio raíz, no a los de organización.
 	if (normalized.slice(at + 1) !== rootDomain.trim().toLowerCase()) return null;
 	return policy.aliases.get(normalized.slice(0, at)) ?? null;
+}
+
+/**
+ * El catálogo de direcciones de sistema, agrupado. Lo consume el panel para ofrecer un destino por
+ * grupo, y el correo para saber a qué grupo pertenece una dirección entrante.
+ * @public
+ */
+export function listSystemAliasGroups(): readonly SystemAliasGroup[] {
+	return getNamePolicy().groups;
+}
+
+/**
+ * Grupo de sistema al que pertenece una dirección, o `null` si no es una de ellas. Mismo criterio
+ * que {@link resolveAliasTarget} —acepta subaddressing y los local-parts sueltos sólo valen en el
+ * dominio raíz— para que el panel y la entrega nunca discrepen sobre qué es una casilla de sistema.
+ * @public
+ */
+export function resolveAliasGroup(address: string, rootDomain: string): SystemAliasGroup | null {
+	const policy = getNamePolicy();
+	if (policy.groups.length === 0) return null;
+
+	const normalized = normalizeAddress(address);
+	const at = normalized.lastIndexOf("@");
+	const local = at > 0 && normalized.slice(at + 1) === rootDomain.trim().toLowerCase() ? normalized.slice(0, at) : null;
+
+	return policy.groups.find((g) => g.labels.some((label) => label === normalized || (local !== null && label === local))) ?? null;
 }
 
 /**

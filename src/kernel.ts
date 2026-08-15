@@ -21,7 +21,7 @@ interface ProvisionableModule {
 	setInfraToken?(token: Capability | symbol): void;
 }
 import { ILogger } from "./interfaces/utils/ILogger.js";
-import { DockerManager, type DockerInspector } from "./utils/system/DockerManager.ts";
+import { DockerManager, type DockerController, type DockerInspector } from "./utils/system/DockerManager.ts";
 import { bootTimeline } from "./utils/system/BootTimeline.ts";
 import { AppLoader } from "./core/apps/AppLoader.js";
 import { ModuleRegistrar } from "./core/modules/ModuleRegistrar.js";
@@ -325,6 +325,27 @@ export class Kernel {
 			listComposeTargets: () => docker.listComposeTargets(),
 			dockerAvailable: () => docker.dockerAvailable(),
 			dockerPath: () => docker.dockerPath(),
+		};
+	}
+
+	/**
+	 * Mando sobre los stacks **comunes** (los de `src/common/docker/`): encenderlos y apagarlos de a
+	 * uno, y elegir si el nodo los baja al cerrarse.
+	 *
+	 * Aparte de {@link getDockerInspector} a propósito: esa vista es de sólo lectura y la consume
+	 * cualquier bloque informativo del panel; ésta ejecuta. Mismo gate, distinta responsabilidad, y
+	 * el que sólo quiere mirar no recibe de paso la capacidad de bajar Mongo.
+	 *
+	 * Sólo los comunes: los composes de una app o un servicio son parte de su ciclo de vida y los
+	 * maneja el loader del módulo, no un botón.
+	 */
+	public getDockerController(token: CapabilityToken): DockerController {
+		assertScope(token, Scope.Orchestrator, Kernel.#kernelKey);
+		const docker = this.#dockerManager;
+		return {
+			startCommonStack: (name) => docker.startCommonStack(name),
+			stopCommonStack: (name, graceSeconds) => docker.stopCommonStack(name, graceSeconds),
+			listCommonStacks: () => docker.listComposeTargets().filter((t) => t.type === "common").map((t) => t.name),
 		};
 	}
 

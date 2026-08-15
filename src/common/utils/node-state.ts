@@ -18,6 +18,9 @@ import { setNodeRoleOverride, type NodeRole } from "./cluster-env.js";
 /** Qué hace el nodo al arrancar. */
 export type PowerMode = "on" | "standby";
 
+/** Qué hace el nodo con los contenedores comunes cuando se apaga. */
+export type InfraShutdownMode = "auto" | "manual";
+
 export interface NodeState {
 	/**
 	 * `standby` = el nodo arranca, levanta sus motores y entra al registro, pero **no carga ninguna
@@ -34,6 +37,16 @@ export interface NodeState {
 	 * Está acá para que promover un secundario sea apretar un botón y no entrar por SSH.
 	 */
 	role: NodeRole | null;
+	/**
+	 * `auto` (default) = al apagarse, el nodo baja los stacks comunes que levantó. `manual` = los
+	 * deja corriendo y se encienden o apagan desde el panel.
+	 *
+	 * En un despliegue con supervisor esto importa: cada reinicio del proceso —un deploy, un
+	 * `pm2 restart`, un crash-loop— arrastra a Mongo, Redis y el resto, que tardan más en volver que
+	 * el kernel y a veces vuelven mal (un `mongod` que no alcanza a cerrar limpio queda recuperando
+	 * el journal). Los motores no tienen por qué compartir el ciclo de vida del proceso que los usa.
+	 */
+	infraShutdown: InfraShutdownMode;
 	updatedAt: string;
 	updatedBy: string | null;
 }
@@ -43,7 +56,7 @@ const STATE_FILE = "node-state.json";
 /** Donde se deja el archivo ilegible, para poder mirarlo en vez de perderlo al arreglar el arranque. */
 const CORRUPT_FILE = "node-state.corrupt.json";
 
-const DEFAULT_STATE: NodeState = { power: "on", infra: null, role: null, updatedAt: "", updatedBy: null };
+const DEFAULT_STATE: NodeState = { power: "on", infra: null, role: null, infraShutdown: "auto", updatedAt: "", updatedBy: null };
 
 function statePath(): string {
 	return resolve(process.cwd(), STATE_DIR, STATE_FILE);
@@ -63,6 +76,10 @@ function isPowerMode(value: unknown): value is PowerMode {
 
 function isNodeRole(value: unknown): value is NodeRole {
 	return value === "primary" || value === "secondary";
+}
+
+function isInfraShutdownMode(value: unknown): value is InfraShutdownMode {
+	return value === "auto" || value === "manual";
 }
 
 /**
@@ -99,6 +116,9 @@ export function readNodeState(): NodeState {
 			power: isPowerMode(raw.power) ? raw.power : "on",
 			infra: typeof raw.infra === "string" ? raw.infra : null,
 			role: isNodeRole(raw.role) ? raw.role : null,
+			// Sin campo = `auto`: es el comportamiento histórico, y el conservador. Un estado viejo
+			// no puede empezar a dejar contenedores encendidos por haberse actualizado el código.
+			infraShutdown: isInfraShutdownMode(raw.infraShutdown) ? raw.infraShutdown : "auto",
 			updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
 			updatedBy: typeof raw.updatedBy === "string" ? raw.updatedBy : null,
 		};
@@ -151,12 +171,13 @@ export function assertNodeStateReadable(): void {
  * corte a mitad deja el archivo viejo entero en vez de uno truncado. El `fsync` previo evita que el
  * rename llegue al disco antes que el contenido.
  */
-export function writeNodeState(patch: Partial<Pick<NodeState, "power" | "infra" | "role">>, actor?: string | null): NodeState {
+export function writeNodeState(patch: Partial<Pick<NodeState, "power" | "infra" | "role" | "infraShutdown">>, actor?: string | null): NodeState {
 	const current = readNodeState();
 	const next: NodeState = {
 		power: patch.power ?? current.power,
 		infra: patch.infra === undefined ? current.infra : patch.infra,
 		role: patch.role === undefined ? current.role : patch.role,
+		infraShutdown: patch.infraShutdown ?? current.infraShutdown,
 		updatedAt: new Date().toISOString(),
 		updatedBy: actor ?? null,
 	};

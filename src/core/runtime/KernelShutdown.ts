@@ -2,6 +2,7 @@ import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import type { ModuleRegistry } from "../../utils/registry/ModuleRegistry.js";
 import type { DockerManager } from "../../utils/system/DockerManager.js";
 import { stopBoundModule } from "../../utils/decorators/OnlyKernel.ts";
+import { readNodeState } from "@common/utils/node-state.ts";
 
 type WithTimeoutFn = <T>(promise: Promise<T>, timeoutMs: number, name: string) => Promise<T | undefined>;
 
@@ -133,11 +134,20 @@ export async function shutdownKernel(deps: {
 
 	// La infraestructura va al final y SIN prisa: los módulos todavía la estaban usando, y es lo
 	// único que guarda datos en disco.
-	logger.logInfo("Deteniendo contenedores Docker comunes...");
-	await dockerManager.stopAllCommonDockerCompose({
-		order: INFRA_STOP_ORDER,
-		timeoutMsPerStack: INFRA_STOP_TIMEOUT_MS,
-	});
+	//
+	// Salvo que el nodo esté en `manual`: ahí los motores NO comparten el ciclo de vida de este
+	// proceso. Un deploy o un `pm2 restart` no tienen por qué arrastrar a Mongo y a Redis, que
+	// tardan más en volver que el kernel y a veces vuelven peor. Se encienden y se apagan desde el
+	// panel de red, que es donde se eligió el modo.
+	if (readNodeState().infraShutdown === "manual") {
+		logger.logInfo("Contenedores Docker comunes: se dejan corriendo (modo `manual` en el estado del nodo).");
+	} else {
+		logger.logInfo("Deteniendo contenedores Docker comunes...");
+		await dockerManager.stopAllCommonDockerCompose({
+			order: INFRA_STOP_ORDER,
+			timeoutMsPerStack: INFRA_STOP_TIMEOUT_MS,
+		});
+	}
 
 	if (abandoned.length > 0) {
 		logger.logWarn(`Cierre completado con ${abandoned.length} módulo(s) abandonado(s) por timeout: ${abandoned.join(", ")}`);
