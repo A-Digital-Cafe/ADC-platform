@@ -27,7 +27,7 @@ h2, o ALPN negociaría sólo h2 y dejaría afuera a todos los clientes internos.
 - `Cross-Origin-Resource-Policy: same-site`, salvo **fuera de producción real** cuando se entra por IP: ahí no hay sitio que comparar y el navegador bloquearía todo subrecurso servido desde otro puerto, así que degrada a `cross-origin`. En producción no degrada nunca, para que pedir por la IP de origen no sea una forma de saltear CORP.
 - CSP centralizada: las apps NO duplican la política completa; declaran solo su delta con el header `Content-Security-Policy-Extend` (ej. `"img-src https:; frame-src https://www.youtube.com"`) y el provider lo fusiona sobre la CSP por defecto (que ya distingue dev/prod). `Content-Security-Policy` explícito sigue funcionando como override total.
 - `Content-Security-Policy-Restrict` **reemplaza** directivas de la base en vez de sumarles fuentes: es la única forma de *cerrar* un comodín que la base concede por compatibilidad (ej. `img-src https:`, que está ahí porque casi todas las apps muestran avatares remotos). Se aplica después de Extend, así que restringir gana sobre extender la misma directiva. Ej: `"img-src 'self' data: blob: https://cdn.discordapp.com"`.
-- CORS: en **producción real** la allowlist es sólo `CORS_ALLOWED_ORIGINS`/`ADC_CORS_ALLOWED_ORIGINS`
+- CORS: en **producción real** la allowlist es sólo `CORS_ALLOWED_ORIGINS`
   (registrar un vhost no vuelve a ese host un origen de API con credenciales). Fuera de ahí se
   aceptan además los orígenes locales y los vhosts **concretos** — nunca los comodín (`*.dominio`),
   que sirven para ruteo. `isPlatformOrigin()` responde la otra pregunta, "¿este origen es nuestro?",
@@ -38,7 +38,7 @@ h2, o ALPN negociaría sólo h2 y dejaría afuera a todos los clientes internos.
   (`CF-IPCountry`): `trustProxy` sólo resuelve `request.ip`, no esos headers.
 - El ruteo por vhost y la decisión de CORP leen `headers.host` **antes** que `request.hostname`: con
   `trustProxy` activo fastify deriva `hostname` de `X-Forwarded-Host`, que el cliente puede mandar.
-- `bodyLimit` se configura con `HTTP_BODY_LIMIT_BYTES`/`ADC_HTTP_BODY_LIMIT_BYTES`. Los bodies `application/octet-stream` llegan como stream y NO pasan por él: su techo es `HTTP_RAW_BODY_LIMIT_BYTES`/`ADC_HTTP_RAW_BODY_LIMIT_BYTES` (413 al excederlo).
+- `bodyLimit` se configura con `HTTP_BODY_LIMIT_BYTES`. Los bodies `application/octet-stream` llegan como stream y NO pasan por él: su techo es `HTTP_RAW_BODY_LIMIT_BYTES` (413 al excederlo).
 - **Conexiones lentas**: un cuerpo que deja de avanzar `HTTP_IDLE_BODY_TIMEOUT_MS` (30 s) se corta con 408, y cada IP puede tener `HTTP_MAX_INFLIGHT_BODIES_PER_IP` (24) peticiones **con cuerpo** a la vez, contadas en `onRequest` — antes de leer un byte, que es donde el rate limit por endpoint todavía no mira. Sólo cuerpos: un `GET` no cuelga bytes de subida y contarlo mataría el SSE. Ver `security/traffic-shaper.ts` y `security/inflight.ts`; los dos valores viven en `platform_settings`.
 - **Caudal de subida**: `UPLOAD_BANDWIDTH_BYTES_PER_SEC` reparte el ancho de banda entrante en partes iguales entre las transferencias en curso y lo achica solo con la carga del proceso (`@common/utils/bandwidth-governor.ts`). Se cambia en caliente desde Admin - Red.
 - Los métodos HTTP se limitan a GET, POST, PUT, PATCH, DELETE, HEAD y OPTIONS.

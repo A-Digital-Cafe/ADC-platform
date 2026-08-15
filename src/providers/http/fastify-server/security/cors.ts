@@ -7,7 +7,7 @@ export const ALLOWED_HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "H
 export const ALLOWED_CORS_HEADERS = ["Content-Type", "Authorization", "Idempotency-Key", "X-CSRF-Token", "X-Requested-With", "Content-Disposition"];
 
 function parseOriginList(): string[] {
-	const raw = process.env.CORS_ALLOWED_ORIGINS || process.env.ADC_CORS_ALLOWED_ORIGINS || "";
+	const raw = process.env.CORS_ALLOWED_ORIGINS || "";
 	return raw
 		.split(",")
 		.map((origin) => origin.trim())

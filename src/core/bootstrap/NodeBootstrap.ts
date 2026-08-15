@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, chmodSync
 import { resolve } from "node:path";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import { ENV_GROUP_ORDER, type EnvGroup } from "../../common/utils/env-manifest.js";
-import { advertisedAddress, nodeId, nodeSite } from "../../common/utils/cluster-env.js";
+import { advertisedAddress, isPrimary, nodeId, nodeSite } from "../../common/utils/cluster-env.js";
 
 /** Carpeta de configuración de la raíz, la misma que lee `load-env.ts`. */
 const ENV_DIR = "env";
@@ -157,6 +157,29 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Un primario no se da de alta contra nadie: es la punta que **emite** el token y sirve el canje.
+ *
+ * Corta el arranque en vez de ignorar las variables en silencio, porque las dos formas de llegar acá
+ * son errores caros y ninguna se nota después:
+ *
+ *  - **El `env/host.env` de un secundario copiado a otra máquina.** Sin esto, el nodo canjea un token
+ *    ya usado y aborta con un 409 que habla del token, mandando a buscar el problema al panel.
+ *  - **Un nodo nuevo al que se le olvidó `ADC_NODE_ROLE=secondary`.** Es el peor de los dos y el que
+ *    no daba señal alguna: `nodeRole()` devuelve `primary` por defecto, así que el nodo se daba de
+ *    alta igual y el clúster quedaba con dos primarios —dos scheduler, dos juegos de watchers, dos
+ *    planos de control de la overlay— sin que nada fallara al arrancar.
+ */
+function assertNotPrimary(joinUrl: string): void {
+	if (!isPrimary()) return;
+	throw new Error(
+		`Este nodo se declara PRIMARIO y tiene variables de alta apuntando a ${joinUrl}. Un primario no canjea: ` +
+			"es el que emite el token y atiende el canje. Si es una máquina que se está sumando al clúster, declarále " +
+			"`ADC_NODE_ROLE=secondary` en `env/host.env` (sin eso el rol por defecto es primario y el clúster quedaría con dos). " +
+			"Si es el primario de verdad, borrá `ADC_NODE_JOIN_URL` y `ADC_NODE_JOIN_TOKEN`: ahí no hacen nada."
+	);
+}
+
+/**
  * Si este nodo tiene variables de alta y todavía no las canjeó, pide su configuración y la aplica.
  *
  * **No arranca a medias**: si el clúster no contesta, reintenta con backoff y aborta el arranque. Un
@@ -174,6 +197,10 @@ export async function bootstrapNodeIfPending(basePath: string, logger: ILogger):
 		logger.logDebug(`[alta] este nodo ya canjeó su token (${JOINED_MARKER}); se sigue con el arranque normal.`);
 		return { joined: false, applied: 0, groups: [] };
 	}
+	// El guard va DESPUÉS del marcador a propósito: un secundario promovido a primario desde el panel
+	// sigue teniendo sus variables de alta en `env/host.env`, y negarle el arranque por eso sería
+	// romper la promoción, que es justo la maniobra de un primario caído.
+	assertNotPrimary(joinUrl);
 	if (!JOIN_URL_RE.test(joinUrl)) {
 		throw new Error(`ADC_NODE_JOIN_URL no tiene forma de URL: '${joinUrl}'. Es a donde se le mandan los secretos de este nodo, así que no se adivina.`);
 	}

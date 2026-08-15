@@ -38,8 +38,6 @@ export interface EnvVarDef {
 	 * - `compose-only`: no la lee el proceso, sólo la interpola un `docker-compose.yml`.
 	 */
 	indirect?: "public-env" | "cluster-env" | "compose-only";
-	/** Nombres alternativos que el código acepta con `||`. */
-	aliases?: string[];
 	/**
 	 * Su valor vive en `platform_settings` (ver `PlatformSettingsService`) y **ya no va en ningún
 	 * `env/*.env`**; queda declarada para que la auditoría no la reporte como desconocida. Si además
@@ -119,9 +117,9 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 
 	// ── network: cómo se expone y en quién confía. Igual en todos los nodos. ────────────────────
 	{ name: "TRUSTED_PROXIES", group: "network" },
-	{ name: "CORS_ALLOWED_ORIGINS", group: "network", aliases: ["ADC_CORS_ALLOWED_ORIGINS"] },
-	{ name: "HTTP_BODY_LIMIT_BYTES", group: "network", aliases: ["ADC_HTTP_BODY_LIMIT_BYTES"], source: "platform-settings" },
-	{ name: "HTTP_RAW_BODY_LIMIT_BYTES", group: "network", aliases: ["ADC_HTTP_RAW_BODY_LIMIT_BYTES"], source: "platform-settings" },
+	{ name: "CORS_ALLOWED_ORIGINS", group: "network" },
+	{ name: "HTTP_BODY_LIMIT_BYTES", group: "network", source: "platform-settings" },
+	{ name: "HTTP_RAW_BODY_LIMIT_BYTES", group: "network", source: "platform-settings" },
 	{ name: "SECURITY_CSP_ENFORCE", group: "network" },
 	{ name: "SECURITY_ENABLE_HSTS", group: "network" },
 	{ name: "SECURITY_CSP_SCRIPT_NONCE", group: "network" },
@@ -291,6 +289,16 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 		why: "si el TURN y el plano de control no comparten la misma, el descubrimiento de NAT falla y todo el tráfico cae al relay: la red anda y es lenta",
 	},
 	{ name: "NETBIRD_IDP_MGMT_CLIENT_SECRET", group: "secrets", indirect: "compose-only", why: "el plano de control no puede consultar el proveedor de identidad" },
+	// Va **vacía** contra el OIDC de esta plataforma: `SessionManagerService` emite clientes públicos
+	// con PKCE y no admite autenticación de cliente. Se declara igual —y en `secrets`, no en
+	// `optionals`— porque el día que la consola de la red se apoye en otro proveedor, su valor es un
+	// secreto y ya tiene destino: sin entrada en el manifiesto habría caído en el archivo equivocado.
+	{
+		name: "NETBIRD_AUTH_CLIENT_SECRET",
+		group: "secrets",
+		indirect: "compose-only",
+		why: "sólo con un proveedor de identidad que exija secreto: sin ella la consola de la red no completa el login",
+	},
 	{ name: "GARAGE_ADMIN_TOKEN", group: "secrets", shared: true, why: "el panel no puede leer el layout del almacenamiento de objetos de ese nodo" },
 	{ name: "MONGO_USER", group: "secrets", shared: true, why: "el nodo arranca y se queda sin base, que es el fallo más ruidoso de la lista" },
 	{ name: "MONGO_PASSWORD", group: "secrets", shared: true, why: "el nodo arranca y se queda sin base, que es el fallo más ruidoso de la lista" },
@@ -306,12 +314,8 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	...IDENTITY_VARS.map((name): EnvVarDef => ({ name, group: "identity", indirect: "public-env" })),
 ];
 
-/** Búsqueda por nombre, incluidos los alias legacy. */
-const BY_NAME = new Map<string, EnvVarDef>();
-for (const def of ENV_VARS) {
-	BY_NAME.set(def.name, def);
-	for (const alias of def.aliases ?? []) BY_NAME.set(alias, def);
-}
+/** Búsqueda por nombre. Cada variable tiene UN nombre: el código no acepta alternativas. */
+const BY_NAME = new Map<string, EnvVarDef>(ENV_VARS.map((def) => [def.name, def]));
 
 /** A qué archivo de `env/` va una variable, o `null` si el manifiesto no la conoce. */
 export function groupOf(name: string): EnvGroup | null {

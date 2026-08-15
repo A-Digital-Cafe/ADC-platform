@@ -253,6 +253,12 @@ levantaría su propio Mongo vacío en paralelo y nada avisaría hasta que alguie
 
 Tras el primer canje queda `env/.joined` y no se vuelve a intentar (el token ya no vale).
 
+`ADC_NODE_ROLE=secondary` no es decorativo: el rol por defecto es `primary`, y un nodo que se diera
+de alta creyéndose primario dejaría al clúster con dos —dos scheduler, dos juegos de watchers, dos
+planos de control de la overlay— sin que nada fallara al arrancar. Por eso el canje lo verifica y
+**corta el arranque** si el nodo se declara primario. El chequeo se hace después de `.joined`, así
+que un secundario **promovido** desde el panel sigue arrancando aunque conserve estas variables.
+
 **El grupo `host` no se entrega nunca.** Es lo que hace distinto a cada nodo —su identificador, su
 sitio, su capacidad de almacenamiento—; mandarlo sería darle a una máquina la identidad de otra.
 

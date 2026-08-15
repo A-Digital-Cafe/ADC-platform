@@ -7,7 +7,7 @@ export function getBodyLimitBytes(): number {
 	// La configuración de plataforma primero: es del clúster y el entorno es de la máquina. Cuando el
 	// servicio de configuración no llegó a cargar (o no hay base), `platformSetting` devuelve
 	// `undefined` y esto se comporta como antes.
-	const raw = platformSetting("HTTP_BODY_LIMIT_BYTES") || process.env.HTTP_BODY_LIMIT_BYTES || process.env.ADC_HTTP_BODY_LIMIT_BYTES;
+	const raw = platformSetting("HTTP_BODY_LIMIT_BYTES") || process.env.HTTP_BODY_LIMIT_BYTES;
 	if (!raw) return DEFAULT_BODY_LIMIT_BYTES;
 
 	const parsed = Number(raw);
@@ -27,7 +27,7 @@ export function getBodyLimitBytes(): number {
 const DEFAULT_RAW_BODY_LIMIT_BYTES = 5 * 1024 * 1024 * 1024; // 5 GiB
 
 export function getRawBodyLimitBytes(): number {
-	const raw = platformSetting("HTTP_RAW_BODY_LIMIT_BYTES") || process.env.HTTP_RAW_BODY_LIMIT_BYTES || process.env.ADC_HTTP_RAW_BODY_LIMIT_BYTES;
+	const raw = platformSetting("HTTP_RAW_BODY_LIMIT_BYTES") || process.env.HTTP_RAW_BODY_LIMIT_BYTES;
 	if (!raw) return DEFAULT_RAW_BODY_LIMIT_BYTES;
 
 	const parsed = Number(raw);

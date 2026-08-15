@@ -45,6 +45,12 @@ El arranque avisa por log cada vez que se enciende este camino.
 - **TLS**: certificado del borde. Con Cloudflare, modo **Full (strict)** y un **Origin Certificate**
   en el origen si el tramo borde→origen también va cifrado; ese certificado dura 15 años y no hay
   renovación que reiniciar.
+- **Cloudflare Tunnel lo resuelve sin certificado de origen**, y es el camino recomendado sin un
+  proxy propio delante: `cloudflared` corre en el nodo, abre la conexión **saliente** hacia
+  Cloudflare y entrega en `http://127.0.0.1:<puerto>`. El tramo que cruza internet lo cifra el túnel,
+  el único tramo plano queda dentro de la máquina, y **no hay puerto publicado** — que es la
+  comprobación que más abajo tiene que fallar. `SSL_CERT_PATH`/`SSL_KEY_PATH` y `HTTP2_ENABLED`
+  quedan vacías: el puerto sigue plano y los clientes entre nodos lo siguen alcanzando.
 - **HTTP/2 y HTTP/3**: se activan ahí y no requieren nada del origen. El origen puede seguir
   hablando HTTP/1.1: el borde traduce.
 - **Cabeceras**: que reenvíe `X-Forwarded-For` y `X-Forwarded-Proto`. Cloudflare los manda solo, y
@@ -54,13 +60,19 @@ El arranque avisa por log cada vez que se enciende este camino.
 
 | Variable | Valor | Para qué |
 | -------- | ----- | -------- |
-| `TRUSTED_PROXIES` | `cloudflare` (alias ya expandido) o los rangos del balanceador | Sin esto **toda la gente comparte la IP del borde**: el rate limit los cuenta juntos y un abuso banea a todos. El arranque avisa en producción si está vacío |
-| `ADC_BIND_HOST` | la dirección de la red privada, o `127.0.0.1` si el borde corre en la misma máquina | Ata el puerto del kernel a esa interfaz. Default `0.0.0.0` por compatibilidad, y el arranque avisa en producción |
+| `TRUSTED_PROXIES` | `cloudflare` (alias ya expandido) o los rangos del balanceador. **Con Cloudflare Tunnel: `loopback`** | Sin esto **toda la gente comparte la IP del borde**: el rate limit los cuenta juntos y un abuso banea a todos. El arranque avisa en producción si está vacío |
+| `ADC_BIND_HOST` | la dirección de la red privada, o `127.0.0.1` si el borde corre en la misma máquina (el caso del túnel) | Ata el puerto del kernel a esa interfaz. Default `0.0.0.0` por compatibilidad, y el arranque avisa en producción |
 | `HTTP2_ENABLED` | `false` | El borde ya habla h2/h3 |
 | `SSL_CERT_PATH` / `SSL_KEY_PATH` | vacías | El TLS no lo termina este proceso |
 
 `ADC_BIND_HOST` no reemplaza al firewall: es la segunda cerradura. **El puerto del kernel no se
 publica** — alcanzarlo directo saltea el TLS, el WAF y el rate limit del borde.
+
+Con túnel, `TRUSTED_PROXIES` es la única de estas variables que **cambia de valor en vez de
+desaparecer**, y es fácil de errar: quien abre la conexión es el `cloudflared` local, así que el peer
+es `127.0.0.1` y los rangos de Cloudflare no matchean con nadie. Con el valor equivocado nada falla
+—se registra el loopback como IP de todo el mundo y `CF-IPCountry` se descarta en silencio—, que es
+justo el modo en que este tipo de error sobrevive meses.
 
 ### 3. Lo que ya funciona solo
 
@@ -78,7 +90,9 @@ curl -s --max-time 5 http://<ip-pública-del-nodo>:<puerto>/healthz    # tiene q
 ```
 
 La tercera es la que importa: si contesta, el puerto del kernel está publicado y el borde es
-opcional para cualquiera que sepa la IP.
+opcional para cualquiera que sepa la IP. Con Cloudflare Tunnel pasa por construcción —no hay puerto
+abierto que responder—, y ahí lo que hay que verificar es lo otro: que la IP registrada en un login
+sea la del visitante y no `127.0.0.1`, que es el síntoma de `TRUSTED_PROXIES` sin `loopback`.
 
 En los logs del nodo no tiene que haber ninguno de estos avisos: «TLS servido por el propio
 proceso», «escucha en TODAS las interfaces» ni «Sin `TRUSTED_PROXIES` en producción».
