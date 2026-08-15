@@ -72,8 +72,9 @@ export const AvatarsQuery = Type.Object({
 	ids: Type.Optional(Type.String({ description: "IDs de usuario separados por coma" })),
 });
 
+/** Body del cambio de contraseña propio. `currentPassword` es opcional SÓLO para cuentas creadas por OAuth. */
 export const ChangePasswordBody = Type.Object({
-	currentPassword: Type.String({ minLength: 1, description: "Contraseña actual" }),
+	currentPassword: Type.Optional(Type.String({ minLength: 1, maxLength: 256, description: "Contraseña actual (obligatoria salvo cuentas creadas por OAuth)" })),
 	newPassword: Type.String({ minLength: 8, maxLength: 256, description: "Nueva contraseña (mín. 8)" }),
 });
 

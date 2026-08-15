@@ -408,19 +408,21 @@ export class UserEndpoints {
 		options: {
 			tag: "IdentityManagerService/Users",
 			summary: "Cambia la contraseña propia",
-			description: "Verifica `currentPassword` y establece `newPassword` (mín. 8 caracteres).",
+			description:
+				"Verifica `currentPassword` (u OAuth: sesión viva) y establece `newPassword` (mín. 8 caracteres). " +
+				"Es el único camino por el que una cuenta creada por un proveedor externo estrena contraseña propia.",
 			rateLimit: { max: 3, timeWindow: 300_000 },
 			schema: { body: US.ChangePasswordBody, response: { 200: SuccessResponse } },
 		},
 	})
-	static async changePassword(ctx: EndpointCtx<Record<string, string>, { currentPassword: string; newPassword: string }>) {
+	static async changePassword(ctx: EndpointCtx<Record<string, string>, { currentPassword?: string; newPassword: string }>) {
 		if (!ctx.user) {
 			throw new AuthError(401, "UNAUTHORIZED", "No hay usuario autenticado");
 		}
 
 		const { currentPassword, newPassword } = ctx.data || {};
 
-		if (!currentPassword || !newPassword) {
+		if (!newPassword) {
 			throw new IdentityError(400, "MISSING_FIELDS", "Faltan campos");
 		}
 
@@ -433,15 +435,9 @@ export class UserEndpoints {
 			throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		}
 
-		// Primitiva pre-auth: vía la superficie privilegiada `_internal(kernelKey)`,
-		// no por el getter público `users` (que ya no la expone).
-		const isValid = await UserEndpoints.identity
-			._internal(UserEndpoints.cap)
-			.users.verifyUserPassword(user.id, currentPassword);
-
-		if (!isValid) {
-			throw new AuthError(401, "INVALID_PASSWORD", "Contraseña actual incorrecta");
-		}
+		// Misma regla que email/username: la cuenta creada por OAuth nunca conoció su password —es
+		// aleatoria— así que exigírsela acá la dejaba sin ninguna forma de estrenar una.
+		await UserEndpoints.#assertSelfReauth(user, currentPassword);
 
 		await UserEndpoints.identity.users.updatePassword(user.id, newPassword, ctx.token!);
 		// Aviso de seguridad (fire-and-forget).
@@ -455,7 +451,7 @@ export class UserEndpoints {
 	// ────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Re-autenticación para cambiar email/username propios.
+	 * Re-autenticación para cambiar password/email/username propios.
 	 *
 	 * - Cuenta con password propio: exige y verifica `currentPassword`.
 	 * - Cuenta creada por OAuth: su password es desconocido y la plataforma no tiene primitiva de
