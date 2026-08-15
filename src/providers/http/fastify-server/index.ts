@@ -853,6 +853,15 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		const priority = calculatePriority(hostPattern, options.priority);
 		const regex = hostPatternToRegex(hostPattern);
 
+		// Las rutas del host SOBREVIVEN a un re-registro. Registrar el mismo patrón otra vez es
+		// normal —el drenaje de builds diferidos, un `rebuildModule`, un deploy git, un `enable()`—
+		// y armar el objeto de cero descartaba en silencio todo lo que se hubiera registrado contra
+		// ese patrón: `/sitemap.xml`, `/llms.txt`, `/_og/:file`. Peor todavía cuando el orden es el
+		// inverso, que es el habitual con builds diferidos: `registerHostRoute` crea el host vacío
+		// (abajo), la app registra su ruta, y el `registerHost` posterior la borraba. El síntoma es
+		// que la ruta responde el `index.html` del host, sin ningún error en el log.
+		const previousRoutes = this.registeredHosts.get(hostPattern)?.routes;
+
 		const host: RegisteredHost = {
 			pattern: hostPattern,
 			regex,
@@ -862,7 +871,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 				...options,
 			},
 			priority,
-			routes: new Map(),
+			routes: previousRoutes ?? new Map(),
 		};
 
 		this.registeredHosts.set(hostPattern, host);
