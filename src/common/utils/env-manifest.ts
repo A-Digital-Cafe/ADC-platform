@@ -128,6 +128,7 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	// pública: viaja adentro de cada token y es contra lo que el consumidor valida.
 	{ name: "ADC_OIDC_ISSUER", group: "network" },
 	{ name: "ADC_OIDC_TOKEN_TTL_SECONDS", group: "network" },
+	{ name: "SESSION_COOKIE_DOMAIN", group: "network" },
 	{ name: "SESSION_OAUTH_BASE_URL", group: "network" },
 	// Red privada (overlay). No hay `NETBIRD_VERSION`: la imagen del plano de control se pinea por
 	// digest en el compose, y una variable con el tag sería una perilla remota —viaja a cada nodo en

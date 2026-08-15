@@ -162,7 +162,14 @@ export class OAuthEndpoints {
 		// Generar state para CSRF protection
 		const state = await OAuthEndpoints.deps.sessionManager.generateState();
 
-		// Preparar cookies
+		// Preparar cookies.
+		//
+		// `domain` por el mismo motivo que en `buildPendingLinkCookies`: el flujo empieza en el
+		// host donde está el botón (`auth.*`, la home, cualquier app) y **vuelve al del callback**,
+		// que sale de `ADC_OIDC_ISSUER`. Sin dominio compartido la cookie es host-only, no viaja de
+		// vuelta, y el callback rebota a `/csrf` — un login que falla sólo en producción, porque en
+		// dev todos los puertos comparten `localhost`.
+		const cookieDomain = OAuthEndpoints.deps.cookieDomain || undefined;
 		const cookies: SetCookie[] = [
 			{
 				name: STATE_COOKIE_NAME,
@@ -172,6 +179,7 @@ export class OAuthEndpoints {
 					secure: isProd,
 					sameSite: "lax",
 					path: "/",
+					domain: cookieDomain,
 					maxAge: 10 * 60, // 10 minutos
 				},
 			},
@@ -187,6 +195,7 @@ export class OAuthEndpoints {
 					secure: isProd,
 					sameSite: "lax",
 					path: "/",
+					domain: cookieDomain,
 					maxAge: 10 * 60,
 				},
 			});
