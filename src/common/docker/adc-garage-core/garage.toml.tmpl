@@ -1,0 +1,52 @@
+# Plantilla de la configuración de Garage (almacenamiento de objetos S3-compatible).
+#
+# Reemplaza a MinIO, cuya edición community quedó archivada en febrero de 2026 (sin parches de
+# seguridad) y que además nunca permitió agregar discos a un pool existente. Garage crece
+# reasignando el layout **en caliente**, que es lo que hace viable sumar un nodo sin downtime.
+#
+# Es plantilla y no el archivo final porque Garage lee de acá tres cosas que cambian de una máquina
+# a otra —factor de replicación, dirección con la que el nodo se anuncia y región— y no las acepta
+# por entorno (verificado contra v2.1.0: `GARAGE_REPLICATION_FACTOR` se ignora en silencio). Las
+# pone `render-config.sh` al arrancar, desde `env/`, en vez de obligar a editar un archivo
+# versionado en cada nodo.
+#
+# Acá NO van secretos: `rpc_secret` y `admin_token` llegan por entorno, así que el archivo generado
+# puede ser legible por todos.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# Cuántas copias de cada bloque guarda el clúster (`GARAGE_REPLICATION_FACTOR`, `env/storage.env`).
+#
+# **No puede ser mayor que la cantidad de nodos con capacidad**: con uno o dos tiene que ser 1 (el 2
+# obliga a escribir en los dos, así que perder una máquina bloquea las escrituras y cuesta el doble
+# de disco sin comprar tolerancia).
+#
+# Cambiarlo NO es editar el número y reiniciar: si no coincide con el layout guardado, Garage se
+# niega a arrancar. El procedimiento completo está en `docs/guides/storage-replication.md` y lo guía
+# el panel (Red → Almacenamiento).
+replication_factor = ${GARAGE_REPLICATION_FACTOR}
+
+rpc_bind_addr = "[::]:3901"
+# Dirección con la que este nodo se anuncia a los demás (`GARAGE_RPC_PUBLIC_ADDR`, `env/host.env`).
+# Con un solo nodo alcanza el loopback del contenedor; al sumar el segundo va una dirección
+# alcanzable desde el otro host (`10.0.0.11:3901`) y hay que abrir el 3901 entre nodos.
+rpc_public_addr = "${GARAGE_RPC_PUBLIC_ADDR}"
+
+[s3_api]
+# La misma `S3_REGION` que usa la plataforma: la firma SigV4 incluye la región, así que si difieren,
+# **toda** petición firmada falla. Por eso sale de la misma variable y no de una copia acá.
+s3_region = "${S3_REGION}"
+api_bind_addr = "[::]:3900"
+# Sufijo para el acceso por vhost (`bucket.s3.garage`). La plataforma firma en path-style
+# (`forcePathStyle: true` en `internal-s3-provider`), así que esto no se usa, pero Garage lo pide.
+root_domain = ".s3.garage"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

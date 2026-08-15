@@ -114,16 +114,17 @@ function git(args, opts = {}) {
 // identificador público, no credencial). Sin TTY o sin Client ID, se mantiene el
 // comportamiento de siempre: los repos sin acceso se omiten en silencio.
 
-/** Client ID de la GitHub App, desde el `.env` de la raíz (o el env del proceso). */
-function resolveGithubClientId() {
-  if (process.env.ADC_GITHUB_CLIENT_ID?.trim()) return process.env.ADC_GITHUB_CLIENT_ID.trim();
-  let envFile;
-  try {
-    envFile = readFileSync('.env', 'utf8');
-  } catch {
-    return '';
-  }
-  for (const line of envFile.split('\n')) {
+/**
+ * Archivo donde vive `ADC_GITHUB_CLIENT_ID`. Es el grupo `optionals` del manifiesto
+ * (`src/common/utils/env-manifest.ts`), pero acá va la ruta a mano a propósito: este script corre
+ * bajo **node** desde `postinstall`, así que no puede importar un `.ts`. Si la variable cambiara de
+ * grupo, hay que actualizar esta constante.
+ */
+const GITHUB_CLIENT_ID_FILE = 'env/optionals.env';
+
+/** Extrae `ADC_GITHUB_CLIENT_ID=` de un texto de entorno, o `''`. */
+function parseClientId(text) {
+  for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('ADC_GITHUB_CLIENT_ID=')) continue;
     let value = trimmed.slice('ADC_GITHUB_CLIENT_ID='.length).trim();
@@ -135,6 +136,23 @@ function resolveGithubClientId() {
       if (hash >= 0) value = value.slice(0, hash);
     }
     return value.trim();
+  }
+  return '';
+}
+
+/**
+ * Client ID de la GitHub App. Mira el entorno del proceso, después `env/optionals.env`, y por
+ * último el `.env` de la raíz (despliegues que todavía no corrieron `bun run env:split`).
+ */
+function resolveGithubClientId() {
+  if (process.env.ADC_GITHUB_CLIENT_ID?.trim()) return process.env.ADC_GITHUB_CLIENT_ID.trim();
+  for (const file of [GITHUB_CLIENT_ID_FILE, '.env']) {
+    try {
+      const found = parseClientId(readFileSync(file, 'utf8'));
+      if (found) return found;
+    } catch {
+      // Archivo ausente: se prueba el siguiente.
+    }
   }
   return '';
 }
@@ -231,28 +249,39 @@ async function promptGithubClientId() {
 }
 
 /**
- * Guarda el Client ID en el `.env` (creándolo si no existe) para no volver a preguntarlo.
+ * Guarda el Client ID en `env/optionals.env` (creándolo si no existe) para no volver a preguntarlo.
  * Sólo se llama tras una autorización EXITOSA: un ID mal tipeado no queda persistido.
+ *
+ * Escribe en la carpeta `env/` sólo si ya existe; si el despliegue todavía es monolítico cae al
+ * `.env` de la raíz. Así un clon que aún no corrió `bun run env:split` no se encuentra con una
+ * carpeta a medio crear que después le ganaría al `.env` que sí está usando.
  */
 function persistGithubClientId(clientId) {
+  const target = existsSync('env') ? GITHUB_CLIENT_ID_FILE : '.env';
   try {
     let current = '';
     try {
-      current = readFileSync('.env', 'utf8');
+      current = readFileSync(target, 'utf8');
     } catch {
-      // Sin .env: se crea con el append de abajo.
+      // Sin archivo: se crea con el append de abajo.
     }
     const line = `ADC_GITHUB_CLIENT_ID=${clientId}`;
-    if (/^\s*ADC_GITHUB_CLIENT_ID\s*=.*$/m.test(current)) {
-      // Existía la clave pero vacía (por eso se preguntó): reemplazar en el lugar.
-      writeFileSync('.env', current.replace(/^\s*ADC_GITHUB_CLIENT_ID\s*=.*$/m, line));
+    if (/^[ \t]*(?:#[ \t]*)?ADC_GITHUB_CLIENT_ID[ \t]*=.*$/m.test(current)) {
+      // Existía la clave (vacía o comentada, por eso se preguntó): reemplazar en el lugar.
+      writeFileSync(target, current.replace(/^[ \t]*(?:#[ \t]*)?ADC_GITHUB_CLIENT_ID[ \t]*=.*$/m, line));
     } else {
       const nl = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
-      appendFileSync('.env', `${nl}# GitHub App para autorizar deploys y clones de presets (guardado por sync-presets)\n${line}\n`);
+      appendFileSync(target, `${nl}# GitHub App para autorizar deploys y clones de presets (guardado por sync-presets)\n${line}\n`);
     }
-    console.log('  ✓ Client ID guardado en .env (ADC_GITHUB_CLIENT_ID).');
+    console.log(`  ✓ Client ID guardado en ${target} (ADC_GITHUB_CLIENT_ID).`);
+    // El valor definitivo vive en la configuración de plataforma (`platform_settings` en Mongo): este
+    // script corre en `postinstall`, fuera del kernel, y no puede escribir en la base. Lo que deja en
+    // `env/` es la semilla, que el próximo arranque toma —también si la opción está creada pero
+    // vacía— y a partir de ahí manda la base. Se dice acá porque si no, un cambio posterior en este
+    // archivo parecería no tener efecto.
+    console.log('    (el arranque lo copia a `platform_settings`; después se cambia ahí, no acá)');
   } catch (e) {
-    console.error(`  ⚠ no se pudo guardar el Client ID en .env: ${e?.message ?? e}`);
+    console.error(`  ⚠ no se pudo guardar el Client ID en ${target}: ${e?.message ?? e}`);
   }
 }
 

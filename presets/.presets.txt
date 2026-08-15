@@ -32,3 +32,4 @@ adc-media https://github.com/A-Digital-Cafe/adc-media.git main
 adc-subscriptions https://github.com/A-Digital-Cafe/adc-subscriptions.git main
 help https://github.com/A-Digital-Cafe/help.git main
 games https://github.com/A-Digital-Cafe/games.git main
+adc-network https://github.com/A-Digital-Cafe/adc-network.git main

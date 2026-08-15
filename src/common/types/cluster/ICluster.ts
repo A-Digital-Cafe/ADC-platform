@@ -28,6 +28,18 @@ export interface ClusterNode {
 	version: string;
 	/** `true` cuando terminó de arrancar y puede recibir tráfico. */
 	ready: boolean;
+	/**
+	 * `standby` = el nodo está vivo y comandable pero **no sirve tráfico de aplicación**: arrancó
+	 * sin cargar apps y `/healthz` responde 503. Distinto de `ready: false`, que es transitorio.
+	 */
+	power: "on" | "standby";
+	/**
+	 * Presión del proceso, de 0 a 100, o ausente si el nodo no la publica (versión anterior).
+	 *
+	 * Sale del retraso del event loop, no del CPU del host: mide si las requests están esperando,
+	 * que es lo único que justifica pasarle trabajo a un vecino. Ver `@common/utils/load-signal.ts`.
+	 */
+	load?: number;
 }
 
 /** Mensaje que un nodo emite al resto por el bus del clúster. */

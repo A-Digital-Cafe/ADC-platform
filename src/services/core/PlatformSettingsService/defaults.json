@@ -1,0 +1,333 @@
+{
+	"_readme": "Valores por defecto de la configuración de plataforma. Se siembran en la colección `platform_settings` la primera vez que arranca un clúster y NO vuelven a pisarla: a partir de ahí manda la base. Si al sembrar existe una variable de entorno con el mismo nombre, gana ella (así una migración desde `env/` no pierde lo que estaba configurado). Agregar una opción es agregarla acá; quitarla de acá no borra el documento, sólo deja de sembrarse.",
+	"IDLE_TICK_SECONDS": {
+		"value": "30",
+		"group": "barridos",
+		"help": "Cada cuánto despierta el planificador de trabajos ociosos."
+	},
+	"IDLE_DEFAULT_INTERVAL_SECONDS": {
+		"value": "300",
+		"group": "barridos",
+		"help": "Intervalo de un trabajo que no declara el suyo."
+	},
+	"IDLE_MAX_CPU_PERCENT": {
+		"value": "35",
+		"group": "barridos",
+		"help": "Por encima de este uso de CPU no corre ningún barrido. Bajarlo demasiado los detiene a todos."
+	},
+	"IDLE_MAX_LOAD_PER_CORE": {
+		"value": "0.7",
+		"group": "barridos",
+		"help": "Carga por core por encima de la cual se saltea el turno."
+	},
+	"IDLE_BATCH_BUDGET_MS": {
+		"value": "2000",
+		"group": "barridos",
+		"help": "Milisegundos que puede ocupar un lote antes de ceder el turno."
+	},
+	"IDLE_MAX_BACKOFF_MINUTES": {
+		"value": "360",
+		"group": "barridos",
+		"help": "Techo del espaciado progresivo cuando un barrido no encuentra nada que hacer."
+	},
+	"IDLE_MAX_CONSECUTIVE_FAILURES": {
+		"value": "5",
+		"group": "barridos",
+		"help": "Fallos seguidos tras los cuales el planificador da de baja el trabajo."
+	},
+	"AUDIT_LOG_RETENTION_DAYS": {
+		"value": "730",
+		"group": "retenciones",
+		"help": "Días que se conserva el log de auditoría. Tiene consecuencias legales: ver las guías de datos personales antes de bajarlo."
+	},
+	"LEGAL_ACCEPTANCE_RETENTION_DAYS": {
+		"value": "1825",
+		"group": "retenciones",
+		"help": "Días que se conserva la constancia de aceptación de los documentos legales."
+	},
+	"BAN_RETENTION_DAYS": {
+		"value": "180",
+		"group": "retenciones",
+		"help": "Días que se conservan los bloqueos vencidos."
+	},
+	"BREACH_RETENTION_DAYS": {
+		"value": "1825",
+		"group": "retenciones",
+		"help": "Días que se conserva el registro de incidentes de datos personales."
+	},
+	"BREACH_AUTHORITY_DEADLINE_HOURS": {
+		"value": "72",
+		"group": "retenciones",
+		"help": "Plazo para notificar a la autoridad, contado desde que se conoce el incidente."
+	},
+	"BREACH_REMINDER_LEAD_HOURS": {
+		"value": "12",
+		"group": "retenciones",
+		"help": "Con cuánta antelación avisa que ese plazo vence."
+	},
+	"NOTIFICATIONS_RETENTION_DAYS": {
+		"value": "365",
+		"group": "retenciones",
+		"help": "Días que se conservan las notificaciones ya leídas."
+	},
+	"SUBSCRIPTIONS_FISCAL_RETENTION_DAYS": {
+		"value": "3650",
+		"group": "retenciones",
+		"help": "Días de conservación de los comprobantes fiscales. Diez años es el mínimo que exige la normativa."
+	},
+	"MAIL_TRASH_RETENTION_DAYS": {
+		"value": "30",
+		"group": "retenciones",
+		"help": "Días en la papelera de correo antes del borrado definitivo."
+	},
+	"MAIL_SPAM_RETENTION_DAYS": {
+		"value": "30",
+		"group": "retenciones",
+		"help": "Días que se conserva lo marcado como spam."
+	},
+	"MAIL_SEND_LOG_RETENTION_DAYS": {
+		"value": "30",
+		"group": "retenciones",
+		"help": "Días que se conserva el registro de envíos."
+	},
+	"MODULES_RESOURCES_RETENTION_HOURS": {
+		"value": "48",
+		"group": "retenciones",
+		"help": "Horas de historial de consumo de recursos por nodo."
+	},
+	"ENDPOINT_METRICS_RETENTION_HOURS": {
+		"value": "25",
+		"group": "retenciones",
+		"help": "Horas de historial de métricas por endpoint."
+	},
+	"MAIL_RETENTION_INTERVAL_SECONDS": {
+		"value": "3600",
+		"group": "barridos",
+		"help": "Cada cuánto corre la retención de correo."
+	},
+	"MAIL_RETENTION_MESSAGES_PER_BATCH": {
+		"value": "50",
+		"group": "barridos",
+		"help": "Mensajes por lote de ese barrido."
+	},
+	"MAIL_RETENTION_BATCH_BUDGET_MS": {
+		"value": "3000",
+		"group": "barridos",
+		"help": "Presupuesto de tiempo por lote de ese barrido."
+	},
+	"PM_TICKET_RETENTION_INTERVAL_SECONDS": {
+		"value": "3600",
+		"group": "barridos",
+		"help": "Cada cuánto corre la retención de tickets."
+	},
+	"PM_TICKET_RETENTION_BATCH_SIZE": {
+		"value": "50",
+		"group": "barridos",
+		"help": "Tickets por lote."
+	},
+	"PM_TICKET_RETENTION_BATCH_BUDGET_MS": {
+		"value": "3000",
+		"group": "barridos",
+		"help": "Presupuesto de tiempo por lote."
+	},
+	"ENDPOINT_METRICS_FLUSH_INTERVAL_MS": {
+		"value": "60000",
+		"group": "barridos",
+		"help": "Cada cuánto se vuelcan las métricas acumuladas en memoria."
+	},
+	"MODULES_RESOURCES_VOLUME_CACHE_MINUTES": {
+		"value": "10",
+		"group": "barridos",
+		"help": "Cuánto se cachea la lectura de espacio en disco por volumen."
+	},
+	"STORAGE_QUOTA_RECONCILE_MS": {
+		"value": "0",
+		"group": "barridos",
+		"help": "Cada cuánto se recalcula el uso de almacenamiento. `0` = apagado."
+	},
+	"ADC_INTEGRITY_REVISIT_HOURS": {
+		"value": "24",
+		"group": "integridad",
+		"help": "Cada cuánto vuelve a mirarse una misma unidad en el barrido de integridad."
+	},
+	"ADC_INTEGRITY_VALIDATE": {
+		"value": "true",
+		"group": "integridad",
+		"help": "Correr `validate` por colección de Mongo. Es la parte más cara del barrido."
+	},
+	"ADC_INTEGRITY_MAX_COLLECTIONS": {
+		"value": "200",
+		"group": "integridad",
+		"help": "Tope de colecciones por pasada."
+	},
+	"ADC_INTEGRITY_MIN_OPLOG_HOURS": {
+		"value": "24",
+		"group": "integridad",
+		"help": "Horas mínimas de ventana de oplog antes de avisar."
+	},
+	"ADC_INTEGRITY_MIN_FREE_RATIO": {
+		"value": "0.1",
+		"group": "integridad",
+		"help": "Proporción mínima de disco libre antes de avisar."
+	},
+	"DRIVE_VERIFY_INTERVAL_SECONDS": {
+		"value": "300",
+		"group": "integridad",
+		"help": "Cada cuánto corre la verificación de contenido de Drive."
+	},
+	"DRIVE_VERIFY_BATCH_BUDGET_MS": {
+		"value": "3000",
+		"group": "integridad",
+		"help": "Presupuesto de tiempo por lote."
+	},
+	"DRIVE_VERIFY_USERS_PER_BATCH": {
+		"value": "5",
+		"group": "integridad",
+		"help": "Usuarios por lote."
+	},
+	"DRIVE_VERIFY_FILES_PER_USER": {
+		"value": "10",
+		"group": "integridad",
+		"help": "Archivos por usuario y por lote."
+	},
+	"DRIVE_VERIFY_MAX_FILE_MB": {
+		"value": "200",
+		"group": "integridad",
+		"help": "Tamaño máximo de archivo que el verificador descarga para hashear."
+	},
+	"DRIVE_VERIFY_REVISIT_DAYS": {
+		"value": "90",
+		"group": "integridad",
+		"help": "Cada cuántos días se vuelve a verificar un archivo ya verificado."
+	},
+	"DRIVE_HASH_FEED_TTL_HOURS": {
+		"value": "168",
+		"group": "integridad",
+		"help": "Vigencia de la lista de hashes conocidos."
+	},
+	"DRIVE_HASH_FEED_MAX_ENTRIES": {
+		"value": "500000",
+		"group": "integridad",
+		"help": "Tope de entradas de esa lista."
+	},
+	"HTTP_BODY_LIMIT_BYTES": {
+		"value": "1048576",
+		"group": "limites",
+		"help": "Techo del cuerpo de un request con parseo bufferizado (JSON, formularios). Se aplica al construir el servidor: cambiarlo exige reiniciar el nodo."
+	},
+	"HTTP_RAW_BODY_LIMIT_BYTES": {
+		"value": "5368709120",
+		"group": "limites",
+		"help": "Techo del cuerpo de las rutas de streaming (subidas crudas, proxy). Éste sí se relee en cada request."
+	},
+	"ENDPOINT_RATE_LIMIT_ENABLED": {
+		"value": "true",
+		"group": "limites",
+		"help": "Interruptor del rate limit por IP. Los endpoints públicos lo tienen igual, aunque esté en `false`."
+	},
+	"ENDPOINT_RATE_LIMIT_READ_MAX": {
+		"value": "600",
+		"group": "limites",
+		"help": "Lecturas por ventana e IP, para los endpoints que no declaran el suyo."
+	},
+	"ENDPOINT_RATE_LIMIT_MUTATION_MAX": {
+		"value": "120",
+		"group": "limites",
+		"help": "Escrituras por ventana e IP, ídem."
+	},
+	"ENDPOINT_RATE_LIMIT_WINDOW_MS": {
+		"value": "60000",
+		"group": "limites",
+		"help": "Tamaño de esa ventana. Se redondea a segundos."
+	},
+	"UPLOAD_MAX_CONCURRENT": {
+		"value": "5",
+		"group": "limites",
+		"help": "Subidas firmadas y sin confirmar que puede tener un usuario a la vez. `0` = sin tope."
+	},
+	"UPLOAD_BYTES_PER_HOUR": {
+		"value": "21474836480",
+		"group": "limites",
+		"help": "Bytes por hora y por usuario, contados con el tamaño real al confirmar. `0` = sin tope."
+	},
+	"UPLOAD_BANDWIDTH_BYTES_PER_SEC": {
+		"value": "0",
+		"group": "limites",
+		"help": "Caudal de subida de TODO el nodo, repartido en partes iguales entre las transferencias en curso y escalado por la carga del proceso. `0` = sin límite. Se cambia en caliente desde Admin - Red."
+	},
+	"HTTP_IDLE_BODY_TIMEOUT_MS": {
+		"value": "30000",
+		"group": "limites",
+		"help": "Milisegundos sin recibir un byte tras los cuales se corta el cuerpo de una petición (408). Es lo único que frena a una conexión lenta: los timeouts del framework no se aplican en este runtime. `0` lo desactiva."
+	},
+	"HTTP_MAX_INFLIGHT_BODIES_PER_IP": {
+		"value": "24",
+		"group": "limites",
+		"help": "Peticiones CON CUERPO simultáneas por IP, contadas antes de leer un byte. Sin `TRUSTED_PROXIES` declarados todo el tráfico de un balanceador cuenta contra una sola IP. `0` lo desactiva."
+	},
+	"EMAIL_CHANGE_CONFIRM_URL": {
+		"value": "https://auth.adigitalcafe.com/confirm-email",
+		"group": "urls",
+		"help": "A dónde lleva el enlace de confirmación de cambio de correo. Vacío = se arma con el dominio del despliegue."
+	},
+	"ACCOUNT_DELETION_CANCEL_URL": {
+		"value": "https://auth.adigitalcafe.com/cancel-deletion",
+		"group": "urls",
+		"help": "A dónde lleva el enlace de arrepentimiento de la baja de cuenta."
+	},
+	"NOTIFICATIONS_UNSUBSCRIBE_URL": {
+		"value": "https://my-account.adigitalcafe.com/api/notifications/unsubscribe",
+		"group": "urls",
+		"help": "Enlace de baja que viaja en los correos de notificación."
+	},
+	"NOTIFICATIONS_PREFERENCES_URL": {
+		"value": "https://my-account.adigitalcafe.com/",
+		"group": "urls",
+		"help": "Enlace a las preferencias de notificación."
+	},
+	"SUBSCRIPTIONS_RETURN_URL": {
+		"value": "https://adigitalcafe.com/my-account",
+		"group": "urls",
+		"help": "A dónde vuelve el usuario tras pagar."
+	},
+	"SESSION_DEFAULT_REDIRECT_URL": {
+		"value": "",
+		"group": "urls",
+		"help": "A dónde va un login que no declara destino."
+	},
+	"ADC_GITHUB_CLIENT_ID": {
+		"value": "",
+		"group": "github",
+		"help": "Client ID público de la GitHub App del device flow. Vacío = los deploys no piden autorización. NO es un secreto."
+	},
+	"ADC_GITHUB_TOKEN_TTL_MINUTES": {
+		"value": "60",
+		"group": "github",
+		"help": "Vida máxima en memoria del token autorizado. Se topea además con lo que diga GitHub."
+	},
+	"MODULES_GIT_ALLOWED_REFS": {
+		"value": "main,master,v*",
+		"group": "github",
+		"help": "Qué ramas y etiquetas se pueden desplegar. Un checkout ejecuta ese código dentro del kernel."
+	},
+	"MODULES_GIT_REQUIRE_SIGNATURE": {
+		"value": "false",
+		"group": "github",
+		"help": "Exigir firma válida en lo que se despliega. Requiere las claves públicas en el keyring del usuario que corre el kernel."
+	},
+	"ADC_STORAGE_HEADROOM_PCT": {
+		"value": "25",
+		"group": "capacidad",
+		"help": "Porcentaje del disco que NO se vende: base de datos, logs, índices y el aire para no llegar al 100 %. Subirlo deja de ofrecer planes antes."
+	},
+	"ADC_STORAGE_OVERSUBSCRIPTION": {
+		"value": "3",
+		"group": "capacidad",
+		"help": "Cuántas veces se puede comprometer el espacio vendible. Nadie usa el 100 % de su cuota; con 1 no hay sobreventa y el disco queda casi vacío. Subirlo vende más y arriesga más."
+	},
+	"ADC_STORAGE_MIN_FREE_PCT": {
+		"value": "10",
+		"group": "capacidad",
+		"help": "Por debajo de este porcentaje de disco libre REAL no se vende nada más, aunque la sobreventa diera lugar. Es el freno de mano: la sobreventa es una apuesta sobre el uso futuro, no una excusa para vender con el disco al borde."
+	}
+}

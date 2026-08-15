@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import type { PlanAxis, PlanFeatureValue, PlanPrice } from "@common/types/plans/index.ts";
+import type { PlanAccess, PlanAxis, PlanFeatureValue, PlanPrice } from "@common/types/plans/index.ts";
 
 /** Documento de un plan: los valores de features de un tier de un eje. */
 export interface PlanDefinitionDoc {
@@ -9,6 +9,8 @@ export interface PlanDefinitionDoc {
 	tier: string;
 	/** Precio de lista. Ausente ⇒ el plan no está a la venta. Sólo lo escribe el import de la oferta. */
 	price?: PlanPrice;
+	/** Por qué no está a la venta: gratuito, otorgado o a cotizar. Ausente ⇒ precio sin definir. */
+	access?: PlanAccess;
 	/** Asientos incluidos sin suscripción activa. Sólo `axis: "org"`. */
 	includedSeats?: number;
 	/** Mínimo y máximo de asientos contratables. Sólo `axis: "org"`. */
@@ -42,6 +44,8 @@ export interface ImportPlanItem {
 	axis: PlanAxis;
 	tier: string;
 	price?: PlanPrice;
+	/** Naturaleza del plan sin precio (gratuito, otorgado, a cotizar). Ver `PlanAccess`. */
+	access?: PlanAccess;
 	includedSeats?: number;
 	minSeats?: number;
 	maxSeats?: number;
@@ -66,6 +70,7 @@ export const planDefinitionSchema = new Schema<PlanDefinitionDoc>(
 		axis: { type: String, required: true, enum: ["user", "org"] },
 		tier: { type: String, required: true, maxlength: 40 },
 		price: { type: planPriceSchema },
+		access: { type: String, enum: ["free", "granted", "custom"] },
 		includedSeats: { type: Number, min: -1 },
 		minSeats: { type: Number, min: 1 },
 		maxSeats: { type: Number, min: 1 },

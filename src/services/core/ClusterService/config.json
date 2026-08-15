@@ -27,7 +27,8 @@
 			"version": "latest",
 			"language": "typescript",
 			"custom": {
-				"url": "${RABBITMQ_URL:-amqp://admin:password@localhost:5672}"
+				"url": "${RABBITMQ_URL:-amqp://admin:password@localhost:5672}",
+				"queueType": "${RABBITMQ_QUEUE_TYPE:-quorum}"
 			}
 		}
 	],

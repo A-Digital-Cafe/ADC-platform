@@ -11,7 +11,7 @@
  * siempre como `{ base, perSeat: 0 }`: el `perSeat` es una decisión comercial posterior.
  */
 
-import { ACCOUNT_TIERS, type AccountTier } from "@common/types/tiers.ts";
+import { ACCOUNT_TIERS, GRANTED_TIERS, type AccountTier } from "@common/types/tiers.ts";
 import { ORGANIZATION_TIERS, type OrganizationTier } from "@common/types/identity/Organization.ts";
 import { STORAGE_USER_TIER_LIMITS, STORAGE_ORG_TIER_LIMITS, STORAGE_TOTAL_FEATURE, getOrgMemberDefaultBytes } from "@common/types/tiers/storage.ts";
 import type { FeatureDef, PlanDefinition, PlanFeatureValue } from "@common/types/plans/index.ts";
@@ -85,12 +85,35 @@ function expansionFeatures(tier: OrganizationTier): Record<string, PlanFeatureVa
 	return { [STORAGE_TOTAL_FEATURE]: { base: 8 * STORAGE_USER_TIER_LIMITS.pro, perSeat: 0 } };
 }
 
+/**
+ * Cómo se consigue cada plan mientras no tenga precio publicado.
+ *
+ * Sólo se declara para los que NO se venden; el resto queda sin `access`, que es
+ * lo que hace que la página de precios pueda decir "el precio todavía no está
+ * definido" en vez de anunciarlos como gratuitos.
+ */
+function userAccess(tier: AccountTier): PlanDefinition["access"] {
+	if (tier === "free") return "free";
+	return GRANTED_TIERS.includes(tier) ? "granted" : undefined;
+}
+
+function orgAccess(tier: OrganizationTier): PlanDefinition["access"] {
+	if (tier === "default") return "free";
+	return tier === "enterprise" ? "custom" : undefined;
+}
+
 /** Los planes iniciales de ambos ejes. */
 export function seedPlans(): PlanDefinition[] {
-	const users = ACCOUNT_TIERS.map<PlanDefinition>((tier) => ({ axis: "user", tier, features: userFeatures(tier) }));
+	const users = ACCOUNT_TIERS.map<PlanDefinition>((tier) => ({
+		axis: "user",
+		tier,
+		access: userAccess(tier),
+		features: userFeatures(tier),
+	}));
 	const orgs = ORGANIZATION_TIERS.map<PlanDefinition>((tier) => ({
 		axis: "org",
 		tier,
+		access: orgAccess(tier),
 		includedSeats: ORG_SEATS[tier].included,
 		minSeats: ORG_SEATS[tier].min,
 		maxSeats: ORG_SEATS[tier].max,

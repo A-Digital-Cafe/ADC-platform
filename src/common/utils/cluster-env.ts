@@ -57,14 +57,22 @@ export function nodeName(): string {
 }
 
 /**
- * Sitio (ubicación física) del nodo. Se usa como **zona de replicación del almacenamiento de
- * objetos** y para preferir el nodo más cercano al rutear, así que cambiarlo obliga a rehacer el
- * layout: es tan inmutable como {@link nodeId}.
+ * Sitio (ubicación física) del nodo: qué máquinas comparten el corte de luz y el enlace. Se usa para
+ * preferir el nodo más cercano al rutear y como raíz de la zona de replicación del almacenamiento
+ * (`<sitio>-<ordinal>`): el sitio distingue ubicaciones, la zona máquinas dentro de una ubicación.
+ *
+ * Cambiarlo con datos adentro obliga a rehacer el layout: tan inmutable como {@link nodeId}.
  */
 export function nodeSite(): string {
 	const declared = env("ADC_NODE_SITE");
-	return declared && SLUG.test(declared) ? declared : "default";
+	return declared && SLUG.test(declared) ? declared : DEFAULT_SITE;
 }
+
+/**
+ * Sitio por defecto. Un nombre de región y no `default`: termina como prefijo de la zona del
+ * almacenamiento (`sa-central-1`), y una zona `default-1` no dice nada al repartir copias.
+ */
+const DEFAULT_SITE = "sa-central";
 
 /** Etiqueta legible del sitio ("Casa"). Cambiable, como {@link nodeName}. */
 export function siteName(): string {
@@ -72,10 +80,28 @@ export function siteName(): string {
 }
 
 /**
- * Rol del nodo. **Default `primary`**: un despliegue que nunca oyó hablar de esta variable se
- * comporta exactamente como antes. Sólo un `secondary` explícito apaga subsistemas.
+ * Rol decidido desde el panel, si lo hay. Este módulo **no lee archivos** a propósito —lo importan
+ * caminos muy tempranos y también el navegador—, así que lo resuelve `node-state.ts` y lo instala acá.
+ */
+let roleOverride: NodeRole | null = null;
+
+/**
+ * Instala (o quita, con `null`) el rol que decidió el panel. La llama el kernel **antes** de que
+ * nada consulte el rol: `shouldRunInfraCompose` lo usa en los primeros milisegundos del arranque.
+ */
+export function setNodeRoleOverride(role: NodeRole | null): void {
+	roleOverride = role;
+}
+
+/**
+ * Rol del nodo. **Default `primary`**: un despliegue que nunca oyó hablar de esto se comporta
+ * exactamente como antes. Sólo un `secondary` explícito apaga subsistemas.
+ *
+ * Lo que decidió el panel ({@link setNodeRoleOverride}) le gana a `ADC_NODE_ROLE`: promover un
+ * secundario se hace cuando el primario se rompió, y ahí no se depende de editar un archivo.
  */
 export function nodeRole(): NodeRole {
+	if (roleOverride) return roleOverride;
 	return env("ADC_NODE_ROLE")?.toLowerCase() === "secondary" ? "secondary" : "primary";
 }
 
@@ -107,24 +133,48 @@ function composeAlias(dirName: string): string {
 }
 
 /**
+ * Stacks que **sólo** levanta el nodo primario, por alias. Los dos son planos de control únicos por
+ * definición: dos coordinadores de overlay repartiendo direcciones sobre la misma red, o dos
+ * clústers de config servers con el catálogo de qué dato vive en qué shard, son dos mapas distintos
+ * del mismo territorio — y el segundo arranca vacío sin que nada avise. Forzarlo acá hace imposible
+ * el olvido de excluirlos al copiar el `.env` de otra máquina.
+ */
+const PRIMARY_ONLY_COMPOSES = new Set(["netbird", "mongo-shard"]);
+
+/**
+ * Stacks que hay que **nombrar** en `ADC_INFRA_COMPOSE` para que arranquen: ni `*` ni la variable
+ * sin definir los incluyen. A diferencia de los cinco históricos, éstos no sirven para nada recién
+ * levantados —hace falta dominio y certificado uno, un `sh.addShard` el otro— y sin eso sólo
+ * descargan cientos de megas y ocupan puertos en cada clon del repo.
+ */
+const OPT_IN_COMPOSES = new Set(["netbird", "mongo-shard"]);
+
+/**
  * ¿Levanta este nodo el `docker-compose.yml` de `src/common/docker/<dirName>`?
  *
- * `ADC_INFRA_COMPOSE` sin definir o `*` = todos (comportamiento histórico). Vacío = ninguno, que es
- * lo que evita que un segundo nodo levante su propio Mongo por accidente. Una lista acepta tanto el
- * nombre del directorio como su alias corto (`mongo` ≡ `adc-mongo-core`).
+ * `selection` sin definir o `*` = todos (comportamiento histórico). Vacío = ninguno, que es lo que
+ * evita que un segundo nodo levante su propio Mongo por accidente. Una lista acepta tanto el nombre
+ * del directorio como su alias corto (`mongo` ≡ `adc-mongo-core`).
+ *
+ * Las dos excepciones se resuelven antes que nada: {@link PRIMARY_ONLY_COMPOSES} nunca en un
+ * secundario, {@link OPT_IN_COMPOSES} sólo si el alias está escrito.
  */
-export function shouldRunInfraCompose(dirName: string): boolean {
-	const raw = process.env.ADC_INFRA_COMPOSE;
-	if (raw === undefined) return true;
+export function shouldRunInfraCompose(dirName: string, selection?: string): boolean {
+	const alias = composeAlias(dirName);
+	if (PRIMARY_ONLY_COMPOSES.has(alias) && !isPrimary()) return false;
+	// `selection` la resuelve `node-state.ts` (en producción, lo que decidió el panel).
+	const raw = selection ?? process.env.ADC_INFRA_COMPOSE;
+	if (raw === undefined) return !OPT_IN_COMPOSES.has(alias);
 	const tokens = raw
 		.split(",")
 		.map((t) => t.trim().toLowerCase())
 		.filter(Boolean);
+	const dir = dirName.toLowerCase();
+	const named = tokens.some((token) => token === dir || token === alias || composeAlias(token) === alias);
+	if (OPT_IN_COMPOSES.has(alias)) return named;
 	if (tokens.includes("*")) return true;
 	if (tokens.length === 0) return false;
-	const dir = dirName.toLowerCase();
-	const alias = composeAlias(dirName);
-	return tokens.some((token) => token === dir || token === alias || composeAlias(token) === alias);
+	return named;
 }
 
 /** Identidad del nodo resuelta, para el banner de arranque. No decide nada. */

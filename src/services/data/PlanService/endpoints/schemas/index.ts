@@ -2,7 +2,7 @@
 
 export { OkResponse, OrgIdParams } from "./common.ts";
 export { EntitlementsResponse, SeatsResponse } from "./entitlements.ts";
-export { CatalogResponse, ImportPlansBody, ImportPlansResponse, PlanParams, UpdatePlanBody } from "./catalog.ts";
+export { CapacityPolicyBody, CapacityPolicyResponse, CapacityResponse, CatalogResponse, ImportPlansBody, ImportPlansResponse, PlanParams, UpdatePlanBody } from "./catalog.ts";
 export {
 	ExpansionResponse,
 	OverrideDto,

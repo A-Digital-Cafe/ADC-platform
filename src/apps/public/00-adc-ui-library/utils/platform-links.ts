@@ -178,6 +178,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "mail", iconTag: "adc-icon-app-mail" },
 	{ id: "modules", label: "Modules Manager", devPort: 3038, subdomain: "modules" },
 	{ id: "admin", label: "Administración", devPort: 3046, subdomain: "admin" },
+	{ id: "network", label: "Red", devPort: 3048, subdomain: "network" },
 	{ id: "help", label: "Help", devPort: 3022, subdomain: "help", iconTag: "adc-icon-app-help" },
 	{ id: "my-account", label: "My Account", devPort: 3016, subdomain: "my-account", iconTag: "adc-icon-app-myaccount" },
 	{

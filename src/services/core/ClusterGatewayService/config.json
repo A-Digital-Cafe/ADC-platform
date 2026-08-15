@@ -4,6 +4,15 @@
 	"version": "1.0.0",
 	"kernelMode": 92,
 	"failOnError": false,
+	"private": {
+		"offload": {
+			"enabled": "${ADC_OFFLOAD_ENABLED:-true}",
+			"highWater": "${ADC_OFFLOAD_HIGH_WATER:-60}",
+			"margin": "${ADC_OFFLOAD_MARGIN:-25}",
+			"minRouteMs": "${ADC_OFFLOAD_MIN_ROUTE_MS:-25}",
+			"crossSite": "${ADC_OFFLOAD_CROSS_SITE:-false}"
+		}
+	},
 	"providers": [
 		{
 			"name": "fastify-server",

@@ -1,0 +1,23 @@
+{
+	"kernelMode": 5,
+	"name": "PlatformSettingsService",
+	"uiName": "Core",
+	"version": "1.0.0",
+	"failOnError": false,
+	"providers": [
+		{
+			"name": "object/mongo",
+			"version": "latest",
+			"language": "typescript",
+			"custom": {
+				"host": "${MONGO_HOST:-localhost:27017}",
+				"user": "${MONGO_USER:-admin}",
+				"password": "${MONGO_PASSWORD:-password}",
+				"options": "${MONGO_OPTIONS:-replicaSet=rs0&authSource=admin}",
+				"db": "adc-platform",
+				"maxRetries": 5,
+				"retryDelay": 5000
+			}
+		}
+	]
+}

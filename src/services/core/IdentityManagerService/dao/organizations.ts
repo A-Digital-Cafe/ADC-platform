@@ -202,6 +202,23 @@ export class OrgManager {
 		return this.orgModel.countDocuments({});
 	}
 
+	/**
+	 * Organizaciones por tier (sin tier ⇒ `default`). Contraparte de
+	 * `UserManager.countUsersByTier` para el eje org: lo consume el control de
+	 * capacidad de `PlanService` para saber cuánto pool compartido hay vendido.
+	 */
+	async countOrganizationsByTier(token?: string): Promise<Record<string, number>> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);
+		const rows = await this.orgModel.aggregate<{ _id: unknown; count: number }>([
+			{ $group: { _id: { $ifNull: ["$tier", "default"] }, count: { $sum: 1 } } },
+		]);
+		const out: Record<string, number> = {};
+		for (const row of rows) {
+			if (typeof row._id === "string" && row._id) out[row._id] = row.count;
+		}
+		return out;
+	}
+
 	/** Obtiene organizaciones por región (acotado a `MAX_LIST_LIMIT`) */
 	async getOrganizationsByRegion(region: string, token?: string, limit: number = MAX_LIST_LIMIT): Promise<Organization[]> {
 		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.ORGANIZATIONS);

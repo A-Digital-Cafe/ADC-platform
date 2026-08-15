@@ -47,8 +47,13 @@ export interface StreamingProxyOptions {
 	/** Prefijo de los logs (`[S3Gateway]`), para no perder de vista qué gateway se quejó. */
 	label: string;
 	logger: { logWarn(msg: string): void };
+	/**
+	 * Milisegundos **sin progreso** tras los cuales se corta el reenvío. `0` lo desactiva. Ver
+	 * `PROGRESS_TIMEOUT_MS`: no es un tope de duración de la transferencia.
+	 */
+	progressTimeoutMs?: number;
 	/** Códigos de error del cuerpo JSON, para conservar los que ya publica cada gateway. */
-	errorCodes?: { noUpstream?: string; unavailable?: string; writeFailed?: string };
+	errorCodes?: { noUpstream?: string; unavailable?: string; writeFailed?: string; stalled?: string };
 }
 
 /**
@@ -173,19 +178,31 @@ function headersFromResponse(response: Response): OutgoingHttpHeaders {
  * `@RegisterEndpoint` por el mismo motivo que el túnel de Drive). Quien lo monta decide qué
  * requests le entrega; el motor no tiene opinión sobre eso.
  *
- * El transporte de ida es `fetch`, y no el `ClientRequest` de `node:http`, por una razón medida: en
- * Bun ese `ClientRequest` **nunca emite `drain`** ni mueve `writableLength`/`socket.bytesWritten`,
- * así que bombearle un cuerpo grande se clava para siempre pasado ~1 MiB (reproducido: un PUT de
- * 4 MiB llega al upstream con 1051030 bytes y ahí se detiene). `fetch` con el cuerpo como
- * `ReadableStream` sí respeta contrapresión. Lo que **no** sobrevive a este transporte —upgrades a
- * WebSocket y los valores de los trailers— tampoco funcionaba antes: el motor nunca los reenvió.
+ * El transporte de ida es `fetch` y no el `ClientRequest` de `node:http`: en Bun ese
+ * `ClientRequest` **nunca emite `drain`**, así que bombearle un cuerpo grande se clava pasado ~1 MiB
+ * (medido: un PUT de 4 MiB se detiene en 1051030 bytes). Con el cuerpo como `ReadableStream`,
+ * `fetch` sí respeta contrapresión. Lo que no sobrevive a este transporte —upgrades a WebSocket y
+ * los valores de los trailers— tampoco funcionaba antes.
  */
+/**
+ * Cuánto se tolera **sin progreso** en el tramo de ida, y no un tope de duración: cada chunk que se
+ * le entrega al upstream lo rearma, así que una subida de media hora que avanza no lo toca.
+ *
+ * No sirve un `AbortSignal.timeout` sobre el `fetch`, que abortaría la petición entera y cortaría
+ * toda subida grande. Lo que hay que cortar es al upstream que dejó de contestar y al cliente que
+ * dejó de mandar, y los dos se ven como ausencia de progreso: un reenvío colgado sostiene DOS
+ * sockets, y en el gateway entre nodos, recursos en dos máquinas.
+ */
+const PROGRESS_TIMEOUT_MS = 60_000;
+
 export function createStreamingProxyHandler(options: StreamingProxyOptions): StreamingProxyHandler {
 	const { pickUpstream, onUpstreamHeaders, label, logger } = options;
+	const progressTimeoutMs = options.progressTimeoutMs ?? PROGRESS_TIMEOUT_MS;
 	const codes = {
 		noUpstream: "NO_UPSTREAM",
 		unavailable: "UPSTREAM_UNAVAILABLE",
 		writeFailed: "UPSTREAM_WRITE_FAILED",
+		stalled: "UPSTREAM_STALLED",
 		...options.errorCodes,
 	};
 
@@ -230,6 +247,25 @@ export function createStreamingProxyHandler(options: StreamingProxyOptions): Str
 			if (!responded) aborter.abort();
 		});
 
+		// Reloj de progreso: lo rearma cada chunk entregado al upstream y se apaga cuando llega la
+		// respuesta. `timedOut` distingue este corte del cliente que se fue, que sale por el mismo
+		// `catch` y no merece ni log de error ni respuesta.
+		let timedOut = false;
+		let progressTimer: ReturnType<typeof setTimeout> | null = null;
+		const clearProgress = (): void => {
+			if (progressTimer) clearTimeout(progressTimer);
+			progressTimer = null;
+		};
+		const armProgress = (): void => {
+			if (progressTimeoutMs <= 0 || responded) return;
+			clearProgress();
+			progressTimer = setTimeout(() => {
+				timedOut = true;
+				aborter.abort();
+			}, progressTimeoutMs);
+			progressTimer.unref?.();
+		};
+
 		// Distingue "no pude entregar el cuerpo" de "el upstream no contestó": son dos códigos de
 		// error distintos en el README de cada gateway, y con `fetch` los dos llegan por el mismo
 		// `catch`.
@@ -241,9 +277,14 @@ export function createStreamingProxyHandler(options: StreamingProxyOptions): Str
 			headers.delete("content-length");
 		} else if (streaming) {
 			outgoing = Readable.toWeb(
-				guardShortBody(body, headers.get("content-length"), () => {
-					bodyFailed = true;
-				})
+				guardShortBody(
+					body,
+					headers.get("content-length"),
+					() => {
+						bodyFailed = true;
+					},
+					armProgress
+				)
 			) as unknown as ReadableStream;
 		} else {
 			// Los content-type que fastify SÍ parsea (json, formularios, texto) llegan como objeto o
@@ -264,6 +305,7 @@ export function createStreamingProxyHandler(options: StreamingProxyOptions): Str
 		const retargeted = rewrittenTarget(request.raw.url);
 		if (retargeted) logger.logWarn(`${label} El destino no sale verbatim (${retargeted}): ${request.raw.url}`);
 
+		armProgress();
 		void fetch(upstreamUrl(upstreamTarget, request.raw.url), {
 			method,
 			headers,
@@ -281,6 +323,9 @@ export function createStreamingProxyHandler(options: StreamingProxyOptions): Str
 			signal: aborter.signal,
 		} as RequestInit)
 			.then((response) => {
+				// El upstream contestó: de acá en más el ritmo lo pone el cliente bajando, y eso lo
+				// gobierna `pipeStreamToRaw`.
+				clearProgress();
 				if (responded) return;
 				responded = true;
 				const bodyless = isBodyless(response.status, method);
@@ -299,6 +344,14 @@ export function createStreamingProxyHandler(options: StreamingProxyOptions): Str
 				);
 			})
 			.catch((error: Error) => {
+				clearProgress();
+				if (timedOut) {
+					logger.logWarn(
+						`${label} Reenvío a ${upstreamTarget.host}:${upstreamTarget.port} cortado por ${progressTimeoutMs} ms sin progreso: ${request.raw.url}`
+					);
+					respondError(504, codes.stalled);
+					return;
+				}
 				// El cliente se fue: no hay a quién contestarle y no es una falla del upstream.
 				if (aborter.signal.aborted) return;
 				// "Cortado" y no "falló": por acá pasan tanto el upstream inalcanzable como el cliente
@@ -319,12 +372,13 @@ export function createStreamingProxyHandler(options: StreamingProxyOptions): Str
  * `PassThrough` que había antes: un fallo del reenvío no destruye la request entrante antes de
  * poder responderle.
  */
-function guardShortBody(body: Readable, contentLength: string | null, onFailure: () => void): Readable {
+function guardShortBody(body: Readable, contentLength: string | null, onFailure: () => void, onProgress: () => void): Readable {
 	const declared = Number(contentLength);
 	let seen = 0;
 	const guard = new Transform({
 		transform(chunk: Buffer, _encoding, callback) {
 			seen += chunk.length;
+			onProgress();
 			callback(null, chunk);
 		},
 		flush(callback) {

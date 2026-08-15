@@ -9,6 +9,8 @@ import { buildId, refreshBuildId } from "@common/utils/build-id.ts";
 import { NodeRegistry } from "./registry.js";
 import { BuildTarget } from "./build-target.js";
 import { registerHealthRoute } from "./health.js";
+import { powerMode } from "@common/utils/node-state.ts";
+import { pressure, startLoadSampler } from "@common/utils/load-signal.ts";
 
 /** Exchange del bus. No durable: el porqué está en `helpers/fanout.ts` del provider. */
 const CLUSTER_EXCHANGE = "cluster.fanout";
@@ -43,6 +45,7 @@ export default class ClusterService extends BaseService implements IClusterServi
 	#buildTarget: BuildTarget | null = null;
 	#heartbeat: ReturnType<typeof setInterval> | null = null;
 	#ready = false;
+	#draining = false;
 	#bootedAt = new Date().toISOString();
 	#buildId = buildId();
 	/** Última transición de artefactos ya avisada, para no repetir el mismo warn en cada latido. */
@@ -59,9 +62,14 @@ export default class ClusterService extends BaseService implements IClusterServi
 		this.#redis = this.getMyProvider<RedisProvider>("queue/redis");
 		this.#registry = new NodeRegistry(this.#redis, ttlSeconds);
 		this.#buildTarget = new BuildTarget(this.#redis);
+		// El muestreo de presión arranca con el clúster porque es acá donde se publica: sin
+		// vecinos a quien contárselo, medirlo sería trabajo sin lector.
+		startLoadSampler();
 		this.#httpProvider = this.getMyProvider<IHostBasedHttpProvider>("fastify-server");
 		registerHealthRoute(this.#httpProvider, this.name, () => ({
 			ready: this.#ready,
+			draining: this.#draining,
+			standby: powerMode() === "standby",
 			buildId: this.#buildId,
 			expectedBuildId: this.#buildTarget?.expected() ?? null,
 		}));
@@ -86,6 +94,31 @@ export default class ClusterService extends BaseService implements IClusterServi
 		void this.#announce();
 	}
 
+	/**
+	 * **Primer paso del cierre ordenado**, antes de parar una sola app: saca al nodo de rotación y
+	 * lo borra del registro, para que ni el balanceador ni el gateway de un vecino le sigan mandando
+	 * tráfico mientras se apaga.
+	 *
+	 * Es un paso propio y no parte de `stop()`, que llega tarde: `ModuleRegistry` para providers
+	 * antes que services, así que Redis ya cerró y el `withdraw()` falla en silencio (ver
+	 * `KernelShutdown`). **Corta el latido primero**: al revés, el siguiente `#announce()` volvería a
+	 * registrar el nodo recién dado de baja.
+	 *
+	 * Idempotente y no lanza: es la primera línea de un cierre y no puede ser el motivo de que falle.
+	 */
+	async beginDrain(): Promise<void> {
+		if (this.#draining) return;
+		this.#draining = true;
+		if (this.#heartbeat) clearInterval(this.#heartbeat);
+		this.#heartbeat = null;
+		try {
+			await this.#registry?.withdraw(nodeId());
+			this.logger.logInfo(`[cluster] nodo "${nodeName()}" fuera de rotación: /healthz responde 503 (draining)`);
+		} catch (error) {
+			this.logger.logWarn(`[cluster] no se pudo dar de baja el nodo del registro: ${(error as Error).message}`);
+		}
+	}
+
 	self(): ClusterNode {
 		return {
 			id: nodeId(),
@@ -98,6 +131,8 @@ export default class ClusterService extends BaseService implements IClusterServi
 			bootedAt: this.#bootedAt,
 			version: process.env.npm_package_version ?? "0.0.0",
 			ready: this.#ready,
+			power: powerMode(),
+			load: pressure(),
 		};
 	}
 
@@ -222,12 +257,11 @@ export default class ClusterService extends BaseService implements IClusterServi
 
 	@OnlyKernel()
 	async stop(kernelKey: symbol): Promise<void> {
-		if (this.#heartbeat) clearInterval(this.#heartbeat);
-		this.#heartbeat = null;
+		// La baja del registro vive en `beginDrain()`, que el cierre ordenado llama al principio.
+		// Acá se repite por si se para el servicio por otra vía (recarga de módulo, `disable` del
+		// panel): es idempotente, y en ese camino el provider de Redis todavía está vivo.
+		await this.beginDrain();
 		this.#ready = false;
-		// Baja explícita: sin esto el nodo seguiría figurando vivo hasta que venza el TTL, y un
-		// gateway le reenviaría tráfico durante todo ese rato.
-		await this.#registry?.withdraw(nodeId()).catch(() => undefined);
 		this.#httpProvider?.unregisterRoutesByOwner?.(this.name);
 		this.#handlers.clear();
 		this.#buildTarget = null;

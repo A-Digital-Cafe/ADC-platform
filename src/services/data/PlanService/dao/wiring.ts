@@ -1,6 +1,7 @@
 import type { Model } from "mongoose";
 import type { ILogger } from "@interfaces/utils/ILogger.js";
 import { PlanCatalog } from "./PlanCatalog.ts";
+import { CapacityGuard, readCapacityConfig, type CountsSource } from "./CapacityGuard.ts";
 import { PlanSeeder } from "./PlanSeeder.ts";
 import { PlanWriter } from "./PlanWriter.ts";
 import { TierResolver, type IdentitySource } from "./TierResolver.ts";
@@ -56,6 +57,8 @@ export interface PlanManagers {
 	overrideResolver: OverrideResolver;
 	orgAdmin: OrgPlanAdmin;
 	entitlements: EntitlementsManager;
+	/** ¿Alcanza el disco para vender un plan más? */
+	capacity: CapacityGuard;
 }
 
 /**
@@ -68,7 +71,15 @@ export interface PlanManagers {
  */
 export function buildPlanManagers(
 	models: PlanModels,
-	deps: { identity: IdentitySource; seatSource: SeatIdentitySource; logger: ILogger; invalidate: InvalidateCaches }
+	deps: {
+		identity: IdentitySource;
+		seatSource: SeatIdentitySource;
+		counts: CountsSource;
+		/** Bloque `private.capacity` del config, sin interpretar. */
+		capacityConfig: Record<string, unknown> | undefined;
+		logger: ILogger;
+		invalidate: InvalidateCaches;
+	}
 ): PlanManagers {
 	const catalog = new PlanCatalog(models.plans);
 	const seeder = new PlanSeeder(models.plans, catalog, deps.logger);
@@ -89,6 +100,7 @@ export function buildPlanManagers(
 	overrides.setOrgCeilingResolver(async (orgId, featureKey) => (await orgLevel.level(orgId, await tiers.orgTier(orgId))).values[featureKey]);
 
 	return {
+		capacity: new CapacityGuard(readCapacityConfig(deps.capacityConfig), catalog, deps.counts, deps.logger),
 		catalog,
 		seeder,
 		writer,

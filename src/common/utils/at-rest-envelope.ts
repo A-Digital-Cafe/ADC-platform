@@ -7,18 +7,23 @@ export interface EnvelopeLogger {
 
 /** Sellador de un dominio concreto: cifra y abre valores de ESE uso, y de ningún otro. */
 export interface AtRestSealer {
-	/** Valor listo para guardar. */
-	seal(plaintext: string, logger?: EnvelopeLogger): string;
 	/**
-	 * Abre lo guardado, o `null` si no descifra (manipulado, corrupto, escrito antes de que
-	 * este uso se cifrara, o la master key cambió entremedio). Loguea el motivo.
+	 * Valor listo para guardar.
+	 *
+	 * `aad` ata el valor a su lugar (ver {@link AtRestContext}): si se pasa al sellar, hay que pasar
+	 * **el mismo** al abrir. La `label` ya separa dominios; el AAD separa filas dentro de un dominio.
+	 */
+	seal(plaintext: string, logger?: EnvelopeLogger, aad?: string): string;
+	/**
+	 * Abre lo guardado, o `null` si no descifra (manipulado, corrupto, movido de contexto, escrito
+	 * antes de que este uso se cifrara, o la master key cambió entremedio). Loguea el motivo.
 	 *
 	 * Devuelve `null` en vez de lanzar porque todos los consumidores tratan el fallo como
 	 * "no está": vuelven a la fuente de verdad. Lo que **nunca** hacen es aceptar el valor
 	 * crudo como fallback — eso sería una vía de degradación permanente y justo el ataque
 	 * que el sobre cierra.
 	 */
-	open(sealed: string | null | undefined, logger?: EnvelopeLogger): string | null;
+	open(sealed: string | null | undefined, logger?: EnvelopeLogger, aad?: string): string | null;
 }
 
 /**
@@ -46,13 +51,13 @@ export function createAtRestSealer(label: string): AtRestSealer {
 	};
 
 	return {
-		seal(plaintext, logger) {
-			return encryptAtRest(plaintext, key(logger));
+		seal(plaintext, logger, aad) {
+			return encryptAtRest(plaintext, key(logger), { aad });
 		},
-		open(sealed, logger) {
+		open(sealed, logger, aad) {
 			if (!sealed) return null;
 			try {
-				return decryptAtRest(sealed, key(logger));
+				return decryptAtRest(sealed, key(logger), { aad });
 			} catch (error) {
 				logger?.logWarn(`[at-rest:${label}] valor ilegible (${error}). ¿Cambió ADC_STORAGE_MASTER_KEY o lo escribió otro?`);
 				return null;

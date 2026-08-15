@@ -55,7 +55,8 @@
 				"defaultPrefetch": 10,
 				"defaultConcurrency": 5,
 				"maxRetries": 4,
-				"retryDelaysMs": [1000, 5000, 25000, 125000]
+				"retryDelaysMs": [1000, 5000, 25000, 125000],
+				"queueType": "${RABBITMQ_QUEUE_TYPE:-quorum}"
 			}
 		},
 		{

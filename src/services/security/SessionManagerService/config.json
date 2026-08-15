@@ -11,7 +11,23 @@
 		"googleClientId": "${GOOGLE_CLIENT_ID}",
 		"googleClientSecret": "${GOOGLE_CLIENT_SECRET}",
 		"cookieDomain": "${SESSION_COOKIE_DOMAIN:-}",
-		"defaultRedirectUrl": "${SESSION_DEFAULT_REDIRECT_URL:-}"
+		"defaultRedirectUrl": "${SESSION_DEFAULT_REDIRECT_URL:-}",
+		"oidc": {
+			"issuer": "${ADC_OIDC_ISSUER:-}",
+			"tokenTtlSeconds": "${ADC_OIDC_TOKEN_TTL_SECONDS:-900}",
+			"loginPath": "/auth/login",
+			"clients": [
+				{
+					"clientId": "netbird",
+					"name": "Red privada (NetBird)",
+					"redirectUris": [
+						"https://${ADC_NETBIRD_DOMAIN:-localhost}:${NETBIRD_ADMIN_PORT:-33073}/auth",
+						"https://${ADC_NETBIRD_DOMAIN:-localhost}:${NETBIRD_ADMIN_PORT:-33073}/silent-auth",
+						"http://localhost:53000"
+					]
+				}
+			]
+		}
 	},
 	"providers": [
 		{

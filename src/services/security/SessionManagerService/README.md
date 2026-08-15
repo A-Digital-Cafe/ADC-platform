@@ -65,3 +65,12 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
   (lease `session.legal-version-check`), para que un deploy de N nodos no dispare N anuncios. Para
   terms/privacy, a partir de esa fecha `/api/auth/legal/status` marca el documento como pendiente y el
   componente `adc-legal-gate` pide la re-aceptación
+
+## Proveedor OIDC
+
+La plataforma como **emisor** de identidad (`/.well-known/openid-configuration`, `/api/oidc/*`).
+Ojo con la dirección: `endpoints/oauth.ts` es la plataforma de *cliente* (entrar con Discord);
+esto es al revés. Sólo authorization code + PKCE `S256`; los clientes se declaran en
+`private.oidc.clients` y las URIs de retorno se comparan exactas. Firma RS256 con clave propia en
+Redis (sellada) — el JWT de sesión es JWE simétrico y no sirve acá: un tercero tiene que poder
+verificar sin poder emitir. Vacío `ADC_OIDC_ISSUER` = apagado y el descubrimiento responde 404.

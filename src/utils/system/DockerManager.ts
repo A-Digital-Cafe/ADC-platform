@@ -7,6 +7,8 @@ import { Logger } from "../logger/Logger.ts";
 import { ILogger } from "../../interfaces/utils/ILogger.js";
 import os from "node:os";
 import { shouldRunInfraCompose } from "../../common/utils/cluster-env.js";
+import { effectiveInfraSelection } from "../../common/utils/node-state.js";
+import { isRealProduction } from "../../common/utils/runtime-env.js";
 
 /** Puerto publicado por un compose: dirección de host y puerto. */
 interface PublishedPort {
@@ -333,8 +335,13 @@ export class DockerManager {
 
 	/**
 	 * Detiene docker-compose en el directorio especificado.
+	 *
+	 * `graceSeconds` es lo que espera docker entre el SIGTERM y el SIGKILL a cada contenedor. El
+	 * default de `docker compose down` son **10 s**, que alcanzan para un servicio sin estado y no
+	 * para uno que tiene que cerrar archivos: un `mongod` o un Garage matados a mitad de un flush
+	 * quedan necesitando recuperación. Los stacks con datos pasan un valor propio.
 	 */
-	async stopDockerCompose(appDir: string): Promise<void> {
+	async stopDockerCompose(appDir: string, graceSeconds?: number): Promise<void> {
 		// Sin docker nunca se levantó nada, así que no hay nada que bajar.
 		if (!this.#dockerPath) return;
 		const dockerPath = this.#dockerPath;
@@ -344,8 +351,11 @@ export class DockerManager {
 
 			this.#logger.logInfo(`Deteniendo servicios Docker para app en ${appDir}...`);
 
+			const args = ["compose", "-f", dockerComposeFile, "down"];
+			if (graceSeconds !== undefined) args.push("--timeout", String(Math.max(1, Math.round(graceSeconds))));
+
 			const { spawn } = await import("node:child_process");
-			const docker = spawn(dockerPath, ["compose", "-f", dockerComposeFile, "down"], {
+			const docker = spawn(dockerPath, args, {
 				cwd: appDir,
 				stdio: "pipe",
 			});
@@ -435,10 +445,15 @@ export class DockerManager {
 			// Un nodo secundario NO debe levantar su propio Mongo/Redis/S3: apuntaría a una base
 			// vacía y paralela sin que nada avise. `ADC_INFRA_COMPOSE` acota qué stacks son suyos;
 			// sin la variable se levanta todo, que es el comportamiento de un despliegue de un nodo.
-			const folders = all.filter((e) => shouldRunInfraCompose(e.name));
+			// En producción, `selection` sale del estado persistido del nodo (lo que se eligió en el
+			// panel) y NO del entorno: la topología de un nodo tiene que sobrevivir a un reinicio y a
+			// que alguien copie el `.env` de otra máquina.
+			const selection = effectiveInfraSelection();
+			const folders = all.filter((e) => shouldRunInfraCompose(e.name, selection));
 			const skipped = all.filter((e) => !folders.includes(e)).map((e) => e.name);
 			if (skipped.length > 0) {
-				this.#logger.logInfo(`Contenedores comunes omitidos por ADC_INFRA_COMPOSE: ${skipped.join(", ")}`);
+				const source = isRealProduction() ? "el estado del nodo" : "ADC_INFRA_COMPOSE";
+				this.#logger.logInfo(`Contenedores comunes omitidos por ${source} (${selection ?? "todos"}): ${skipped.join(", ")}`);
 			}
 
 			if (folders.length === 0) {
@@ -477,16 +492,67 @@ export class DockerManager {
 	}
 
 	/**
-	 * Detiene todos los contenedores comunes.
+	 * Detiene todos los contenedores comunes, **uno por vez y en el orden pedido**.
+	 *
+	 * Secuencial y no en paralelo (al revés que el arranque) porque acá el orden importa: bajar la
+	 * base de datos antes que sus consumidores los deja escribiendo contra algo que ya no está.
+	 *
+	 * El presupuesto es **por stack** y no para el conjunto: `docker compose down` ya tiene 10 s de
+	 * gracia por contenedor, así que un reloj común saltaría siempre y el SIGKILL a `mongod` sería la
+	 * regla. Los que se pasan se **abandonan pero no se olvidan**: quedan en el mapa y se reportan.
 	 */
-	async stopAllCommonDockerCompose(): Promise<void> {
-		for (const [name, dir] of this.#commonDockerComposeMap) {
+	async stopAllCommonDockerCompose(opts: { order?: string[]; timeoutMsPerStack?: number } = {}): Promise<void> {
+		const { order = [], timeoutMsPerStack = 180_000 } = opts;
+		// Lo declarado primero, en ese orden; después lo que no figure, como haya quedado.
+		const declared = order.filter((name) => this.#commonDockerComposeMap.has(name));
+		const rest = [...this.#commonDockerComposeMap.keys()].filter((name) => !declared.includes(name));
+		const graceSeconds = Math.max(10, Math.floor(timeoutMsPerStack / 1000) - 5);
+
+		for (const name of [...declared, ...rest]) {
+			const dir = this.#commonDockerComposeMap.get(name);
+			if (!dir) continue;
+			const startedAt = Date.now();
 			try {
-				await this.stopDockerCompose(dir);
+				const timedOut = await this.#withStackTimeout(this.stopDockerCompose(dir, graceSeconds), timeoutMsPerStack, name);
+				if (timedOut) continue;
 				this.#commonDockerComposeMap.delete(name);
+				this.#logger.logOk(`[${name}] detenido en ${Date.now() - startedAt}ms`);
 			} catch (error: any) {
 				this.#logger.logWarn(`Error deteniendo contenedor común ${name}: ${error.message}`);
+				this.#commonDockerComposeMap.delete(name);
 			}
+		}
+	}
+
+	/**
+	 * Espera a que un stack termine de bajar, avisando cada 10 s de que sigue en eso.
+	 *
+	 * El aviso periódico no es cosmético: un cierre limpio de Mongo puede tardar, y sin señales de
+	 * vida el operador asume que se colgó y lo mata a mano — que es exactamente lo que este cambio
+	 * viene a evitar. Devuelve `true` si venció el presupuesto.
+	 */
+	async #withStackTimeout(promise: Promise<void>, timeoutMs: number, name: string): Promise<boolean> {
+		let ticker: ReturnType<typeof setInterval> | undefined;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const startedAt = Date.now();
+		try {
+			const timedOut = await Promise.race([
+				promise.then(() => false),
+				new Promise<boolean>((resolve) => {
+					ticker = setInterval(() => {
+						this.#logger.logInfo(`[${name}] cerrando... (${Math.round((Date.now() - startedAt) / 1000)}s)`);
+					}, 10_000);
+					ticker.unref?.();
+					timer = setTimeout(() => resolve(true), timeoutMs);
+				}),
+			]);
+			if (timedOut) {
+				this.#logger.logWarn(`[${name}] no terminó de cerrar en ${timeoutMs}ms: se deja corriendo en vez de matarlo a mitad de una escritura.`);
+			}
+			return timedOut;
+		} finally {
+			if (ticker) clearInterval(ticker);
+			if (timer) clearTimeout(timer);
 		}
 	}
 

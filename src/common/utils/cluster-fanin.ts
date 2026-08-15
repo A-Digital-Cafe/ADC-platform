@@ -31,7 +31,7 @@ const FANIN_BY = "x-adc-fanin-by";
 /** Un vecino que no contesta rápido no vale la pena: el panel prefiere el error al spinner. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 
-/** Llamada de sólo lectura al endpoint equivalente de otro nodo. */
+/** Llamada al endpoint equivalente de otro nodo. */
 export interface NodeCall {
 	/** Destino, tal como lo publicó el registro: de ahí sale `advertise`. */
 	node: ClusterNode;
@@ -39,6 +39,15 @@ export interface NodeCall {
 	origin: string;
 	/** Ruta absoluta del endpoint del vecino, sin query. */
 	path: string;
+	/**
+	 * Verbo. `GET` por defecto, que es el caso para el que nació esto (leer la vista que sólo el
+	 * vecino tiene). `POST` existe para las órdenes dirigidas a UN nodo —apagarlo— donde el nodo que
+	 * atiende no es necesariamente el destinatario, y donde la decisión tiene que tomarla el nodo
+	 * destino porque es el único que puede sondear sus propios motores.
+	 */
+	method?: "GET" | "POST";
+	/** Cuerpo JSON del `POST`. Ignorado en `GET`. */
+	body?: unknown;
 	/** Filtros ya parseados. Nunca incluye el selector de nodo: el salto es de uno solo. */
 	query?: Record<string, string | number | undefined>;
 	/** Headers del request original. De acá salen las credenciales del operador, y nada más. */
@@ -86,7 +95,7 @@ function urlFor(call: NodeCall): string {
 }
 
 /**
- * Consulta el endpoint equivalente del vecino y devuelve su cuerpo.
+ * Llama al endpoint equivalente del vecino y devuelve su cuerpo.
  *
  * El error del vecino se propaga como 502 con su motivo adentro: un 403 del otro nodo no es un
  * 403 de este request —el operador sí tiene permiso acá—, y devolverlo tal cual mandaría al panel
@@ -100,12 +109,26 @@ export async function callNode<T>(call: NodeCall): Promise<T> {
 	if (call.headers.cookie) headers.cookie = call.headers.cookie;
 	if (call.headers.authorization) headers.authorization = call.headers.authorization;
 	if (call.clientIp) headers["x-forwarded-for"] = call.clientIp;
+	// El CSRF viaja igual que la cookie y por el mismo motivo: el vecino corre la misma validación
+	// que este nodo, así que sin el header un POST reenviado se rechazaría del otro lado.
+	if (call.headers["x-csrf-token"]) headers["x-csrf-token"] = call.headers["x-csrf-token"];
+
+	const method = call.method ?? "GET";
+	if (method === "POST") headers["content-type"] = "application/json";
 
 	let response: Response;
 	try {
 		response = await fetch(urlFor(call), {
+			method,
 			headers,
+			body: method === "POST" ? JSON.stringify(call.body ?? {}) : undefined,
 			signal: AbortSignal.timeout(call.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+			// Sin seguir redirecciones: este `fetch` lleva adjunta la cookie de sesión del operador, y
+			// el default de `fetch` es seguir el `Location` que conteste el otro lado. Un vecino roto
+			// —o suplantado— mandaría esas credenciales a donde quisiera con un `302`. El endpoint
+			// equivalente de un vecino nunca redirige, así que un 3xx acá es un error, no un camino.
+			// El proxy del gateway ya toma esta misma postura.
+			redirect: "manual",
 		});
 	} catch (error) {
 		throw new HttpError(
@@ -114,12 +137,15 @@ export async function callNode<T>(call: NodeCall): Promise<T> {
 			`No se pudo consultar al nodo '${node.displayName}' en ${node.advertise}: ${(error as Error).message}`
 		);
 	}
-	if (!response.ok) {
+	if (response.status >= 300 && response.status < 400) {
 		throw new HttpError(
 			502,
-			"NODE_QUERY_FAILED",
-			`El nodo '${node.displayName}' respondió ${response.status} a la consulta de ${call.path}.`
+			"NODE_REDIRECTED",
+			`El nodo '${node.displayName}' contestó una redirección (${response.status}) a ${method} ${call.path}. No se sigue: llevaría las credenciales del operador a un destino que eligió el otro lado.`
 		);
+	}
+	if (!response.ok) {
+		throw new HttpError(502, "NODE_QUERY_FAILED", `El nodo '${node.displayName}' respondió ${response.status} a ${method} ${call.path}.`);
 	}
 	return (await response.json()) as T;
 }

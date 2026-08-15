@@ -12,7 +12,7 @@ const REFRESH_MS = 2000;
  * `host:puerto` → destino. Sin puerto no hay a dónde reenviar, así que el nodo queda fuera en vez
  * de inventarle un default. IPv6 va entre corchetes, como en una URL.
  */
-function parseAdvertise(advertise: string | null): ProxyTarget | null {
+export function parseAdvertise(advertise: string | null): ProxyTarget | null {
 	const value = advertise?.trim();
 	if (!value) return null;
 	const bracketed = /^\[(.+)]:(\d+)$/.exec(value);
@@ -72,7 +72,20 @@ export class NodePicker {
 	/** Foto vigente. Dispara el refresco en segundo plano; no lo espera nunca. */
 	#candidates(): ClusterNode[] {
 		if (Date.now() - this.#lastAt >= REFRESH_MS) void this.#refresh();
-		return this.#snapshot.filter((node) => node.ready && node.id !== nodeId() && node.advertise);
+		// `power === "standby"` queda afuera igual que un nodo que no terminó de arrancar: está vivo
+		// y en el registro, pero no cargó una sola app, así que reenviarle una request devolvería un
+		// 404 en vez de la respuesta que ese nodo, encendido, sí sabría dar.
+		return this.#snapshot.filter((node) => node.ready && node.power !== "standby" && node.id !== nodeId() && node.advertise);
+	}
+
+	/**
+	 * Los vecinos elegibles, tal cual: vivos, alcanzables y no en espera.
+	 *
+	 * La expone para que la política de reparto por carga decida con la MISMA lista que usa el
+	 * ruteo, en vez de releer el registro por su cuenta y poder discrepar sobre quién está vivo.
+	 */
+	candidates(): ClusterNode[] {
+		return this.#candidates();
 	}
 
 	/** `true` si hay a quién reenviarle algo. Con un solo nodo apaga la afinidad por build. */

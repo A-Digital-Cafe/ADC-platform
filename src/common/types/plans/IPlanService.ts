@@ -50,6 +50,15 @@ export interface IPlanService {
 	 */
 	planPrice(key: string): Promise<PlanPrice | null>;
 	/**
+	 * ¿Queda capacidad en el nodo para sostener una cuenta más de este plan?
+	 *
+	 * El disco es finito: vender diez planes de 30 GB es prometer 300 GB que quizá
+	 * no existan. Lo consultan la página de precios y el checkout, para que las dos
+	 * den la misma respuesta. Devuelve `available: true` cuando no se puede medir:
+	 * un control roto no debe cortar la facturación.
+	 */
+	canOfferPlan(key: string, seats?: number): Promise<{ available: boolean; reason?: string }>;
+	/**
 	 * Otorga o revoca la **ampliación** de una organización. Requiere `plans:admin`.
 	 *
 	 * Es un override booleano, no un cambio de plan: revocarla devuelve los límites

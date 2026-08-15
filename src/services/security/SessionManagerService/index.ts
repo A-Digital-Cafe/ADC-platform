@@ -28,6 +28,10 @@ import { openPermissions, sealPermissions } from "./domain/security/perm-cache.j
 // Endpoints (singleton)
 import { AuthEndpoints } from "./endpoints/auth.js";
 import { OAuthEndpoints } from "./endpoints/oauth.js";
+import { OidcEndpoints } from "./endpoints/oidc.js";
+import { isOidcEnabled, readOidcConfig } from "./domain/oidc/clients.js";
+import { AuthorizationCodeStore } from "./domain/oidc/codes.js";
+import { OidcSigningKeys } from "./domain/oidc/SigningKeys.js";
 import { SessionAdminEndpoints, maskIp } from "./endpoints/sessions.js";
 import { LegalEndpoints } from "./endpoints/legal.js";
 
@@ -113,7 +117,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 	// Lifecycle
 
 	@EnableEndpoints({
-		managers: () => [AuthEndpoints, OAuthEndpoints, SessionAdminEndpoints, LegalEndpoints],
+		managers: () => [AuthEndpoints, OAuthEndpoints, OidcEndpoints, SessionAdminEndpoints, LegalEndpoints],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -421,6 +425,31 @@ export default class SessionManagerService extends BaseService implements ISessi
 			logger: this.logger,
 			moderation: this.#moderation,
 		});
+
+		await this.#initOidc();
+	}
+
+	/**
+	 * El proveedor OIDC. Se arma siempre —los endpoints están registrados igual— pero sin emisor o
+	 * sin clientes declarados contesta 404: publicar un descubrimiento a medias sería peor que no
+	 * publicarlo, porque un consumidor lo tomaría por bueno y fallaría más tarde y más lejos.
+	 */
+	async #initOidc(): Promise<void> {
+		OidcEndpoints.config = readOidcConfig(this.config?.private?.oidc as Record<string, unknown> | undefined);
+		OidcEndpoints.codes = new AuthorizationCodeStore(this.#redis);
+		OidcEndpoints.identity = this.#internalIdentity;
+		OidcEndpoints.logger = this.logger;
+		if (!isOidcEnabled(OidcEndpoints.config)) {
+			this.logger.logInfo("[oidc] proveedor de identidad deshabilitado (sin `ADC_OIDC_ISSUER` o sin clientes declarados).");
+			OidcEndpoints.keys = new OidcSigningKeys(this.#redis, this.logger);
+			return;
+		}
+		// La clave se genera o se lee acá, no en la primera request: que el arranque falle es
+		// preferible a que falle el primer login, cuando ya hay alguien esperando del otro lado.
+		OidcEndpoints.keys = new OidcSigningKeys(this.#redis, this.logger);
+		await OidcEndpoints.keys.init();
+		const clientNames = OidcEndpoints.config.clients.map((c) => c.clientId).join(", ");
+		this.logger.logOk(`[oidc] proveedor de identidad activo en ${OidcEndpoints.config.issuer} (clientes: ${clientNames}).`);
 	}
 
 	async verifyToken(token: string): Promise<TokenVerificationResult> {

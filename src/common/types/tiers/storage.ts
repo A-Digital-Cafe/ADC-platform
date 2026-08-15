@@ -23,21 +23,34 @@ const GB = 1024 * MB;
  */
 export const STORAGE_TOTAL_FEATURE = "storage.total";
 
-/** Límite total de almacenamiento por tier de cuenta personal. */
+/**
+ * Límite total de almacenamiento por tier de cuenta personal.
+ *
+ * Dimensionado contra la capacidad REAL del nodo, no contra lo que ofrece la
+ * competencia: un `plus` de 200 GB se comía medio disco con un solo cliente. Los
+ * valores son el punto de partida y suben cuando haya más hierro — bajar un
+ * límite ya vendido es mucho peor que subirlo después.
+ */
 export const STORAGE_USER_TIER_LIMITS: Record<AccountTier, number> = {
 	free: 250 * MB,
-	pro: 5 * GB,
-	plus: 200 * GB,
+	vip: 1 * GB,
+	pro: 8 * GB,
+	plus: 30 * GB,
 };
 
 /**
- * Límite total de almacenamiento por tier de organización. `team` equivale a 6 planes `pro` en el pool
- * compartido; `enterprise` es sólo el punto de partida de la negociación (sus
- * límites reales se fijan por override, cliente por cliente).
+ * Límite total de almacenamiento por tier de organización.
+ *
+ * `team` se deriva como **6 planes `pro`** —la equivalencia con la que se fijó su
+ * precio por asiento— para que si `pro` cambia el pool acompañe. `enterprise` es
+ * sólo el punto de partida: sus límites reales se fijan por override.
+ *
+ * Que un `team` comprometa 48 GB de un nodo de 300-400 GB es sostenible porque la
+ * venta está acotada por capacidad real (`CapacityGuard`).
  */
 export const STORAGE_ORG_TIER_LIMITS: Record<OrganizationTier, number> = {
 	default: 1 * GB,
-	team: 30 * GB,
+	team: 6 * STORAGE_USER_TIER_LIMITS.pro,
 	enterprise: 100 * GB,
 };
 
@@ -57,24 +70,24 @@ interface StorageAppMinMatrix {
  */
 const STORAGE_APP_MIN_BYTES: Record<string, StorageAppMinMatrix> = {
 	drive: {
-		personal: { free: 50 * MB, pro: 250 * MB, plus: 1 * GB },
+		personal: { free: 50 * MB, vip: 100 * MB, pro: 250 * MB, plus: 1 * GB },
 		org: { default: 50 * MB, team: 250 * MB, enterprise: 1 * GB },
 	},
 	email: {
-		personal: { free: 100 * MB, pro: 500 * MB, plus: 2 * GB },
+		personal: { free: 100 * MB, vip: 200 * MB, pro: 500 * MB, plus: 2 * GB },
 		org: { default: 100 * MB, team: 500 * MB, enterprise: 2 * GB },
 	},
 	community: {
-		personal: { free: 50 * MB, pro: 250 * MB, plus: 1 * GB },
+		personal: { free: 50 * MB, vip: 100 * MB, pro: 250 * MB, plus: 1 * GB },
 		org: { default: 50 * MB, team: 250 * MB, enterprise: 1 * GB },
 	},
 	"project-manager": {
-		personal: { free: 100 * MB, pro: 500 * MB, plus: 2 * GB },
+		personal: { free: 100 * MB, vip: 200 * MB, pro: 500 * MB, plus: 2 * GB },
 		org: { default: 100 * MB, team: 500 * MB, enterprise: 2 * GB },
 	},
 	// Los avatares cuentan SIEMPRE en contexto personal (en org quedan en 0).
 	avatars: {
-		personal: { free: 10 * MB, pro: 20 * MB, plus: 50 * MB },
+		personal: { free: 10 * MB, vip: 15 * MB, pro: 20 * MB, plus: 50 * MB },
 		org: { default: 0, team: 0, enterprise: 0 },
 	},
 };
@@ -93,8 +106,11 @@ export function getStorageAppMinBytes(appId: string, scope: QuotaScope): number 
  * override `org-members-default`.
  */
 const ORG_MEMBER_DEFAULT_BYTES: Record<OrganizationTier, number> = {
-	default: 512 * MB, // pool 1 GB
-	team: 10 * GB, // pool 50 GB
+	// Mitad del pool: con hasta 3 miembros, uno solo no puede vaciarlo.
+	default: STORAGE_ORG_TIER_LIMITS.default / 2,
+	// Un cuarto del pool. Queda por encima de un `pro` individual, que es lo mínimo
+	// para que entrar a un equipo no se sienta una degradación.
+	team: STORAGE_ORG_TIER_LIMITS.team / 4,
 	enterprise: UNLIMITED_BYTES,
 };
 

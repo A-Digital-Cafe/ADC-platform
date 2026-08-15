@@ -44,14 +44,23 @@ export class IdleJobs implements IIdleOrchestrator {
 		this.#require().register(ownerOf(cap), job);
 	}
 
+	/**
+	 * Dar de baja sin planificador **no es un error**: es el estado que se buscaba.
+	 *
+	 * Los productores dan de baja sus trabajos en su `stop()`, y el planificador se para antes que
+	 * ellos (`OperationsService` es kernelMode 45 y los que registran trabajos vienen después), así
+	 * que exigirlo hacía que cada cierre ordenado terminara con cinco `Error deteniendo Service …`
+	 * que no describían ningún problema — y que tapaban a los que sí. Registrar contra un
+	 * planificador muerto sigue lanzando: eso sí es un error de programación.
+	 */
 	unregisterIdleJob(cap: CapabilityToken, id: string): boolean {
 		assertScope(cap, Scope.IdleRegister);
-		return this.#require().unregister(ownerOf(cap), id);
+		return this.#scheduler?.unregister(ownerOf(cap), id) ?? false;
 	}
 
 	unregisterIdleJobs(cap: CapabilityToken): number {
 		assertScope(cap, Scope.IdleRegister);
-		return this.#require().unregisterOwner(ownerOf(cap));
+		return this.#scheduler?.unregisterOwner(ownerOf(cap)) ?? 0;
 	}
 
 	idleJobs(): IdleJobStatus[] {

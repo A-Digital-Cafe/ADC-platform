@@ -31,6 +31,12 @@ export const PUBLIC_ENV_VARS = {
 	contactEmail: "ADC_PUBLIC_CONTACT_EMAIL",
 	discordHandle: "ADC_PUBLIC_DISCORD_HANDLE",
 	discordUrl: "ADC_PUBLIC_DISCORD_URL",
+	/**
+	 * Dónde se consigue el plan otorgado por comunidad (el canal del bot que lo
+	 * vende por monedas). Vacío = la página de precios explica cómo conseguirlo
+	 * pero no enlaza a ningún lado, en vez de mandar al servidor de otro.
+	 */
+	discordVipUrl: "ADC_PUBLIC_DISCORD_VIP_URL",
 	socialTwitch: "ADC_PUBLIC_SOCIAL_TWITCH",
 	socialYoutube: "ADC_PUBLIC_SOCIAL_YOUTUBE",
 	socialInstagram: "ADC_PUBLIC_SOCIAL_INSTAGRAM",

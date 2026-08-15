@@ -17,14 +17,22 @@ export const ADC_SHEET_EXT = "adcsheet";
 
 /**
  * Celda extendida: bloque con propiedades abiertas. Hoy el editor solo usa
- * `v`; el resto (`f` fórmula, `bg` color, …) se conserva intacto al editar
- * aunque el editor todavía no lo entienda (forward-compatible).
+ * `v`; el resto (`bg` color, …) se conserva intacto al editar aunque el editor
+ * todavía no lo entienda (forward-compatible).
  * @public
  */
 export interface SheetCellBlock {
-	/** Valor visible/editable de la celda. */
+	/**
+	 * Contenido de la celda: el texto que escribió el usuario. Si empieza con
+	 * `=` es una fórmula y el editor muestra su resultado — que **no** se guarda
+	 * acá: el archivo tiene la fórmula y nada más (los valores calculados viven
+	 * en la caché del host).
+	 */
 	v: string;
-	/** Fórmula (reservada: hoy se conserva sin evaluar; se exporta a FODS). */
+	/**
+	 * Fórmula en sintaxis OpenFormula, sólo para interoperar: se conserva tal
+	 * cual y se exporta a FODS. Las fórmulas propias del editor van en `v`.
+	 */
 	f?: string;
 	[prop: string]: unknown;
 }

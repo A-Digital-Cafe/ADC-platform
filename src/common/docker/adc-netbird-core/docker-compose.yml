@@ -1,0 +1,198 @@
+# Plano de control de la red overlay (NetBird), self-hosted. Qué hace cada contenedor, cómo se
+# configura y qué verificar: `docs/guides/network-vpn.md`.
+#
+# ⚠️ **No arranca solo.** Es el único stack de `src/common/docker/` que hay que nombrar en
+# `ADC_INFRA_COMPOSE`: sin dominio, certificado ni proveedor de identidad, levantarlo en cada clon
+# del repo sólo descargaría cientos de megas y ocuparía puertos. Y **sólo corre en el nodo
+# primario**, forzado en `PRIMARY_ONLY_COMPOSES` (`cluster-env.ts`) y no acá: dos coordinadores
+# repartiendo direcciones sobre la misma red es el desastre que la overlay viene a evitar.
+#
+# Estructura y nombres de variables salen de las plantillas oficiales de la v0.62.0, adaptadas a las
+# convenciones de este repo: pineado por digest, sin capabilities de más, y con las superficies de
+# administración atadas a loopback.
+#
+# ⚠️ Sin verificar contra un despliegue real: el handshake WireGuard entre dos máquinas. Levantar los
+# contenedores no prueba nada de eso.
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+  logging:
+    # Retención local acotada: sin esto el json-file default crece sin tope.
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  # ── Consola web ───────────────────────────────────────────────────────────────
+  # **Loopback y nada más.** Publicarla sería poner en internet la consola que reparte el acceso a
+  # la red privada, que es exactamente lo contrario de tener una. Para llegar: un túnel SSH.
+  dashboard:
+    <<: *hardening
+    image: netbirdio/dashboard@sha256:f3eb26c93ca9901a7385e88e12f6ad98d04e075e8817c664d73557fea123875f # v2.91.1
+    container_name: adc-netbird-dashboard
+    ports:
+      - "127.0.0.1:${NETBIRD_ADMIN_PORT:-33073}:80"
+    environment:
+      # A qué API le habla la consola. Es una URL de navegador, así que va el dominio público.
+      NETBIRD_MGMT_API_ENDPOINT: https://${ADC_NETBIRD_DOMAIN:-localhost}:${NETBIRD_PUBLIC_PORT:-33443}
+      NETBIRD_MGMT_GRPC_API_ENDPOINT: https://${ADC_NETBIRD_DOMAIN:-localhost}:${NETBIRD_PUBLIC_PORT:-33443}
+      AUTH_AUTHORITY: ${NETBIRD_AUTH_AUTHORITY:-}
+      AUTH_CLIENT_ID: ${NETBIRD_AUTH_CLIENT_ID:-}
+      AUTH_CLIENT_SECRET: ${NETBIRD_AUTH_CLIENT_SECRET:-}
+      AUTH_AUDIENCE: ${NETBIRD_AUTH_AUDIENCE:-}
+      AUTH_SUPPORTED_SCOPES: ${NETBIRD_AUTH_SUPPORTED_SCOPES:-openid profile email offline_access api}
+      AUTH_REDIRECT_URI: ${NETBIRD_AUTH_REDIRECT_URI:-/auth}
+      AUTH_SILENT_REDIRECT_URI: ${NETBIRD_AUTH_SILENT_REDIRECT_URI:-/silent-auth}
+      USE_AUTH0: "false"
+      NETBIRD_TOKEN_SOURCE: ${NETBIRD_TOKEN_SOURCE:-idToken}
+      # El certificado lo pone la plataforma, así que la consola no negocia TLS por su cuenta.
+      NGINX_SSL_PORT: "443"
+    networks:
+      - adc-netbird
+
+  # ── Plano de control ──────────────────────────────────────────────────────────
+  # El único servicio que los peers alcanzan por TLS desde afuera, junto con signal. Va en un puerto
+  # propio porque el 443 ya lo sirve el gateway de la plataforma y esto habla gRPC sobre HTTP/2, que
+  # el proxy de streaming del kernel no reenvía. Una sola IP pública, dos puertos.
+  management:
+    <<: *hardening
+    image: netbirdio/management@sha256:8983bffac5ad8e6401c09a9724604a07e62927631a39dbb6c762dbe577c704fd # 0.62.0
+    container_name: adc-netbird-management
+    depends_on:
+      - dashboard
+    ports:
+      - "${NETBIRD_BIND_HOST:-0.0.0.0}:${NETBIRD_PUBLIC_PORT:-33443}:443"
+    volumes:
+      - adc_netbird_mgmt_data:/var/lib/netbird
+      # El `management.json` NO está versionado: lleva secretos adentro y el binario no los lee del
+      # entorno (de las ~20 variables `NB_*` que reconoce, ninguna es ésas). Lo arma este script al
+      # arrancar: el repo versiona la forma, los valores llegan por entorno.
+      - ./render-config.sh:/usr/local/bin/render-config.sh:ro
+      # Opcional: sin `SSL_CERT_PATH` puesto, docker monta el default y el management arranca sin
+      # TLS, que es lo que uno quiere para probar en una LAN.
+      - ${SSL_CERT_PATH:-/dev/null}:/etc/netbird/tls/cert.pem:ro
+      - ${SSL_KEY_PATH:-/dev/null}:/etc/netbird/tls/key.pem:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/render-config.sh"]
+    command:
+      - --port=443
+      - --log-file=console
+      - --log-level=info
+      - --disable-anonymous-metrics=true
+      - --dns-domain=${NETBIRD_MGMT_DNS_DOMAIN:-netbird.selfhosted}
+    environment:
+      # Los tres secretos del plano de control. Sin default: el script corta diciendo cuál falta,
+      # porque un plano de control con secretos previsibles parece que anda y es peor que uno caído.
+      NETBIRD_DATASTORE_ENC_KEY: ${NETBIRD_DATASTORE_ENC_KEY:-}
+      NETBIRD_RELAY_AUTH_SECRET: ${NETBIRD_RELAY_AUTH_SECRET:-}
+      NETBIRD_TURN_PASSWORD: ${NETBIRD_TURN_PASSWORD:-}
+      NETBIRD_TURN_USER: ${NETBIRD_TURN_USER:-netbird}
+      NETBIRD_TURN_DOMAIN: ${NETBIRD_TURN_DOMAIN:-}
+      ADC_NETBIRD_DOMAIN: ${ADC_NETBIRD_DOMAIN:-}
+      NETBIRD_SIGNAL_PORT: ${NETBIRD_SIGNAL_PORT:-33080}
+      NETBIRD_RELAY_PORT: ${NETBIRD_RELAY_PORT:-33081}
+      NETBIRD_MGMT_DISABLE_DEFAULT_POLICY: ${NETBIRD_MGMT_DISABLE_DEFAULT_POLICY:-true}
+      # Identidad: NetBird self-hosted no tiene usuarios propios y delega en el OIDC que expone
+      # `SessionManagerService` (ver «La identidad» en `docs/guides/network-vpn.md`). Sin default a
+      # propósito: apuntan al emisor público del despliegue.
+      NETBIRD_AUTH_OIDC_CONFIGURATION_ENDPOINT: ${NETBIRD_AUTH_OIDC_CONFIGURATION_ENDPOINT:-}
+      NETBIRD_AUTH_AUTHORITY: ${NETBIRD_AUTH_AUTHORITY:-}
+      NETBIRD_AUTH_CLIENT_ID: ${NETBIRD_AUTH_CLIENT_ID:-}
+      NETBIRD_AUTH_CLIENT_SECRET: ${NETBIRD_AUTH_CLIENT_SECRET:-}
+      NETBIRD_AUTH_AUDIENCE: ${NETBIRD_AUTH_AUDIENCE:-}
+      NETBIRD_AUTH_SUPPORTED_SCOPES: ${NETBIRD_AUTH_SUPPORTED_SCOPES:-}
+      NETBIRD_AUTH_TOKEN_ENDPOINT: ${NETBIRD_AUTH_TOKEN_ENDPOINT:-}
+      NETBIRD_AUTH_PKCE_AUTHORIZATION_ENDPOINT: ${NETBIRD_AUTH_PKCE_AUTHORIZATION_ENDPOINT:-}
+      NETBIRD_AUTH_USER_ID_CLAIM: ${NETBIRD_AUTH_USER_ID_CLAIM:-sub}
+      NETBIRD_MGMT_IDP: ${NETBIRD_MGMT_IDP:-none}
+      NETBIRD_IDP_MGMT_CLIENT_ID: ${NETBIRD_IDP_MGMT_CLIENT_ID:-}
+      NETBIRD_IDP_MGMT_CLIENT_SECRET: ${NETBIRD_IDP_MGMT_CLIENT_SECRET:-}
+    healthcheck:
+      # Contra el API DENTRO del contenedor: señal de que el plano de control atiende, no sólo de
+      # que el proceso arrancó.
+      test: ["CMD-SHELL", "wget -qO- --no-check-certificate https://127.0.0.1:443/api/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 1s
+    # Matarlo a mitad de una escritura deja la red sin su registro de quién puede entrar, y eso no
+    # se reconstruye desde los peers.
+    stop_grace_period: 60s
+    networks:
+      - adc-netbird
+
+  # ── Señalización ──────────────────────────────────────────────────────────────
+  # Reenvía los mensajes con que dos peers se ponen de acuerdo para conectarse. No ve el tráfico.
+  signal:
+    <<: *hardening
+    image: netbirdio/signal@sha256:a2e0c35cc40d5d9504a38b28461e107483686d723dfe9a2ed14955b16fc16133 # 0.62.0
+    container_name: adc-netbird-signal
+    ports:
+      - "${NETBIRD_BIND_HOST:-0.0.0.0}:${NETBIRD_SIGNAL_PORT:-33080}:80"
+    volumes:
+      - adc_netbird_signal_data:/var/lib/netbird
+    command:
+      - --port=80
+      - --log-file=console
+    stop_grace_period: 30s
+    networks:
+      - adc-netbird
+
+  # ── Relay ─────────────────────────────────────────────────────────────────────
+  # Camino de último recurso: si el NAT de los dos lados no deja hacer hole punching, el tráfico
+  # pasa por acá. Cifrado de punta a punta igual — el relay mueve bytes, no los abre.
+  relay:
+    <<: *hardening
+    image: netbirdio/relay@sha256:913884614662cd811312aac2e0420153e2026dcc50d5e810d3739dd2daf2c38b # 0.62.0
+    container_name: adc-netbird-relay
+    ports:
+      - "${NETBIRD_BIND_HOST:-0.0.0.0}:${NETBIRD_RELAY_PORT:-33081}:${NETBIRD_RELAY_PORT:-33081}"
+    environment:
+      NB_LOG_LEVEL: info
+      NB_LISTEN_ADDRESS: ":${NETBIRD_RELAY_PORT:-33081}"
+      # Con qué dirección se anuncia a los peers. Tiene que ser alcanzable DESDE AFUERA.
+      NB_EXPOSED_ADDRESS: rel://${ADC_NETBIRD_DOMAIN:-localhost}:${NETBIRD_RELAY_PORT:-33081}
+      # El mismo secreto que el management pone en `Relay.Secret`. Si no coinciden, los peers
+      # conectan y el relay los rechaza: se ve como «la red anda pero algunos no se alcanzan».
+      NB_AUTH_SECRET: ${NETBIRD_RELAY_AUTH_SECRET:-}
+    stop_grace_period: 30s
+    networks:
+      - adc-netbird
+
+  # ── STUN / TURN ───────────────────────────────────────────────────────────────
+  # Cómo dos peers detrás de NAT descubren con qué dirección los ve el mundo. Sin esto, todo el
+  # tráfico cae al relay y la red anda pero lenta.
+  #
+  # `network_mode: host` no es pereza: coturn necesita ver las direcciones de origen reales y abrir
+  # un rango de puertos UDP para las asignaciones. Detrás del NAT de docker, las candidatas que
+  # anuncia son direcciones internas y el hole punching falla siempre.
+  coturn:
+    <<: *hardening
+    image: coturn/coturn@sha256:771a95d04cb97bbc5bfc672e5fdf455591c7d2b2a15f02bb9ceda3e27561695f # 4.17.2-alpine
+    container_name: adc-netbird-coturn
+    network_mode: host
+    volumes:
+      # Igual que el management: la contraseña va adentro de la configuración, así que el archivo se
+      # arma al arrancar en vez de vivir en git.
+      - ./render-turn.sh:/usr/local/bin/render-turn.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/render-turn.sh"]
+    environment:
+      NETBIRD_TURN_PASSWORD: ${NETBIRD_TURN_PASSWORD:-}
+      NETBIRD_TURN_USER: ${NETBIRD_TURN_USER:-netbird}
+      # Detrás de NAT hay que declarar la IP pública o el descubrimiento no sirve para nada.
+      NETBIRD_TURN_EXTERNAL_IP: ${NETBIRD_TURN_EXTERNAL_IP:-}
+      NETBIRD_TURN_MIN_PORT: ${NETBIRD_TURN_MIN_PORT:-49152}
+      NETBIRD_TURN_MAX_PORT: ${NETBIRD_TURN_MAX_PORT:-49472}
+      ADC_NETBIRD_DOMAIN: ${ADC_NETBIRD_DOMAIN:-}
+    stop_grace_period: 30s
+
+volumes:
+  adc_netbird_mgmt_data:
+  adc_netbird_signal_data:
+
+networks:
+  adc-netbird:
+    driver: bridge

@@ -176,16 +176,36 @@ export default class OperationsService extends BaseService implements IOperation
 		return this.#idle.idleJobs();
 	}
 
-	@OnlyKernel()
-	async stop(kernelKey: symbol): Promise<void> {
+	/**
+	 * **Segundo paso del cierre ordenado**, apenas el nodo sale de rotación: para el planificador y
+	 * suelta el rol de fondo para que otro nodo lo tome en el turno siguiente en vez de esperar a
+	 * que venza el lease.
+	 *
+	 * Es un paso propio por el mismo motivo que `ClusterService.beginDrain()`: en `stop()` ya no hay
+	 * Redis con quien hablar y el `releaseLeadership` falla en silencio.
+	 *
+	 * Idempotente y no lanza.
+	 */
+	async releaseBackgroundRole(): Promise<void> {
+		if (!this.#leadership) return;
 		this.#idle.stop();
-		// Baja explícita del rol de fondo: sin esto el trabajo del clúster queda parado hasta que
-		// venza el lease, aunque otro nodo esté listo para tomarlo ya mismo.
-		await this.#leadership?.releaseLeadership(IDLE_ROLE).catch(() => undefined);
+		try {
+			await this.#leadership.releaseLeadership(IDLE_ROLE);
+		} catch (error) {
+			this.logger.logWarn(`[operations] no se pudo soltar el rol de trabajos de fondo: ${(error as Error).message}`);
+		}
 		// Corta los renovadores: si no, un lease de este nodo se seguiría renovando después de
 		// pararlo y ningún otro podría tomar el trabajo hasta el TTL siguiente.
-		this.#leadership?.stop();
+		this.#leadership.stop();
 		this.#leadership = null;
+	}
+
+	@OnlyKernel()
+	async stop(kernelKey: symbol): Promise<void> {
+		// Repetido acá para el camino que no pasa por el cierre ordenado (recarga de módulo,
+		// `disable` del panel), donde el provider de Redis sigue vivo. Es idempotente.
+		await this.releaseBackgroundRole();
+		this.#idle.stop();
 		this.#redis = null;
 		this.#stepperModel = null;
 		await super.stop(kernelKey);

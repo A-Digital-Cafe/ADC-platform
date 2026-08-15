@@ -3,6 +3,7 @@ import { getUrl, isPrivateHost } from "@common/utils/url-utils.js";
 import { hasBitfieldPermission } from "@common/utils/perms.js";
 import { SecurityScopes } from "@common/types/security/permissions.js";
 import { PlanScopes } from "@common/types/plans/permissions.js";
+import { NetworkScopes } from "@common/types/network/permissions.js";
 import {
 	authMarkerFor,
 	broadcastAuthChange,
@@ -80,6 +81,12 @@ export class AdcAccessButton {
 
 	/** URL del panel de administración general */
 	@Prop() generalAdminUrl: string = "";
+
+	/** Texto del acceso al panel de red e infraestructura */
+	@Prop() networkAdminText: string = "Admin - Network";
+
+	/** URL del panel de red e infraestructura */
+	@Prop() networkAdminUrl: string = "";
 
 	@Prop() redirectAfterLogin: boolean = true;
 
@@ -205,6 +212,21 @@ export class AdcAccessButton {
 
 	private getDefaultGeneralAdminUrl(): string {
 		return getUrl(3046, "admin.adigitalcafe.com");
+	}
+
+	private getDefaultNetworkAdminUrl(): string {
+		return getUrl(3048, "network.adigitalcafe.com");
+	}
+
+	/**
+	 * El panel de red es del rol de infraestructura, que no es Admin global: gatearlo por `isAdmin`
+	 * —como el de módulos— dejaría al Network Manager sin ninguna vía de acceso. Alcanza con poder
+	 * LEER la lista de nodos: quien no tenga ni eso no tiene nada que mirar del otro lado.
+	 */
+	private canAccessNetworkAdmin(): boolean {
+		if (!this.user || this.user.orgId) return false;
+		if (this.user.isAdmin) return true;
+		return hasBitfieldPermission(this.user.perms, `network.${NetworkScopes.NODES}.${ACTION_READ}`);
 	}
 
 	/**
@@ -585,6 +607,25 @@ export class AdcAccessButton {
 										/>
 									</svg>
 									{this.generalAdminText}
+								</a>
+							</div>
+						)}
+						{/* Panel de red: nodos, topología de los datos y ciclo de vida de las máquinas */}
+						{this.canAccessNetworkAdmin() && (
+							<div class="border-t border-divider">
+								<a
+									href={this.networkAdminUrl || this.getDefaultNetworkAdminUrl()}
+									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
+									role="menuitem"
+								>
+									<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 0 1 1.06 0Z"
+										/>
+									</svg>
+									{this.networkAdminText}
 								</a>
 							</div>
 						)}

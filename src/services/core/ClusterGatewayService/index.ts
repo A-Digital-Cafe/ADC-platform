@@ -5,8 +5,9 @@ import type { IClusterService } from "@common/types/cluster/ICluster.ts";
 import { clusterGatewayEnabled, nodeId } from "@common/utils/cluster-env.ts";
 import { buildId } from "@common/utils/build-id.ts";
 import { createStreamingProxyHandler, type ProxyTarget, type StreamingProxyHandler } from "@common/utils/http-proxy.ts";
-import { NodePicker } from "./node-picker.js";
+import { NodePicker, parseAdvertise } from "./node-picker.js";
 import { buildCookieHeader, isDocumentRequest, readBuildCookie } from "./build-affinity.js";
+import { OffloadPolicy, readOffloadConfig } from "./offload-policy.js";
 
 /** Marca del nodo que reenvió. Es el corta-bucles: una request que vuelve marcada no se reenvía. */
 const FORWARDED_BY = "x-adc-forwarded-by";
@@ -61,6 +62,7 @@ export default class ClusterGatewayService extends BaseService {
 	#cluster: IClusterService | null = null;
 	#picker: NodePicker | null = null;
 	#proxy: StreamingProxyHandler | null = null;
+	#offload: OffloadPolicy | null = null;
 	readonly #affinity = new Map<string, AffinityResolver>();
 
 	@OnlyKernel()
@@ -91,10 +93,14 @@ export default class ClusterGatewayService extends BaseService {
 			logger: this.logger,
 			errorCodes: { unavailable: "CLUSTER_NODE_UNREACHABLE", writeFailed: "CLUSTER_NODE_WRITE_FAILED" },
 		});
+		this.#offload = new OffloadPolicy(readOffloadConfig(this.config?.private?.offload as Record<string, unknown> | undefined));
 		// La primera foto del registro se paga acá y no en la primera request desviada.
 		await this.#picker.prime();
 		httpProvider.setRequestForwarder((request, reply) => this.#forward(request, reply), this.name);
 		this.logger.logOk(`[cluster-gw] activo: lo que este nodo no sirve se reenvía a sus vecinos (sitio ${cluster.self().site})`);
+		if (this.#offload.enabled) {
+			this.logger.logInfo("[cluster-gw] reparto por carga activo: bajo presión sostenida, las rutas caras se pasan a un vecino menos cargado.");
+		}
 	}
 
 	/**
@@ -148,7 +154,39 @@ export default class ClusterGatewayService extends BaseService {
 		}
 
 		if (this.#affinity.size > 0) return this.#forwardWithAffinity(request, reply, host, path, servedHere);
-		return this.#dispatch(request, reply, this.#pickByHost(request, host, path, servedHere));
+		const byHost = this.#pickByHost(request, host, path, servedHere);
+		if (byHost) return this.#dispatch(request, reply, byHost);
+		return this.#dispatch(request, reply, this.#pickByLoad(request, reply, path, servedHere));
+	}
+
+	/**
+	 * Reparto por carga: el ÚLTIMO criterio que se consulta, y a propósito.
+	 *
+	 * Los tres anteriores —afinidad de conexión, vhost ajeno, build fijado— son de corrección: si
+	 * aciertan, la request **no se puede** servir acá. Éste es de rendimiento, así que va último:
+	 * antes, un nodo cargado desviaría por carga algo que igual iba a reenviar por afinidad.
+	 *
+	 * Cuando decide servir local engancha el cronómetro que alimenta el costo típico de la ruta: sin
+	 * esas muestras la política no desvía nada.
+	 */
+	#pickByLoad(request: FastifyRequest, reply: FastifyReply, path: string, servedHere: boolean): ProxyTarget | null {
+		const policy = this.#offload;
+		if (!policy?.enabled || !servedHere) return null;
+
+		const chosen = policy.pick(request, path, this.#picker!.candidates());
+		if (chosen?.advertise) {
+			const target = parseAdvertise(chosen.advertise);
+			if (target) {
+				this.logger.logDebug(`[cluster-gw] ${request.method} ${path} desviada a ${chosen.displayName} por carga`);
+				return this.#stamp(target, request);
+			}
+		}
+
+		// Se sirve acá: medir cuánto costó. `finish` es del socket de respuesta, así que cubre
+		// también lo que tarde en escribirse el cuerpo, que es parte del costo real de la ruta.
+		const startedAt = Date.now();
+		reply.raw.once("finish", () => policy.record(request.method, path, Date.now() - startedAt));
+		return null;
 	}
 
 	/**

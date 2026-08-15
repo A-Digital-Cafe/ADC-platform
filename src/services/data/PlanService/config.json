@@ -2,7 +2,9 @@
 	"kernelMode": 62,
 	"name": "PlanService",
 	"uiName": "Core",
-	"privileges": ["identity:internal"],
+	"privileges": [
+		"identity:internal"
+	],
 	"version": "1.0.0",
 	"failOnError": false,
 	"providers": [
@@ -35,6 +37,21 @@
 			"name": "ClusterService",
 			"version": "latest",
 			"optional": true
+		},
+		{
+			"name": "PlatformSettingsService",
+			"version": "latest",
+			"optional": true
 		}
-	]
+	],
+	"private": {
+		"capacity": {
+			"$comment": "Techo real de lo que se puede vender. Sin esto la página de precios ofrece planes que el disco no sostiene.",
+			"totalBytes": "${ADC_STORAGE_CAPACITY_BYTES:-0}",
+			"path": "${ADC_STORAGE_CAPACITY_PATH:-/}",
+			"headroomPct": "${ADC_STORAGE_HEADROOM_PCT:-25}",
+			"oversubscription": "${ADC_STORAGE_OVERSUBSCRIPTION:-3}",
+			"minFreePct": "${ADC_STORAGE_MIN_FREE_PCT:-10}"
+		}
+	}
 }

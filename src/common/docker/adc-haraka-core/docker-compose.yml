@@ -4,6 +4,18 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: adc-haraka-core
+    # `NET_BIND_SERVICE` NO es opcional acá y es la trampa de este archivo: la imagen ya corre como
+    # el usuario `node` y consigue el puerto 25 por un `setcap` sobre el binario (ver Dockerfile).
+    # Una capability de archivo sólo se puede activar si además está en el *bounding set* del
+    # contenedor, así que un `cap_drop: ALL` pelado dejaría al MTA sin poder abrir el 25 —y el
+    # síntoma sería un healthcheck que nunca pasa, no un error que nombre las capabilities.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    pids_limit: 512
     ports:
       # 25: SMTP entrante y, mientras el envío sea interno, también la entrega
       # del email-service (por 25 el correo local va al webhook, no a internet).
@@ -36,8 +48,8 @@ services:
       - "host.docker.internal:host-gateway"
     healthcheck:
       # Probe con `node` porque la imagen no trae `nc` ni `curl` (sólo ca-certificates
-      # y libcap2-bin), y comprueba el listener SMTP en sí, que es lo que importa:
-      # el proceso puede estar vivo con el 25 todavía cerrado.
+      # y libcap), y comprueba el listener SMTP en sí, que es lo que importa: el
+      # proceso puede estar vivo con el 25 todavía cerrado.
       test:
         [
           "CMD",
@@ -52,6 +64,10 @@ services:
       # entero y el arranque en frío reporta healthy ~10 s tarde sin motivo.
       start_period: 30s
       start_interval: 500ms
+    # Deja terminar las entregas en vuelo antes de cortar. Un SMTP matado a mitad de una sesión
+    # obliga al remitente a reintentar; lo que está en la cola sobrevive en su volumen, pero el
+    # mensaje que se estaba entregando se pierde el intento.
+    stop_grace_period: 30s
     restart: unless-stopped
     logging:
       # Retención local acotada: sin esto el json-file default crece sin tope.

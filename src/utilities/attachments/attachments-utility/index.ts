@@ -5,6 +5,7 @@ import { AttachmentsManager, type AttachmentsManagerOptions } from "./managers/A
 import { UserKeyStore, resolveStorageMasterKey } from "./crypto/userKeys.js";
 
 export type { AttachmentsManagerOptions };
+export type { AttachmentsUploadLimits } from "./managers/AttachmentsManager.js";
 export type { S3Resolver } from "./managers/AttachmentsManager.js";
 export { AttachmentsManager, UserKeyStore, resolveStorageMasterKey };
 
@@ -37,6 +38,7 @@ export default class AttachmentsUtility extends BaseUtility {
 			presignTtl: opts.presignTtl,
 			kernelKey: opts.kernelKey,
 			quota: opts.quota,
+			uploadLimits: opts.uploadLimits,
 			encryption: opts.encryption,
 			logger: opts.logger,
 			onQuotaExceeded: opts.onQuotaExceeded,

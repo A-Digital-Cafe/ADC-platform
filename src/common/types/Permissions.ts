@@ -110,6 +110,13 @@ export const P = buildAllPermissions() as {
 		readonly AUDIT: ScopePermissions<"modules">;
 		readonly LOGS: ScopePermissions<"modules">;
 	};
+	readonly NETWORK: {
+		readonly NODES: ScopePermissions<"network">;
+		readonly TOPOLOGY: ScopePermissions<"network">;
+		readonly VPN: ScopePermissions<"network">;
+		readonly INTEGRITY: ScopePermissions<"network">;
+		readonly LIFECYCLE: ScopePermissions<"network">;
+	};
 	readonly PLANS: {
 		readonly CATALOG: ScopePermissions<"plans">;
 		readonly OVERRIDES: ScopePermissions<"plans">;

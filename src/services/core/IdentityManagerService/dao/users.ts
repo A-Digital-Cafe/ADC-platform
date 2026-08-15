@@ -1127,6 +1127,28 @@ export class UserManager {
 	}
 
 	/**
+	 * Cuántas cuentas activas hay por tier (`metadata.accountTier`, sin tier ⇒ `free`).
+	 *
+	 * Es un `$group` en la base, no un listado: contar los planes vendidos no puede
+	 * costar traerse la colección de usuarios. Lo consume el control de capacidad de
+	 * `PlanService`, que necesita saber cuánto hay **comprometido** antes de dejar
+	 * vender un plan más.
+	 */
+	async countUsersByTier(token?: string): Promise<Record<string, number>> {
+		await this.#permissionChecker.requirePermission(token, CRUDXAction.READ, IdentityScopes.USERS);
+		const rows = await this.userModel.aggregate<{ _id: unknown; count: number }>([
+			{ $match: { isActive: { $ne: false } } },
+			{ $group: { _id: { $ifNull: ["$metadata.accountTier", "free"] }, count: { $sum: 1 } } },
+		]);
+		const out: Record<string, number> = {};
+		for (const row of rows) {
+			// Un `metadata` con basura no puede romper la cuenta: se ignora la fila.
+			if (typeof row._id === "string" && row._id) out[row._id] = row.count;
+		}
+		return out;
+	}
+
+	/**
 	 * Página de IDs de usuarios activos (`id > afterId`, asc; contrato de `forEachPage`)
 	 * para fan-outs por lotes. Misma sensibilidad que `getAllUserIds`.
 	 */

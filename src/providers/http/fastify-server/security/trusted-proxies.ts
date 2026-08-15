@@ -1,4 +1,5 @@
 import proxyaddr from "proxy-addr";
+import { isRealProduction } from "@common/utils/runtime-env.ts";
 import { Logger } from "../../../../utils/logger/Logger.js";
 
 /**
@@ -80,6 +81,23 @@ export function resolveTrustProxy(raw = process.env.TRUSTED_PROXIES): string[] |
 	if (list.length === 0) return null;
 	proxyaddr.compile(list); // valida la sintaxis; lanza con el rango culpable
 	return list;
+}
+
+/**
+ * Avisa en producción real cuando no hay proxies confiables declarados.
+ *
+ * Detrás de un borde (`docs/guides/tls-edge.md`) y sin esta lista, **toda la gente comparte la IP
+ * del edge**: el rate limit los cuenta juntos, la geolocalización mira la del proxy y un bloqueo por
+ * abuso alcanza a quien no hizo nada. Es un aviso y no un fallo porque un despliegue sin borde
+ * delante es legítimo, y ahí la lista vacía es lo correcto.
+ */
+export function warnIfNoTrustedProxies(logger: { logWarn(msg: string): void }): void {
+	if (!isRealProduction() || resolveTrustProxy() !== null) return;
+	logger.logWarn(
+		"[trusted-proxies] Sin `TRUSTED_PROXIES` en producción: `request.ip` es la IP del último salto. " +
+			"Si hay un borde delante (Cloudflare, balanceador), toda la gente comparte esa IP y el rate limit los cuenta juntos. " +
+			"Declará los rangos del borde (o el alias `cloudflare`). Ver docs/guides/tls-edge.md."
+	);
 }
 
 /** Trust function compilada (memoizada): la misma primitiva que usa fastify para `request.ip`. */

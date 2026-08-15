@@ -15,6 +15,17 @@ async function main() {
 
 	const FORCE_EXIT_WINDOW_MS = 1200; // humano, no ruido de hijos
 
+	/**
+	 * Watchdog de última instancia, **no** el límite operativo del cierre.
+	 *
+	 * Era 15 s fijos, y ahí estaba el problema: el cierre ordenado tiene que drenar el nodo, parar
+	 * apps y módulos y recién después bajar Mongo, Garage, Redis y Rabbit con un cierre limpio. Eso
+	 * no entra en 15 s y no tiene por qué: apagar un nodo puede tardar, lo que no puede es corromper
+	 * datos. Este reloj sólo existe para que un cierre colgado no deje el proceso zombi para
+	 * siempre, así que el default es holgado y se puede subir.
+	 */
+	const SHUTDOWN_BUDGET_MS = Math.max(30_000, Number(process.env.ADC_SHUTDOWN_BUDGET_MS) || 600_000);
+
 	const shutdownHandler = async (signal: string) => {
 		const now = Date.now();
 
@@ -38,10 +49,10 @@ async function main() {
 		Logger.info(`\nSeñal ${signal} recibida. Iniciando cierre ordenado...`);
 
 		const shutdownTimeout = setTimeout(async () => {
-			Logger.error("Timeout en el cierre. Matando todos los procesos hijos...");
+			Logger.error(`El cierre no terminó en ${Math.round(SHUTDOWN_BUDGET_MS / 1000)}s. Matando todos los procesos hijos...`);
 			await killAllChildProcesses();
 			process.exit(1);
-		}, 15000);
+		}, SHUTDOWN_BUDGET_MS);
 
 		try {
 			Logger.info("Deteniendo el kernel...");

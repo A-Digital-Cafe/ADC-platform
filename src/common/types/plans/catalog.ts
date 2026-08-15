@@ -85,16 +85,32 @@ export interface PlanPrice {
 	perSeat?: boolean;
 }
 
+/**
+ * Cómo se consigue un plan que **no** tiene `price`. Sin esto «no hay precio» es ambiguo y la página
+ * anuncia «Sin costo» tanto en el plan gratuito como en uno a cotizar o en uno cuyo precio todavía
+ * no se publicó — el caso normal recién instalado, porque el código nunca siembra precios.
+ *
+ * - `free` — gratuito por diseño; es el plan base del eje.
+ * - `granted` — se otorga al cumplir una condición, no se paga (ver `vip`).
+ * - `custom` — se cotiza caso por caso.
+ *
+ * Ausente **y** sin `price` ⇒ el precio todavía no está definido.
+ */
+export type PlanAccess = "free" | "granted" | "custom";
+
 /** Un plan: el conjunto de valores de features para un tier de un eje. */
 export interface PlanDefinition {
 	axis: PlanAxis;
 	/** `AccountTier` si `axis === "user"`; `OrganizationTier` si `axis === "org"`. */
 	tier: string;
 	/**
-	 * Precio de lista. Ausente ⇒ **el plan no está a la venta** (gratuito, o a medida
-	 * como enterprise). Lo publica la oferta comercial; el código nunca lo siembra.
+	 * Precio de lista. Ausente ⇒ **el plan no está a la venta**. Lo publica la
+	 * oferta comercial; el código nunca lo siembra. Por qué no está a la venta lo
+	 * dice {@link PlanDefinition.access}.
 	 */
 	price?: PlanPrice;
+	/** Cómo se consigue el plan si no lleva `price`. Ver {@link PlanAccess}. */
+	access?: PlanAccess;
 	/** Asientos incluidos sin suscripción activa. Sólo `axis: "org"`. */
 	includedSeats?: number;
 	/** Mínimo de asientos contratables. Sólo `axis: "org"`. */

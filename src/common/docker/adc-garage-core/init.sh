@@ -15,7 +15,9 @@
 # antes de que esto termine. No hace falta ningún centinela.
 set -uo pipefail
 
-CONFIG=/etc/garage.toml
+# La generada por `garage-config`, no la plantilla: es la única que tiene la región y el factor
+# resueltos, y el CLI los necesita para hablar con el servidor.
+CONFIG=/etc/garage/garage.toml
 ZONE="${GARAGE_ZONE:-default}"
 CAPACITY="${GARAGE_CAPACITY:-10G}"
 RPC_TARGET="${GARAGE_RPC_TARGET:-garage:3901}"
@@ -71,6 +73,23 @@ for _ in $(seq 1 90); do
 	sleep 1
 done
 [ "$ready" = "1" ] || fail "El servidor no respondió por RPC tras 90 s."
+
+# 2b. Un SECUNDARIO no se provisiona a sí mismo: si asignara su propio layout formaría un clúster de
+#     objetos PROPIO y vacío en paralelo al de verdad, los dos arrancarían sanos, y el fallo
+#     aparecería el día que alguien busca desde otro nodo un archivo que este nodo sí tiene.
+#
+#     El alta la hace el PRIMARIO, único que conoce el layout vigente. Este init deja el servidor
+#     arriba —su id sólo existe una vez arrancado— e imprime los dos comandos exactos. La clave de
+#     servicio y los buckets son del clúster y llegan solos al unirse.
+if [ "$(echo "${ADC_NODE_ROLE:-primary}" | tr '[:upper:]' '[:lower:]')" = "secondary" ]; then
+	log "nodo secundario: NO se asigna layout ni se crean buckets (los formaría en un clúster propio)."
+	log "Desde el PRIMARIO, para sumar este nodo al almacenamiento:"
+	log "    garage node connect ${node_full}"
+	log "    garage layout assign -z ${ZONE} -c ${CAPACITY} ${node_id}"
+	log "    garage layout apply --version <actual + 1>"
+	log "Hasta entonces este Garage está arriba y vacío, y no participa del clúster."
+	exit 0
+fi
 
 # 3. Layout. `layout show` imprime la versión actual; aplicar exige pasar la SIGUIENTE, así que se
 #    lee en vez de asumir 1 (si no, un segundo `compose up` fallaría o pisaría la versión buena).

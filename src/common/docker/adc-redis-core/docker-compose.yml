@@ -1,14 +1,52 @@
 services:
   redis:
-    image: redis:alpine
+    # Versión explícita + digest. El tag `alpine` a secas era peor de lo que parece: `compose up -d`
+    # NO re-baja una imagen que ya existe local, así que el motor se quedaba clavado en la build del
+    # primer arranque (acá: 8.4.0, de nueve meses atrás) y ninguna corrección posterior llegaba
+    # nunca. Con el digest, un `up` contra una imagen distinta la baja sola.
+    image: redis:8.4.5-alpine@sha256:bd4a0d37e7cd830117ffec9329052b4a1887afa060c265e1768f82b177ff6f43
     container_name: adc-redis-core
     ports:
-      - "127.0.0.1:6380:6379"
+      # Loopback por defecto. Se abre a la dirección de la red privada (`REDIS_BIND_HOST=<ip de
+      # overlay>`) sólo en el nodo que hace de master, porque es la única forma de que la réplica de
+      # otro nodo lo alcance. Nunca a `0.0.0.0`: sin `REDIS_PASSWORD`, Redis no pide autenticación.
+      - "${REDIS_BIND_HOST:-127.0.0.1}:6380:6379"
+    # Un proceso que sólo tiene que leer y escribir su propio volumen no necesita ninguna capability
+    # del set default de docker. `no-new-privileges` corta además el escalón por binarios setuid.
+    # Las cuatro que quedan son del entrypoint oficial, que arranca como root, hace `chown` de /data
+    # y recién ahí baja a `redis` con su-exec.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    pids_limit: 512
     # `requirepass ""` es "sin contraseña" para Redis: sin REDIS_PASSWORD no hay auth.
     # Es defensa en profundidad: lo que realmente protege los secretos de sesión es que
     # van cifrados (ver `at-rest-envelope`), porque el bind a loopback no ayuda contra
     # nada que ya corra en el host.
-    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}"
+    #
+    # `--replicaof no one` es "sos el master", y es el default a propósito: un nodo suelto tiene que
+    # seguir levantando su Redis sin configurar nada. Poniendo `REDIS_REPLICA_OF="<host> <puerto>"`
+    # el mismo contenedor arranca como réplica de ese master —de sólo lectura, sincronizando— sin
+    # tocar el compose. `--masterauth` va siempre porque en un master no hace nada, y omitirlo sería
+    # el error silencioso clásico: la réplica conecta, el master le pide auth y la sincronización
+    # falla en bucle sin que el contenedor deje de estar "healthy".
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}" --masterauth "${REDIS_PASSWORD:-}" --replicaof ${REDIS_REPLICA_OF:-no one}
+    # Con `appendonly yes`, el SIGTERM dispara el fsync final del AOF. El default de docker son
+    # 10 s: alcanzan salvo con un AOF grande, y si no alcanzan se pierden las últimas escrituras
+    # (leases, rate limit, estado de sesión) sin que nada avise.
+    stop_grace_period: 30s
+    # Sin esto, un Redis caído se lleva puesto el rate limit, los leases de líder y las afinidades de
+    # conexión hasta que alguien reinicie la plataforma: el kernel levanta los composes sólo al
+    # arrancar. `unless-stopped` respeta el parate manual, que es lo que hace falta al promover una
+    # réplica a master.
+    restart: unless-stopped
     environment:
       REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
     volumes:

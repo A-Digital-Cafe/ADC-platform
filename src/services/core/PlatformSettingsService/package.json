@@ -1,0 +1,11 @@
+{
+	"name": "platform-settings-service",
+	"license": "ISC",
+	"author": "abbytec",
+	"version": "1.0.0",
+	"description": "Configuración del clúster en Mongo: retenciones, barridos, límites y URLs",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"dependencies": {}
+}

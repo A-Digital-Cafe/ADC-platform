@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { buffer as streamToBuffer } from "node:stream/consumers";
-import type { Model } from "mongoose";
+import type { Connection, Model } from "mongoose";
 import type { Attachment, AttachmentDTO } from "../../../../common/types/attachments/Attachment.js";
 import { ATTACHMENT_DEFAULT_ALLOWED_MIMES, ATTACHMENT_DEFAULT_MAX_SIZE } from "../../../../common/types/attachments/Attachment.js";
 import type { AttachmentDoc } from "../schemas/attachment.schema.js";
+import { getOrCreateUploadRateModel, rateBucketId, type UploadRateDoc } from "../schemas/uploadRate.schema.js";
 import { AttachmentError } from "../../../../common/types/custom-errors/AttachmentError.ts";
 import { isInlineSafeMime } from "../../../../common/utils/mime.ts";
 import { trimChar } from "../../../../common/utils/strings.ts";
+import { platformSetting } from "../../../../common/utils/platform-settings.ts";
 import { OnlyKernel, bindKernelKey } from "../../../../utils/decorators/OnlyKernel.ts";
 import { UNLIMITED_BYTES, type QuotaTrackerGetter } from "../../../../common/types/storage/quota.ts";
 import { createObjectDecipher, type UserKeyStore } from "../crypto/userKeys.js";
@@ -26,6 +28,23 @@ export interface AttachmentPermissionContext {
 	userId: string;
 	/** Contexto de organización del caller (del token); alimenta el tracker de cuota. */
 	orgId?: string | null;
+}
+
+/**
+ * Topes anti-abuso de subida. Son **de caudal**, no de cuota: la cuota dice cuánto podés tener
+ * guardado, esto dice a qué ritmo podés llegar a tenerlo.
+ *
+ * Existen porque el rate limit del borde no ve las subidas: el archivo no pasa por la plataforma
+ * —el navegador lo manda directo al almacenamiento con una URL firmada—, así que lo único que ese
+ * contador mide es cuántas veces pediste permiso, no cuántos bytes mandaste.
+ */
+export interface AttachmentsUploadLimits {
+	/** Subidas firmadas y sin confirmar que un sujeto puede tener a la vez. `0` = sin tope. */
+	maxConcurrent?: number;
+	/** Bytes que un sujeto puede subir por hora, contados con el tamaño REAL. `0` = sin tope. */
+	bytesPerHour?: number;
+	/** Colección del contador horario. Sólo se crea si `bytesPerHour > 0`. */
+	rateCollectionName?: string;
 }
 
 /** Integración opcional con StorageQuotaService. */
@@ -109,6 +128,8 @@ export interface AttachmentsManagerOptions {
 	kernelKey: symbol;
 	/** Tracking/enforcement de cuota de almacenamiento (opcional, fail-open). */
 	quota?: AttachmentsQuotaOptions;
+	/** Topes de caudal de subida. Sin esto rigen los defaults de la utility. */
+	uploadLimits?: AttachmentsUploadLimits;
 	/**
 	 * Cifrado en reposo por usuario (envelope encryption). Al confirmar la subida
 	 * el objeto se re-escribe cifrado con la DEK del uploader; las descargas deben
@@ -123,6 +144,34 @@ export interface AttachmentsManagerOptions {
 	 * notificar "te quedaste sin espacio". No debe lanzar.
 	 */
 	onQuotaExceeded?: (userId: string, appId: string) => void;
+}
+
+/**
+ * Defaults de los topes de caudal, pensados para no molestar a nadie real: cinco subidas a la vez
+ * cubre un arrastre de carpeta desde el navegador y corta el caso de las mil firmas simultáneas;
+ * 20 GB/hora es más de lo que sube un usuario en un día y aun así llena un disco de 1 TB en dos.
+ */
+const DEFAULT_MAX_CONCURRENT_UPLOADS = 5;
+const DEFAULT_UPLOAD_BYTES_PER_HOUR = 20 * 1024 * 1024 * 1024;
+const DEFAULT_RATE_COLLECTION = "attachment_upload_rate";
+
+/**
+ * El valor configurado para el clúster, si lo hay. La utility lo consulta por su cuenta y no lo
+ * recibe de cada servicio porque son seis managers en cinco servicios distintos: un tope anti-abuso
+ * que hay que cablear seis veces es un tope que en algún lado va a faltar. Un servicio que necesite
+ * otro valor lo pasa igual por `uploadLimits`.
+ */
+function settingNumber(name: string): number | undefined {
+	const raw = platformSetting(name);
+	if (raw === undefined || raw.trim() === "") return undefined;
+	const parsed = Number(raw);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/** `undefined` → default; `0` o negativo → sin tope (apagarlo tiene que ser explícito). */
+function positiveOrZero(value: number | undefined, fallback: number): number {
+	if (value === undefined) return fallback;
+	return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
 export interface PresignUploadInput {
@@ -185,6 +234,8 @@ export class AttachmentsManager {
 	readonly #allowedMimes: ReadonlySet<string> | null;
 	readonly #presignTtl: number;
 	readonly #quota?: AttachmentsQuotaOptions;
+	readonly #limits: { maxConcurrent: number; bytesPerHour: number };
+	readonly #rateModel: Model<UploadRateDoc> | null;
 	readonly #onQuotaExceeded?: (userId: string, appId: string) => void;
 	readonly #encryption?: { keyStore: UserKeyStore };
 	readonly #logger?: { logWarn(msg: string): void };
@@ -200,6 +251,16 @@ export class AttachmentsManager {
 		this.#allowedMimes = opts.allowedMimeTypes === null ? null : new Set(opts.allowedMimeTypes ?? ATTACHMENT_DEFAULT_ALLOWED_MIMES);
 		this.#presignTtl = opts.presignTtl ?? this.#s3.getDefaultPresignTtl();
 		this.#quota = opts.quota;
+		this.#limits = {
+			maxConcurrent: positiveOrZero(opts.uploadLimits?.maxConcurrent ?? settingNumber("UPLOAD_MAX_CONCURRENT"), DEFAULT_MAX_CONCURRENT_UPLOADS),
+			bytesPerHour: positiveOrZero(opts.uploadLimits?.bytesPerHour ?? settingNumber("UPLOAD_BYTES_PER_HOUR"), DEFAULT_UPLOAD_BYTES_PER_HOUR),
+		};
+		// El contador cuelga de la MISMA conexión que los adjuntos: la utility no resuelve
+		// dependencias por DI, así que sale del modelo que ya recibió.
+		this.#rateModel =
+			this.#limits.bytesPerHour > 0
+				? getOrCreateUploadRateModel(this.#model.db as unknown as Connection, opts.uploadLimits?.rateCollectionName ?? DEFAULT_RATE_COLLECTION)
+				: null;
 		this.#onQuotaExceeded = opts.onQuotaExceeded;
 		this.#encryption = opts.encryption;
 		this.#logger = opts.logger;
@@ -314,11 +375,97 @@ export class AttachmentsManager {
 		}
 	}
 
+	/**
+	 * Cuántas subidas firmadas y sin confirmar tiene el sujeto **ahora mismo**.
+	 *
+	 * Se cuentan los `pending` más nuevos que la vigencia de la URL y no todos: un presign que nadie
+	 * usó deja su fila hasta que pasa el recolector (24 h), y abandonar cinco subidas dejaría al
+	 * usuario bloqueado un día entero por URLs que ya no sirven para subir nada.
+	 *
+	 * Se cuenta en vivo y no con un contador aparte: el documento `pending` ya existe, así que no hay
+	 * dos verdades que puedan separarse.
+	 */
+	async #countInFlight(ctx: AttachmentPermissionContext): Promise<number> {
+		const since = new Date(Date.now() - this.#presignTtl * 1000);
+		return this.#model.countDocuments({
+			uploadedBy: ctx.userId,
+			orgId: ctx.orgId ?? null,
+			status: "pending",
+			createdAt: { $gt: since },
+		});
+	}
+
+	/** Bytes ya subidos por el sujeto en la hora en curso. `0` si el tope está apagado. */
+	async #bytesThisHour(ctx: AttachmentPermissionContext): Promise<number> {
+		if (!this.#rateModel || !this.#quota) return 0;
+		const id = rateBucketId(ctx.userId, ctx.orgId ?? null, this.#quota.appId, new Date());
+		const doc = await this.#rateModel.findById(id).lean<UploadRateDoc>();
+		return doc?.bytes ?? 0;
+	}
+
+	/**
+	 * Suma bytes al balde de la hora. Corre **al confirmar**, con el tamaño real leído del
+	 * almacenamiento: el que declara el cliente al pedir la firma no obliga a nada.
+	 *
+	 * Nunca lanza ni bloquea la subida que la disparó: el tope se aplica sobre la SIGUIENTE. Rechazar
+	 * acá sería borrar un objeto que el usuario ya terminó de mandar, con el ancho de banda gastado.
+	 */
+	async #recordUploadedBytes(ctx: AttachmentPermissionContext, bytes: number): Promise<void> {
+		if (!this.#rateModel || !this.#quota || bytes <= 0) return;
+		const now = new Date();
+		const id = rateBucketId(ctx.userId, ctx.orgId ?? null, this.#quota.appId, now);
+		try {
+			await this.#rateModel.updateOne(
+				{ _id: id },
+				// Dos horas y no una: con exactamente una, el barrido de Mongo podría llevárselo
+				// mientras la hora en curso todavía lo está usando.
+				{ $inc: { bytes }, $setOnInsert: { expiresAt: new Date(now.getTime() + 2 * 3_600_000) } },
+				{ upsert: true }
+			);
+		} catch (e) {
+			this.#logger?.logWarn(`Attachments(${this.#quota.appId}): no se pudo contabilizar el caudal de subida (${(e as Error).message})`);
+		}
+	}
+
+	/**
+	 * Los dos topes de caudal, comprobados antes de firmar.
+	 *
+	 * Van antes de firmar y no en la confirmación porque acá todavía no se gastó nada: negar una
+	 * confirmación cuesta el ancho de banda de un archivo entero que además hay que borrar. El `429`
+	 * lleva `retryAfterSeconds` para que el cliente espere en vez de reintentar en bucle.
+	 */
+	async #checkUploadRate(ctx: AttachmentPermissionContext): Promise<void> {
+		if (this.#limits.maxConcurrent > 0) {
+			const inFlight = await this.#countInFlight(ctx);
+			if (inFlight >= this.#limits.maxConcurrent) {
+				throw new AttachmentError(429, "ATTACHMENT_TOO_MANY_UPLOADS", `Ya tenés ${inFlight} subida(s) en curso: esperá a que terminen o cancelalas.`, {
+					inFlight,
+					maxConcurrent: this.#limits.maxConcurrent,
+					retryAfterSeconds: this.#presignTtl,
+				});
+			}
+		}
+		if (this.#limits.bytesPerHour > 0) {
+			const used = await this.#bytesThisHour(ctx);
+			if (used >= this.#limits.bytesPerHour) {
+				const retryAfterSeconds = Math.max(1, 3600 - Math.floor((Date.now() % 3_600_000) / 1000));
+				throw new AttachmentError(429, "ATTACHMENT_UPLOAD_RATE_EXCEEDED", "Alcanzaste el máximo de subida por hora. Volvé a intentar más tarde.", {
+					usedBytes: used,
+					limitBytes: this.#limits.bytesPerHour,
+					retryAfterSeconds,
+				});
+			}
+		}
+	}
+
 	async presignUpload(ctx: AttachmentPermissionContext, input: PresignUploadInput): Promise<PresignUploadResult> {
 		this.#validateUploadInput(input);
 		const subCtx: SubPathContext = { ...ctx, ownerType: input.ownerType, ownerId: input.ownerId };
 		await this.#checkPermission("upload", subCtx);
 		await this.#checkQuotaAllowance(ctx, input.size);
+		// Después de la cuota y antes de crear la fila: la fila `pending` es lo que cuenta como
+		// «subida en curso», así que hacerlo después se contaría a sí misma.
+		await this.#checkUploadRate(ctx);
 
 		const attachmentId = randomUUID();
 		const subPath = this.#subPathResolver(subCtx);
@@ -391,6 +538,9 @@ export class AttachmentsManager {
 		// Enforcement real de cuota con el tamaño verificado en S3 (no el declarado
 		// por el cliente). Si no entra, se revierte la subida completa.
 		const committed = await this.#commitQuota(ctx, head.size);
+		// El caudal se contabiliza donde se suma la cuota y con el mismo número (el tamaño
+		// verificado), pero no en `unretain`: recuperar un adjunto retenido es administración.
+		if (committed) await this.#recordUploadedBytes(ctx, head.size);
 		if (!committed) {
 			try {
 				await this.#s3.deleteObject({ bucket: attachment.bucket, key: attachment.storageKey });

@@ -5,16 +5,14 @@ import { compileSchema, safeParseJson } from "@common/utils/json-schema.ts";
 /**
  * Sellado del cache de permisos por sesión (`session:permfp:*` en Redis).
  *
- * Por qué existe: lo que devuelve ese cache **no** es un fingerprint, es el set de permisos
- * con el que se autoriza el request — `verifyToken` reemplaza con él los permisos que venían
- * firmados dentro del token cuando detecta un cambio. Como JSON plano en un Redis sin
- * autenticación (el único freno es el bind a loopback), escribir `["*"]` en la clave de
- * cualquier usuario le daría administrador (el validador de permisos hace short-circuit con
- * el comodín), y escribir `[]` lo dejaría sin acceso a nada.
+ * Lo que devuelve ese cache **no** es un fingerprint: es el set de permisos con el que se autoriza
+ * el request, y `verifyToken` reemplaza con él los que venían firmados en el token. Como JSON plano
+ * en un Redis sin autenticación, escribir `["*"]` en la clave de cualquier usuario le daría
+ * administrador (el validador hace short-circuit con el comodín) y `[]` lo dejaría sin nada.
  *
- * El sobre lleva dentro `(userId, orgId)` porque `encryptAtRest` no tiene AAD: sin eso, copiar
- * el sobre de un administrador a la clave de la víctima descifra perfectamente y el ataque
- * sobrevive al cifrado.
+ * El sobre lleva `(userId, orgId)` dentro y se verifican al abrirlo: sin eso, copiar el sobre de un
+ * administrador a la clave de la víctima descifra perfectamente. Se hace así y no con el AAD de
+ * `encryptAtRest` porque migrarlo invalidaría los sobres vivos sin ganar nada.
  */
 
 /** Etiqueta de separación de dominio. Cambiarla sólo invalida los sobres vivos (TTL 60 s). */

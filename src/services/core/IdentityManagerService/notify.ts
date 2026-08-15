@@ -215,6 +215,24 @@ export class NotifyManager {
 		});
 	}
 
+	/**
+	 * Aviso al equipo (mismos destinatarios) de que un chequeo de integridad de la infraestructura
+	 * pasó a **fallar**, topic `security.integrity_failed`.
+	 *
+	 * Lo emite el barrido de `NetworkService` en el flanco, no en cada pasada: un almacenamiento al
+	 * que le falta una copia o un Redis que no puede volcar a disco siguen respondiendo verde a
+	 * cualquier healthcheck, así que este aviso es lo único que separa "se rompió algo" de "se
+	 * descubrió meses después".
+	 */
+	async integrityFailure(event: { checkId: string; title: string; nodeId: string; detail: string }): Promise<void> {
+		await this.#fanoutToSecurityTeam({
+			topic: "security.integrity_failed",
+			title: "Fallo de integridad en la infraestructura",
+			body: `${event.title} (nodo ${event.nodeId}): ${event.detail}`,
+			data: { checkId: event.checkId, nodeId: event.nodeId, detail: event.detail },
+		});
+	}
+
 	/** Fan-out best-effort a los destinatarios de seguridad, excluyendo opcionalmente al actor. */
 	async #fanoutToSecurityTeam(input: Omit<NotifyInput, "userId">, excludeUserId?: string): Promise<void> {
 		let recipients: string[];

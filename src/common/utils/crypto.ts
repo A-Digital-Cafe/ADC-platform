@@ -191,24 +191,67 @@ export function deriveAtRestKey(masterKey: Buffer, label: string): Buffer {
 }
 
 /**
- * Cifra un string con AES-256-GCM. Envelope `base64(iv).base64(authTag).base64(ciphertext)`,
- * el mismo formato que usa el envoltorio de DEKs de attachments.
+ * Prefijo de versión del envelope. Existe para poder cambiar el esquema sin volver ilegible lo ya
+ * guardado: un valor **sin** prefijo es del formato original (tres partes, sin AAD).
  *
- * GCM es autenticado: manipular el ciphertext hace fallar a {@link decryptAtRest}, no
- * devuelve basura.
+ * Es también donde iría un identificador de clave (`v1:<id>`) el día que haya un llavero. No está
+ * porque rotar de verdad exige DOS claves vivas a la vez, y reservar el hueco sin el llavero sería
+ * aparentar que la rotación está resuelta: hoy cambiar `ADC_STORAGE_MASTER_KEY` vuelve ilegible lo
+ * anterior y el sellador lo trata como «no está» (ver `scripts/rotate-master-key.mjs`).
  */
-export function encryptAtRest(plaintext: string, key: Buffer): string {
-	const iv = crypto.randomBytes(AT_REST_IV_LENGTH);
-	const cipher = crypto.createCipheriv(AT_REST_SCHEME, key, iv);
-	const sealed = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-	return `${iv.toString("base64")}.${cipher.getAuthTag().toString("base64")}.${sealed.toString("base64")}`;
+const AT_REST_ENVELOPE_V1 = "v1";
+
+/** Contexto opcional del sellado. */
+export interface AtRestContext {
+	/**
+	 * Datos autenticados pero **no cifrados**: atan el ciphertext al lugar donde vive.
+	 *
+	 * Sin esto un valor cifrado sirve en cualquier documento del mismo dominio: GCM garantiza que
+	 * esos bytes no se tocaron, nunca que estén donde corresponde, así que quien pueda escribir en la
+	 * base copia el secreto del nodo A al documento del nodo B y se abre sin objetar.
+	 *
+	 * **No es retroactivo**: los valores guardados antes se siguen abriendo sin comprobarlo, y quedan
+	 * atados recién cuando se reescriben.
+	 */
+	aad?: string;
 }
 
-/** Inverso de {@link encryptAtRest}. Lanza si el envelope está corrupto, truncado o alterado. */
-export function decryptAtRest(envelope: string, key: Buffer): string {
-	const [iv, authTag, sealed] = envelope.split(".");
+/**
+ * Cifra un string con AES-256-GCM. Envelope `v1.base64(iv).base64(authTag).base64(ciphertext)`.
+ *
+ * GCM es autenticado: manipular el ciphertext hace fallar a {@link decryptAtRest}, no
+ * devuelve basura. Con `aad`, además, moverlo de contexto también falla.
+ *
+ * El separador es `.` y ninguna de las partes puede contenerlo (base64 estándar no lo usa y el
+ * prefijo de versión tampoco), así que el parseo no es ambiguo.
+ */
+export function encryptAtRest(plaintext: string, key: Buffer, ctx: AtRestContext = {}): string {
+	const iv = crypto.randomBytes(AT_REST_IV_LENGTH);
+	const cipher = crypto.createCipheriv(AT_REST_SCHEME, key, iv);
+	if (ctx.aad) cipher.setAAD(Buffer.from(ctx.aad, "utf8"));
+	const sealed = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+	return `${AT_REST_ENVELOPE_V1}.${iv.toString("base64")}.${cipher.getAuthTag().toString("base64")}.${sealed.toString("base64")}`;
+}
+
+/**
+ * Inverso de {@link encryptAtRest}. Lanza si el envelope está corrupto, truncado, alterado o —con
+ * `aad`— si viene de otro contexto.
+ *
+ * Acepta los dos formatos: el de cuatro partes con versión y el original de tres. El de tres se abre
+ * **sin** comprobar el AAD aunque se pase, porque se escribió cuando no existía.
+ */
+export function decryptAtRest(envelope: string, key: Buffer, ctx: AtRestContext = {}): string {
+	const parts = envelope.split(".");
+	const versioned = parts.length === 4 && parts[0] === AT_REST_ENVELOPE_V1;
+	if (!versioned && parts.length !== 3) throw new Error("envelope de cifrado inválido");
+
+	const [iv, authTag, sealed] = versioned ? parts.slice(1) : parts;
 	if (!iv || !authTag || !sealed) throw new Error("envelope de cifrado inválido");
+
 	const decipher = crypto.createDecipheriv(AT_REST_SCHEME, key, Buffer.from(iv, "base64"));
+	// El AAD va antes del primer `update` (lo exige node) y sólo para los envelopes que se cifraron
+	// con él: aplicarlo a uno viejo haría fallar algo perfectamente válido.
+	if (versioned && ctx.aad) decipher.setAAD(Buffer.from(ctx.aad, "utf8"));
 	decipher.setAuthTag(Buffer.from(authTag, "base64"));
 	return Buffer.concat([decipher.update(Buffer.from(sealed, "base64")), decipher.final()]).toString("utf8");
 }

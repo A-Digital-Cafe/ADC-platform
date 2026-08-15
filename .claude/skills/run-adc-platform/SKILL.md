@@ -11,6 +11,32 @@ the driver and `bun run cleanup` both read). No GUI window: drive it headless vi
 DevTools Protocol; logic is split under `./utils`). All paths are repo-root
 relative; run the driver as `node .claude/skills/run-adc-platform/driver.mjs <cmd>`.
 
+## Sesiones en paralelo (leer primero si no sos la única sesión)
+
+Kernel, puertos y el puerto de CDP son **uno solo por repo**: dos agentes trabajando a la vez se
+pisan. El driver ya lo maneja, pero conviene saber cómo:
+
+- **Todo comando que toca el entorno se encola.** `up`/`stop`/`boot-check`/`smoke`/`drive`/`login`/
+  `shot`/`ready` toman un lock de archivo (`temp/.adc-driver.lock`); si otra sesión lo tiene, el
+  tuyo **espera su turno** e imprime `== esperando turno ==`. No falla ni atropella. Acotá la
+  espera con `--lock-timeout <segundos>` si preferís rendirte antes.
+- **`port`, `logs` y `status` no se encolan**: sólo leen, y `status` tiene que poder responder
+  justo cuando otro tiene el lock.
+- **`up` es idempotente**: si :3000 ya sirve, reusa ese kernel en vez de lanzar un segundo (dos
+  kernels peleando por el puerto es el origen del clásico "UIFederationService no encontrado").
+- **Exportá `ADC_DRIVER_SESSION=<id>` en cada llamada.** Con eso `stop` distingue tu propia
+  actividad de la ajena y **se niega a apagar el entorno de otra sesión** (exit 1) en vez de
+  matarle las pruebas. Sin la variable sólo funciona el encolado. Cada llamada de Bash es un
+  proceso nuevo, así que va como prefijo, no como `export` suelto:
+
+```bash
+ADC_DRIVER_SESSION=$SESSION node .claude/skills/run-adc-platform/driver.mjs status
+ADC_DRIVER_SESSION=$SESSION node .claude/skills/run-adc-platform/driver.mjs up
+```
+
+**Empezá siempre por `status`**: dice si el gateway ya sirve (no hace falta `up`), quién tiene el
+lock y si `stop` te va a dejar. Si de verdad quedó algo colgado de otra sesión: `stop --force`.
+
 ## Prerequisites & setup
 
 Already provisioned in this container (no `apt-get` / `bun install` needed). On a
@@ -106,7 +132,8 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ hom
 | `shot <url> [name]` | one-shot screenshot → `/tmp/adc-shots/<name>.png`. Accepts `--mobile`/`--device d`/`--viewport WxH` |
 | `login <who> [url] [name]` | log in (`admin`\|`orgadmin`\|`'user::pass[::orgId]'`), navigate, screenshot. Accepts viewport flags. Dev only |
 | `drive <url> [name]` | CDP session: `--login who`, `--wait sel`, `--wait-timeout ms`, `--click sel`, `--type "sel::text"`, `--eval expr`, `--settle ms`, `--mobile`/`--device d`/`--viewport WxH`. Ends in a screenshot + prints `document.title` and the real text of any console errors / exceptions |
-| `stop` | kill kernel + all rspack dev servers, free every port in ports.csv (leaves Docker S3 on :3900) |
+| `status` | qué hay levantado, quién tiene el lock y cuál fue la última actividad. No se encola: se puede correr siempre |
+| `stop [--force]` | kill kernel + all rspack dev servers, free every port in ports.csv (leaves Docker S3 on :3900). **Rechaza (exit 1) si otra sesión trabajó hace poco**; `--force` lo ignora |
 
 > To register a new port or seed another dev user: add the port to
 > [docs/guides/ports.csv](docs/guides/ports.csv) (`port,app,notes` — picked up
@@ -118,8 +145,11 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ hom
 **Stop cleanly — always via the driver, never Ctrl-C or `bun run cleanup`** (see Gotchas):
 
 ```bash
-node .claude/skills/run-adc-platform/driver.mjs stop
+ADC_DRIVER_SESSION=$SESSION node .claude/skills/run-adc-platform/driver.mjs stop
 ```
+
+Si responde `otra sesión (…) usó el entorno hace Ns`, **no lo fuerces por reflejo**: alguien está
+probando algo. Dejá el kernel andando (cuesta ~65 s levantarlo de nuevo) o esperá.
 
 ## Test
 
@@ -140,6 +170,8 @@ exit code is not a failure) and `bun run lint` (zero-warnings, src only).
 - **bun orphans the kernel on exit.** It doesn't propagate SIGINT/SIGTERM to the `bun src/index.ts` child, which keeps holding :3000. Killing the `bun run dev` pid alone is not enough — always finish with `driver.mjs stop`.
 - **`UIFederationService no encontrado` spam + `Failed to start server. Is port 3000 in use?`** = a **stale instance already owns :3000**. The kernel still reaches "Kernel en funcionamiento" but serves no UI. Fix: `driver.mjs stop`, then relaunch.
 - **First nav to an app can be slow.** rspack dev servers compile lazily; :3000 is up long before an app's port. The driver's `--wait`/`--wait-timeout`/virtual-time-budget absorbs this — don't replace it with a fixed `sleep`. Federated chunks (e.g. mobile editor) can exceed the 15s `--wait` default; pass `--wait-timeout 30000`.
+- **`stop` rechazado con "otra sesión usó el entorno"** = hay un agente trabajando en paralelo. Es la protección haciendo su trabajo: esperá, o `--force` sólo si comprobaste que quedó colgado.
+- **Un comando que imprime `== esperando turno ==` no está colgado**: está encolado detrás de otra sesión. Termina solo cuando el otro suelta el lock.
 - **A leaked Chrome makes screenshots lie.** The CDP port is fixed (9333), so a browser left over from an earlier run would be reused by the next `drive`/`login`: stale page, stale cookies, screenshots that do not reflect the current code — it reads as a real bug. Each launch now gets a unique `--user-data-dir` and refuses to start if the port is already taken, telling you to run `stop` first.
 - **A bare foreground `sleep` is blocked in the sandboxed shell** — exits 1 silently, no output. Don't poll the kernel with a `sleep` loop; use `driver.mjs ready` (blocks internally) or wrap in `timeout … bash -c 'until <cond>; do sleep N; done'` (a `sleep` inside the until-loop is fine).
 - **`test/home` (:3002) returns 404 at `/`** — it serves under a sub-path. `smoke` counts it OK (status < 500); not a failure.

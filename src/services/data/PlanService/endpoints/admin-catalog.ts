@@ -2,6 +2,7 @@ import { RegisterEndpoint, type EndpointCtx } from "@services/core/EndpointManag
 import { P } from "@common/types/Permissions.ts";
 import { PlanError } from "@common/types/custom-errors/PlanError.ts";
 import type { PlanAxis } from "@common/types/plans/index.ts";
+import type { CapacityPolicy } from "../dao/CapacityGuard.ts";
 import type { ImportPlanItem, UpdatePlanPatch } from "../domain/index.ts";
 import type PlanService from "../index.js";
 import { assertGlobalActor } from "./utils/actor.ts";
@@ -87,6 +88,44 @@ export class AdminCatalogEndpoints {
 			memberFeatures: ctx.data?.memberFeatures,
 		});
 		return { ok: true };
+	}
+
+	@RegisterEndpoint({
+		method: "GET",
+		url: "/api/plans/admin/capacity",
+		permissions: [P.PLANS.CATALOG.READ],
+		options: {
+			tag: "PlanService/Admin",
+			summary: "Cuánto disco hay y cuánto está comprometido por los planes vendidos",
+			description:
+				"Es lo que decide si un plan se sigue ofreciendo. `measured: false` significa que no se pudo medir " +
+				"(sin `statfs` ni capacidad declarada) y entonces NO se bloquea ninguna venta.",
+			schema: { response: { 200: S.CapacityResponse } },
+		},
+	})
+	static async capacity(_ctx: EndpointCtx) {
+		return AdminCatalogEndpoints.service.capacityReport();
+	}
+
+	@RegisterEndpoint({
+		method: "PUT",
+		url: "/api/plans/admin/capacity",
+		permissions: [P.PLANS.CATALOG.UPDATE],
+		options: {
+			tag: "PlanService/Admin",
+			summary: "Ajusta cuánto del disco se compromete antes de dejar de vender",
+			skipIdempotency: true,
+			description:
+				"Es política del clúster, no de un nodo: se guarda en la configuración de plataforma y se aplica en caliente acá " +
+				"(los otros nodos la toman al reiniciar). La CAPACIDAD del disco no se toca desde acá — cada nodo mide la suya.",
+			rateLimit: { max: 20, timeWindow: 60_000 },
+			schema: { body: S.CapacityPolicyBody, response: { 200: S.CapacityPolicyResponse } },
+		},
+	})
+	static async setCapacity(ctx: EndpointCtx<Record<string, string>, Partial<CapacityPolicy>>) {
+		assertGlobalActor(ctx, CATALOG_SCOPE);
+		const policy = await AdminCatalogEndpoints.service.setCapacityPolicy(ctx.data ?? {}, ctx.user?.id);
+		return { policy };
 	}
 
 	@RegisterEndpoint({

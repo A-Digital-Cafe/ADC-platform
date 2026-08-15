@@ -1,7 +1,7 @@
-import type { AccountTier } from "@common/types/tiers.ts";
+import { maxTier, type AccountTier } from "@common/types/tiers.ts";
 import type { OrganizationTier } from "@common/types/identity/Organization.ts";
 import type { PlanAxis, PlanSubject } from "@common/types/plans/index.ts";
-import { SystemRole } from "@services/core/IdentityManagerService/defaults/systemRoles.js";
+import { ROLE_GRANTED_TIERS, SystemRole } from "@services/core/IdentityManagerService/defaults/systemRoles.js";
 import LRUCache from "@adc/utils/performance/LRUCache.ts";
 
 /**
@@ -30,6 +30,9 @@ interface Cached<T> {
  *
  * - Usuario → `user.metadata.accountTier`, default `free`. El tier no viaja en el token.
  * - Organización → `org.tier`, default `default`.
+ * - **Roles que otorgan tier** (`ROLE_GRANTED_TIERS`, hoy los de Discord → `vip`):
+ *   funcionan como **piso**, no como techo. Quien paga `pro` y además es VIP en la
+ *   comunidad sigue en `pro`; quien sólo es VIP sube de `free` a `vip`.
  * - **Un admin global** (rol `SystemRole.ADMIN` sin `orgId`) recibe el tier máximo:
  *   evita que quien administra la plataforma choque con sus propios límites.
  * - Tolerante a fallos: ante cualquier error devuelve el tier base.
@@ -52,7 +55,11 @@ export class TierResolver {
 		try {
 			const user = await this.#identity.getUser(userId);
 			tier = (user?.metadata?.accountTier as AccountTier) ?? "free";
-			if (tier !== "plus" && (await this.#isGlobalAdmin(user?.roleIds))) tier = "plus";
+			// Un solo recorrido de roles resuelve las dos reglas: el piso de comunidad
+			// y el techo de administración.
+			const { granted, globalAdmin } = await this.#rolePrivileges(user?.roleIds);
+			if (granted) tier = maxTier(tier, granted);
+			if (globalAdmin) tier = "plus";
 		} catch {
 			tier = "free";
 		}
@@ -88,12 +95,24 @@ export class TierResolver {
 		this.#orgCache.clear();
 	}
 
-	async #isGlobalAdmin(roleIds?: string[]): Promise<boolean> {
-		if (!roleIds?.length) return false;
+	/**
+	 * Lo que los roles del usuario aportan al tier: el mayor tier otorgado por
+	 * comunidad y si es administrador global. Se resuelve en una sola pasada
+	 * porque cada rol cuesta una lectura.
+	 */
+	async #rolePrivileges(roleIds?: string[]): Promise<{ granted: AccountTier | null; globalAdmin: boolean }> {
+		if (!roleIds?.length) return { granted: null, globalAdmin: false };
+		let granted: AccountTier | null = null;
+		let globalAdmin = false;
 		for (const roleId of roleIds) {
 			const role = await this.#identity.getRole(roleId).catch(() => null);
-			if (role?.name === SystemRole.ADMIN && !role.orgId) return true;
+			if (!role?.name) continue;
+			if (role.name === SystemRole.ADMIN && !role.orgId) globalAdmin = true;
+			// Los roles otorgantes son globales: uno con `orgId` es de una organización
+			// y no puede regalar tier personal.
+			const grant = role.orgId ? undefined : ROLE_GRANTED_TIERS.get(role.name);
+			if (grant) granted = granted ? maxTier(granted, grant) : grant;
 		}
-		return false;
+		return { granted, globalAdmin };
 	}
 }

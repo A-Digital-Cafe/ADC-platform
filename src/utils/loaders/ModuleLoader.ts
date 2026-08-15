@@ -10,6 +10,7 @@ import { moduleKeyConfig, type ModuleRegistry } from "../registry/ModuleRegistry
 import { Logger } from "../logger/Logger.js";
 import { VersionResolver } from "../VersionResolver.js";
 import { safeParseJson, parseJsonOrThrow } from "@common/utils/json-schema.ts";
+import { platformSetting } from "@common/utils/platform-settings.ts";
 import { moduleConfigCheck } from "@common/schemas/module-config.ts";
 import { isInsideAnyBase } from "@common/utils/path-containment.ts";
 import { runDevCleanup } from "@common/utils/dev-cleanup.ts";
@@ -117,6 +118,15 @@ export class ModuleLoader {
 	/**
 	 * Interpola variables de entorno en un objeto de configuración
 	 * Reemplaza ${VAR_NAME} con el valor de process.env.VAR_NAME o del envVars proporcionado
+	 *
+	 * Precedencia: `.env` del módulo → **configuración de plataforma** (Mongo) → `process.env` →
+	 * default del `${VAR:-default}`.
+	 *
+	 * La configuración de plataforma le gana al entorno porque es del clúster: si ganara el archivo
+	 * local, una línea olvidada en un nodo lo dejaría distinto del resto sin que nadie se entere. Que
+	 * una variable quede ignorada lo avisa por log el servicio de configuración al arrancar, y sólo
+	 * alcanza a los nombres declarados en su `defaults.json`.
+	 *
 	 * @param obj - Objeto a interpolar
 	 * @param envVars - Variables de entorno específicas del módulo (opcionales)
 	 */
@@ -124,8 +134,8 @@ export class ModuleLoader {
 		if (typeof obj === "string") {
 			return obj.replaceAll(/\$\{([^}]+)\}/g, (_, varSpec) => {
 				const [varName, defaultValue] = String(varSpec).split(":-");
-				// Priorizar variables del módulo, luego process.env
-				return envVars?.[varName] || process.env[varName] || defaultValue || "";
+				// Priorizar variables del módulo, luego la configuración de plataforma, luego process.env
+				return envVars?.[varName] || platformSetting(varName) || process.env[varName] || defaultValue || "";
 			});
 		}
 

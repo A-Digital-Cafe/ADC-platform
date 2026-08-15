@@ -13,7 +13,9 @@ type ExpectedSubscriptionErrorTypes =
 	| "SEATS_BELOW_MEMBERS"
 	| "SEATS_OUT_OF_RANGE"
 	| "COUNTRY_NOT_SUPPORTED"
-	| "BILLING_DATA_REQUIRED";
+	| "BILLING_DATA_REQUIRED"
+	/** El nodo no tiene capacidad para otra cuenta de ese plan. Reintentable: no es un error del pedido. */
+	| "PLAN_AT_CAPACITY";
 
 type UnexpectedSubscriptionErrorTypes = "GATEWAY_UNAVAILABLE" | "GATEWAY_ERROR" | "PLANS_UNAVAILABLE";
 

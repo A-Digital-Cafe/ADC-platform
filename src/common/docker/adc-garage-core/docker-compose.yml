@@ -1,7 +1,59 @@
 services:
+  # Genera el `garage.toml` desde la plantilla y el entorno, y termina. El servidor no arranca hasta
+  # que este contenedor sale con 0 (`service_completed_successfully`), así que no hay ventana en la
+  # que Garage lea una configuración vieja o a medio escribir.
+  #
+  # Es un contenedor aparte y no el entrypoint del servidor porque la imagen de Garage **no trae
+  # shell**: es sólo el binario estático. Reusa la imagen del provisionador, que sí tiene bash.
+  garage-config:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: adc-garage-core-config
+    entrypoint: ["/usr/local/bin/render-config.sh"]
+    # Root, a diferencia de los otros dos: un volumen nombrado nace vacío y propiedad de root, así que
+    # un usuario sin privilegios no podría escribir el archivo la primera vez. Es un one-shot que
+    # escribe un único archivo sin secretos y sale.
+    user: "0:0"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    environment:
+      # Los tres valores que Garage sólo acepta por archivo. `GARAGE_REPLICATION_FACTOR` es del
+      # CLÚSTER (idéntico en todos los nodos, `env/storage.env`); el anuncio es de la máquina.
+      GARAGE_REPLICATION_FACTOR: ${GARAGE_REPLICATION_FACTOR:-1}
+      GARAGE_RPC_PUBLIC_ADDR: ${GARAGE_RPC_PUBLIC_ADDR:-127.0.0.1:3901}
+      S3_REGION: ${S3_REGION:-sa-central-1}
+    volumes:
+      - ./garage.toml.tmpl:/etc/garage-template/garage.toml.tmpl:ro
+      - adc_garage_core_conf:/etc/garage
+    restart: "no"
+    networks:
+      - adc-network
+
   garage:
-    image: dxflrs/garage:v2.1.0
+    # Pineado por digest además del tag: el tag `v2.1.0` es mutable en el registro (se puede
+    # re-publicar), y el digest es lo único que ata este despliegue a unos bytes concretos.
+    image: dxflrs/garage:v2.1.0@sha256:4c9b34c113e61358466e83fd6e7d66e6d18657ede14b776eb78a93ee8da7cf6a
     container_name: adc-garage-core
+    depends_on:
+      garage-config:
+        condition: service_completed_successfully
+    # La imagen no declara entrypoint: su CMD es `/garage server`. Se repite entero para poder
+    # apuntar al archivo generado, que vive en un volumen (docker no puede montar un archivo suelto
+    # desde un volumen nombrado, sólo el directorio).
+    command: ["/garage", "-c", "/etc/garage/garage.toml", "server"]
+    # De los siete stacks, éste es el único cuyo puerto el runbook manda publicar en la LAN (el RPC
+    # entre nodos), así que es el que más gana con no tener ninguna capability. La imagen no declara
+    # USER —corre como root—, pero sus puertos son todos > 1024 y sólo escribe en sus dos volúmenes,
+    # que le pertenecen: no necesita nada del set default.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 1024
     ports:
       # 3900 (API S3) lo abre el NAVEGADOR (subidas con URL presignada), no sólo el kernel: para
       # probar desde otro dispositivo de la LAN hay que publicarlo más allá del loopback
@@ -10,16 +62,17 @@ services:
       # loopback: el navegador entra por `S3GatewayService`, no por acá.
       - "${S3_BIND_HOST:-127.0.0.1}:3900:3900"
       # 3901 es el RPC ENTRE NODOS. Con un solo nodo no hace falta abrirlo; al sumar el segundo
-      # hay que publicarlo en la interfaz de la LAN y ajustar `rpc_public_addr` en garage.toml.
+      # hay que publicarlo en la interfaz de la LAN y poner `GARAGE_RPC_PUBLIC_ADDR` en `env/host.env`
+      # (la dirección con la que este nodo se anuncia a los demás).
       - "${GARAGE_RPC_BIND_HOST:-127.0.0.1}:3901:3901"
       # Admin API: sólo para el operador y para el panel de infraestructura. Nunca a la red.
       - "127.0.0.1:3903:3903"
     environment:
-      # Secretos fuera del garage.toml, que sí está en git. Los defaults son de DESARROLLO.
+      # Secretos fuera de la configuración, que sí está en git. Los defaults son de DESARROLLO.
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-adc-garage-dev}
     volumes:
-      - ./garage.toml:/etc/garage.toml:ro
+      - adc_garage_core_conf:/etc/garage:ro
       - adc_garage_core_meta:/var/lib/garage/meta
       - adc_garage_core_data:/var/lib/garage/data
     healthcheck:
@@ -30,7 +83,7 @@ services:
       #
       # En forma EXEC, no `CMD-SHELL`: la imagen de Garage es sólo el binario, sin `/bin/sh`, y un
       # `CMD-SHELL` falla con "stat /bin/sh: no such file or directory" en cada chequeo.
-      test: ["CMD", "/garage", "-c", "/etc/garage.toml", "bucket", "list"]
+      test: ["CMD", "/garage", "-c", "/etc/garage/garage.toml", "bucket", "list"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,6 +92,10 @@ services:
       # reportarse healthy aunque el servicio esté listo en ~1 s.
       start_period: 30s
       start_interval: 500ms
+    # Garage tiene que cerrar su metadata (LMDB) y terminar lo que esté resincronizando. Matarlo a
+    # los 10 s de default, a mitad de un rebalanceo, es la forma más fácil de que un bloque quede
+    # a medio escribir sin que nada lo reporte.
+    stop_grace_period: 60s
     restart: unless-stopped
     logging:
       # Retención local acotada: sin esto el json-file default crece sin tope.
@@ -57,15 +114,32 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: adc-garage-core-init
+    # El único que puede ir con el rootfs de sólo lectura, porque es el único del que ya sabíamos
+    # que no escribe en ningún lado (ver el comentario del volumen de abajo y el Dockerfile). El
+    # `tmpfs` es para lo que bash use de paso; sin él, un `mktemp` del init fallaría recién en
+    # ejecución.
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
     depends_on:
       garage:
         condition: service_started
+      garage-config:
+        condition: service_completed_successfully
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
       GARAGE_RPC_TARGET: garage:3901
       # Zona de replicación = sitio del nodo. Con `replication_factor` > 1, Garage reparte una
       # copia por zona, así que esto es lo que hace que perder un sitio entero no pierda datos.
       GARAGE_ZONE: ${ADC_NODE_SITE:-default}
+      # Rol del nodo. Un secundario deja el servidor arriba pero NO se asigna layout: lo suma el
+      # primario, que es el único que conoce el layout vigente. Ver el paso 2b de `init.sh`.
+      ADC_NODE_ROLE: ${ADC_NODE_ROLE:-primary}
       GARAGE_CAPACITY: ${GARAGE_CAPACITY:-10G}
       # Garage impone el formato: id = `GK` + 24 hex, secreto = 64 hex. Estos son de DESARROLLO.
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-GKadc000000000000000000000}
@@ -73,7 +147,7 @@ services:
       # Los buckets por dominio del `.env` de la raíz. El nombre tiene que empezar con `adc-`.
       GARAGE_BUCKETS: ${GARAGE_BUCKETS:-adc-drive adc-pm adc-mail adc-articles adc-avatars}
     volumes:
-      - ./garage.toml:/etc/garage.toml:ro
+      - adc_garage_core_conf:/etc/garage:ro
       # Sólo lectura: el init lee `node_key.pub` para saber a qué nodo le habla. No escribe acá — ni
       # acá ni en ningún lado, que es lo que le permite correr sin privilegios (ver el Dockerfile).
       - adc_garage_core_meta:/var/lib/garage/meta:ro
@@ -82,6 +156,9 @@ services:
     restart: "no"
 
 volumes:
+  # La configuración generada. Es un volumen y no un bind al repo para no ensuciar el árbol de git
+  # con un archivo que cambia por máquina.
+  adc_garage_core_conf:
   adc_garage_core_meta:
   adc_garage_core_data:
 

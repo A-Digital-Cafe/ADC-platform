@@ -29,6 +29,8 @@ import { KernelServiceLoader } from "./core/services/KernelServiceLoader.js";
 import { ConfigWatcher, watchLayer, watchPresetTopic, watchPresetsRoot, type LayerEventHandlers } from "./core/runtime/ConfigWatcher.js";
 import { ModuleDetector } from "./core/runtime/ModuleDetector.js";
 import { shutdownKernel } from "./core/runtime/KernelShutdown.js";
+import { bootstrapNodeIfPending } from "./core/bootstrap/NodeBootstrap.js";
+import { applyNodeRoleFromState, assertNodeStateReadable, powerMode } from "./common/utils/node-state.js";
 import { loadLayerRecursive, type LayerLoadOptions } from "./core/apps/LayerLoader.js";
 import { LoadSemaphore } from "./utils/system/LoadSemaphore.ts";
 import { MemoryProbe } from "./utils/system/MemoryProbe.ts";
@@ -398,8 +400,21 @@ export class Kernel {
 		this.#logger.logInfo("Iniciando...");
 		this.#logger.logInfo(`Modo: ${this.#isDevelopment ? "DESARROLLO" : "PRODUCCIÓN"}`);
 		this.#logBootSecurityProfile();
+		// Antes del banner y antes de todo lo que decida por rol: si el panel promovió este nodo a
+		// primario, lo que sigue tiene que verlo ya promovido —empezando por qué composes levanta—.
+		applyNodeRoleFromState();
 		this.#logBootClusterIdentity();
 		this.#logger.logDebug(`Base path: ${this.#basePath}`);
+
+		// Si el estado operativo de este nodo quedó ilegible, en producción se corta acá. Lo que sigue
+		// decide qué motores levanta la máquina, y adivinarlo es cómo un nodo vuelve de un corte con
+		// una base de datos en paralelo a la del clúster.
+		assertNodeStateReadable();
+
+		// Alta de un nodo virgen, ANTES de levantar infraestructura y de cargar un solo módulo: es
+		// el único punto donde el proceso ya sabe quién es y todavía no dejó nada a medias. Sin
+		// variables de alta (el caso normal) no hace nada.
+		await bootTimeline.measure("node:bootstrap", () => bootstrapNodeIfPending(this.#basePath, this.#logger));
 
 		this.#presetTopics = await this.#discoverPresetTopics();
 		if (this.#presetTopics.length > 0) {
@@ -421,6 +436,16 @@ export class Kernel {
 		// se suma al exclude —así ni se lee su config— y se le declara dormido al orquestador,
 		// que si no lo contaría como caída pasados los 3 min de gracia.
 		excludeList.push(...(await this.#applyLoadAllowlist(excludeList)));
+
+		// En espera: el nodo levantó sus motores y entró al registro, pero no carga UNA sola app.
+		// Es lo que permite que una máquina vuelva de un corte de luz sin ponerse a servir hasta
+		// que alguien lo decida — y lo que hace que «apagar» signifique algo bajo un supervisor
+		// que, por definición, vuelve a levantar todo lo que sale.
+		if (powerMode() === "standby") {
+			this.#logger.logWarn("[nodo] EN ESPERA: los motores están arriba y /healthz responde 503; no se carga ninguna app.");
+			this.#logger.logWarn('[nodo] Para ponerlo en servicio: panel de red → Nodos → Encender (o poner "power": "on" en env/node-state.json y reiniciar).');
+			excludeList.push(...(await this.#applyStandbyExclusions(excludeList)));
+		}
 
 		// Las UI libraries de presets cargan antes que cualquier otra app: hosts de src o
 		// de otros presets pueden declararlas en uiDependencies, y la carga de presets es
@@ -508,6 +533,28 @@ export class Kernel {
 			this.#logger.logWarn(`ADC_LOAD_APPS: sin coincidencia para ${unknown.join(", ")} (¿nombre de app o de directorio mal escrito?).`);
 		}
 		this.#logger.logInfo(`Boot dirigido (ADC_LOAD_APPS): ${load.size} app(s) a cargar, ${dormant.size} dormida(s).`);
+		this.#orchestrator.setDormantApps(dormant);
+		return [...dormant];
+	}
+
+	/**
+	 * En espera: **todas** las apps quedan dormidas.
+	 *
+	 * Dormidas y no excluidas, igual que en el boot dirigido: el orquestador cuenta como caída lo que
+	 * no aparece pasados los 3 min de gracia, y un nodo en espera pondría la plataforma entera en
+	 * rojo en la página de estado.
+	 *
+	 * Los motores SÍ se levantan: son la copia de datos de este nodo, y un secundario que volviera
+	 * de un corte con el Mongo apagado dejaría el replica set degradado hasta que alguien lo encienda.
+	 */
+	async #applyStandbyExclusions(excludeList: string[]): Promise<string[]> {
+		const layers = [this.#appsPath, ...this.#presetLayerPaths("apps")];
+		const apps: AppLoadInfo[] = [];
+		for (const layerPath of layers) {
+			apps.push(...(await collectAppConfigsRecursive(layerPath, excludeList, this.#fileExtension)));
+		}
+		const dormant = new Set(apps.map((app) => app.dirName));
+		this.#logger.logWarn(`[nodo] EN ESPERA: ${dormant.size} app(s) dormidas. Los motores de datos sí están arriba.`);
 		this.#orchestrator.setDormantApps(dormant);
 		return [...dormant];
 	}

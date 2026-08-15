@@ -1,9 +1,33 @@
 services:
   mongo:
-    image: mongo:latest
+    # Versión explícita + digest. `latest` era el peor de los tags acá: además de congelarse en lo
+    # que se bajó una vez (`compose up -d` no re-baja), puede saltar de major entre un clon y otro,
+    # así que dos nodos del mismo repo formaban replica set con mongod de versiones distintas.
+    image: mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3
     container_name: adc-mongo-core
     ports:
-      - "127.0.0.1:27017:27017"
+      # Loopback por defecto. Un replica set de más de un miembro necesita que los otros nodos
+      # alcancen a éste, así que ahí va la dirección de la red privada
+      # (`MONGO_BIND_HOST=<ip de overlay>`, la misma que `MONGO_RS_MEMBER_HOST` anuncia). Sin esto,
+      # el miembro se anuncia por una dirección a la que nadie puede conectar y el `rs.add()` queda
+      # eternamente en `STARTUP`. Nunca `0.0.0.0`: mongod queda expuesto a la LAN entera.
+      - "${MONGO_BIND_HOST:-127.0.0.1}:27017:27017"
+    # Las cinco capabilities son exactamente las del arranque, no las del servicio: el entrypoint de
+    # abajo genera el keyfile como root, le hace `chmod 400` y `chown mongodb`, y recién entonces
+    # docker-entrypoint.sh baja a `mongodb` con gosu. Ya corriendo, mongod no usa ninguna.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    # mongod usa un hilo por conexión: el tope es un cortafuegos contra un fork bomb, no un límite
+    # de capacidad, así que va bien por encima de cualquier carga real.
+    pids_limit: 4096
     environment:
       # Mismas `MONGO_USER`/`MONGO_PASSWORD` con las que se conecta la plataforma (`.env`
       # de la raíz): un solo par, sin drift. Ojo: `MONGO_INITDB_*` sólo se aplica al
@@ -19,6 +43,12 @@ services:
     # Con replicación + autorización, Mongo EXIGE un keyfile para la autenticación interna entre
     # miembros. Se genera dentro del contenedor (nunca en git) y vive en su propio volumen: si se
     # regenerara, un miembro agregado después no podría hablar con éste.
+    #
+    # `MONGO_SHARDSVR` vacío (el default) deja el mongod de siempre; con `--shardsvr` puede ser un
+    # shard, y **no es opcional para eso**: `sh.addShard` sobre un replica set que no lo declara
+    # falla con un mensaje que habla de preferencias de lectura y no menciona el rol. Lo pone la
+    # conversión de topología desde el panel. El `--port` va explícito porque `--shardsvr` cambia el
+    # default a 27018, y eso movería el puerto publicado y el healthcheck sin avisar.
     entrypoint:
       - bash
       - -c
@@ -29,7 +59,16 @@ services:
         fi
         chmod 400 /etc/mongo-keyfile/keyfile
         chown mongodb:mongodb /etc/mongo-keyfile/keyfile
-        exec docker-entrypoint.sh mongod --replSet "${MONGO_REPLICA_SET:-rs0}" --keyFile /etc/mongo-keyfile/keyfile --bind_ip_all
+        exec docker-entrypoint.sh mongod --replSet "${MONGO_REPLICA_SET:-rs0}" --port 27017 --keyFile /etc/mongo-keyfile/keyfile --bind_ip_all ${MONGO_SHARDSVR:-}
+    # El más importante de los cinco. Un cierre limpio de mongod hace el último checkpoint y cierra
+    # el journal; matarlo a mitad lo deja necesitando recuperación al arrancar, y con un disco poco
+    # fiable ese es justo el momento en que las cosas salen mal. El default de docker son 10 s.
+    stop_grace_period: 60s
+    # El kernel levanta los composes UNA vez, al arrancar, y no vuelve a mirarlos: sin esta línea, un
+    # mongod que se muere a las 3 de la mañana queda muerto hasta que alguien reinicie la plataforma.
+    # `unless-stopped` y no `always`: si lo paraste a mano —por ejemplo, a mitad de un cambio de
+    # topología— tiene que quedarse parado, incluso después de reiniciar la máquina.
+    restart: unless-stopped
     volumes:
       - adc_mongo_core_data:/data/db
       - adc_mongo_core_keyfile:/etc/mongo-keyfile
@@ -54,8 +93,15 @@ services:
   # corre en cada `compose up` sin riesgo. Depende de `service_started` y no de `service_healthy`
   # a propósito — el healthcheck de mongo no puede pasar hasta que ESTE contenedor haga su trabajo.
   mongo-init:
-    image: mongo:latest
+    image: mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3
     container_name: adc-mongo-core-init
+    # Este sólo corre `mongosh` contra el servidor: no cambia dueños ni baja de usuario, así que no
+    # necesita ni las cinco de arriba.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
     depends_on:
       mongo:
         condition: service_started
@@ -67,6 +113,9 @@ services:
       # plataforma corra en el MISMO host que el contenedor (el caso de un nodo). Al sumar
       # miembros hay que reconfigurarlo a un host alcanzable desde todos: `nodo-a:27017`.
       MONGO_RS_MEMBER_HOST: ${MONGO_RS_MEMBER_HOST:-localhost:27017}
+      # Rol del nodo que levanta este stack. Decide si este init puede INICIAR un replica set o
+      # sólo esperar a que lo sumen: ver el comentario del entrypoint.
+      ADC_NODE_ROLE: ${ADC_NODE_ROLE:-primary}
     entrypoint:
       - bash
       - -c
@@ -80,11 +129,19 @@ services:
             rs.status();
             print("[adc-mongo-core-init] replica set ya iniciado");
           } catch (e) {
-            if (e.codeName === "NotYetInitialized") {
+            if (e.codeName !== "NotYetInitialized") { throw e; }
+            // Un SECUNDARIO nunca inicia un replica set. Si lo hiciera, formaría uno propio y
+            // VACÍO en paralelo al del clúster: los dos se llamarían `rs0`, los dos arrancarían
+            // sanos, y la plataforma de ese nodo escribiría contra una base que nadie replica.
+            // Eso no falla en el momento —falla el día que alguien busca un dato y no está—, así
+            // que el init se queda esperando el `rs.add()` desde el primario, que es lo que suma
+            // este mongod al replica set de verdad.
+            if ((process.env.ADC_NODE_ROLE || "primary").toLowerCase() === "secondary") {
+              print("[adc-mongo-core-init] nodo secundario: NO se inicia un replica set propio.");
+              print("[adc-mongo-core-init] Este mongod queda esperando un rs.add(\"" + process.env.MONGO_RS_MEMBER_HOST + "\") desde el primario.");
+            } else {
               rs.initiate({ _id: process.env.MONGO_REPLICA_SET, members: [{ _id: 0, host: process.env.MONGO_RS_MEMBER_HOST }] });
               print("[adc-mongo-core-init] replica set iniciado");
-            } else {
-              throw e;
             }
           }
         ' || echo "[adc-mongo-core-init] No se pudo iniciar el replica set; la plataforma no va a poder conectarse."

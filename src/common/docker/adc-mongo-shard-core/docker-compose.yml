@@ -1,0 +1,196 @@
+# Plano de control de un clúster sharded: el replica set de config servers y el router (`mongos`).
+# El trámite completo, en `docs/guides/mongo-sharding.md`.
+#
+# Archivo NUEVO y no una mutación de `adc-mongo-core`: el shard sigue siendo ese compose sin un solo
+# cambio y esto se levanta al lado, así que la migración se puede abortar sin tocar el stack que
+# corre en todos los despliegues de un nodo.
+#
+# **No agrega el shard.** `sh.addShard(...)` lo ejecuta la máquina de estados del panel de red
+# (`NetworkService`), que puede auditarlo y retomarlo después de un corte.
+#
+# Alias `mongo-shard`, **opt-in y sólo del primario** (`cluster-env.ts`).
+services:
+  # Los config servers guardan el catálogo de qué rango vive en qué shard: perderlos es perder el
+  # mapa de los datos aunque los datos estén enteros.
+  configsvr:
+    # Mismo pin que el shard (adc-mongo-core): los dos tienen que ser la misma versión de mongod, y
+    # con `latest` en ambos lados eso dependía de cuándo se bajó cada imagen.
+    image: mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3
+    container_name: adc-mongo-shard-configsvr
+    # Las cinco de siempre, del docker-entrypoint oficial: ajusta dueños de /data/configdb y baja a
+    # `mongodb` con gosu antes del `command`.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    pids_limit: 2048
+    # Sin `ports`: el catálogo sólo se habla desde `mongos`.
+    command:
+      - mongod
+      - --configsvr
+      - --replSet
+      - ${MONGO_CONFIG_REPLICA_SET:-csrs}
+      - --keyFile
+      - /etc/mongo-keyfile/keyfile
+      - --bind_ip_all
+    stop_grace_period: 60s
+    # El kernel levanta los composes sólo al arrancar, y un config server caído deja al router sin
+    # catálogo.
+    restart: unless-stopped
+    volumes:
+      - adc_mongo_shard_configsvr_data:/data/configdb
+      # EL MISMO keyfile que el shard: la autenticación interna de Mongo exige bytes idénticos en
+      # todo el clúster, y con uno propio el rechazo llega como un error que no lo menciona.
+      - adc_mongo_core_keyfile:/etc/mongo-keyfile:ro
+    healthcheck:
+      # `hello()` a secas y no `isWritablePrimary`: acá alcanza con que el proceso conteste, porque
+      # quien lo inicia como replica set es el contenedor de abajo y todavía no corrió.
+      test: ["CMD-SHELL", "mongosh --quiet --port 27019 --eval 'db.hello().ok' | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 500ms
+    networks:
+      - adc-shard-net
+      # El config server TAMBIÉN necesita alcanzar al shard: `sh.addShard` se ejecuta contra el
+      # router, pero éste lo reenvía al config server, que es quien valida el replica set. Sin esta
+      # red falla con «Could not find host matching read preference for set rs0», que no menciona
+      # que el inalcanzable es un contenedor que ni aparece en el comando.
+      - adc-mongo-core
+
+  # Inicia el replica set de config servers y crea el usuario raíz del clúster. Idempotente.
+  #
+  # `network_mode: service:configsvr` comparte el namespace de red del config server, así que
+  # `127.0.0.1:27019` es de verdad su loopback. Con `--keyFile` la autenticación está activa desde el
+  # primer arranque y la ÚNICA forma de hacer el `rs.initiate()` inicial es la excepción de
+  # localhost, que mira la IP de origen: desde un contenedor vecino la IP es la del bridge y no hay
+  # usuario con el que autenticarse, porque crearlo es lo que viene después.
+  configsvr-init:
+    image: mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3
+    container_name: adc-mongo-shard-configsvr-init
+    # Sólo corre `mongosh`: no cambia dueños ni baja de usuario.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    depends_on:
+      configsvr:
+        condition: service_started
+    environment:
+      MONGO_USER: ${MONGO_USER:-admin}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-password}
+      MONGO_CONFIG_REPLICA_SET: ${MONGO_CONFIG_REPLICA_SET:-csrs}
+      # Cómo se anuncia el config server a `mongos` y al resto del clúster. Con un solo host es
+      # `adc-mongo-shard-configsvr:27019`, que resuelve dentro de la red del compose.
+      MONGO_CONFIG_MEMBER_HOST: ${MONGO_CONFIG_MEMBER_HOST:-adc-mongo-shard-configsvr:27019}
+    network_mode: "service:configsvr"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        for i in $$(seq 1 60); do
+          mongosh "mongodb://127.0.0.1:27019/?directConnection=true" --quiet --eval 'db.hello()' >/dev/null 2>&1 && break
+          sleep 1
+        done
+        mongosh "mongodb://127.0.0.1:27019/?directConnection=true" --quiet --eval '
+          try {
+            rs.status();
+            print("[adc-mongo-shard-init] config servers ya iniciados");
+          } catch (e) {
+            if (e.codeName !== "NotYetInitialized") { throw e; }
+            rs.initiate({
+              _id: process.env.MONGO_CONFIG_REPLICA_SET,
+              configsvr: true,
+              members: [{ _id: 0, host: process.env.MONGO_CONFIG_MEMBER_HOST }]
+            });
+            print("[adc-mongo-shard-init] config servers iniciados");
+          }
+          // El usuario raíz del clúster vive en los config servers, no en el shard: son bases de
+          // usuarios distintas y la del shard no se hereda al agregarlo. Sin esto, `mongos` queda en
+          // pie y rechaza todo login, incluido el de la propia plataforma.
+          for (var i = 0; i < 60 && !db.hello().isWritablePrimary; i++) { sleep(1000); }
+          try {
+            db.getSiblingDB("admin").createUser({ user: process.env.MONGO_USER, pwd: process.env.MONGO_PASSWORD, roles: ["root"] });
+            print("[adc-mongo-shard-init] usuario raíz del clúster creado");
+          } catch (e) {
+            // La excepción de localhost alcanza para CREAR el primer usuario y para nada más, ni
+            // siquiera para contar los que hay: por eso no se pregunta si existe, se intenta. Una
+            // vez creado, la excepción se cierra y el rechazo llega como «no autorizado».
+            if (!/already exists|not authorized|Unauthorized/i.test(e.message)) { throw e; }
+            print("[adc-mongo-shard-init] usuario raíz del clúster ya existe");
+          }
+        ' || echo "[adc-mongo-shard-init] No se pudieron iniciar los config servers; mongos no va a poder arrancar."
+        exit 0
+    restart: "no"
+
+  # El router: lee el catálogo de los config servers y reparte, sin guardar nada. Por eso se lo
+  # puede bajar y volver a levantar sin consecuencias, y por eso la migración es reversible.
+  mongos:
+    image: mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3
+    container_name: adc-mongo-shard-mongos
+    # El router no guarda datos, pero pasa por el mismo docker-entrypoint que el resto.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    pids_limit: 2048
+    depends_on:
+      configsvr:
+        condition: service_healthy
+    ports:
+      # Un puerto propio, no el 27017: el shard sigue atendiendo en el suyo durante toda la
+      # migración. Que convivan es lo que permite volver atrás cambiando una variable.
+      - "127.0.0.1:${MONGO_MONGOS_PORT:-27018}:27017"
+    command:
+      - mongos
+      - --configdb
+      - ${MONGO_CONFIG_REPLICA_SET:-csrs}/${MONGO_CONFIG_MEMBER_HOST:-adc-mongo-shard-configsvr:27019}
+      - --keyFile
+      - /etc/mongo-keyfile/keyfile
+      - --bind_ip_all
+    stop_grace_period: 20s
+    # El router no guarda datos, pero si se cae la plataforma pierde su conexión a Mongo entera.
+    restart: unless-stopped
+    volumes:
+      - adc_mongo_core_keyfile:/etc/mongo-keyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --port 27017 --eval 'db.hello().msg' | grep -q isdbgrid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+      start_interval: 500ms
+    networks:
+      - adc-shard-net
+      # La red del shard, para poder alcanzar su `mongod`. Es externa porque la crea el compose de
+      # `adc-mongo-core`, que sigue siendo el dueño del dato.
+      - adc-mongo-core
+
+volumes:
+  adc_mongo_shard_configsvr_data:
+  # El keyfile lo genera y lo posee `adc-mongo-core`; declararlo externo es decir «el mismo, no otro
+  # igual». Si ese stack nunca se levantó, éste no arranca: no se puede shardear un shard que no existe.
+  adc_mongo_core_keyfile:
+    external: true
+    name: adc-mongo-core_adc_mongo_core_keyfile
+
+networks:
+  adc-shard-net:
+    driver: bridge
+  adc-mongo-core:
+    external: true
+    name: adc-mongo-core_adc-network

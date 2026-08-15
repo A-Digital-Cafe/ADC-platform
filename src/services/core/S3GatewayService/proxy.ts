@@ -38,7 +38,7 @@ export function registerS3ProxyRoutes(deps: S3ProxyDeps): void {
 				headers["access-control-allow-origin"] = "*";
 			}
 		},
-		errorCodes: { unavailable: "S3_UPSTREAM_UNAVAILABLE", writeFailed: "S3_UPSTREAM_WRITE_FAILED" },
+		errorCodes: { unavailable: "S3_UPSTREAM_UNAVAILABLE", writeFailed: "S3_UPSTREAM_WRITE_FAILED", stalled: "S3_UPSTREAM_STALLED" },
 	});
 
 	for (const method of PROXIED_METHODS) {

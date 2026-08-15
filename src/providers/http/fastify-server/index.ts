@@ -14,24 +14,34 @@ import type { IHostBasedHttpProvider, HostOptions, HttpHandler, RequestForwarder
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
 import {
+	acquireInflight,
 	ALLOWED_CORS_HEADERS,
 	ALLOWED_HTTP_METHODS,
 	applySecurityHeaders,
 	countryFromRequest,
 	createCorsOriginGuard,
+	createTrafficShaper,
 	getAllowHeader,
 	getBodyLimitBytes,
 	getCspNonce,
+	getMaxInflightBodiesPerIp,
 	getRawBodyLimitBytes,
+	hasRequestBody,
 	isAllowedHttpMethod,
 	injectCountry,
 	isCspNonceEnabled,
 	isSafeStaticPath,
+	readShapingConfig,
 	resolveTrustProxy,
 	stampCspNonce,
 	resolveSafeStaticPath,
 	warnIfCorsAllowlistEmpty,
+	warnIfNoTrustedProxies,
+	type ShapingConfig,
 } from "./security/index.js";
+import { bandwidthBudget, configureBandwidth } from "@common/utils/bandwidth-governor.ts";
+import { platformSetting } from "@common/utils/platform-settings.ts";
+import { isRealProduction } from "@common/utils/runtime-env.ts";
 
 type FastifyHandler = (req: FastifyRequest<any>, reply: FastifyReply<any>) => void | Promise<void>;
 
@@ -204,48 +214,89 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		const trustProxy = resolveTrustProxy();
 		if (trustProxy) fastifyOptions.trustProxy = trustProxy;
 
-		// Configurar HTTP/2 si está habilitado
-		if (http2Enabled) {
-			fastifyOptions.http2 = true;
-
-			// HTTP/2 requiere HTTPS. Buscar certificados o usar auto-firmados en desarrollo
-			const certPath = process.env.SSL_CERT_PATH;
-			const keyPath = process.env.SSL_KEY_PATH;
-
-			if (certPath && keyPath) {
-				try {
-					fastifyOptions.https = {
-						cert: readFileSync(certPath),
-						key: readFileSync(keyPath),
-					};
-					this.logger.logInfo("HTTP/2 habilitado con certificados SSL personalizados");
-				} catch (error: any) {
-					this.logger.logWarn(`Error leyendo certificados SSL: ${error.message}. HTTP/2 deshabilitado.`);
-					delete fastifyOptions.http2;
-				}
-			} else if (this.isDev) {
-				// En desarrollo, permitir HTTP/2 sin TLS (cleartext)
-				fastifyOptions.http2 = true;
-				fastifyOptions.http2SessionTimeout = 5000;
-				this.logger.logWarn("HTTP/2 habilitado en modo desarrollo sin TLS (no recomendado para producción)");
-			} else {
-				this.logger.logWarn("HTTP/2 requiere certificados SSL. Define SSL_CERT_PATH y SSL_KEY_PATH o desactiva HTTP2_ENABLED.");
-				delete fastifyOptions.http2;
-			}
-		}
+		// TLS y HTTP/2 dentro del proceso: camino NO recomendado. Ver `#applyInProcessTls`.
+		if (http2Enabled || process.env.SSL_CERT_PATH) this.#applyInProcessTls(fastifyOptions, http2Enabled);
 
 		this.app = Fastify(fastifyOptions);
+	}
+
+	/**
+	 * TLS y HTTP/2 **hablados por este proceso**. Sigue existiendo para un despliegue sin borde
+	 * delante, pero no es la postura de la plataforma y el arranque lo dice.
+	 *
+	 * Qué se rompe al encenderlo —los clientes internos hablan `http://` fijo, y con h2 no pasan ni
+	 * el handshake— está medido y tabulado en `docs/guides/tls-edge.md`.
+	 */
+	#applyInProcessTls(fastifyOptions: Record<string, unknown>, http2Enabled: boolean): void {
+		const certPath = process.env.SSL_CERT_PATH;
+		const keyPath = process.env.SSL_KEY_PATH;
+
+		if (certPath && keyPath) {
+			try {
+				fastifyOptions.https = {
+					cert: readFileSync(certPath),
+					key: readFileSync(keyPath),
+					// Correcto donde se respeta; en este runtime, medido, no cambia nada.
+					...(http2Enabled ? { allowHTTP1: true } : {}),
+				};
+				if (http2Enabled) fastifyOptions.http2 = true;
+				this.logger.logWarn(
+					`TLS ${http2Enabled ? "+ HTTP/2 " : ""}servido por el propio proceso (SSL_CERT_PATH). ` +
+						"La postura de la plataforma es terminar TLS en el borde y dejar este puerto plano en la red privada: " +
+						"los clientes ENTRE NODOS hablan `http://` fijo y dejan de alcanzar a este nodo. Ver docs/guides/tls-edge.md."
+				);
+				if (http2Enabled) {
+					this.logger.logWarn(
+						"Bajo HTTP/2 no hay cabeceras de conexión: el SSE de notificaciones y las rutas crudas del túnel de dispositivos " +
+							"dejan de funcionar. Y aunque va `allowHTTP1`, en este runtime NO se respeta (medido): un cliente que ofrece sólo " +
+							"HTTP/1.1 no pasa siquiera el handshake TLS, así que NINGÚN cliente interno alcanza a este nodo."
+					);
+				}
+			} catch (error: any) {
+				this.logger.logWarn(`Error leyendo certificados SSL: ${error.message}. Se sirve en claro (TLS/HTTP2 deshabilitados).`);
+			}
+			return;
+		}
+
+		if (http2Enabled && this.isDev) {
+			// HTTP/2 en claro: sólo sirve para probar el camino h2 en la máquina de quien desarrolla.
+			fastifyOptions.http2 = true;
+			fastifyOptions.http2SessionTimeout = 5000;
+			this.logger.logWarn("HTTP/2 en claro (sin TLS) en desarrollo. No es un modo de producción.");
+			return;
+		}
+
+		this.logger.logWarn(
+			http2Enabled
+				? "HTTP2_ENABLED=true sin SSL_CERT_PATH/SSL_KEY_PATH: se ignora y se sirve HTTP/1.1 en claro. Es lo esperado si el TLS lo termina el borde — en ese caso apagá la variable."
+				: "SSL_CERT_PATH definido sin SSL_KEY_PATH: falta la llave, así que se sirve en claro."
+		);
 	}
 	@OnlyKernel()
 	public async start(_kernelKey: symbol): Promise<void> {
 		await super.start(_kernelKey);
+		this.#applyConfiguredBandwidth();
 		await this.setupMiddleware();
+	}
+
+	/**
+	 * Caudal de subida con el que arranca el nodo (el panel lo cambia en caliente por
+	 * `configureBandwidth`). Se lee acá y no en el constructor porque la configuración de plataforma
+	 * la instala un servicio que corre después de construirse este provider.
+	 */
+	#applyConfiguredBandwidth(): void {
+		const raw = platformSetting("UPLOAD_BANDWIDTH_BYTES_PER_SEC") ?? process.env.UPLOAD_BANDWIDTH_BYTES_PER_SEC;
+		const parsed = Number(raw);
+		if (!raw || !Number.isFinite(parsed) || parsed <= 0) return;
+		configureBandwidth(parsed);
+		this.logger.logInfo(`Caudal de subida limitado a ${Math.round(bandwidthBudget() / 1024)} KiB/s repartidos entre las transferencias en curso.`);
 	}
 
 	private async setupMiddleware(): Promise<void> {
 		// CORS - En desarrollo permitir credenciales desde cualquier localhost; en producción real,
 		// sólo `CORS_ALLOWED_ORIGINS` (los vhosts registrados dejaron de ser allowlist).
 		warnIfCorsAllowlistEmpty(this.logger);
+		warnIfNoTrustedProxies(this.logger);
 		await this.app.register(
 			fastifyCors as any,
 			{
@@ -264,11 +315,17 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			}
 		});
 
+		this.#installInflightCap();
+
 		// Cookie parser - Necesario para setCookie/clearCookie en endpoints
 		await this.app.register(fastifyCookie);
 
 		// Body parser para formularios
 		await this.app.register(fastifyFormbody);
+
+		// Modelado del cuerpo entrante (inactividad + caudal), ANTES de los parsers: es lo que lo
+		// distingue del techo de tamaño, que sólo mira los binarios crudos.
+		this.#installTrafficShaper();
 
 		// Binarios crudos: sin bufferizar (request.body sigue siendo un Readable). Fastify no
 		// aplica `bodyLimit` a los parsers con firma de stream, así que el techo anti-abuso lo
@@ -354,6 +411,62 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		this.app.setNotFoundHandler((async (request: FastifyRequest<any>, reply: FastifyReply<any>) => {
 			await this.handleStaticRequest(request, reply);
 		}) as any);
+	}
+
+	/**
+	 * Tope de peticiones **con cuerpo** en vuelo por IP, tomado en `onRequest`: antes de leer un solo
+	 * byte, que es el único momento en que el costo todavía no se pagó.
+	 *
+	 * El lugar se libera desde `close` de la respuesta cruda y no desde `onResponse`: las respuestas
+	 * secuestradas (SSE, túnel de dispositivos, los dos gateways) nunca vuelven al framework, así que
+	 * el contador de esas IPs no bajaría nunca.
+	 */
+	#installInflightCap(): void {
+		const limit = getMaxInflightBodiesPerIp();
+		if (limit <= 0) {
+			this.logger.logWarn("Tope de peticiones con cuerpo en vuelo por IP DESACTIVADO (HTTP_MAX_INFLIGHT_BODIES_PER_IP=0).");
+			return;
+		}
+		this.app.addHook("onRequest", async (request, reply) => {
+			if (!hasRequestBody(request.headers)) return;
+			const release = acquireInflight(request.ip, limit);
+			if (!release) {
+				this.logger.logWarn(`[http] ${request.ip} llegó al tope de ${limit} cuerpos en vuelo: ${request.method} ${request.url} rechazado.`);
+				reply.header("Retry-After", "5");
+				await reply.code(429).send({
+					error: "TOO_MANY_INFLIGHT_REQUESTS",
+					message: `Demasiadas peticiones con cuerpo en curso desde esta dirección (máximo ${limit}). Esperá a que terminen las anteriores.`,
+				});
+				return reply;
+			}
+			reply.raw.on("close", release);
+		});
+	}
+
+	/**
+	 * Guardia de inactividad + reparto del caudal sobre el cuerpo entrante (`traffic-shaper.ts`). Van
+	 * juntos porque el estrangulador provoca pausas que el guardia leería como un cliente colgado.
+	 */
+	#installTrafficShaper(): void {
+		const config: ShapingConfig = readShapingConfig();
+		if (config.idleBodyTimeoutMs <= 0) {
+			this.logger.logWarn("Guardia de inactividad del cuerpo DESACTIVADO (HTTP_IDLE_BODY_TIMEOUT_MS=0): una conexión lenta puede quedar abierta para siempre.");
+		}
+		this.app.addHook("preParsing", (request, _reply, payload, done) => {
+			// Sin cuerpo no hay nada que modelar, y armarle un temporizador mataría el SSE.
+			if (!hasRequestBody(request.headers)) {
+				done(null, payload);
+				return;
+			}
+			const shaper = createTrafficShaper(request.headers, config, (detail) =>
+				this.logger.logWarn(`[http] cuerpo cortado por inactividad (${detail}): ${request.method} ${request.url} desde ${request.ip}`)
+			);
+			// `pipe` no propaga los errores del origen: un cliente que se corta dejaría el modelador
+			// abierto y el parser esperando un cuerpo que ya no viene.
+			payload.on("error", (error: Error) => shaper.destroy(error));
+			payload.pipe(shaper);
+			done(null, shaper);
+		});
 	}
 
 	/**
@@ -861,6 +974,31 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		});
 	}
 
+	/**
+	 * A qué interfaz se ata el puerto del kernel. `0.0.0.0` por compatibilidad —en desarrollo hay que
+	 * llegar desde el móvil de la LAN—, pero con un borde delante va la dirección de la overlay o
+	 * loopback: ver `ADC_BIND_HOST` en `docs/guides/tls-edge.md`.
+	 */
+	#bindHost(): string {
+		return process.env.ADC_BIND_HOST?.trim() || "0.0.0.0";
+	}
+
+	/**
+	 * Avisa cuando el puerto queda abierto al mundo en producción real. Informa en vez de negarse
+	 * porque no puede ver el firewall, y con firewall puesto la configuración es legítima.
+	 */
+	#warnIfPubliclyBound(host: string): void {
+		if (!isRealProduction() || (host !== "0.0.0.0" && host !== "::")) return;
+		const behindEdge = resolveTrustProxy() !== null;
+		this.logger.logWarn(
+			`El puerto del kernel escucha en TODAS las interfaces (ADC_BIND_HOST=${host}). ` +
+				(behindEdge
+					? "Con un borde delante, alcanzarlo directo saltea TLS, WAF y el rate limit del edge: cerralo por firewall o atalo a la dirección de la red privada."
+					: "Además no hay TRUSTED_PROXIES declarados, así que si hay un borde delante toda la gente comparte su IP y el rate limit banea a todos juntos.") +
+				" Ver docs/guides/tls-edge.md."
+		);
+	}
+
 	async listen(port: number): Promise<void> {
 		if (this.isListening) {
 			this.logger.logWarn("El servidor ya está escuchando");
@@ -870,10 +1008,12 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		try {
 			this.#installCountryInjector();
 			this.#installCspNonceSealer();
+			const host = this.#bindHost();
+			this.#warnIfPubliclyBound(host);
 			// Esperar a que el middleware esté listo antes de iniciar
-			await this.app.listen({ port, host: "0.0.0.0" });
+			await this.app.listen({ port, host });
 			this.isListening = true;
-			this.logger.logOk(`Servidor Fastify escuchando en puerto ${port}`);
+			this.logger.logOk(`Servidor Fastify escuchando en ${host}:${port}`);
 
 			if (this.registeredHosts.size > 0) {
 				this.logger.logInfo(`Hosts virtuales registrados: ${this.registeredHosts.size}`);

@@ -60,6 +60,10 @@ export class PlanSeeder {
 				$set.includedSeats = plan.includedSeats;
 				$set.minSeats = plan.minSeats;
 				$set.maxSeats = plan.maxSeats;
+				// `access` describe la naturaleza del plan (gratuito, otorgado, a cotizar),
+				// no su precio: se refresca con el resto del seed para que un despliegue ya
+				// instalado incorpore el dato sin tener que republicar la oferta.
+				$set.access = plan.access;
 			}
 			await this.#model.updateOne({ _id }, { $set });
 		}

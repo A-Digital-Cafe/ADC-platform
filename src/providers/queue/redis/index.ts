@@ -177,12 +177,21 @@ export default class RedisProvider extends BaseProvider {
 	}
 
 	/**
-	 * `SET key value NX EX <ttl>`: escribe **sólo** si la clave no existe, en una única operación
+	 * `SET key value NX [EX <ttl>]`: escribe **sólo** si la clave no existe, en una única operación
 	 * del servidor. `exists()` + `setex()` no es equivalente (dos viajes, con carrera entre medio).
+	 *
+	 * Sin `ttlSeconds` la clave **no vence**, que es lo que necesita cualquier valor que se crea una
+	 * vez y tiene que durar (la clave de firma del proveedor OIDC, por ejemplo) pero que igual tiene
+	 * que resolver quién lo crea cuando arrancan varios nodos a la vez. Antes el TTL era obligatorio
+	 * y pasar `0` fallaba con `ERR invalid expire time`, así que ese caso no tenía forma de escribirse.
+	 *
 	 * @returns `true` si esta llamada creó la clave; `false` si ya existía.
 	 */
-	async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-		const result = await this.client.set(this._k(key), value, "NX", "EX", String(ttlSeconds));
+	async setIfAbsent(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
+		const finalKey = this._k(key);
+		const result = ttlSeconds && ttlSeconds > 0
+			? await this.client.set(finalKey, value, "NX", "EX", String(ttlSeconds))
+			: await this.client.set(finalKey, value, "NX");
 		return result === "OK";
 	}
 

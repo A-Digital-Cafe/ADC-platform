@@ -96,6 +96,7 @@ export class PlanWriter {
 						memberFeatures: mergeOptionalFeatures(current.memberFeatures, item.memberFeatures, true),
 						expansionFeatures: mergeOptionalFeatures(current.expansionFeatures, item.expansionFeatures, true),
 						price: item.price ?? current.price,
+						access: item.access ?? current.access,
 						includedSeats: item.includedSeats ?? current.includedSeats,
 						minSeats: item.minSeats ?? current.minSeats,
 						maxSeats: item.maxSeats ?? current.maxSeats,
@@ -129,6 +130,7 @@ export class PlanWriter {
 			{ _id },
 			{
 				$set: {
+					access: composed.access,
 					includedSeats: composed.includedSeats,
 					minSeats: composed.minSeats,
 					maxSeats: composed.maxSeats,

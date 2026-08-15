@@ -1,9 +1,39 @@
 services:
   rabbitmq:
-    image: rabbitmq:3-management
+    # Versión explícita + digest, por el mismo motivo que en redis: `3-management` flotaba y el
+    # motor quedaba congelado en lo que se bajó una vez.
+    #
+    # ⚠️ **3.13 ya no recibe parches de la comunidad.** Se pinea acá para dejar de flotar, no porque
+    # esté al día: subir a 4.x es una migración con habilitación previa de feature flags y va aparte
+    # (ver PLAN-scaling.md). Pinear primero es lo que permite que el escaneo de imágenes de la CI
+    # reporte algo estable en vez de un blanco móvil.
+    image: rabbitmq:3.13.7-management@sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
+    # Mismo criterio que redis: el entrypoint arranca como root, ajusta dueños de /var/lib/rabbitmq
+    # y baja a `rabbitmq` con gosu. Nada más del set default hace falta.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    # La VM de Erlang levanta un hilo por scheduler más los de IO; el tope es contra un fork bomb,
+    # no contra el uso normal, así que va holgado.
+    pids_limit: 2048
+    # Cerrar un broker es esperar a que los consumidores suelten sus mensajes y sincronizar las
+    # colas durables a disco. Con los 10 s de default, un SIGKILL a mitad deja mensajes sin
+    # confirmar que se reentregan (o se pierden) en el arranque siguiente.
+    stop_grace_period: 60s
+    # El kernel sólo levanta los composes al arrancar, así que sin esto un broker caído deja los
+    # trabajos encolados sin consumidor hasta el próximo reinicio de la plataforma. `unless-stopped`
+    # para que un parate deliberado siga siendo un parate.
+    restart: unless-stopped
     environment:
       # Defaults de desarrollo; en un despliegue real se definen en el `.env` de la raíz
       # junto con `RABBITMQ_URL`, que es de donde las lee la plataforma. Igual que en Mongo,

@@ -1,5 +1,6 @@
 import { SecurityScopes } from "./security/permissions.js";
 import { ModulesScopes } from "./modules/permissions.js";
+import { NetworkScopes } from "./network/permissions.js";
 import { EmailScopes } from "./email/permissions.js";
 import { PlanScopes } from "./plans/permissions.js";
 
@@ -106,6 +107,15 @@ const MODULES_SCOPES: ScopeDef[] = [
 	{ key: "logs", value: ModulesScopes.LOGS },
 ];
 
+/** Network scopes — alineados con NetworkScopes en types/network/permissions.ts */
+const NETWORK_SCOPES: ScopeDef[] = [
+	{ key: "nodes", value: NetworkScopes.NODES },
+	{ key: "topology", value: NetworkScopes.TOPOLOGY },
+	{ key: "vpn", value: NetworkScopes.VPN },
+	{ key: "integrity", value: NetworkScopes.INTEGRITY },
+	{ key: "lifecycle", value: NetworkScopes.LIFECYCLE },
+];
+
 /** Email scopes — alineados con EmailScopes en types/email/permissions.ts (sin el bit SELF, que es modificador) */
 const EMAIL_SCOPES: ScopeDef[] = [
 	{ key: "messages", value: EmailScopes.MESSAGES },
@@ -134,6 +144,7 @@ export const RESOURCES: ResourceDef[] = [
 	{ id: "email", label: "resources.email", scopes: EMAIL_SCOPES },
 	{ id: "security", label: "resources.security", scopes: SECURITY_SCOPES, globalOnly: true },
 	{ id: "modules", label: "resources.modules", scopes: MODULES_SCOPES, globalOnly: true },
+	{ id: "network", label: "resources.network", scopes: NETWORK_SCOPES, globalOnly: true },
 	{ id: "plans", label: "resources.plans", scopes: PLANS_SCOPES, globalOnly: true },
 ];
 

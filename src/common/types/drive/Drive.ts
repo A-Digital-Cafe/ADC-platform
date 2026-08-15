@@ -130,6 +130,22 @@ export interface DriveFile {
 	 * ninguno), pero un archivo cuyo hash real está bloqueado se retira igual.
 	 */
 	verifiedSha256?: string | null;
+	/**
+	 * A qué contenido pertenece {@link verifiedSha256}.
+	 *
+	 * Sin esto, comparar el hash de hoy contra el guardado daría un falso positivo cada vez que
+	 * alguien sube una revisión: el contenido cambió a propósito y el hash tiene que cambiar. Con la
+	 * referencia al attachment, la comparación sólo se hace cuando se trata **del mismo objeto**, y
+	 * una revisión simplemente vuelve a empezar la verificación.
+	 */
+	verifiedAttachmentId?: string | null;
+	/**
+	 * El contenido cambió **sin que nadie lo cambiara**: el hash real dejó de coincidir con el que
+	 * este mismo verificador calculó antes sobre el mismo objeto. Es el único síntoma de un bit
+	 * flip en disco o de una escritura perdida por el almacenamiento, y no se descubre de ninguna
+	 * otra forma. No se repara solo: se marca, se avisa y queda para mirar.
+	 */
+	integrityFailedAt?: Date | null;
 	createdAt: Date;
 	updatedAt: Date;
 }

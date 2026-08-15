@@ -8,6 +8,11 @@
  *
  * Es best-effort sobre patrones conocidos, no un DLP: sirve para que un secreto
  * no quede en un buffer/registro por descuido, no para habilitar loguear secretos.
+ *
+ * Cubre todo el grupo `secrets` del manifiesto de entorno, sea por el nombre (`…PASSWORD`,
+ * `…SECRET`, `…TOKEN`, `…_KEY`, `…PEPPER`) o por la forma (`RABBITMQ_URL`, con credenciales
+ * adentro). Quedan **sin** redactar `MONGO_USER` y `RABBITMQ_USER`: taparlos no protege gran cosa y
+ * sumar `user` a las reglas se comería `userId=…`, que es con lo que se diagnostica.
  */
 
 /** Marcador único: hace obvio en la lectura que ahí había algo y que se sacó. */
@@ -21,13 +26,23 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
 	[/([a-z][a-z0-9+.-]{0,15}:\/\/)[^\s/@:]*:[^\s/@]*@/gi, `$1${MARK}@`],
 	// Authorization: Bearer <token>
 	[/\bBearer\s+[\w.\-+/=]+/gi, `Bearer ${MARK}`],
+	// Cualquier otro esquema, anclado al nombre del header. Hace falta porque el esquema no siempre es
+	// `Bearer`: el plano de control de la red privada, por ejemplo, manda `Authorization: Token <pat>`.
+	// Va anclado a `authorization` y NO como regla suelta `\bToken\s+\S+` a propósito: "token" es una
+	// palabra corriente en los mensajes de este repo ("el token no es válido", "token de alta"), y una
+	// regla suelta convertiría medio log en `[REDACTED]` — que es la forma más rápida de que alguien
+	// desactive la redacción entera.
+	[/\b(authorization\s*[:=]\s*)(bearer|token|basic|apikey)\s+[\w.\-+/=]+/gi, `$1$2 ${MARK}`],
 	// JWT sueltos: el header base64url de `{"alg"...` siempre empieza con `eyJ`.
 	[/\beyJ[\w-]*\.[\w-]+\.[\w-]*/g, MARK],
 	// Asignaciones `clave=valor` (query strings, DSNs, dumps de env, líneas de log).
 	// El prefijo acotado cubre las variantes compuestas (`DB_PASSWORD`, `mongoPass`, `x-api-key`)
 	// y se preserva el separador original. Dos reglas chicas en vez de una alternancia gigante:
 	// más legible y sin backtracking anidado.
-	[/([\w.-]{0,40}(?:pass|pwd|secret)\w{0,10})(\s*[=:]\s*)(?:"[^"]*"|[^\s&,;)"]+)/gi, `$1$2${MARK}`],
+	// `pepper` está en la lista porque `BAN_HASH_PEPPER` no cae en ninguna de las otras: no termina en
+	// `_KEY` ni contiene `pass`/`secret`/`token`, así que era el único secreto compartido del
+	// manifiesto que se escribía entero en un log.
+	[/([\w.-]{0,40}(?:pass|pwd|secret|pepper)\w{0,10})(\s*[=:]\s*)(?:"[^"]*"|[^\s&,;)"]+)/gi, `$1$2${MARK}`],
 	[/([\w.-]{0,40}(?:token|apikey|[_-]key))(\s*[=:]\s*)(?:"[^"]*"|[^\s&,;)"]+)/gi, `$1$2${MARK}`],
 	// Códigos y tokens que viajan por query string (OAuth y compañía).
 	[/([?&](?:code|state|refresh_token|id_token|access_token)=)[^\s&]+/gi, `$1${MARK}`],

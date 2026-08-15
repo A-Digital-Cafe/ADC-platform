@@ -120,6 +120,14 @@
       "name": "@adc-platform/modules-manager-service",
       "version": "1.0.0",
     },
+    "presets/adc-network/apps/adc-network": {
+      "name": "@adc-platform/adc-network",
+      "version": "1.0.0",
+    },
+    "presets/adc-network/services/NetworkService": {
+      "name": "@adc-platform/network-service",
+      "version": "1.0.0",
+    },
     "presets/adc-notifications/apps/adc-notifications": {
       "name": "@adc-platform/adc-notifications",
       "version": "1.0.0",
@@ -352,6 +360,10 @@
       "name": "operations-service",
       "version": "1.0.0",
     },
+    "src/services/core/PlatformSettingsService": {
+      "name": "platform-settings-service",
+      "version": "1.0.0",
+    },
     "src/services/core/S3GatewayService": {
       "name": "@adc-platform/s3-gateway-service",
       "version": "1.0.0",
@@ -445,6 +457,8 @@
 
     "@adc-platform/adc-modules-manager": ["@adc-platform/adc-modules-manager@workspace:presets/adc-modules-manager/apps/adc-modules-manager"],
 
+    "@adc-platform/adc-network": ["@adc-platform/adc-network@workspace:presets/adc-network/apps/adc-network"],
+
     "@adc-platform/adc-notifications": ["@adc-platform/adc-notifications@workspace:presets/adc-notifications/apps/adc-notifications"],
 
     "@adc-platform/adc-org-requests": ["@adc-platform/adc-org-requests@workspace:presets/org-requests/apps/adc-org-requests"],
@@ -492,6 +506,8 @@
     "@adc-platform/modules-manager-service": ["@adc-platform/modules-manager-service@workspace:presets/adc-modules-manager/services/ModulesManagerService"],
 
     "@adc-platform/my-account": ["@adc-platform/my-account@workspace:presets/my-account/apps/my-account"],
+
+    "@adc-platform/network-service": ["@adc-platform/network-service@workspace:presets/adc-network/services/NetworkService"],
 
     "@adc-platform/notification-service": ["@adc-platform/notification-service@workspace:presets/adc-notifications/services/NotificationService"],
 
@@ -2174,6 +2190,8 @@
     "pino-std-serializers": ["pino-std-serializers@7.0.0", "", {}, "sha512-e906FRY0+tV27iq4juKzSYPbUj2do2X2JX4EzSca1631EB2QJQUqGbDuERal7LCtOpxl6x3+nvo9NPZcmjkiFA=="],
 
     "plan-service": ["plan-service@workspace:src/services/data/PlanService"],
+
+    "platform-settings-service": ["platform-settings-service@workspace:src/services/core/PlatformSettingsService"],
 
     "postcss": ["postcss@8.5.26", "", { "dependencies": { "nanoid": "^3.3.17", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ=="],
 

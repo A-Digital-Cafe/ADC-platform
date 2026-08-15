@@ -10,6 +10,7 @@ import { portEntries, loadPorts, shotEntries } from "./ports.mjs";
 import { captureScreenshot, chromeArgs, connectCDP, launchChromeChecked, printPageErrors, waitForSelector } from "./cdp.mjs";
 import { resolveViewport, applyViewport } from "./viewport.mjs";
 import { loginSession } from "./auth.mjs";
+import { foreignActivity, lastActivity, lockHolder, sessionId } from "./lock.mjs";
 
 async function curlStatus(port) {
 	try {
@@ -212,6 +213,12 @@ export async function logs(target, lines) {
 // ---- up: launch the platform in the background --------------------------
 // Single documented entry point, so the log lands where `logs` can find it.
 export async function up(seconds) {
+	// Un kernel ya sirviendo es el caso normal cuando hay dos sesiones: arrancar
+	// otro deja dos peleando por :3000 y el segundo sirve nada. Se reusa el que hay.
+	if (typeof (await curlStatus(3000)) === "number") {
+		console.log("== up == el gateway ya está sirviendo en :3000, se reusa (no se lanza otro kernel)");
+		return ready(undefined, seconds);
+	}
 	const cwd = repoRoot();
 	const dir = path.join(cwd, "temp", "logs");
 	mkdirSync(dir, { recursive: true });
@@ -226,7 +233,17 @@ export async function up(seconds) {
 // ---- stop ---------------------------------------------------------------
 // MUST run from here, not from a shell: spawned as node children, pkill gets a
 // clean argv and excludes itself (a shell `pkill -f` would match its own argv).
-export async function stop() {
+export async function stop(opts = {}) {
+	// Otra sesión trabajando = no se apaga nada. Se puede afirmar sólo con
+	// ADC_DRIVER_SESSION en ambos lados; sin eso, `foreign` es null y esto no aplica.
+	const foreign = opts.force ? null : foreignActivity();
+	if (foreign) {
+		const age = Math.round((Date.now() - foreign.at) / 1000);
+		throw new Error(
+			`otra sesión (${foreign.session}) usó el entorno hace ${age}s con "${foreign.command}": no se detiene nada. ` +
+				"Esperá a que termine, o forzá con `stop --force` si sabés que quedó colgado."
+		);
+	}
 	// Must cover the Stencil side (watchers, worker threads, MF broker/dev-worker) and the headless
 	// Chrome too: survivors keep recompiling, and a leaked Chrome holding DBG_PORT makes the next
 	// run attach to it and screenshot stale code.
@@ -399,4 +416,36 @@ export async function login(who, url, name, opts = {}) {
 		}
 		chrome.kill("SIGKILL");
 	}
+}
+
+// ---- status --------------------------------------------------------------
+// Qué hay levantado y quién está usando el entorno. Es la primera llamada
+// razonable de una sesión que se suma a un repo compartido: dice si hace falta
+// `up`, si conviene esperar y si `stop` va a estar permitido.
+export async function status() {
+	const gateway = await curlStatus(3000);
+	const serving = typeof gateway === "number";
+	console.log(`gateway :3000        ${serving ? `sirviendo (${gateway})` : `caído (${gateway})`}`);
+
+	if (serving) {
+		const ports = portEntries();
+		let ok = 0;
+		for (const [, p] of ports) if (typeof (await curlStatus(p)) === "number") ok++;
+		console.log(`apps                 ${ok}/${ports.length} puertos respondiendo`);
+	}
+
+	const holder = lockHolder();
+	console.log(`lock                 ${holder ? `TOMADO por ${holder.command} (${holder.session ? `sesión ${holder.session}` : `pid ${holder.pid}`})` : "libre"}`);
+
+	const last = lastActivity();
+	if (last) {
+		const age = Math.round((Date.now() - last.at) / 1000);
+		console.log(`última actividad     ${last.command} hace ${age}s (${last.session ? `sesión ${last.session}` : `pid ${last.pid}`})`);
+	}
+
+	const me = sessionId();
+	console.log(`mi sesión            ${me ?? "(sin ADC_DRIVER_SESSION: stop no puede protegerte de otra sesión)"}`);
+	const foreign = foreignActivity();
+	if (foreign) console.log(`⚠ otra sesión (${foreign.session}) está trabajando: stop va a rechazar salvo --force`);
+	return serving;
 }

@@ -26,7 +26,13 @@ export const BUG_BOUNTY_SEVERITIES: readonly BugBountySeverity[] = ["low", "medi
 
 /** Una variante de recompensa: tier de pago durante N días. */
 interface BugBountyReward {
-	tier: Exclude<AccountTier, "free">;
+	/**
+	 * Sólo tiers **de pago**: la recompensa es un plan que se regala por un tiempo.
+	 * `vip` queda afuera aunque sea un tier superior a `free` — se otorga por
+	 * pertenencia a la comunidad y no vence, así que no es algo que se pueda dar
+	 * "por 10 días" ni tiene sentido como premio.
+	 */
+	tier: Exclude<AccountTier, "free" | "vip">;
 	/** Duración del upgrade en días (mínimo garantizado; el admin puede ampliar). */
 	days: number;
 }

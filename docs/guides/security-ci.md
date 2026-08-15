@@ -16,7 +16,24 @@ presets). La lógica vive una sola vez en el repo público
 | Semgrep (`--config auto`) | SAST | PR aprobado · periódico · manual |
 | OSV-Scanner | Vulns de deps + licencias (alt. libre a FOSSA) | PR aprobado · periódico · manual |
 | Trivy (`config`) | Misconfig Docker (solo si el repo tiene Dockerfile/compose) | PR aprobado · periódico · manual |
+| Trivy (`image`) | CVEs de SO y paquetes de cada imagen declarada en un compose | **solo periódico/manual**, report-only |
 | OSSF Scorecard | Prácticas de seguridad del repo | **solo periódico/manual** |
+
+Los dos modos de Trivy no son intercambiables y conviene tener claro por qué hay dos:
+`config` lee los Dockerfiles y los composes —rápido, depende del cambio, por eso gatea el PR—,
+mientras que `image` **baja cada imagen y mira lo que realmente corre adentro**. Sin el segundo, la
+suite daba verde con la base de datos nueve meses atrasada: ni `config` ni OSV (que lee lockfiles del
+código) miran una imagen. Va en el escaneo periódico y sin gate porque cuesta minutos y gigas, y
+porque una CVE de una imagen base no la introdujo el PR que la encontró.
+
+Las imágenes se sacan de los `image:` de los composes del repo, resolviendo `${VAR:-default}` y
+descartando lo que quede sin resolver. Los servicios con `build:` no aparecen: de esos ya se ocupa
+`config`. **Esto es lo que le da sentido a pinear por digest**: con tags flotantes el escaneo
+apuntaría cada semana a algo distinto, y el reporte no sería comparable con el de la semana pasada.
+
+Semgrep y OSV-Scanner van **con versión fija**, y el binario de OSV además se verifica por SHA-256
+contra un valor escrito en el workflow. Bajar el checksum en la misma corrida no verificaría nada:
+quien pudiera cambiar el binario cambiaría también el archivo de checksums que está al lado.
 
 ## Triggers
 

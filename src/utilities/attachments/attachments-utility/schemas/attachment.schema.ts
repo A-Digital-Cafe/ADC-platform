@@ -56,6 +56,9 @@ function buildAttachmentSchema(connection: Connection): Schema<AttachmentDoc> {
 
 	schema.index({ basePath: 1, subPath: 1, ownerId: 1 });
 	schema.index({ status: 1, createdAt: 1 });
+	// Subidas en vuelo por sujeto: lo consulta cada presign para el tope de concurrencia, así que sin
+	// este índice ese contador recorrería toda la colección de adjuntos en cada firma.
+	schema.index({ uploadedBy: 1, orgId: 1, status: 1, createdAt: 1 });
 
 	return schema;
 }

@@ -4,9 +4,11 @@ import { PMScopes, PM_RESOURCE_NAME } from "@common/types/project-manager/permis
 import { StorageScopes, STORAGE_RESOURCE_NAME } from "@common/types/storage/permissions.ts";
 import { SecurityScopes, SECURITY_RESOURCE_NAME } from "@common/types/security/permissions.ts";
 import { ModulesScopes, MODULES_RESOURCE_NAME } from "@common/types/modules/permissions.ts";
+import { NetworkScopes, NETWORK_RESOURCE_NAME } from "@common/types/network/permissions.ts";
 import { EmailScopes, EMAIL_RESOURCE_NAME } from "@common/types/email/permissions.ts";
 import { PlanScopes, PLANS_RESOURCE_NAME } from "@common/types/plans/permissions.ts";
 import { BaseRole, RoleHierarchy } from "@common/types/identity/Role.ts";
+import type { AccountTier } from "@common/types/tiers.ts";
 import { COMMUNITY_SCOPES_BITS, isGlobalOnlyResource } from "@common/types/resources.ts";
 
 export enum SystemRole {
@@ -42,9 +44,19 @@ const BASE_MANAGEMENT_ROLES: Array<BaseRole> = [
 	},
 	{
 		name: SystemRole.NETWORK_MANAGER,
-		description: "Gestor de infraestructura de red (regiones de despliegue)",
+		// Dos alcances distintos y dos pantallas distintas, a propósito: las REGIONES de Identity son
+		// backends de datos POR ORGANIZACIÓN (dónde se guarda cada tenant), y los NODOS son procesos
+		// del kernel corriendo sobre hierro. Se parecen sólo en el nombre; mezclarlas en una sola
+		// pantalla haría creer que apagar un nodo mueve los datos de una organización.
+		description: "Gestor de infraestructura: nodos del clúster, topología de datos y red privada; y regiones de despliegue de Identity",
 		hierarchy: RoleHierarchy.MANAGER,
-		permissions: [{ resource: RESOURCE_NAME, action: CRUDXAction.CRUD, scope: IdentityScopes.REGIONS }],
+		permissions: [
+			{ resource: RESOURCE_NAME, action: CRUDXAction.CRUD, scope: IdentityScopes.REGIONS },
+			// Global-only. ALL y no CRUD porque las acciones que justifican el rol —apagar un nodo,
+			// convertir la topología de Mongo, rotar una clave de alta de la overlay— son EXECUTE:
+			// sin ese bit el rol puede mirar la infraestructura y no operarla.
+			{ resource: NETWORK_RESOURCE_NAME, action: CRUDXAction.ALL, scope: NetworkScopes.ALL },
+		],
 	},
 	{
 		name: SystemRole.SECURITY_MANAGER,
@@ -80,7 +92,14 @@ const BASE_MANAGEMENT_ROLES: Array<BaseRole> = [
 		// Global-only: la gestión de módulos es de plataforma. ALL incluye EXECUTE
 		// (start/stop/reload, git pull, anuncios broadcast) y el bit LOGS.
 		// Admin/SYSTEM lo cubren por el comodín `*` con scope 0xffff.
-		permissions: [{ resource: MODULES_RESOURCE_NAME, action: CRUDXAction.ALL, scope: ModulesScopes.ALL }],
+		permissions: [
+			{ resource: MODULES_RESOURCE_NAME, action: CRUDXAction.ALL, scope: ModulesScopes.ALL },
+			// Sólo LEER la lista de nodos, y sólo por el selector de las tabs de Logs y Recursos:
+			// esos dos paneles muestran datos DE UN PROCESO y sin la lista no se puede elegir cuál.
+			// Es la única esquirla que dejó mudar los nodos a su propio recurso, y es READ sobre
+			// nombres de máquina: no habilita renombrar, ni la topología, ni apagar nada.
+			{ resource: NETWORK_RESOURCE_NAME, action: CRUDXAction.READ, scope: NetworkScopes.NODES },
+		],
 	},
 	{
 		name: SystemRole.PROJECT_MANAGER,
@@ -149,3 +168,16 @@ export const PREDEFINED_ROLES: Array<BaseRole> = [
 		],
 	},
 ];
+
+/**
+ * Roles que otorgan un tier de cuenta **sin pagar**. Los sincroniza el login de
+ * Discord desde el `discordRoleMap` del guild, así que el tier sigue a la
+ * pertenencia real: quien pierde el rol allá lo pierde acá en el próximo login.
+ *
+ * El tier otorgado es un **piso**, nunca un techo: `TierResolver` se queda con el
+ * mayor entre éste y el del plan contratado (ver `maxTier`).
+ */
+export const ROLE_GRANTED_TIERS: ReadonlyMap<string, AccountTier> = new Map([
+	[SystemRole.DISCORD_VIP as string, "vip" as AccountTier],
+	[SystemRole.DISCORD_NITRO_BOOSTER as string, "vip" as AccountTier],
+]);

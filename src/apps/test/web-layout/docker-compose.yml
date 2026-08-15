@@ -2,8 +2,21 @@ version: '3.8'
 
 services:
   mongodb:
-    image: mongo:latest
+    # Mismo pin que el Mongo de la plataforma. Es una app de prueba, pero la imagen es la misma y el
+    # escaneo de imágenes de la CI la mira igual: un `latest` acá ensucia el reporte de todos.
+    image: mongo:8.2.12@sha256:e0ce8c35124d4a9f9785532d1f268f39e9728ffa1cb38f46fa482436424c4bd3
     container_name: adc-layout-mongo
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    pids_limit: 1024
     ports:
       - "127.0.0.1:27018:27017"
     environment:

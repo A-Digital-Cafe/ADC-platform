@@ -21,6 +21,12 @@ temp/
 .env.*
 !.env.example
 
+# Entorno partido por concern (ver env/README.md). Sólo se versionan los `.example`:
+# `env/secrets.env` y `env/host.env` además se escriben 0600.
+env/*
+!env/*.example
+!env/README.md
+
 # IDE
 .vscode/
 .idea/

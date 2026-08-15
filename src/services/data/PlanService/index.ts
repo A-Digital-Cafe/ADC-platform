@@ -7,6 +7,8 @@ import type { EntitlementsProvider, FeatureDef, ModulePlanDefaults, OrgPlanSnaps
 import type { IPlanService } from "@common/types/plans/IPlanService.ts";
 import { PlanError } from "@common/types/custom-errors/PlanError.ts";
 import type { IClusterService } from "@common/types/cluster/ICluster.ts";
+import type { IPlatformSettingsService } from "@common/types/platform/IPlatformSettingsService.ts";
+import type { CapacityPolicy } from "./dao/CapacityGuard.ts";
 import { buildPlanManagers, bootstrapPlanData, createPlanModels, type PlanManagers } from "./dao/wiring.ts";
 import type { EntitlementsManager } from "./dao/EntitlementsManager.ts";
 import { entitlementsProviderOf, overridesAdminOf } from "./dao/adapters.ts";
@@ -47,6 +49,13 @@ export default class PlanService extends BaseService implements IPlanService {
 				getRole: (roleId) => internal.roles.getRole(roleId),
 			},
 			seatSource: { getAllUsers: (token, orgId, opts) => internal.users.getAllUsers(token, orgId, opts) },
+			// Cuántas cuentas hay por tier: es lo comprometido, y con eso el control de
+			// capacidad decide si todavía se puede vender un plan más.
+			counts: {
+				countUsersByTier: () => internal.users.countUsersByTier(),
+				countOrgsByTier: () => internal.organizations.countOrganizationsByTier(),
+			},
+			capacityConfig: (this.config?.private as Record<string, unknown> | undefined)?.capacity as Record<string, unknown> | undefined,
 			logger: this.logger,
 			invalidate: (orgId) => this.invalidate(orgId),
 		});
@@ -97,6 +106,49 @@ export default class PlanService extends BaseService implements IPlanService {
 	/** Precio de lista de un plan; `null` si no existe o no está a la venta. */
 	planPrice(key: string): Promise<PlanPrice | null> {
 		return this.daos.catalog.planPrice(key);
+	}
+
+	/**
+	 * ¿Queda disco para vender este plan? Lo consulta el catálogo público (para no
+	 * ofrecer lo que no se puede sostener) y el checkout (para no cobrarlo).
+	 *
+	 * Sin medición disponible devuelve `available: true`: un control de capacidad
+	 * que no puede medir no debe cortar la facturación.
+	 */
+	canOfferPlan(key: string, seats = 1): Promise<{ available: boolean; reason?: string }> {
+		const [axis, tier] = key.split(":");
+		if (axis !== "user" && axis !== "org") return Promise.resolve({ available: true });
+		return this.daos.capacity.canOffer(axis, tier, seats);
+	}
+
+	/** Estado de capacidad del nodo, con la política vigente (panel y diagnóstico). */
+	async capacityReport() {
+		return { ...(await this.daos.capacity.report()), policy: this.daos.capacity.policy };
+	}
+
+	/**
+	 * Cambia la política de capacidad: cuánto del disco se reserva, cuánto se
+	 * sobrevende y con cuánto libre se deja de vender.
+	 *
+	 * Es **del clúster**: se persiste en `platform_settings` y se aplica en caliente
+	 * acá; los otros nodos la toman al reiniciar. La capacidad en sí no se toca desde
+	 * acá — cada nodo tiene su disco, medido o declarado en su `env/`.
+	 */
+	async setCapacityPolicy(policy: Partial<CapacityPolicy>, actor: string | undefined): Promise<CapacityPolicy> {
+		const applied = this.daos.capacity.setPolicy(policy);
+		const settings = this.tryGetMyService<IPlatformSettingsService>("PlatformSettingsService");
+		if (settings) {
+			await settings.setSetting("ADC_STORAGE_HEADROOM_PCT", String(applied.headroomPct), actor);
+			await settings.setSetting("ADC_STORAGE_OVERSUBSCRIPTION", String(applied.oversubscription), actor);
+			await settings.setSetting("ADC_STORAGE_MIN_FREE_PCT", String(applied.minFreePct), actor);
+		} else {
+			this.logger.logWarn("[plans] política de capacidad aplicada sólo en memoria: sin PlatformSettingsService no sobrevive al reinicio");
+		}
+		this.logger.logWarn(
+			`[plans] política de capacidad: margen ${applied.headroomPct}%, sobreventa x${applied.oversubscription}, ` +
+				`mínimo libre ${applied.minFreePct}% — cambiada por '${actor ?? "desconocido"}'`
+		);
+		return applied;
 	}
 
 	/**

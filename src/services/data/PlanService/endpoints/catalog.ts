@@ -33,19 +33,31 @@ export class CatalogEndpoints {
 		},
 	})
 	static async catalog(_ctx: EndpointCtx) {
-		const catalog = CatalogEndpoints.service.daos.catalog;
+		const { catalog, capacity } = CatalogEndpoints.service.daos;
 		const features = catalog.listFeatures().filter((f) => f.salesVisible);
 		const visible = new Set(features.map((f) => f.key));
 
-		const plans = (await catalog.listPlans()).map((p) => ({
-			axis: p.axis,
-			tier: p.tier,
-			// El precio es público: la página de precios tiene que mostrarlo a un
-			// visitante sin sesión. Ausente = plan gratuito o a medida.
-			price: p.price,
-			includedSeats: p.includedSeats,
-			features: Object.fromEntries(Object.entries(p.features).filter(([key]) => visible.has(key))),
-		}));
+		const plans = await Promise.all(
+			(await catalog.listPlans()).map(async (p) => {
+				// La disponibilidad se resuelve acá y no en el cliente: es la MISMA
+				// respuesta que da el checkout, así que la página no puede ofrecer algo
+				// que la compra vaya a rechazar.
+				const verdict = p.price ? await capacity.canOffer(p.axis, p.tier, p.includedSeats ?? 1) : { available: true };
+				return {
+					axis: p.axis,
+					tier: p.tier,
+					// El precio es público: la página de precios tiene que mostrarlo a un
+					// visitante sin sesión. Ausente = no está a la venta, y `access` dice por qué
+					// (gratuito, otorgado, a cotizar) o, si tampoco está, que aún no tiene precio.
+					price: p.price,
+					access: p.access,
+					includedSeats: p.includedSeats,
+					available: verdict.available,
+					unavailableReason: verdict.reason,
+					features: Object.fromEntries(Object.entries(p.features).filter(([key]) => visible.has(key))),
+				};
+			})
+		);
 
 		return { features, plans };
 	}

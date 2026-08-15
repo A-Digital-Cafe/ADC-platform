@@ -28,8 +28,15 @@ README enruta por categoría, no re-lista cada archivo).
   [desktop-clients](guides/desktop-clients.md) (clientes que se publican en npm),
   [discord-oauth](guides/discord-oauth.md), [email-dns-setup](guides/email-dns-setup.md),
   [github-deploy-auth](guides/github-deploy-auth.md) (device flow para deploys y clones de presets),
+  [mongo-sharding](guides/mongo-sharding.md) (convertir el replica set en clúster sharded, y la
+  verificación de integridad de la infraestructura),
   [name-policy](guides/name-policy.md) (alias de correo y usernames prohibidos),
-  [ports](guides/ports.csv), [security-ci](guides/security-ci.md).
+  [network-vpn](guides/network-vpn.md) (red privada entre nodos y alta de una máquina nueva),
+  [ports](guides/ports.csv), [security-ci](guides/security-ci.md),
+  [tls-edge](guides/tls-edge.md) (dónde se termina el TLS y por qué el puerto del kernel va plano
+  en la red privada),
+  [storage-replication](guides/storage-replication.md) (cambiar cuántas copias guarda el
+  almacenamiento de objetos, y cuánto entra con cada factor).
 
 > La operación fiscal (monotributo/ARCA, facturación electrónica) y el modelo de precios
 > se documentan aparte, fuera de este repositorio: describen el flujo contable de quien

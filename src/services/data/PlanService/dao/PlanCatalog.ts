@@ -1,5 +1,7 @@
 import type { Model } from "mongoose";
 import { planKey, type FeatureDef, type PlanAxis, type PlanDefinition, type PlanFeatureValue, type PlanPrice } from "@common/types/plans/index.ts";
+import { ACCOUNT_TIERS } from "@common/types/tiers.ts";
+import { ORGANIZATION_TIERS } from "@common/types/identity/Organization.ts";
 import { SEED_FEATURES, type PlanDefinitionDoc } from "../domain/index.ts";
 
 const CACHE_TTL_MS = 30_000;
@@ -46,9 +48,15 @@ export class PlanCatalog {
 
 	// ─── Planes ──────────────────────────────────────────────────────────────
 
-	/** Todos los planes, cacheados (TTL 30 s). La colección tiene un plan por eje/tier. */
+	/**
+	 * Todos los planes, cacheados (TTL 30 s). La colección tiene un plan por eje/tier.
+	 *
+	 * Ordenados **de menor a mayor tier**, no por orden de inserción: la página de
+	 * precios los pinta en este orden y un tier agregado después (como `vip`, que es
+	 * intermedio) aparecería último, contando la escalera al revés.
+	 */
 	async listPlans(): Promise<PlanDefinition[]> {
-		return [...(await this.#loadPlans()).values()];
+		return [...(await this.#loadPlans()).values()].sort(comparePlans);
 	}
 
 	/** Plan de un eje/tier; `null` si no existe (el caller decide el fallback). */
@@ -94,6 +102,7 @@ export class PlanCatalog {
 				axis: d.axis,
 				tier: d.tier,
 				price: d.price,
+				access: d.access,
 				includedSeats: d.includedSeats,
 				minSeats: d.minSeats,
 				maxSeats: d.maxSeats,
@@ -106,4 +115,15 @@ export class PlanCatalog {
 		this.#plansExpireAt = Date.now() + CACHE_TTL_MS;
 		return map;
 	}
+}
+
+/** Orden de la escalera de planes: primero el eje personal, y dentro, de menor a mayor. */
+function comparePlans(a: PlanDefinition, b: PlanDefinition): number {
+	if (a.axis !== b.axis) return a.axis === "user" ? -1 : 1;
+	const order: readonly string[] = a.axis === "user" ? ACCOUNT_TIERS : ORGANIZATION_TIERS;
+	const ia = order.indexOf(a.tier);
+	const ib = order.indexOf(b.tier);
+	// Un tier que el código no conoce (dato viejo, o de un módulo que ya no está) va al
+	// final en vez de colarse primero por un -1.
+	return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib);
 }
