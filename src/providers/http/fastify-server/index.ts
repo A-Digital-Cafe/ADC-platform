@@ -546,18 +546,8 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 
 		// Si no hay host matcheado, intentar con rutas estáticas globales
 		if (!matchedHost) {
-			// Buscar en rutas estáticas globales por prefijo de path
-			for (const [pathPrefix, directory] of this.globalStaticPaths) {
-				if (urlPath.startsWith(pathPrefix)) {
-					const relativePath = urlPath.slice(pathPrefix.length) || "/index.html";
-					const filePath = resolveSafeStaticPath(directory, relativePath);
-					if (!filePath) {
-						reply.code(404).send({ error: "File not found" });
-						return;
-					}
-					return this.serveFile(filePath, directory, reply);
-				}
-			}
+			const global = this.#resolveGlobalStatic(urlPath);
+			if (global) return this.serveFile(global.filePath, global.directory, reply);
 
 			reply.code(404).send({ error: "Not Found", host: request.hostname });
 			return;
@@ -573,7 +563,48 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			reply.code(404).send({ error: "File not found" });
 			return;
 		}
+
+		// El directorio del host manda, pero no es lo único que se sirve: los assets de las UI
+		// libraries (`/ui`), los de otros módulos UI (`/pub`) y el `common/public` montado en `/`
+		// son rutas GLOBALES, y con un host matcheado no se consultaban nunca. Como todo host UI
+		// lleva `spaFallback`, una imagen que no estaba en el build de la app devolvía el
+		// `index.html` con 200 y `text/html`: el `<img>` quedaba roto y la URL directa no daba
+		// ni un 404 que delatara el problema.
+		if (!fs.existsSync(filePath)) {
+			const global = this.#resolveGlobalStatic(urlPath);
+			if (global) return this.serveFile(global.filePath, global.directory, reply);
+		}
+
 		await this.serveFile(filePath, matchedHost.directory, reply, matchedHost.options);
+	}
+
+	/**
+	 * Ruta estática global que sirve `urlPath`, o `null` si ninguna tiene ese archivo.
+	 *
+	 * **Gana el prefijo más largo**, no el primero registrado: `common/public` se monta en `/`
+	 * durante el registro del primer módulo UI, y `/` es prefijo de todo, así que por orden de
+	 * inserción se tragaba `/ui`, `/pub` y los `/<namespace>/<módulo>` — quedaban registrados y
+	 * eran inalcanzables.
+	 *
+	 * Exige que el archivo exista para devolverlo: así un `/ui/x` que no está en la UI library
+	 * puede seguir cayendo al `common/public` de abajo, en vez de cortar con 404 en el primer
+	 * prefijo que matchee.
+	 */
+	#resolveGlobalStatic(urlPath: string): { filePath: string; directory: string } | null {
+		const byLongestPrefix = [...this.globalStaticPaths.entries()].sort((a, b) => b[0].length - a[0].length);
+
+		for (const [pathPrefix, directory] of byLongestPrefix) {
+			// Frontera de segmento: `/ui` no puede matchear `/uicorp/logo.png`.
+			const prefix = pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix;
+			if (prefix && urlPath !== prefix && !urlPath.startsWith(`${prefix}/`)) continue;
+
+			const rest = urlPath.slice(prefix.length);
+			const relativePath = rest === "" || rest === "/" ? "/index.html" : rest;
+			const filePath = resolveSafeStaticPath(directory, relativePath);
+			if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) return { filePath, directory };
+		}
+
+		return null;
 	}
 
 	private matchPath(pattern: string, urlPath: string): PathMatchResult {
