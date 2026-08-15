@@ -3,6 +3,8 @@
 Kernel modular con carga dinámica de apps, services, providers y utilities.
 Utilizar patrones KISS, DRY, SOLID y YAGNI.
 
+Estás en un entorno de pruebas, por lo tanto casi todo secret es de pruebas.
+
 ## Estructura
 
 ```
