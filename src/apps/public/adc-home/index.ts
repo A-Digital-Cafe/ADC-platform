@@ -31,6 +31,29 @@ export default class AdcHomeApp extends AppWithSeo {
 					},
 				],
 			},
+			// El apex es la puerta de entrada, así que su `llms.txt` es un índice de las apps: un
+			// crawler de IA que llega acá tiene que poder saltar a cada subdominio sin adivinarlos.
+			llms: {
+				title: "Abby's Digital Cafe",
+				description: "Plataforma modular open-source: cada app vive en su propio subdominio y comparte identidad, permisos y almacenamiento.",
+				sections: ({ origin }) => {
+					const base = new URL(origin).host.replace(/^www\./, "");
+					const app = (sub: string) => `https://${sub}.${base}`;
+					return [
+						{
+							title: "Apps de la plataforma",
+							links: [
+								{ title: "Community", description: "Artículos, rutas de aprendizaje y contenido de la comunidad.", href: app("community") },
+								{ title: "Drive", description: "Almacenamiento de archivos, carpetas compartidas y túnel de dispositivos.", href: app("drive") },
+								{ title: "Projects", description: "Gestión de proyectos y tareas.", href: app("projects") },
+								{ title: "Editor de imágenes", description: "Editor de imágenes, memes y stickers.", href: app("editor") },
+								{ title: "Status", description: "Estado de los servicios y tickets de soporte.", href: app("status") },
+								{ title: "Help", description: "Documentación de uso y documentos legales.", href: app("help") },
+							],
+						},
+					];
+				},
+			},
 		});
 		this.logger.logOk(`${this.name} ejecutándose`);
 	}

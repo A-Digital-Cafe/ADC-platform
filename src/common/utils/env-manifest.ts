@@ -123,6 +123,7 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	{ name: "SECURITY_CSP_ENFORCE", group: "network" },
 	{ name: "SECURITY_ENABLE_HSTS", group: "network" },
 	{ name: "SECURITY_CSP_SCRIPT_NONCE", group: "network" },
+	{ name: "ADC_CF_BEACON_TOKEN", group: "network" },
 	{ name: "HTTP2_ENABLED", group: "network" },
 	// La plataforma como PROVEEDOR de identidad OpenID Connect. El emisor tiene que ser la URL
 	// pública: viaja adentro de cada token y es contra lo que el consumidor valida.
@@ -130,6 +131,7 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	{ name: "ADC_OIDC_TOKEN_TTL_SECONDS", group: "network" },
 	{ name: "SESSION_COOKIE_DOMAIN", group: "network" },
 	{ name: "SESSION_OAUTH_BASE_URL", group: "network" },
+	{ name: "SESSION_CHANGE_PASSWORD_URL", group: "network" },
 	// Red privada (overlay). No hay `NETBIRD_VERSION`: la imagen del plano de control se pinea por
 	// digest en el compose, y una variable con el tag sería una perilla remota —viaja a cada nodo en
 	// el alta por token— sobre qué binario corre la red privada.
@@ -205,6 +207,8 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	{ name: "MAIL_INTERNAL_ONLY", group: "mail" },
 	{ name: "MAIL_DEV_LOOPBACK", group: "mail" },
 	{ name: "MAIL_DKIM_SELECTOR", group: "mail" },
+	{ name: "MAIL_MTA_STS_MODE", group: "mail" },
+	{ name: "MAIL_MTA_STS_MAX_AGE", group: "mail" },
 	{ name: "MAIL_RELAY_TLS_INSECURE", group: "mail" },
 	{ name: "MAIL_RELAY_PORT", group: "mail" },
 	{ name: "MAIL_TRASH_RETENTION_DAYS", group: "mail" },

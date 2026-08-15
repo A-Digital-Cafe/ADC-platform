@@ -137,7 +137,10 @@ export function generateIndexHtml(name: string, framework: string): string {
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="${title}" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <!-- Favicon: SIEMPRE la marca de la plataforma, igual en todas las apps — es lo que identifica
+         de quién es la pestaña. Los iconos por app son los de INSTALAR (manifest + apple-touch),
+         donde lo útil es distinguir una app de otra en la pantalla de inicio. -->
+    <link rel="icon" type="image/webp" href="/ui/images/mini-logo.webp" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     ${DARK_MODE_SCRIPT}
   </head>

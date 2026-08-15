@@ -14,6 +14,7 @@
 		"googleClientId": "${GOOGLE_CLIENT_ID}",
 		"googleClientSecret": "${GOOGLE_CLIENT_SECRET}",
 		"cookieDomain": "${SESSION_COOKIE_DOMAIN:-}",
+		"changePasswordUrl": "${SESSION_CHANGE_PASSWORD_URL:-}",
 		"defaultRedirectUrl": "${SESSION_DEFAULT_REDIRECT_URL:-}",
 		"oidc": {
 			"issuer": "${ADC_OIDC_ISSUER:-}",

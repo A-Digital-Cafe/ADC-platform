@@ -24,6 +24,9 @@ import {
 	getAllowHeader,
 	getBodyLimitBytes,
 	getCspNonce,
+	hasGpcOptOut,
+	hasMalformedBeaconToken,
+	injectWebAnalytics,
 	getMaxInflightBodiesPerIp,
 	getRawBodyLimitBytes,
 	hasRequestBody,
@@ -34,6 +37,7 @@ import {
 	readShapingConfig,
 	resolveTrustProxy,
 	stampCspNonce,
+	webAnalyticsSnippet,
 	resolveSafeStaticPath,
 	warnIfCorsAllowlistEmpty,
 	warnIfNoTrustedProxies,
@@ -991,11 +995,17 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	}
 
 	#installCspNonceSealer(): void {
-		if (!isCspNonceEnabled()) return;
+		const nonceEnabled = isCspNonceEnabled();
+		const analytics = webAnalyticsSnippet();
+		if (hasMalformedBeaconToken()) {
+			this.logger.logWarn("ADC_CF_BEACON_TOKEN no tiene forma de token de Cloudflare (32 hexadecimales): no se inyecta el beacon.");
+		}
+		if (!nonceEnabled && !analytics) return;
+
 		this.app.addHook("onSend", (request, reply, payload, done) => {
 			try {
 				const nonce = getCspNonce(request);
-				if (!nonce) return done(null, payload);
+				if (!nonce && !analytics) return done(null, payload);
 				const contentType = String(reply.getHeader("content-type") ?? "");
 				if (!contentType.includes("text/html")) return done(null, payload);
 				// String o Buffer: los archivos estáticos se sirven con `readFileSync` (Buffer)
@@ -1005,7 +1015,13 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 				if (typeof payload === "string") html = payload;
 				else if (Buffer.isBuffer(payload)) html = payload.toString("utf8");
 				else return done(null, payload);
-				return done(null, stampCspNonce(html, nonce));
+
+				// La analítica va ANTES del sellado, para que el nonce alcance también a su script.
+				// `Sec-GPC: 1` la saltea: es la única forma de honrar la señal, porque el beacon que
+				// inyecta el borde (RUM automático) sale después de este proceso y sin este dato.
+				if (analytics && !hasGpcOptOut(request)) html = injectWebAnalytics(html, analytics);
+				if (nonce) html = stampCspNonce(html, nonce);
+				return done(null, html);
 			} catch {
 				// Nunca romper una respuesta por el sellado: sin nonce el navegador bloquea los
 				// inline, pero un 500 acá tiraría la página entera.

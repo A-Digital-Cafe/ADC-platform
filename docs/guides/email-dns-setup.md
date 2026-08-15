@@ -106,6 +106,29 @@ _dmarc.adigitalcafe.com.  IN  TXT  "v=DMARC1; p=none; rua=mailto:dmarc@adigitalc
 Empieza en `p=none` para monitorizar y sube a `quarantine` y luego `reject`
 cuando los informes salgan limpios.
 
+## 5b. MTA-STS y TLS-RPT
+
+Protegen el correo **entrante**: sin ellos, cualquiera en el camino puede quitar el `STARTTLS` de
+la negociación y el remitente entrega en texto plano sin enterarse. MTA-STS le dice que exija TLS
+con certificado válido a nombre del MX; TLS-RPT le pide que reporte los fallos.
+
+La política la publica `EmailService` en `https://mta-sts.<dominio>/.well-known/mta-sts.txt`
+(`MAIL_MTA_STS_MODE`, default `testing`). Falta el DNS, que es lo que la activa:
+
+```
+mta-sts.adigitalcafe.com.        IN  CNAME  <túnel>          ; el host que sirve la política (proxeado)
+_mta-sts.adigitalcafe.com.       IN  TXT    "v=STSv1; id=20260815000000"
+_smtp._tls.adigitalcafe.com.     IN  TXT    "v=TLSRPTv1; rua=mailto:tlsrpt@adigitalcafe.com"
+```
+
+- El `id` es un identificador **de versión de la política**, no una fecha: hay que cambiarlo cada vez
+  que cambie el archivo, o los remitentes seguirán usando la copia cacheada hasta que expire
+  `max_age`. Cualquier cadena creciente sirve; una marca de tiempo es lo habitual.
+- `mta-sts.<dominio>` tiene que resolver y servir **HTTPS**: la spec no admite redirects entre hosts,
+  así que no vale apuntarlo al apex.
+- Quedate en `mode: testing` hasta que los informes TLS-RPT lleguen limpios. En `enforce`, un
+  certificado vencido en el MX no degrada la entrega: la **rechaza**.
+
 ## 6. PTR (DNS inverso)
 
 Imprescindible para entregabilidad **saliente**. Se configura en el proveedor de

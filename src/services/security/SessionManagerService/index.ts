@@ -368,6 +368,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 				internalIdentity: this.#internalIdentity,
 				cookieDomain: this.#cookieDomain,
 				defaultRedirectUrl: this.#defaultRedirectUrl,
+				changePasswordUrl: this.#changePasswordUrl(),
 				logger: this.logger,
 				moderation: this.#moderation,
 				onLoginSuccess: (userId: string, ip: string) => void this.checkAndNotifyNewLoginIp(userId, ip),
@@ -704,6 +705,32 @@ export default class SessionManagerService extends BaseService implements ISessi
 		const base = explicit || issuer;
 		if (base) return base.replace(/\/+$/, "");
 		return isRealProduction() ? null : "http://localhost:3000";
+	}
+
+	/**
+	 * Destino de `/.well-known/change-password`.
+	 *
+	 * Por defecto se deriva del origen público anteponiéndole el subdominio de `my-account`, que es
+	 * fijo en la plataforma. Es una convención y no una lectura de la config de esa app —los
+	 * módulos no se leen entre sí— así que queda `SESSION_CHANGE_PASSWORD_URL` para el despliegue
+	 * que la sirva en otro lado.
+	 */
+	#changePasswordUrl(): string | null {
+		const explicit = (this.config.private?.changePasswordUrl as string | undefined)?.trim();
+		if (explicit) return explicit;
+
+		const base = this.#oauthBaseUrl();
+		if (!base) return null;
+		try {
+			const url = new URL(base);
+			const host = url.host.replace(/^www\./, "");
+			url.host = host.startsWith("my-account.") ? host : `my-account.${host}`;
+			url.pathname = "/settings/privacy-security";
+			url.search = "";
+			return url.toString();
+		} catch {
+			return null;
+		}
 	}
 
 	#getProviderConfig(provider: string): OAuthProviderConfig | null {

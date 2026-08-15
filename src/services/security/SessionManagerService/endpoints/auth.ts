@@ -38,6 +38,8 @@ interface AuthEndpointsDeps {
 	internalIdentity: ReturnType<IIdentityManagerService["_internal"]> | null;
 	cookieDomain: string;
 	defaultRedirectUrl: string;
+	/** Destino de `/.well-known/change-password`. `null` = sin URL pública configurada. */
+	changePasswordUrl: string | null;
 	logger: { logError: (msg: string) => void; logWarn: (msg: string) => void };
 	moderation: ModerationLookupService | null;
 	/** Hook tras un login exitoso: detecta dispositivo/IP nuevo y notifica (best-effort). */
@@ -77,6 +79,38 @@ export class AuthEndpoints {
 	static init(deps: AuthEndpointsDeps, validateCredentials: (username: string, password: string) => Promise<UserAuthenticationResult>): void {
 		AuthEndpoints.deps ??= deps;
 		AuthEndpoints.validateCredentials ??= validateCredentials;
+	}
+
+	/**
+	 * `GET /.well-known/change-password` — URL bien conocida (W3C) que los gestores de contraseñas
+	 * y los navegadores consultan para llevar al usuario directo a cambiar una clave comprometida,
+	 * sin tener que adivinar la ruta ni buscarla en el menú.
+	 *
+	 * Redirige y no renderiza: la página vive en `my-account`, y el gestor puede preguntar desde
+	 * **cualquier** origen de la plataforma donde haya guardado la credencial. Por eso es ruta
+	 * global y no de un host.
+	 */
+	@RegisterEndpoint({
+		method: "GET",
+		url: "/.well-known/change-password",
+		permissions: [],
+		options: {
+			tag: "SessionManagerService/Auth",
+			summary: "Redirige a la página de cambio de contraseña",
+			description:
+				"URL bien conocida del W3C. Los gestores de contraseñas la consultan para abrir el formulario de cambio de clave. " +
+				"Responde 302 a la página de seguridad de la cuenta. Pública y sin autenticación, como manda la convención.",
+			skipIdempotency: true,
+		},
+	})
+	static changePassword(): never {
+		const target = AuthEndpoints.deps.changePasswordUrl;
+		if (!target) {
+			// Sin URL pública no hay adónde mandar a nadie. 404 y no un redirect a medias: el gestor
+			// interpreta la ausencia como "este sitio no lo soporta" y cae a su comportamiento normal.
+			throw new AuthError(404, "SERVICE_UNAVAILABLE", "No hay página de cambio de contraseña configurada");
+		}
+		throw UncommonResponse.redirect(target, { status: 302 });
 	}
 
 	/**

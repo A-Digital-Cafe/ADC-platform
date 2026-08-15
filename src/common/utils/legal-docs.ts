@@ -84,8 +84,12 @@ export const LEGAL_DOCUMENTS = {
 		// que nadie aceptó— y porque declarar una cookie de más nunca recorta lo que ya se prometió.
 		// Declararla recién el día que se encienda el segundo nodo sí habría exigido enmienda con 30
 		// días de preaviso, y esa espera bloquearía el despliegue.
+		// Y una cuarta el 2026-08-15, por el mismo criterio: §5 declara que respetamos **Global Privacy
+		// Control** (sin el script de analítica cuando el navegador manda `Sec-GPC`), y se corrige quién
+		// inserta ese script —lo inyecta la plataforma, no el proxy de Cloudflare— porque es lo que hace
+		// posible la decisión por visita. Suma un derecho y precisa un hecho: no recorta nada.
 		// sha256sum presets/help/apps/help/src/pages/CookiesPage.tsx
-		contentHash: "059f77b19ad1b4717639b4f07610946c9ace83babc96ae013976470ec44d71eb",
+		contentHash: "4fee0cb26c6a78f27a9394008afaf3cd76d3e755e20de2913ae8815f25475f55",
 	},
 	dpa: {
 		id: "dpa",

@@ -40,6 +40,36 @@ function registerSubdomainHosts(
 	return patterns;
 }
 
+/**
+ * `GET /robots.txt` por host.
+ *
+ * Vive acá y no en `SEOService` porque ese preset es **opcional** y la mitad que más importa es la
+ * del host interno: si el robots dependiera del preset, un despliegue sin él dejaría `admin.*` y
+ * `modules.*` abiertos al rastreo.
+ *
+ * Rastrear ≠ indexar: `Disallow` evita la visita, pero una URL enlazada desde afuera puede aparecer
+ * igual en los resultados. Lo que la saca del índice es `X-Robots-Tag: noindex`, que las apps
+ * internas declaran en el `security.headers` de su `config.json`.
+ *
+ * Los patrones comodín siempre van `Disallow`: son el catch-all de subdominios no reclamados y
+ * servirían el mismo contenido bajo infinitos hosts, que es contenido duplicado por definición.
+ */
+function registerRobots(patterns: string[], seoEnabled: boolean, ctx: UIFederationContext): void {
+	for (const pattern of patterns) {
+		const indexable = seoEnabled && !pattern.startsWith("*.");
+		ctx.httpProvider?.registerHostRoute(pattern, "GET", "/robots.txt", (req: any, reply: any) => {
+			const forwarded = req.headers["x-forwarded-proto"];
+			const proto = (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : "") || "https";
+			const host = req.headers.host?.split(",")[0]?.trim() || pattern.replace(/^\*\./, "");
+			const body = indexable
+				? `User-agent: *\nAllow: /\n\nSitemap: ${proto}://${host}/sitemap.xml\n`
+				: "User-agent: *\nDisallow: /\n";
+			reply.header("Content-Type", "text/plain; charset=utf-8");
+			reply.send(body);
+		});
+	}
+}
+
 async function registerHostsForModule(module: RegisteredUIModule, namespace: string, ctx: UIFederationContext): Promise<void> {
 	const hosting = module.uiConfig.hosting;
 	if (!hosting || !module.outputPath) return;
@@ -61,6 +91,7 @@ async function registerHostsForModule(module: RegisteredUIModule, namespace: str
 
 	if (registeredPatterns.length > 0) {
 		ctx.logger.logOk(`Módulo UI ${module.name} [${namespace}] servido en hosts: ${registeredPatterns.join(", ")}`);
+		registerRobots(registeredPatterns, Boolean(module.uiConfig.enableSEO), ctx);
 	}
 
 	if (module.uiConfig.enableSEO) {
