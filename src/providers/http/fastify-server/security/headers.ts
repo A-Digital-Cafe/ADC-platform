@@ -194,6 +194,12 @@ function extendCsp(baseCsp: string, extension: string): string {
 		const addition = values.join(" ");
 		const existing = directives.get(name);
 		if (existing === undefined) directives.set(name, addition);
+		// `'none'` no se suma: tiene que ser la ÚNICA fuente de su directiva o el navegador
+		// descarta la directiva entera (y avisa por consola). Concatenar dejaba
+		// `object-src 'none' blob:`, que el browser ignora y hace caer a `default-src 'self'` —
+		// más restrictivo que la base Y que lo pedido, así que la app se rompía por los dos lados.
+		// Una app que extiende una directiva negada está pidiendo abrirla: la addition la reemplaza.
+		else if (addition && existing.trim() === "'none'") directives.set(name, addition);
 		else if (addition && !existing.includes(addition)) directives.set(name, `${existing} ${addition}`);
 	}
 	return [...directives.entries()].map(([name, value]) => (value ? `${name} ${value}` : name)).join("; ");
