@@ -39,6 +39,11 @@ registro va **sin proxy** (nube gris): el proxy no reenvía SMTP.
 mail.adigitalcafe.com.   IN  A     <ip>
 ```
 
+> ⚠️ `mail.` es **del MTA y de nadie más**. El webmail vive en `email.adigitalcafe.com`, que sí va
+> proxeado (o por el túnel). Darle `mail.` a la app la deja inalcanzable —el registro tiene que
+> quedar sin proxy para el SMTP, y sin proxy no hay HTTP público que atienda— y en el intento de
+> arreglarlo se rompe el correo, que es el error caro de los dos.
+
 ## 2. Registros MX ✅
 
 El dominio raíz y un **wildcard** que cubre a todas las organizaciones:

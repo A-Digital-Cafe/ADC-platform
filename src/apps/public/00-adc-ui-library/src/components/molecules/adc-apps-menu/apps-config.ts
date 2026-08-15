@@ -9,7 +9,7 @@ export const DEFAULT_APPS: AppMenuItem[] = [
 	{ id: "community", name: "Community", url: getUrl(3010, "community.adigitalcafe.com"), moduleName: "community-home" },
 	{ id: "identity", name: "Identity", url: getUrl(3014, "identity.adigitalcafe.com"), requires: canAccessIdentity, moduleName: "adc-identity" },
 	{ id: "projects", name: "Projects", url: getUrl(3018, "projects.adigitalcafe.com"), moduleName: "adc-project-manager" },
-	{ id: "mail", name: "Mail", url: getUrl(3030, "mail.adigitalcafe.com"), moduleName: "adc-mail" },
+	{ id: "mail", name: "Mail", url: getUrl(3030, "email.adigitalcafe.com"), moduleName: "adc-mail" },
 	{ id: "drive", name: "Drive", url: getUrl(3032, "drive.adigitalcafe.com"), moduleName: "adc-drive" },
 	{
 		id: "image-editor",

@@ -9,6 +9,7 @@ import type { ISessionManagerService } from "@common/types/identity/ISessionMana
 import type { IModerationService } from "@common/types/identity/IModerationService.ts";
 import type { IOperationsService } from "@common/types/operations/IOperationsService.ts";
 import { Scope, assertScope, type CapabilityToken } from "@common/security/Capability.ts";
+import { isRealProduction } from "@common/utils/runtime-env.ts";
 import type { AuthenticatedUser, ModerationLookupService, OAuthProviderConfig, TokenVerificationResult } from "./types.js";
 export type { AuthenticatedUser, TokenVerificationResult } from "./types.js";
 
@@ -427,6 +428,28 @@ export default class SessionManagerService extends BaseService implements ISessi
 		});
 
 		await this.#initOidc();
+		this.#warnIfOAuthUnreachable();
+	}
+
+	/**
+	 * El callback de OAuth se descubre tarde: sólo falla cuando alguien intenta entrar. Este aviso
+	 * lo adelanta al arranque, que es cuando todavía hay alguien mirando los logs.
+	 */
+	#warnIfOAuthUnreachable(): void {
+		const hasOAuth = Boolean(this.config.private?.discordClientId || this.config.private?.googleClientId);
+		if (!hasOAuth) return;
+		const baseUrl = this.#oauthBaseUrl();
+		if (!baseUrl) {
+			this.logger.logError(
+				"OAuth configurado pero sin URL pública para el callback: definí 'ADC_OIDC_ISSUER' (o 'SESSION_OAUTH_BASE_URL'). Los logins con proveedor externo van a ser rechazados."
+			);
+			return;
+		}
+		if (isRealProduction() && /^https?:\/\/(localhost|127\.0\.0\.1)\b/i.test(baseUrl)) {
+			this.logger.logError(
+				`OAuth apunta a ${baseUrl}, que es esta máquina: el proveedor va a devolver al usuario a SU propio localhost y el login nunca se completa. Corregí 'ADC_OIDC_ISSUER' con el origen público.`
+			);
+		}
 	}
 
 	/**
@@ -662,9 +685,36 @@ export default class SessionManagerService extends BaseService implements ISessi
 		}
 	}
 
+	/**
+	 * Origen público al que el proveedor devuelve al usuario con el `code`. Tiene que ser
+	 * alcanzable **desde el navegador** y coincidir carácter por carácter con la URI registrada en
+	 * el panel del proveedor.
+	 *
+	 * Cae al emisor OIDC (`ADC_OIDC_ISSUER`) porque es la misma URL pública: el callback lo sirve
+	 * este mismo proceso, así que sostener dos variables para el mismo origen sólo agrega una
+	 * forma de que se desincronicen.
+	 *
+	 * El `localhost` sobrevive **sólo fuera de producción real**. Antes era el default silencioso,
+	 * y en un despliegue mandaba a la gente a su propia máquina con el `code` en la query: un login
+	 * roto que no se ve hasta que ya está en producción.
+	 */
+	#oauthBaseUrl(): string | null {
+		const explicit = this.#customConfig.baseUrl?.trim();
+		const issuer = (this.config?.private?.oidc as { issuer?: string } | undefined)?.issuer?.trim();
+		const base = explicit || issuer;
+		if (base) return base.replace(/\/+$/, "");
+		return isRealProduction() ? null : "http://localhost:3000";
+	}
+
 	#getProviderConfig(provider: string): OAuthProviderConfig | null {
-		const cfg = this.#customConfig;
-		const baseUrl = cfg.baseUrl || "http://localhost:3000";
+		const baseUrl = this.#oauthBaseUrl();
+		if (!baseUrl) {
+			this.logger.logError(
+				`OAuth ${provider}: no hay URL pública para el callback. Definí 'SESSION_OAUTH_BASE_URL' o 'ADC_OIDC_ISSUER' ` +
+					`con el origen público (ej: https://adigitalcafe.com). Se rechaza el login en vez de mandar el 'code' a localhost.`
+			);
+			return null;
+		}
 
 		const configs: Record<string, OAuthProviderConfig> = {
 			discord: {

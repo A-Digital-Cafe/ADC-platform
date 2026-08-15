@@ -5,6 +5,9 @@
 	"version": "1.0.0",
 	"kernelMode": 70,
 	"failOnError": true,
+	"custom": {
+		"baseUrl": "${SESSION_OAUTH_BASE_URL:-}"
+	},
 	"private": {
 		"discordClientId": "${DISCORD_CLIENT_ID}",
 		"discordClientSecret": "${DISCORD_CLIENT_SECRET}",

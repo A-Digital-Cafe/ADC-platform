@@ -68,7 +68,7 @@ const MICROAPPS: Microapp[] = [
 		name: "Mail",
 		description: "Envía y recibe correos con el dominio de tu organización.",
 		iconColor: "text-accentcyan",
-		href: getUrl(3030, "mail.adigitalcafe.com"),
+		href: getUrl(3030, "email.adigitalcafe.com"),
 		icon: <adc-icon-app-mail size="2rem" />,
 		moduleName: "adc-mail",
 	},
