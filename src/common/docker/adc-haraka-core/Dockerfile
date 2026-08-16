@@ -10,7 +10,11 @@ FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a5
 # Haraka lo busca en `<global node_modules>`, que es donde lo deja `-g`. `libcap` trae el `setcap` de
 # más abajo. Se borran los tres gestores de paquetes: un MTA no instala nada en caliente y son lo
 # único que arrastra dependencias con CVEs.
-RUN apk add --no-cache ca-certificates libcap \
+# `openssl` NO es opcional aunque nada del entrypoint lo llame: el plugin `tls` de Haraka lo spawnea
+# para generar los dhparams la primera vez. Sin el binario, el MTA arranca y muere con
+# `spawn openssl ENOENT` en bucle — y sólo pasa cuando hay certificado montado, así que el fallo
+# aparece el día que habilitás STARTTLS y no antes.
+RUN apk add --no-cache ca-certificates libcap openssl \
 	&& npm install --ignore-scripts -g Haraka@3.2.1 haraka-plugin-dkim@1.2.0 \
 	&& rm -rf /usr/local/lib/node_modules/npm \
 	/usr/local/lib/node_modules/corepack \

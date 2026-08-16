@@ -188,10 +188,25 @@ el Redis de la plataforma, alcanzado de contenedor a contenedor por la red
 compartida `adc-core-net` — no hace falta publicar Redis en ninguna interfaz.
 Las IPs privadas quedan exentas, así que la entrega interna del `email-service`
 no los toca. Si Redis no contesta, el plugin degrada a permitir: se pierden los
-topes, nunca el correo. Verificación:
+topes, nunca el correo.
+
+El MTA entra con **usuario propio** (`MAIL_REDIS_USER`/`MAIL_REDIS_PASSWORD`), no
+con la credencial de la plataforma: una ACL definida en el compose de
+`adc-redis-core` lo deja sólo en `rate_conn:*` y `rate_rcpt_host:*`, con los
+comandos justos. Haraka es el proceso más expuesto que corre el nodo, así que un
+RCE ahí no puede leer sesiones ni hacer `FLUSHALL`.
+
+> ⚠️ Eso vale **sólo con `REDIS_PASSWORD` puesta**. Sin ella el usuario `default`
+> queda `nopass` y quien esté dentro del contenedor de Haraka se conecta como
+> default y se saltea la ACL entera. Las dos van juntas, o la segunda es
+> decorativa. Comprobable: `docker exec adc-redis-core redis-cli KEYS '*'` sin
+> credenciales no debe devolver nada.
+
+Verificación:
 
 ```bash
 docker exec adc-redis-core redis-cli -n 4 KEYS '*'   # rate_conn:<ip> tras recibir correo
+docker exec adc-redis-core redis-cli ACL GETUSER haraka
 ```
 
 ## 8. Checklist de verificación
