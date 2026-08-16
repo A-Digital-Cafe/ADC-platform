@@ -23,6 +23,15 @@ const AUTH_DEV_PORT = 3000;
 /** Clave (por origen) donde se recuerda el vencimiento. Es sólo un timestamp: no es sensible. */
 const EXPIRY_KEY = "adc-auth-expires-at";
 /**
+ * Clave donde se anota "acá no hay sesión". Sin esto, cada request de un visitante anónimo
+ * que recibe 401 dispara su propio POST /refresh (y cada copia federada del módulo tiene su
+ * propio estado en memoria, así que se multiplican). Con TTL corto: es un anti-avalancha de
+ * la carga de página, no una decisión permanente — a quien SÍ tenga refresh token vivo hay
+ * que dejarlo recuperar la sesión enseguida.
+ */
+const ABSENT_KEY = "adc-auth-absent-at";
+const ABSENT_TTL_MS = 60_000;
+/**
  * Canal propio: el canal `adc-auth` de auth-sync recarga la página ante cualquier
  * mensaje, y una renovación no debe recargar nada.
  */
@@ -67,6 +76,26 @@ function writeStoredExpiry(value: number | null): void {
 	}
 }
 
+/** ¿Se sabe (y hace poco) que este origen no tiene sesión renovable? */
+function isSessionKnownAbsent(): boolean {
+	try {
+		const raw = globalThis.localStorage?.getItem(ABSENT_KEY);
+		const parsed = raw ? Number(raw) : Number.NaN;
+		return Number.isFinite(parsed) && Date.now() - parsed < ABSENT_TTL_MS;
+	} catch {
+		return false;
+	}
+}
+
+function markSessionAbsent(absent: boolean): void {
+	try {
+		if (absent) globalThis.localStorage?.setItem(ABSENT_KEY, String(Date.now()));
+		else globalThis.localStorage?.removeItem(ABSENT_KEY);
+	} catch {
+		/* modo privado / storage bloqueado: se pierde el anti-avalancha, nada más */
+	}
+}
+
 /** Vencimiento conocido, preferentemente el compartido con las otras pestañas del origen. */
 function currentExpiry(): number | null {
 	const stored = readStoredExpiry();
@@ -87,6 +116,7 @@ export function noteSessionExpiry(value: number | string | null | undefined): vo
 	if (value === null || value === undefined) {
 		expiresAt = null;
 		writeStoredExpiry(null);
+		markSessionAbsent(true);
 		clearTimeout(timer);
 		timer = undefined;
 		return;
@@ -97,6 +127,7 @@ export function noteSessionExpiry(value: number | string | null | undefined): vo
 
 	expiresAt = parsed;
 	writeStoredExpiry(parsed);
+	markSessionAbsent(false);
 	scheduleNext();
 }
 
@@ -117,6 +148,9 @@ export async function ensureFreshSession(): Promise<void> {
  * (nunca fuerza logout desde acá).
  */
 export async function refreshSession(force = false): Promise<boolean> {
+	// Visitante anónimo: ya se comprobó hace poco que no hay nada que renovar.
+	if (isSessionKnownAbsent()) return false;
+
 	// Single-flight dentro de la pestaña (varios microfrontends comparten este módulo).
 	if (inflight !== null) return inflight;
 
@@ -124,6 +158,10 @@ export async function refreshSession(force = false): Promise<boolean> {
 		try {
 			return await withLock(async () => {
 				// Dentro del lock: si otra pestaña del origen ya renovó, no salir a la red.
+				// El chequeo de "sin sesión" se repite acá porque el lock es lo único que
+				// serializa las copias federadas del módulo: sin esto, las que entraron
+				// al lock antes de la primera respuesta salen igual a pedir un refresh.
+				if (isSessionKnownAbsent()) return false;
 				if (!force && !isNearExpiry()) return true;
 				if (Date.now() - lastRefreshAt < MIN_INTERVAL_MS) return true;
 				return await postRefresh();

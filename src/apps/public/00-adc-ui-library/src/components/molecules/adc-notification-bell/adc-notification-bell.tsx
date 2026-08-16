@@ -59,7 +59,7 @@ export class AdcNotificationBell {
 	#menuContainer: HTMLElement | null = null;
 
 	async componentWillLoad(): Promise<void> {
-		const session = await getSession(false, true);
+		const session = await getSession(false);
 		if (!session.authenticated) return;
 
 		// Sondea el backend: si la ruta no existe (preset ausente o servicio

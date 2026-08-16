@@ -144,10 +144,25 @@ la mayoría de los destinos. Es la razón de peso para mantener
 | 25     | SMTP entrante (recepción) y entrega interna del `email-service` |
 | 587    | Submission — **hoy cerrado**; se habilita con el envío externo (auth + TLS) |
 
-El `docker-compose.yml` publica sólo el 25 en `127.0.0.1`. Para recibir de fuera
-hay que exponer el 25 al exterior (cambiar el binding y redirigir el puerto en
-el router/firewall). El 25 **saliente** suele estar bloqueado por el ISP; con
-envío interno no molesta.
+El `docker-compose.yml` publica el 25 en `${MAIL_BIND_HOST:-127.0.0.1}`. Con el
+default, **el correo externo no llega y encima no rebota**: nadie consigue abrir
+la sesión SMTP, así que el remitente reintenta hasta rendirse. Para recibir de
+fuera, en `env/host.env`:
+
+```
+MAIL_BIND_HOST=0.0.0.0
+```
+
+y después `docker compose up -d` en `src/common/docker/adc-haraka-core/` (cambiar
+un binding de puerto exige recrear el contenedor; `restart` no alcanza).
+
+Falta todavía el camino desde internet: redirigir el 25 en el router hacia el
+host y abrirlo en el firewall. ⚠️ Docker publica escribiendo en la cadena
+`DOCKER-USER` de iptables, **saltándose ufw**: con `MAIL_BIND_HOST=0.0.0.0` el
+puerto queda expuesto aunque `ufw status` lo dé por cerrado. El 25 **saliente**
+suele estar bloqueado por el ISP; con envío interno no molesta, pero el
+**entrante** también lo bloquean muchos ISP residenciales — si el reenvío está
+puesto y sigue sin conectar desde fuera, es lo primero a confirmar con ellos.
 
 ### STARTTLS (prerequisito para exponer el 25)
 

@@ -94,6 +94,7 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	// `STARTUP` para siempre.
 	{ name: "MONGO_BIND_HOST", group: "host", indirect: "compose-only" },
 	{ name: "REDIS_BIND_HOST", group: "host", indirect: "compose-only" },
+	{ name: "MAIL_BIND_HOST", group: "host", indirect: "compose-only" },
 	// `<host> <puerto>` del master, sólo en los nodos réplica. Vacío = este Redis es el master.
 	{ name: "REDIS_REPLICA_OF", group: "host", indirect: "compose-only" },
 	{ name: "ADC_HOST", group: "host" },

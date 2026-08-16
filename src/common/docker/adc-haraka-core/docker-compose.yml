@@ -19,7 +19,11 @@ services:
     ports:
       # 25: SMTP entrante y, mientras el envío sea interno, también la entrega
       # del email-service (por 25 el correo local va al webhook, no a internet).
-      - "127.0.0.1:25:25"
+      # Loopback por defecto: así el MTA sólo recibe la entrega interna. Para
+      # RECIBIR de fuera hay que publicarlo en la interfaz pública
+      # (`MAIL_BIND_HOST=0.0.0.0`), y eso expone el 25 a internet — prerequisitos
+      # (TLS + límites con Redis) en docs/guides/email-dns-setup.md.
+      - "${MAIL_BIND_HOST:-127.0.0.1}:25:25"
       # 587 (submission) no se publica ni se escucha hasta abrir el envío
       # externo: hoy sería un segundo 25 sin AUTH, superficie gratis. Al
       # habilitarlo: restaurar el listener en config/smtp.ini + auth + TLS.

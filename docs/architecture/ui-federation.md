@@ -162,8 +162,11 @@ registrar el SW.
    (como `adc-layout`, `adc-feature-card`, `adc-skeleton`) reposicionan físicamente los slotted
    children. Nunca renderizar tal componente en `main.tsx` envolviendo `<App />`, y nunca retornar
    nodos JSX top-level diferentes entre renders dentro de ellos — el reconciler de React lanzará
-   `NotFoundError: removeChild` al unmount. Colocar `<adc-layout>` dentro de `App.tsx` como root
-   estable, o envolver ramas con `key` props distintas para forzar remount completo.
+   `NotFoundError: removeChild` al unmount, y con él se desmonta TODO el árbol (pantalla negra).
+   Colocar `<adc-layout>` dentro de `App.tsx` como root estable y darle **un único hijo envolvente
+   fijo** (`<div className="contents">{render}</div>`): así React siempre muta dentro de ese div y
+   nunca borra el nodo que Stencil reubicó. Un `key` distinto por rama NO alcanza — el borrado se
+   sigue pidiendo sobre el padre equivocado.
 
 3. **React 19 sincroniza props de custom elements durante el bubbling:** al abrir un popover/menú
    desde un handler de evento React (ej.: `onContextMenu` que setea `open=true` en un web component

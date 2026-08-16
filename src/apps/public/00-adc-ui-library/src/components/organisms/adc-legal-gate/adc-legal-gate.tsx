@@ -69,7 +69,7 @@ export class AdcLegalGate {
 		const current = this.app || (globalThis as { __ADC_APP__?: string }).__ADC_APP__ || "";
 		if (EXEMPT_APPS.has(current)) return;
 
-		const session = await getSession(false, true);
+		const session = await getSession(false);
 		if (!session.authenticated) return;
 
 		const result = await api.get<LegalStatus>("/legal/status", { silent: true });

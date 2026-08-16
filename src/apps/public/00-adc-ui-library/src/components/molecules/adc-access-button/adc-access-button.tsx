@@ -15,11 +15,12 @@ import {
 	type AvatarUpdatePayload,
 } from "../../../../utils/auth-sync.js";
 import { DEFAULT_CREDENTIALS } from "../../../../utils/adc-fetch.js";
-import { noteSessionExpiry, refreshSession, startSessionRefresh } from "../../../../utils/auth-refresh.js";
+import { getSession } from "../../../../utils/session.js";
+import { startSessionRefresh } from "../../../../utils/auth-refresh.js";
 import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
 import { appendCsrfHeader } from "../../../../utils/csrf.js";
 import { buildAvatarUrl } from "../../../../utils/avatar.js";
-import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
+import type { SessionUser } from "@common/types/identity/Session.js";
 
 interface OrgOption {
 	orgId: string;
@@ -57,9 +58,6 @@ export class AdcAccessButton {
 	@Prop() apiBaseUrl: string = isPrivateHost(globalThis.location?.hostname ?? "")
 		? `${globalThis.location?.protocol}//${globalThis.location?.hostname}:3000`
 		: "";
-
-	/** URL de la API de sesión */
-	@Prop() sessionApiUrl: string = "/api/auth/session";
 
 	/** URL de logout */
 	@Prop() logoutApiUrl: string = "/api/auth/logout";
@@ -247,34 +245,16 @@ export class AdcAccessButton {
 		);
 	}
 
-	private fetchSession(): Promise<Response> {
-		return fetch(this.getApiUrl(this.sessionApiUrl), { method: "GET", credentials: DEFAULT_CREDENTIALS });
-	}
-
 	private async checkSession() {
 		let authenticatedUserId: string | null = null;
 		try {
-			let response = await this.fetchSession();
-
-			// Un 401 puede ser sesión terminada o sólo el access token vencido: se intenta
-			// renovar una vez antes de dar al usuario por deslogueado.
-			if (response.status === 401 && (await refreshSession(true))) {
-				response = await this.fetchSession();
-			}
-
-			// Si no hay sesión (401) o hay error, marcar como no autenticado
-			if (!response.ok) {
-				this.isAuthenticated = false;
-				this.user = null;
-				noteSessionExpiry(null);
-				return;
-			}
-
-			const data: SessionResponse = await response.json();
+			// `getSession` ya trae el reintento tras renovar y comparte la consulta con el
+			// resto de la página (cada remoto federado tenía la suya), así que el botón no
+			// necesita su propio fetch: era una consulta duplicada por carga.
+			const data = await getSession(true);
 
 			this.isAuthenticated = data.authenticated;
 			this.user = data.user || null;
-			noteSessionExpiry(data.authenticated ? data.expiresAt : null);
 			if (data.authenticated && data.user?.id) {
 				authenticatedUserId = data.user.id;
 			}

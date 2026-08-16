@@ -44,7 +44,7 @@ export class AdcAppsMenu {
 		// En paralelo: la sesión (predicados `requires`) y el estado de plataforma
 		// (`__ADC_PLATFORM__`: 0 fetch en prod, 1 fetch cacheado en dev). Ambos degradan.
 		const [session, unavailable] = await Promise.all([
-			getSession(false, true).catch(() => null),
+			getSession(false).catch(() => null),
 			getUnavailableApps().catch(() => new Set<string>()),
 		]);
 		this.sessionUser = session?.authenticated ? session.user : undefined;
