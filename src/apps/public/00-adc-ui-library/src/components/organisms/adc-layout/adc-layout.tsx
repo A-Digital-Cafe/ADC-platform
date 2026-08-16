@@ -9,8 +9,9 @@ const AUTH_PORT = 3012;
 const AUTH_HOST = "auth.adigitalcafe.com";
 /** API dev port */
 const API_PORT = 3000;
-/** Home (adc-home) dev port */
+/** Home (adc-home) dev port / prod hostname */
 const HOME_PORT = 3024;
+const HOME_HOST = "adigitalcafe.com";
 
 function resolveAuthUrl(): string {
 	return IS_DEV ? `http://${host()}:${AUTH_PORT}` : `${proto()}//${AUTH_HOST}${port()}`;
@@ -20,8 +21,10 @@ function resolveApiBaseUrl(): string {
 	return IS_DEV ? `http://${host()}:${API_PORT}` : "";
 }
 
+// El apex sirve adc-home, así que el logo lleva a la home de la plataforma desde cualquier
+// subdominio. Con "/" se quedaba en la raíz del subdominio actual (drive → drive).
 function resolveHomeHref(): string {
-	return IS_DEV ? `http://${host()}:${HOME_PORT}` : "/";
+	return IS_DEV ? `http://${host()}:${HOME_PORT}` : `${proto()}//${HOME_HOST}${port()}`;
 }
 
 @Component({

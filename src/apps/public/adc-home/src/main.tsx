@@ -9,6 +9,8 @@ import "./styles/tailwind.css"; // Extensiones locales
 if (!(await redirectIfUnderMaintenance("adc-home"))) {
 	const container = document.getElementById("root");
 	if (container) {
+		// El hero estático de index.html ya cumplió su función (HTML sin JS); ahora estorba.
+		document.getElementById("prerender")?.remove();
 		createRoot(container).render(
 			<React.StrictMode>
 				<App />

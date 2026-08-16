@@ -2,7 +2,7 @@
 	"id": "/",
 	"name": "Abby's Digital Cafe",
 	"short_name": "ADC Cafe",
-	"description": "Tu acceso a todas las apps de Abby's Digital Cafe.",
+	"description": "Abby's Digital Cafe es un ecosistema de herramientas colaborativas: drive, correo, gestión de proyectos, identidad y más.",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

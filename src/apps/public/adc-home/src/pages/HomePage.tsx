@@ -113,7 +113,7 @@ export function HomePage() {
 					</h1>
 
 					<p className="mt-6 max-w-2xl text-lg leading-relaxed text-text/80 md:text-xl">
-						Un ecosistema de herramientas colaborativas y de código abierto para aprender, construir y crecer juntos.
+						Un ecosistema de herramientas colaborativas para aprender, construir y crecer juntos.
 					</p>
 
 					<div className="mt-10 flex w-full items-center justify-center">
