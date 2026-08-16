@@ -73,7 +73,7 @@ export default class CommunityHomeApp extends AppWithSeo {
 			},
 			pageMeta: {
 				defaults: {
-					titleTemplate: "%s · ADC",
+					titleTemplate: "%s · Abby's Digital Cafe",
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
 					twitter: { card: "summary_large_image" },
 					ogBrand: {

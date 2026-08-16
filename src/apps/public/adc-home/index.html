@@ -44,46 +44,7 @@
       }
     })();
   </script>
-  <!--
-    Estilos del bloque #prerender: no puede usar Tailwind ni la UI library porque ese CSS lo
-    inyecta el bundle JS, y el punto del bloque es verse sin JS.
-  -->
-  <style>
-    #prerender {
-      max-width: 48rem;
-      margin: 0 auto;
-      padding: 4rem 1.5rem;
-      text-align: center;
-      color: #1a202c;
-      line-height: 1.6;
-    }
-
-    html[dark-mode] #prerender {
-      color: #e2e8f0;
-    }
-
-    #prerender h1 {
-      font-size: clamp(2rem, 6vw, 3.5rem);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      margin: 0 0 1.5rem;
-    }
-
-    #prerender p {
-      font-size: 1.125rem;
-      margin: 0 0 1rem;
-    }
-
-    #prerender ul {
-      display: inline-block;
-      text-align: left;
-      margin: 0 0 1.5rem;
-    }
-
-    #prerender a {
-      color: inherit;
-    }
-  </style>
+  <link rel="stylesheet" href="/prerender.css" />
 </head>
 
 <body>
@@ -91,28 +52,29 @@
     Contenido estático del hero. Existe para que la home diga qué es la app en el HTML inicial,
     sin ejecutar JS: es lo que ven los crawlers y los revisores de OAuth de Google, que marcaron
     la página como "protegida por login" cuando el body era sólo el contenedor vacío de React.
-    Lo borra main.tsx justo antes de montar React.
+    Lo tapa /prerender.css en cuanto el bundle llena el contenedor.
   -->
   <div id="prerender">
     <h1>Abby's Digital Cafe</h1>
-    <p>
+    <p class="prerender-lead">
       Un ecosistema de herramientas colaborativas para aprender, construir y crecer juntos.
       Todas las apps comparten una única cuenta y viven en el mismo espacio.
     </p>
     <ul>
-      <li><strong>Drive</strong> — guardá, organizá y compartí archivos.</li>
-      <li><strong>Mail</strong> — correo con el dominio de tu organización.</li>
-      <li><strong>Project Manager</strong> — proyectos, sprints y tareas en equipo.</li>
-      <li><strong>Identity</strong> — usuarios, roles, grupos y permisos.</li>
-      <li><strong>Community Home</strong> — rutas de aprendizaje y contenidos.</li>
+      <li><strong>Drive</strong> <span>Guardá, organizá y compartí tus archivos.</span></li>
+      <li><strong>Correo</strong> <span>Envía y recibe correos con el dominio de tu organización.</span></li>
+      <li><strong>Proyectos</strong> <span>Proyectos, sprints y tareas con tu equipo.</span></li>
+      <li><strong>Editor de imágenes</strong> <span>Editá imágenes, memes y stickers en el navegador.</span></li>
+      <li><strong>Cuentas</strong> <span>Usuarios, roles, grupos y permisos de tu organización.</span></li>
+      <li><strong>Comunidad</strong> <span>Rutas de aprendizaje, contenidos y actividades.</span></li>
     </ul>
-    <p>
+    <p class="prerender-lead">
       Podés crear tu cuenta con email y contraseña o con <strong>Iniciar sesión con Google</strong>.
       Si elegís Google, sólo leemos tu dirección de correo, tu nombre y tu foto de perfil, y los
       usamos únicamente para crear tu cuenta e identificarte al entrar. No accedemos a tu Gmail,
       tu Drive ni a ningún otro dato de tu cuenta de Google.
     </p>
-    <p>
+    <p class="prerender-links">
       <a href="https://help.adigitalcafe.com/privacy">Política de privacidad</a> ·
       <a href="https://help.adigitalcafe.com/terms">Términos y condiciones</a> ·
       <a href="https://help.adigitalcafe.com/contact">Contacto</a>

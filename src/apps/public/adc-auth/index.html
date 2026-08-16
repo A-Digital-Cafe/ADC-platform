@@ -29,9 +29,30 @@
       }
     })();
   </script>
+  <link rel="stylesheet" href="/prerender.css" />
 </head>
 
 <body>
+  <!--
+    Bloque estático: describe la app en el HTML inicial, sin ejecutar JS. Es lo que ven los
+    crawlers y cualquier revisor que no corra el bundle. Lo tapa /prerender.css en cuanto el
+    bundle llena el contenedor de React.
+  -->
+  <div id="prerender">
+    <h1>Entrá a Abby's Digital Cafe</h1>
+    <p class="prerender-lead">Una sola cuenta para todas las apps de la plataforma: Drive, Correo, Proyectos, Editor de imágenes, Cuentas y Comunidad. Creála gratis o entrá con la que ya tenés.</p>
+    <p class="prerender-lead">
+      Podés entrar con email y contraseña o con <strong>Iniciar sesión con Google</strong>. Si elegís
+      Google, sólo leemos tu dirección de correo, tu nombre y tu foto de perfil, y los usamos
+      únicamente para crear tu cuenta e identificarte al entrar. No accedemos a tu Gmail, tu Drive ni
+      a ningún otro dato de tu cuenta de Google.
+    </p>
+    <p class="prerender-links">
+      <a href="https://adigitalcafe.com/">Abby's Digital Cafe</a> ·
+      <a href="https://help.adigitalcafe.com/privacy">Política de privacidad</a> ·
+      <a href="https://help.adigitalcafe.com/terms">Términos y condiciones</a>
+    </p>
+  </div>
   <div id="root"></div>
 </body>
 

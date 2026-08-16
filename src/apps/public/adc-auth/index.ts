@@ -15,10 +15,9 @@ export default class AdcAuthApp extends AppWithSeo {
 			},
 			pageMeta: {
 				defaults: {
-					titleTemplate: "%s · ADC",
+					titleTemplate: "%s · Abby's Digital Cafe",
 					og: { siteName: "Abby's Digital Cafe", locale: "es_ES", type: "website" },
 					twitter: { card: "summary" },
-					robots: "noindex,nofollow",
 					ogBrand: { background: "#ffede3", color: "#712b00", brandName: "Abby's Digital Cafe" },
 				},
 				pages: [
@@ -36,12 +35,15 @@ export default class AdcAuthApp extends AppWithSeo {
 							description: "Únete a Abby's Digital Cafe y empieza a aprender y compartir con la comunidad.",
 						},
 					},
-					// Páginas de canje de tokens por email: fuera del sitemap a propósito.
+					// Páginas de canje de tokens por email: fuera del sitemap y noindex a propósito.
+					// El `robots` va por página y no en los defaults porque /login y /register sí se
+					// indexan: son las que responden la búsqueda "iniciar sesión <marca>".
 					{
 						path: "/cancel-deletion",
 						meta: {
 							title: "Cancelar baja de cuenta",
 							description: "Cancela la baja programada de tu cuenta con el enlace del correo.",
+							robots: "noindex,nofollow",
 						},
 					},
 					{
@@ -49,6 +51,7 @@ export default class AdcAuthApp extends AppWithSeo {
 						meta: {
 							title: "Confirmar cambio de email",
 							description: "Confirma el nuevo email de tu cuenta con el enlace del correo.",
+							robots: "noindex,nofollow",
 						},
 					},
 				],

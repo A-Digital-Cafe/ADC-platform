@@ -8,6 +8,7 @@
 
 import { createAdcApi } from "./adc-fetch.js";
 import { noteSessionExpiry } from "./auth-refresh.js";
+import { resolvePlatformPath } from "./platform-links.js";
 import type { SessionResponse } from "@common/types/identity/Session.js";
 
 export type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
@@ -29,6 +30,19 @@ const store = globalThis as typeof globalThis & {
 };
 store.__adcSession ??= { cache: null, inflight: null };
 const shared = store.__adcSession;
+
+/**
+ * Manda al login de la app `auth` con `returnUrl` a la página actual, igual que el botón del
+ * header. Existe para que las landings de las apps no tengan que hardcodear el subdominio:
+ * `/login` relativo apunta al host de la app, que no sirve esa ruta.
+ */
+export function goToLogin(returnUrl?: string): void {
+	const loc = globalThis.location;
+	if (!loc) return;
+	const back = returnUrl ?? loc.origin + loc.pathname;
+	const target = resolvePlatformPath("auth", `/login?returnUrl=${encodeURIComponent(back)}`);
+	if (target) loc.assign(target);
+}
 
 export async function getSession(force = false): Promise<SessionResponse> {
 	const now = Date.now();

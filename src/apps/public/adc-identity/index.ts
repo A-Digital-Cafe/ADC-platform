@@ -19,7 +19,7 @@ export default class AdcIdentityApp extends AppWithSeo {
 						path: "/",
 						meta: {
 							title: "Gestión de identidad",
-							titleTemplate: "%s · ADC",
+							titleTemplate: "%s · Abby's Digital Cafe",
 							description: "Administra usuarios, roles, grupos, organizaciones y regiones.",
 						},
 					},

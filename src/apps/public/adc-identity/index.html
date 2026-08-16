@@ -38,10 +38,31 @@
             }
         })();
     </script>
+  <link rel="stylesheet" href="/prerender.css" />
 </head>
 
 <body>
-    <div id="root"></div>
+    <!--
+    Bloque estático: describe la app en el HTML inicial, sin ejecutar JS. Es lo que ven los
+    crawlers y cualquier revisor que no corra el bundle. Lo tapa /prerender.css en cuanto el
+    bundle llena el contenedor de React.
+  -->
+  <div id="prerender">
+    <h1>Cuentas de tu organización</h1>
+    <p class="prerender-lead">Administrá quién entra y qué puede hacer dentro de Abby's Digital Cafe, con la misma identidad en todas las apps de la plataforma.</p>
+    <ul>
+      <li><strong>Usuarios</strong> <span>Altas, bajas y datos de cada miembro de la organización.</span></li>
+      <li><strong>Roles</strong> <span>Jerarquía de roles con permisos heredados y límites claros.</span></li>
+      <li><strong>Grupos</strong> <span>Agrupá personas para asignarles acceso de una sola vez.</span></li>
+      <li><strong>Permisos</strong> <span>Control fino por recurso, auditable y revisable.</span></li>
+    </ul>
+    <p class="prerender-links">
+      <a href="https://adigitalcafe.com/">Abby's Digital Cafe</a> ·
+      <a href="https://help.adigitalcafe.com/privacy">Política de privacidad</a> ·
+      <a href="https://help.adigitalcafe.com/terms">Términos y condiciones</a>
+    </p>
+  </div>
+  <div id="root"></div>
 </body>
 
 </html>
