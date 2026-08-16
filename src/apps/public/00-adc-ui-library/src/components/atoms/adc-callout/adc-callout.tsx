@@ -23,7 +23,9 @@ export class AdcCallout {
 	}
 
 	render() {
-		const classes = `rounded-xxl border p-3 mb-2 ml-8 xl:max-w-[80vw] ${this.getToneClass()}`;
+		// `block` por el `role="status"`: va en un `<output>`, inline de fábrica, y el recuadro se
+		// partiría en un fragmento por renglón. Lo llevan las tres ramas para no depender del UA.
+		const classes = `block rounded-xxl border p-3 mb-2 ml-8 xl:max-w-[80vw] ${this.getToneClass()}`;
 
 		if (this.role === "note") {
 			return (

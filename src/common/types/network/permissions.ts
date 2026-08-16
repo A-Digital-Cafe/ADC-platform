@@ -17,6 +17,9 @@ export const NETWORK_RESOURCE_NAME = "network" as const;
  * - `INTEGRITY`: informes de verificación de integridad de la infraestructura y los objetos.
  * - `LIFECYCLE`: apagar y drenar nodos. Bit propio y no derivado de `NODES` porque leer la lista
  *   de máquinas y poder apagarlas son permisos de distinto tamaño.
+ * - `ROUTING`: los nombres públicos del borde (subdominios enrutados por el túnel). Bit propio
+ *   porque publica superficie en internet: quien lo tiene puede colgar un host nuevo del dominio,
+ *   que es una operación de otra naturaleza que mirar la topología o repartir claves de la overlay.
  */
 export const NetworkScopes = {
 	NONE: 0,
@@ -25,7 +28,8 @@ export const NetworkScopes = {
 	VPN: 1 << 2, // 4
 	INTEGRITY: 1 << 3, // 8
 	LIFECYCLE: 1 << 4, // 16
-	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // 31
+	ROUTING: 1 << 5, // 32
+	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5), // 63
 } as const;
 
 /** @public */

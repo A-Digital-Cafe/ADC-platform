@@ -114,6 +114,7 @@ const NETWORK_SCOPES: ScopeDef[] = [
 	{ key: "vpn", value: NetworkScopes.VPN },
 	{ key: "integrity", value: NetworkScopes.INTEGRITY },
 	{ key: "lifecycle", value: NetworkScopes.LIFECYCLE },
+	{ key: "routing", value: NetworkScopes.ROUTING },
 ];
 
 /** Email scopes — alineados con EmailScopes en types/email/permissions.ts (sin el bit SELF, que es modificador) */

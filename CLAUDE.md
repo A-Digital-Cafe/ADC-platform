@@ -142,6 +142,13 @@ this.tryGetMyService<INotificationService>("NotificationService"); // undefined 
 - Tipos compartidos en `@common/types/<domain>/`; errores tipados en `@common/types/custom-errors/`
 - Imports que escapan de un módulo usan aliases (`@common`, `@services`, `@providers`, `@utilities`, `@interfaces`, `@kernel`); imports internos relativos
 
+**Comentarios**: cortos. Uno o dos renglones; un bloque de más de 4 sólo si la decisión es
+realmente difícil de reconstruir. Comentá el **porqué** no evidente (qué se descartó, qué rompe si
+se cambia) y nada más: si el código ya lo dice, no lo repitas. Sin justificaciones largas ni
+reescribir en prosa lo que hace la línea de abajo. Esto aplica también a los docstrings de tipos y
+campos — la mayoría no necesita ninguno. Los `description` de `@RegisterEndpoint` son la excepción:
+son documentación de API y ahí sí se explaya.
+
 **Logging** (usar logger heredado de las clases base):
 
 ```typescript

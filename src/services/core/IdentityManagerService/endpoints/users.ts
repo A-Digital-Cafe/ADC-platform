@@ -435,8 +435,8 @@ export class UserEndpoints {
 			throw new IdentityError(404, "USER_NOT_FOUND", "Usuario no encontrado");
 		}
 
-		// Misma regla que email/username: la cuenta creada por OAuth nunca conoció su password —es
-		// aleatoria— así que exigírsela acá la dejaba sin ninguna forma de estrenar una.
+		// Misma regla que email/username: exigirle la password a una cuenta OAuth —aleatoria y que
+		// nadie conoce— la dejaba sin ninguna forma de estrenar una.
 		await UserEndpoints.#assertSelfReauth(user, currentPassword);
 
 		await UserEndpoints.identity.users.updatePassword(user.id, newPassword, ctx.token!);

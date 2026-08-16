@@ -161,6 +161,14 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	// Desde qué rangos se acepta canjear un token de alta. **Vacío = alta deshabilitada**: es un
 	// gate cuyo fallo abierto entregaría los secretos compartidos a cualquiera con el token.
 	{ name: "ADC_NODE_JOIN_CIDRS", group: "network" },
+	// Alta y baja de subdominios del túnel desde el panel de red, en vez de por `cloudflared` en el
+	// nodo primario. Sin `CLOUDFLARE_API_TOKEN` la tab se ve pero no opera; el token es el único
+	// secreto del grupo y por eso vive con los demás.
+	{ name: "CLOUDFLARE_ACCOUNT_ID", group: "network" },
+	{ name: "CLOUDFLARE_ZONE_ID", group: "network" },
+	{ name: "CLOUDFLARE_ZONE_NAME", group: "network" },
+	{ name: "CLOUDFLARE_TUNNEL_ID", group: "network" },
+	{ name: "CLOUDFLARE_TUNNEL_NAME", group: "network" },
 	// Reparto de carga entre nodos sin balanceador. Se autodesactiva cuando hay uno adelante —la
 	// presión de cada nodo no llega al umbral—, así que no hace falta apagarlo al migrar a Cloudflare.
 	{ name: "ADC_OFFLOAD_ENABLED", group: "network" },
@@ -306,6 +314,12 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 		why: "sólo con un proveedor de identidad que exija secreto: sin ella la consola de la red no completa el login",
 	},
 	{ name: "GARAGE_ADMIN_TOKEN", group: "secrets", shared: true, why: "el panel no puede leer el layout del almacenamiento de objetos de ese nodo" },
+	{
+		name: "CLOUDFLARE_API_TOKEN",
+		group: "secrets",
+		shared: true,
+		why: "la tab de Routing queda en sólo lectura y publicar un subdominio vuelve a exigir sesión en el nodo primario",
+	},
 	{ name: "MONGO_USER", group: "secrets", shared: true, why: "el nodo arranca y se queda sin base, que es el fallo más ruidoso de la lista" },
 	{ name: "MONGO_PASSWORD", group: "secrets", shared: true, why: "el nodo arranca y se queda sin base, que es el fallo más ruidoso de la lista" },
 	{ name: "REDIS_PASSWORD", group: "secrets", shared: true, why: "sesiones, rate limit y leases dejan de funcionar en ese nodo" },
