@@ -224,6 +224,9 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	{ name: "MAIL_SPAM_RETENTION_DAYS", group: "mail" },
 	{ name: "MAIL_SEND_LOG_RETENTION_DAYS", group: "mail" },
 	{ name: "MAIL_INBOUND_WEBHOOK_URL", group: "mail", indirect: "compose-only" },
+	{ name: "MAIL_REDIS_HOST", group: "mail", indirect: "compose-only" },
+	{ name: "MAIL_REDIS_PORT", group: "mail", indirect: "compose-only" },
+	{ name: "MAIL_REDIS_USER", group: "mail", indirect: "compose-only" },
 
 	// ── build: qué compila y cuánto habla este proceso. Es de la máquina, no del clúster. ───────
 	{ name: "LOG_LEVEL", group: "build" },
@@ -280,6 +283,13 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 		group: "secrets",
 		shared: true,
 		why: "el correo entrante que reciba ese nodo se descarta como no autenticado",
+	},
+	{
+		name: "MAIL_REDIS_PASSWORD",
+		group: "secrets",
+		shared: true,
+		indirect: "compose-only",
+		why: "el MTA no autentica contra Redis y pierde los topes de rate, que es lo que frena la enumeración de casillas",
 	},
 	{ name: "GARAGE_RPC_SECRET", group: "secrets", shared: true, why: "el Garage nuevo no logra hablar con el existente y nunca aparece en `garage status`" },
 	// Secretos del plano de control de la red privada. Viven SÓLO en el primario —es el único que

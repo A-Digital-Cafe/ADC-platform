@@ -37,7 +37,23 @@ services:
     # tocar el compose. `--masterauth` va siempre porque en un master no hace nada, y omitirlo sería
     # el error silencioso clásico: la réplica conecta, el master le pide auth y la sincronización
     # falla en bucle sin que el contenedor deje de estar "healthy".
-    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}" --masterauth "${REDIS_PASSWORD:-}" --replicaof ${REDIS_REPLICA_OF:-no one}
+    #
+    # El `--user haraka` es una identidad APARTE para el MTA, que es el proceso más expuesto del
+    # despliegue (habla con cualquiera en internet, sin autenticar, parseando MIME). Sólo puede tocar
+    # las claves de sus contadores de rate y sólo con los comandos que usa `haraka-plugin-limit`
+    # (+ los del handshake de node-redis: select/info/ping/client|setinfo), así que un RCE en Haraka
+    # no llega a las sesiones ni a los leases de líder.
+    #
+    # ⚠️ Esto SÓLO sirve con `REDIS_PASSWORD` puesta. Sin ella el usuario `default` queda `nopass` y
+    # quien esté adentro del contenedor de Haraka se conecta como default y se saltea la ACL entera.
+    # Las dos variables van juntas o el usuario acotado es decorativo.
+    #
+    # Los patrones de clave NO se pueden acotar por base: las ACL de Redis ignoran el `SELECT`. Que
+    # el prefijo sea el candado es lo que hace que `database=4` sea sólo prolijidad y no seguridad.
+    command:
+      redis-server --appendonly yes --requirepass "${REDIS_PASSWORD:-}" --masterauth "${REDIS_PASSWORD:-}" --replicaof ${REDIS_REPLICA_OF:-no one}
+      --user "haraka" on ">${MAIL_REDIS_PASSWORD:-change-me-haraka}" "~rate_conn:*" "~rate_rcpt_host:*" resetchannels
+      +select +info +ping "+client|setinfo" +incr +expire +get +hincrby +hgetall +hdel
     # Con `appendonly yes`, el SIGTERM dispara el fsync final del AOF. El default de docker son
     # 10 s: alcanzan salvo con un AOF grande, y si no alcanzan se pierden las últimas escrituras
     # (leases, rate limit, estado de sesión) sin que nada avise.
@@ -63,6 +79,11 @@ services:
       start_interval: 500ms
     networks:
       - adc-network
+      # Red compartida con los stacks que necesitan hablarle sin pasar por el host: hoy el MTA, que
+      # usa Redis para los topes de rate del 25 (los contadores tienen que sobrevivir a la sesión).
+      # Por acá el acceso es de contenedor a contenedor, así que no hace falta publicar el 6380 en
+      # ninguna interfaz más — que es justo lo que este compose evita por no tener contraseña.
+      - adc-core-net
 
 volumes:
   adc_redis_core_data:
@@ -70,3 +91,8 @@ volumes:
 networks:
   adc-network:
     driver: bridge
+  # `external`: la crea el kernel antes de levantar los comunes (DockerManager.#ensureSharedNetwork).
+  # Los comunes arrancan en paralelo, así que si la declarara un compose el otro fallaría a veces
+  # al unirse a una red que todavía no existe. Suelto: `docker network create adc-core-net`.
+  adc-core-net:
+    external: true

@@ -20,6 +20,8 @@ interface PublishedPort {
 const READY_TIMEOUT_MS = 20_000;
 /** Cadencia del poll de `docker compose ps`. */
 const READY_POLL_MS = 250;
+/** Red que comparten los stacks de infra que necesitan verse entre sí (ver `#ensureSharedNetwork`). */
+const SHARED_INFRA_NETWORK = "adc-core-net";
 
 /** Fila de `docker compose ps --format json` (sólo los campos que interesan). */
 interface ComposePsRow {
@@ -168,6 +170,28 @@ export class DockerManager {
 			`[${name}] no quedó listo en ${READY_TIMEOUT_MS / 1000}s (${lastPending || "sin detalle"}); se sigue con el arranque. ` +
 				`Los providers que dependan de él van a reintentar la conexión.`
 		);
+	}
+
+	/**
+	 * Crea la red compartida entre stacks de infra, si no existe.
+	 *
+	 * Cada compose arma su propia `adc-network`, que compose namespacea por proyecto: dos stacks con
+	 * ese nombre están en redes DISTINTAS y no se ven. `adc-core-net` es la excepción declarada
+	 * `external` en los dos extremos que sí tienen que hablarse (hoy Haraka → Redis, para los topes
+	 * de rate del MTA).
+	 *
+	 * Se crea acá y no desde un compose porque los comunes arrancan en PARALELO: el que la declarara
+	 * la crearía a veces después de que el otro intente unirse, y `up -d` fallaría por red inexistente
+	 * de forma intermitente. `docker network create` ya existente sale distinto de 0 y se ignora.
+	 */
+	static #ensureSharedNetwork(dockerPath: string, logger: ILogger): void {
+		try {
+			execFileSync(dockerPath, ["network", "create", SHARED_INFRA_NETWORK], { encoding: "utf8", timeout: 10_000, stdio: "pipe" });
+			logger.logDebug(`Red compartida '${SHARED_INFRA_NETWORK}' creada`);
+		} catch {
+			// Ya existía (el caso normal) o docker la rechazó; si de verdad falta, el `up` del stack
+			// que la declara external lo dice con el nombre de la red.
+		}
 	}
 
 	/** Filas de `docker compose ps` (JSON por línea), o `null` si el comando falla. */
@@ -471,6 +495,9 @@ export class DockerManager {
 				this.#logger.logDebug("No hay contenedores comunes para cargar");
 				return;
 			}
+
+			// Antes del fan-out: los stacks que se hablan entre sí la declaran `external` y arrancan a la vez.
+			DockerManager.#ensureSharedNetwork(this.#dockerPath, this.#logger);
 
 			this.#logger.logInfo(`Cargando ${folders.length} contenedor(es) común(es) en paralelo...`);
 

@@ -8,9 +8,9 @@
 
 import { createAdcApi } from "./adc-fetch.js";
 import { noteSessionExpiry } from "./auth-refresh.js";
-import type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
+import type { SessionResponse } from "@common/types/identity/Session.js";
 
-export type { SessionUser, SessionResponse };
+export type { SessionUser, SessionResponse } from "@common/types/identity/Session.js";
 
 const api = createAdcApi({
 	basePath: "/api/auth",

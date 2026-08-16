@@ -37,6 +37,17 @@ services:
       INBOUND_WEBHOOK_SECRET: ${MAIL_INBOUND_WEBHOOK_SECRET:-change-me}
       # DKIM selector global
       DKIM_SELECTOR: ${MAIL_DKIM_SELECTOR:-adcmail}
+      # Redis para los topes de rate del plugin `limit` (config/limit.ini). Nombre de contenedor,
+      # resuelto por el DNS de la red compartida `adc-core-net`: NO se pasa por el host, así que el
+      # 6380 sigue publicado sólo en loopback. Si no contesta, el plugin degrada a permitir
+      # (`if (!this.db) return next()`): sin Redis se pierden los topes, no el correo.
+      REDIS_HOST: ${MAIL_REDIS_HOST:-adc-redis-core}
+      REDIS_PORT: ${MAIL_REDIS_PORT:-6379}
+      # Identidad propia del MTA, no la de la plataforma: la ACL que la acota vive en el compose de
+      # adc-redis-core y sólo le deja sus claves de rate. El default acompaña al de allá para que un
+      # despliegue sin configurar arranque igual; en un nodo real las dos salen de `env/secrets.env`.
+      REDIS_USER: ${MAIL_REDIS_USER:-haraka}
+      REDIS_PASSWORD: ${MAIL_REDIS_PASSWORD:-change-me-haraka}
     volumes:
       # Clave privada DKIM (gitignorada): openssl genrsa -out ./dkim/private 2048
       # La pública (openssl rsa -in private -pubout) va en el TXT: adcmail._domainkey.<dominio>.
@@ -81,6 +92,8 @@ services:
         max-file: "5"
     networks:
       - adc-network
+      # Sólo para llegar al Redis de los topes de rate (ver REDIS_HOST arriba).
+      - adc-core-net
 
 volumes:
   adc_haraka_queue:
@@ -88,3 +101,8 @@ volumes:
 networks:
   adc-network:
     driver: bridge
+  # `external`: la crea el kernel antes de levantar los comunes (DockerManager.#ensureSharedNetwork),
+  # porque arrancan en paralelo y el que la declarara podría crearla después de que el otro intente
+  # unirse. Suelto: `docker network create adc-core-net`.
+  adc-core-net:
+    external: true

@@ -177,8 +177,22 @@ cp /etc/letsencrypt/live/mail.adigitalcafe.com/privkey.pem  tls/key.pem
 ```
 
 El entrypoint los detecta y activa el plugin `tls` solo; la renovación necesita
-reiniciar el contenedor (deploy-hook de certbot). Antes de exponer el puerto,
-activar también los límites con Redis comentados en `config/limit.ini`.
+reiniciar el contenedor (deploy-hook de certbot).
+
+### Topes de rate (ya cableados)
+
+`config/limit.ini` trae activos los topes por IP en el tiempo (`rate_conn`,
+`rate_rcpt_host`), que son los que frenan la enumeración de casillas: los de
+sesión no la ven, porque cada intento llega en una conexión nueva. Se apoyan en
+el Redis de la plataforma, alcanzado de contenedor a contenedor por la red
+compartida `adc-core-net` — no hace falta publicar Redis en ninguna interfaz.
+Las IPs privadas quedan exentas, así que la entrega interna del `email-service`
+no los toca. Si Redis no contesta, el plugin degrada a permitir: se pierden los
+topes, nunca el correo. Verificación:
+
+```bash
+docker exec adc-redis-core redis-cli -n 4 KEYS '*'   # rate_conn:<ip> tras recibir correo
+```
 
 ## 8. Checklist de verificación
 

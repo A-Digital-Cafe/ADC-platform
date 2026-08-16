@@ -40,6 +40,26 @@ else
 	echo "[entrypoint] AVISO: sin certificado en /app/secrets/tls (cert.pem+key.pem); STARTTLS deshabilitado" >&2
 fi
 
+# Conexión a Redis para haraka-plugin-redis, del que hereda `limit`. Va en redis.ini y no en la
+# sección [redis] de limit.ini para que ese archivo quede con la POLÍTICA (qué se limita y cuánto)
+# y no con la topología, que cambia por despliegue. El plugin mueve host/port a `socket.*` solo.
+{
+	echo "[server]"
+	echo "host=${REDIS_HOST:-adc-redis-core}"
+	echo "port=${REDIS_PORT:-6379}"
+	# `username`/`password` no están en la lista de opciones de socket del plugin, así que llegan
+	# tal cual a node-redis, que es donde van. `if` y no `[ … ] && echo`: con `set -e`, un test
+	# falso devuelve 1 y abortaría el entrypoint.
+	if [ -n "${REDIS_USER:-}" ]; then
+		echo "username=${REDIS_USER}"
+	fi
+	if [ -n "${REDIS_PASSWORD:-}" ]; then
+		echo "password=${REDIS_PASSWORD}"
+	fi
+} > /app/config/redis.ini
+# Legible sólo por el dueño: lleva la credencial del MTA.
+chmod 600 /app/config/redis.ini
+
 # Variables consumidas por el plugin de webhook (adc_inbound_webhook).
 {
 	echo "url=${INBOUND_WEBHOOK_URL:-http://host.docker.internal:3000/api/email/inbound}"
