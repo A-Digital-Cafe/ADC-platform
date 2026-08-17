@@ -329,7 +329,7 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 		name: "CLOUDFLARE_API_TOKEN",
 		group: "secrets",
 		shared: true,
-		why: "la tab de Routing queda en sólo lectura y publicar un subdominio vuelve a exigir sesión en el nodo primario",
+		why: "la tab de Routing queda en sólo lectura: publicar un subdominio vuelve a exigir sesión en el nodo primario y no se puede purgar el caché del borde (permisos del token: Zone:DNS:Edit + Zone:Cache Purge)",
 	},
 	{ name: "MONGO_USER", group: "secrets", shared: true, why: "el nodo arranca y se queda sin base, que es el fallo más ruidoso de la lista" },
 	{ name: "MONGO_PASSWORD", group: "secrets", shared: true, why: "el nodo arranca y se queda sin base, que es el fallo más ruidoso de la lista" },
