@@ -213,6 +213,13 @@
         vertical-align: middle;
     }
 
+    /* El carril de tabs scrollea en horizontal: con el host inline no tendría un ancho
+       propio contra el que acotarse y la fila desbordaría la página en mobile. */
+    adc-tabs {
+        display: block;
+        min-width: 0;
+    }
+
     .paperWarn {
         background-color: var(--c-warn);
         color: var(--c-twarn);

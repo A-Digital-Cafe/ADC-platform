@@ -38,6 +38,40 @@ export class NotifyManager {
 		});
 	}
 
+	/** Avisa que se activó la verificación en dos pasos (topic `security.two_factor_enabled`). */
+	async twoFactorEnabled(userId: string): Promise<void> {
+		if (!userId) return;
+		await this.#emit({
+			userId,
+			topic: "security.two_factor_enabled",
+			title: "Activaste la verificación en dos pasos",
+			body: "Guardá tus códigos de recuperación en un lugar seguro: son la única forma de entrar si perdés el autenticador.",
+			channels: ["inApp", "email"],
+			linkApp: "my-account",
+			link: "/settings/privacy-security",
+		});
+	}
+
+	/**
+	 * Aviso de baja del segundo factor. El reseteo administrativo va por su **propio** topic y no
+	 * por un texto distinto: el contenido lo pone la plantilla del servidor (anti-phishing), así que
+	 * distinguir los dos casos exige distinguir el topic. Y hay que distinguirlos: un reseteo es
+	 * indistinguible de uno hostil desde una cuenta de admin comprometida, y quien lo tiene que
+	 * notar es el titular.
+	 */
+	async twoFactorDisabled(userId: string, opts?: { byAdmin?: boolean }): Promise<void> {
+		if (!userId) return;
+		await this.#emit({
+			userId,
+			topic: opts?.byAdmin ? "security.two_factor_reset" : "security.two_factor_disabled",
+			title: opts?.byAdmin ? "Un administrador reseteó tu verificación en dos pasos" : "Desactivaste la verificación en dos pasos",
+			body: "Tu cuenta vuelve a entrar sólo con contraseña. Si no fuiste vos, cambiala y contactá a soporte de inmediato.",
+			channels: ["inApp", "email"],
+			linkApp: "my-account",
+			link: "/settings/privacy-security",
+		});
+	}
+
 	/**
 	 * Avisa a la casilla ACTUAL (el cambio aún no se aplicó) que se pidió cambiar el email. Es la
 	 * ventana de reacción ante un pedido hostil con sesión robada: sale en el momento del pedido,

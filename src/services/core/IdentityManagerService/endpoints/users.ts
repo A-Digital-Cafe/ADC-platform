@@ -10,7 +10,7 @@ import { assertCanManageUser, assertCanAssignRoles, assertCanGrantPermissions } 
 import { checkUsername } from "@common/utils/name-policy.js";
 import { hashEmails, maskEmails } from "@common/utils/identityHash.js";
 import { isInternalAddress, normalizeAddress } from "@common/utils/email-address.js";
-import { sanitizeUserMetadata } from "@common/utils/user-metadata.js";
+import { isOAuthCreatedAccount, sanitizeUserMetadata } from "@common/utils/user-metadata.js";
 import type { MailboxRenameResult } from "@common/types/email/Email.js";
 import { EMAIL_CHANGE_TOKEN_TTL_MINUTES } from "../emails.js";
 
@@ -154,15 +154,6 @@ const EXPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 /** Mismo formato de email que exige el alta (`validateRegisterBody` de SessionManagerService). */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/;
-
-/**
- * `true` si la cuenta la creó un proveedor OAuth: su password es aleatorio y desconocido, así que
- * no sirve para re-autenticar. El alta nativa estampa `createdVia: "platform"`, el seed `"dev-seed"`.
- */
-function isOAuthCreatedAccount(user: { metadata?: Record<string, unknown> }): boolean {
-	const via = user.metadata?.createdVia;
-	return typeof via === "string" && via !== "platform" && via !== "dev-seed";
-}
 
 function getScopedMembership(user: Awaited<ReturnType<IdentityManagerService["users"]["getUser"]>>, callerOrgId?: string) {
 	if (!callerOrgId || !user?.orgMemberships?.length) return undefined;

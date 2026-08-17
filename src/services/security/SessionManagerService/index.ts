@@ -35,6 +35,8 @@ import { AuthorizationCodeStore } from "./domain/oidc/codes.js";
 import { OidcSigningKeys } from "./domain/oidc/SigningKeys.js";
 import { SessionAdminEndpoints, maskIp } from "./endpoints/sessions.js";
 import { LegalEndpoints } from "./endpoints/legal.js";
+import { TwoFactorLoginEndpoints } from "./endpoints/twofactor.js";
+import { AUTH_APP_BASE } from "./utils/authApp.js";
 
 // Decoradores
 import { EnableEndpoints, DisableEndpoints } from "../../core/EndpointManagerService/index.js";
@@ -118,7 +120,7 @@ export default class SessionManagerService extends BaseService implements ISessi
 	// Lifecycle
 
 	@EnableEndpoints({
-		managers: () => [AuthEndpoints, OAuthEndpoints, OidcEndpoints, SessionAdminEndpoints, LegalEndpoints],
+		managers: () => [AuthEndpoints, OAuthEndpoints, OidcEndpoints, SessionAdminEndpoints, LegalEndpoints, TwoFactorLoginEndpoints],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -411,6 +413,24 @@ export default class SessionManagerService extends BaseService implements ISessi
 		LegalEndpoints.init({
 			internalIdentity: this.#internalIdentity,
 			logger: this.logger,
+		});
+
+		TwoFactorLoginEndpoints.init({
+			redis: this.#redis,
+			internalIdentity: this.#internalIdentity,
+			cookieDomain: this.#cookieDomain,
+			authAppBase: AUTH_APP_BASE,
+			logger: this.logger,
+			// La emisión de la sesión la sigue haciendo AuthEndpoints: el desafío sólo decide CUÁNDO.
+			issueSession: (ctx, userId, orgId, provider) => AuthEndpoints.issueSession(ctx, userId, orgId, provider),
+			// El topic es de Identity (plantilla server-side): acá sólo se dispara, best-effort.
+			notifyEnabled: (userId) => {
+				try {
+					void this.#identityService?.notifications(this.getCapability()).twoFactorEnabled(userId);
+				} catch (err: any) {
+					this.logger.logDebug(`Aviso de alta de 2FA no emitido: ${err?.message || err}`);
+				}
+			},
 		});
 
 		OAuthEndpoints.init({

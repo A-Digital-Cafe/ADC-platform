@@ -1,0 +1,97 @@
+/* Botón de menú del header (sólo mobile, apps con sidebar propio).
+ * Es la misma caja de 39px del logo, girando entre dos caras: la de menú —la
+ * funcional— y la del logo, para que se siga leyendo como la marca. */
+
+.adc-header-menu {
+	position: relative;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	/* 44px de área táctil sin agrandar la caja visual de 39px del logo. */
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	cursor: pointer;
+	touch-action: manipulation;
+	perspective: 240px;
+}
+
+/* El corte por breakpoint vive acá y no en `lg:hidden`/`hidden lg:block`: el CSS
+ * de la UI library se inyecta sin capa, así que le gana a las utilidades de
+ * Tailwind y las clases responsive quedarían sin efecto. 64rem = `lg`. */
+@media (width < 64rem) {
+	.adc-header-menu {
+		display: inline-flex;
+	}
+}
+
+/* De `lg` para arriba el sidebar está siempre a la vista: el logo vuelve a ser
+ * el enlace a la home y el botón desaparece. */
+.adc-header-brand {
+	display: none;
+}
+
+@media (width >= 64rem) {
+	.adc-header-brand {
+		display: block;
+	}
+}
+
+.adc-header-menu__flip {
+	position: relative;
+	display: block;
+	width: 39px;
+	height: 39px;
+	transform-style: preserve-3d;
+	animation: adc-header-menu-flip 9s ease-in-out infinite;
+}
+
+/* Con el drawer abierto la cara de menú se queda quieta: ahí el botón ya es
+ * evidente y girar sólo distrae mientras se navega. */
+.adc-header-menu__flip[data-open="true"] {
+	animation: none;
+	transform: rotateY(0deg);
+}
+
+.adc-header-menu__face {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 9999px;
+	backface-visibility: hidden;
+	-webkit-backface-visibility: hidden;
+}
+
+.adc-header-menu__face--logo {
+	transform: rotateY(180deg);
+}
+
+.adc-header-menu__face img {
+	border-radius: 9999px;
+}
+
+@keyframes adc-header-menu-flip {
+	0%,
+	38% {
+		transform: rotateY(0deg);
+	}
+	50%,
+	88% {
+		transform: rotateY(180deg);
+	}
+	100% {
+		transform: rotateY(360deg);
+	}
+}
+
+/* Sin animación queda la cara de menú, que es la que hace algo al tocarla. */
+@media (prefers-reduced-motion: reduce) {
+	.adc-header-menu__flip {
+		animation: none;
+	}
+}

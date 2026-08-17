@@ -116,6 +116,16 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3040/ edi
 POSTs to `/api/auth/login` from inside the page; the `localhost` cookie then
 applies across every app port. Custom users: `'username::password[::orgId]'`.
 
+Both presets are **administrators, so the platform blocks their login until they
+have a second factor** — the driver resolves that on its own: on the first login it
+enrolls TOTP and stores the secret in `temp/.adc-2fa-secrets.json` (gitignored),
+and after that it computes the code. Nothing to do by hand. Two consequences worth
+knowing: deleting that file leaves the account enrolled and the driver unable to log
+in (reset it with `POST /api/identity/users/:userId/2fa/reset`, or drop the
+`usertwofactors` document), and `/api/auth/login` is rate-limited to **4 attempts per
+5 minutes per IP** — a burst of login tests will hit it and the fix is to wait, not
+to retry.
+
 ```bash
 node .claude/skills/run-adc-platform/driver.mjs login admin http://localhost:3014/ identity-as-admin
 node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ home-authed --login orgadmin --wait "body"

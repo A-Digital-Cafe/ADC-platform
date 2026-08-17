@@ -633,7 +633,7 @@ export class UserManager {
 		const userObj = (current.toObject?.() || current) as User;
 		const now = new Date();
 		const nextMeta: Record<string, unknown> = {
-			...(userObj.metadata || {}),
+			...userObj.metadata,
 			deletionRequestedAt: now,
 			deletionReason: "admin" satisfies DeletionReason,
 			scheduledDeletionAt: new Date(now.getTime() + retentionDays * 24 * 60 * 60 * 1000),
@@ -919,7 +919,7 @@ export class UserManager {
 		const expiresAt = new Date(now.getTime() + EMAIL_CHANGE_TOKEN_TTL_MS);
 		const issued = this.#issueHmacToken(this.#emailChangeKey, userId, expiresAt);
 		const pending: EmailChangePending = { newEmail, tokenHash: issued.tokenHash, requestedAt: now, expiresAt };
-		const nextMeta = { ...(userObj.metadata || {}), emailChangePending: pending };
+		const nextMeta = { ...userObj.metadata, emailChangePending: pending };
 		await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: now });
 		this.logger.logInfo(`Cambio de email solicitado por ${userId} (pendiente de confirmación)`);
 		return { confirmToken: issued.token, expiresAt };
@@ -937,7 +937,7 @@ export class UserManager {
 		const userObj = (current.toObject?.() || current) as User;
 		const now = new Date();
 		const pending: EmailChangePending = { newEmail, requestedAt: now, expiresAt: new Date(now.getTime() + EMAIL_CHANGE_TOKEN_TTL_MS) };
-		const nextMeta = { ...(userObj.metadata || {}), emailChangePending: pending };
+		const nextMeta = { ...userObj.metadata, emailChangePending: pending };
 		await this.userModel.findOneAndUpdate({ id: userId }, { metadata: nextMeta, updatedAt: now });
 	}
 
@@ -1028,7 +1028,7 @@ export class UserManager {
 
 	/** Limpieza compartida de la metadata de baja + reactivación de la cuenta. */
 	async #clearScheduledDeletion(current: User): Promise<User> {
-		const nextMeta = { ...(current.metadata || {}) } as Record<string, unknown>;
+		const nextMeta = { ...current.metadata } as Record<string, unknown>;
 		delete nextMeta.scheduledDeletionAt;
 		delete nextMeta.deletionRequestedAt;
 		delete nextMeta.deletionReason;
@@ -1236,7 +1236,7 @@ export class UserManager {
 		if (!current) return;
 		const doc = (current.toObject?.() || current) as User;
 
-		const metadata = { ...(doc.metadata || {}) } as Record<string, unknown>;
+		const metadata = { ...doc.metadata } as Record<string, unknown>;
 		delete metadata.avatar;
 		if (attachmentId) {
 			metadata.customAvatar = { attachmentId };

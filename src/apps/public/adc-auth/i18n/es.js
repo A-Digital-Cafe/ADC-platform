@@ -83,6 +83,31 @@ export default {
 		submitting: "Vinculando...",
 		backToLogin: "Volver a iniciar sesión"
 	},
+	twoFactor: {
+		verifyTitle: "Verificación en dos pasos",
+		verifyIntro: "Abrí tu app de autenticación e ingresá el código de 6 dígitos.",
+		enrollTitle: "Configurá la verificación en dos pasos",
+		enrollIntro:
+			"Tu cuenta tiene permisos de administración, así que necesita un segundo factor para entrar. Escaneá el código con tu app de autenticación (Google Authenticator, Aegis, 1Password…) y confirmá con el código que te muestre.",
+		qrAlt: "Código QR para configurar la verificación en dos pasos",
+		cannotScan: "No puedo escanear el código",
+		hideSecret: "Ocultar la clave",
+		codeLabel: "Código de verificación",
+		recoveryHint: "También podés usar uno de tus códigos de recuperación.",
+		submit: "Verificar",
+		submitting: "Verificando...",
+		backToLogin: "Volver a iniciar sesión",
+		expiredTitle: "El inicio de sesión expiró",
+		expiredBody: "Pasaron más de 5 minutos o el intento ya se usó. Volvé a iniciar sesión para empezar de nuevo.",
+		recoveryTitle: "Guardá tus códigos de recuperación",
+		recoveryBody:
+			"Son de un solo uso y es la única vez que se muestran. Guardalos en un lugar seguro: si perdés el teléfono, son la única forma de entrar a tu cuenta.",
+		recoveryCopy: "Copiar",
+		recoveryCopied: "Copiado",
+		recoveryDownload: "Descargar",
+		recoveryFilename: "codigos-de-recuperacion.txt",
+		recoveryContinue: "Ya los guardé, continuar"
+	},
 	errors: {
 		// Errores específicos de formulario (se muestran como callout inline)
 		MISSING_CREDENTIALS: "Usuario y contraseña son requeridos",
@@ -110,6 +135,11 @@ export default {
 		REGISTER_ERROR: "Error al crear la cuenta",
 		NOT_ORG_MEMBER: "No perteneces a esta organización",
 		USER_NOT_FOUND: "Usuario no encontrado",
+		// Segundo factor en el login
+		NO_PENDING_2FA: "No hay un inicio de sesión pendiente. Volvé a iniciar sesión.",
+		INVALID_PENDING_2FA: "El inicio de sesión expiró o ya se usó. Volvé a iniciar sesión.",
+		INVALID_TOTP: "El código no es válido",
+		TWO_FACTOR_UNAVAILABLE: "No pudimos verificar la seguridad de la cuenta. Probá de nuevo en unos minutos.",
 		// OAuth link flow
 		NO_PENDING_LINK: "No hay una vinculación pendiente. Reinicia el proceso de inicio de sesión.",
 		INVALID_PENDING_LINK: "La vinculación expiró o es inválida. Volvé a iniciar sesión con el proveedor.",

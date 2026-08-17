@@ -1,7 +1,8 @@
 import type { Model } from "mongoose";
-import type { UserManager, OrgManager, RoleManager } from "./dao/index.js";
+import type { UserManager, OrgManager, RoleManager, TwoFactorManager } from "./dao/index.js";
 import type { DiscordGuildConfig } from "./domain/index.js";
 import type { EmailBinder } from "./emailBinding.js";
+import { SystemRole } from "./defaults/systemRoles.js";
 
 /**
  * Superficies internas de IdentityManager, **separadas por scope** para least‑privilege.
@@ -16,7 +17,17 @@ export interface IdentityInternalApi {
 	users: UserManager;
 	organizations: OrgManager;
 	roles: RoleManager;
+	/** Alta/verificación/baja del segundo factor. La usa el login, que corre sin sesión todavía. */
+	twoFactor: TwoFactorManager;
 	getUserIdsByRoleName(roleName: string): Promise<string[]>;
+	/**
+	 * True si la cuenta es Admin **global** o Admin en **alguna** de sus organizaciones.
+	 *
+	 * Es el criterio único de "a esta cuenta el segundo factor le es obligatorio", y por eso mira
+	 * todas las membresías en vez de la organización activa: si dependiera del contexto elegido en
+	 * el login, un admin de organización se saltearía la exigencia entrando como acceso personal.
+	 */
+	isAdminAccount(userId: string): Promise<boolean>;
 	/**
 	 * Trae a nuestro almacenamiento el avatar que trae una cuenta OAuth (alta o vinculación) y
 	 * deja apuntada una URL propia. Vive acá porque escribe el avatar de un usuario arbitrario
@@ -64,15 +75,34 @@ export function buildInternalApi(
 	users: UserManager,
 	organizations: OrgManager,
 	roles: RoleManager,
+	twoFactor: TwoFactorManager,
 	bindEmailNeutrally: EmailBinder,
 	ingestProviderAvatar: IdentityInternalApi["ingestProviderAvatar"]
 ): IdentityInternalApi {
+	/** Los roles globales van sin `orgId`; los de una organización lo llevan. */
+	const isAdminRole = async (roleId: string): Promise<boolean> => {
+		const role = await roles.getRole(roleId).catch(() => null);
+		return role?.name === SystemRole.ADMIN;
+	};
+
 	return {
 		users,
 		organizations,
 		roles,
+		twoFactor,
 		bindEmailNeutrally,
 		ingestProviderAvatar,
+
+		isAdminAccount: async (userId: string): Promise<boolean> => {
+			const user = await users.getUser(userId).catch(() => null);
+			if (!user) return false;
+
+			const roleIds = [...(user.roleIds || []), ...(user.orgMemberships || []).flatMap((membership) => membership.roleIds || [])];
+			for (const roleId of roleIds) {
+				if (await isAdminRole(roleId)) return true;
+			}
+			return false;
+		},
 		/**
 		 * IDs de usuarios con un **rol global** por nombre (ej. `SystemRole.ADMIN`). Usa los
 		 * managers sin auth; por eso vive tras el gate (enumeraría destinatarios privilegiados).

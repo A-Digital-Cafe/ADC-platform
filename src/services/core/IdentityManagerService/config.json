@@ -111,6 +111,9 @@
 			"cancelUrl": "${ACCOUNT_DELETION_CANCEL_URL:-https://auth.adigitalcafe.com/cancel-deletion}",
 			"legalArchiveRetentionDays": "${LEGAL_ACCEPTANCE_RETENTION_DAYS:-1825}"
 		},
+		"twoFactor": {
+			"issuer": "${TWO_FACTOR_ISSUER:-ADC Platform}"
+		},
 		"emailChange": {
 			"confirmUrl": "${EMAIL_CHANGE_CONFIRM_URL:-https://auth.adigitalcafe.com/confirm-email}"
 		},

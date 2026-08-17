@@ -83,6 +83,31 @@ export default {
 		submitting: "Linking...",
 		backToLogin: "Back to sign in"
 	},
+	twoFactor: {
+		verifyTitle: "Two-factor verification",
+		verifyIntro: "Open your authenticator app and enter the 6-digit code.",
+		enrollTitle: "Set up two-factor verification",
+		enrollIntro:
+			"Your account has administrator permissions, so it needs a second factor to sign in. Scan the code with your authenticator app (Google Authenticator, Aegis, 1Password…) and confirm with the code it shows.",
+		qrAlt: "QR code to set up two-factor verification",
+		cannotScan: "I can't scan the code",
+		hideSecret: "Hide the key",
+		codeLabel: "Verification code",
+		recoveryHint: "You can also use one of your recovery codes.",
+		submit: "Verify",
+		submitting: "Verifying...",
+		backToLogin: "Back to sign in",
+		expiredTitle: "Sign-in expired",
+		expiredBody: "More than 5 minutes went by, or this attempt was already used. Sign in again to start over.",
+		recoveryTitle: "Save your recovery codes",
+		recoveryBody:
+			"They are single-use and this is the only time they are shown. Keep them somewhere safe: if you lose your phone, they are the only way back into your account.",
+		recoveryCopy: "Copy",
+		recoveryCopied: "Copied",
+		recoveryDownload: "Download",
+		recoveryFilename: "recovery-codes.txt",
+		recoveryContinue: "I saved them, continue"
+	},
 	errors: {
 		// Form-specific errors (shown as inline callout)
 		MISSING_CREDENTIALS: "Username and password are required",
@@ -110,6 +135,11 @@ export default {
 		REGISTER_ERROR: "Error creating account",
 		NOT_ORG_MEMBER: "You are not a member of this organization",
 		USER_NOT_FOUND: "User not found",
+		// Two-factor during sign-in
+		NO_PENDING_2FA: "No pending sign-in found. Please sign in again.",
+		INVALID_PENDING_2FA: "The sign-in expired or was already used. Please sign in again.",
+		INVALID_TOTP: "Invalid code",
+		TWO_FACTOR_UNAVAILABLE: "We couldn't verify the account's security. Try again in a few minutes.",
 		// OAuth link flow
 		NO_PENDING_LINK: "No pending account link found. Please restart the sign-in process.",
 		INVALID_PENDING_LINK: "The account link has expired or is invalid. Please sign in with the provider again.",

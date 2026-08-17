@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { authApi } from "../utils/auth-api.ts";
+import { authApi, type TwoFactorMode } from "../utils/auth-api.ts";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
-import { redirectToReturnUrl } from "../utils/safe-url.ts";
+import { DEFAULT_RETURN_URL, redirectToReturnUrl } from "../utils/safe-url.ts";
+import { TwoFactorChallenge } from "./TwoFactorChallenge.tsx";
 
 /** Nombres visibles de proveedores conocidos (la query es input no confiable: no se muestra cruda). */
 const PROVIDER_NAMES: Record<string, string> = { google: "Google", discord: "Discord" };
@@ -30,6 +31,8 @@ export function LinkAccount({ onNavigateToLogin }: LinkAccountProps) {
 	const { t, ready } = useTranslation({ namespace: "adc-auth", autoLoad: true });
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
+	/** La vinculación ya quedó hecha; lo que falta es el segundo factor para emitir la sesión. */
+	const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode | null>(null);
 
 	const params = new URLSearchParams(globalThis.location?.search);
 	const provider = PROVIDER_NAMES[params.get("provider") ?? ""] ?? t("linkAccount.genericProvider");
@@ -41,6 +44,11 @@ export function LinkAccount({ onNavigateToLogin }: LinkAccountProps) {
 		setLoading(true);
 
 		const result = await authApi.linkAccount(password);
+		if (result.success && result.data?.requires2fa) {
+			setTwoFactorMode(result.data.mode ?? "verify");
+			setLoading(false);
+			return;
+		}
 		if (result.success && result.data?.success && globalThis.location) {
 			// El backend resuelve el returnUrl (cookie httpOnly validada server-side) y lo devuelve.
 			redirectToReturnUrl(result.data.redirectUrl);
@@ -49,6 +57,10 @@ export function LinkAccount({ onNavigateToLogin }: LinkAccountProps) {
 
 		setLoading(false);
 	};
+
+	if (twoFactorMode) {
+		return <TwoFactorChallenge returnUrl={DEFAULT_RETURN_URL} initialMode={twoFactorMode} onNavigateToLogin={onNavigateToLogin} />;
+	}
 
 	if (!ready) {
 		return (

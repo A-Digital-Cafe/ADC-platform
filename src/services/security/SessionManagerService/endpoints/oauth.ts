@@ -34,6 +34,8 @@ import { checkUsername, generateRandomUsername } from "@common/utils/name-policy
 import { isPrivateHost } from "@common/utils/url-utils.js";
 import { resolveUserAvatar } from "@common/utils/avatar.js";
 import { buildLegalAcceptance } from "@common/utils/legal-docs.js";
+import { TwoFactorLoginEndpoints } from "./twofactor.js";
+import { AUTH_APP_BASE } from "../utils/authApp.js";
 
 /** Nombre de las cookies */
 const STATE_COOKIE_NAME = "oauth_state";
@@ -41,13 +43,6 @@ const RETURN_URL_COOKIE_NAME = "oauth_return_url";
 const PENDING_LINK_COOKIE_NAME = "oauth_pending_link";
 
 const isProd = process.env.NODE_ENV === "production";
-
-/**
- * Base del microfront `adc-auth` (mismo criterio que `errorRedirect.ts`): el redirect de
- * vinculación tiene que ser absoluto porque el callback OAuth corre en el host de la API
- * (dev: localhost:3000), que no sirve el SPA de cuentas.
- */
-const AUTH_APP_BASE = isProd ? "https://auth.adigitalcafe.com" : "http://localhost:3012";
 
 /** Max intentos de contraseña por pending link antes de consumirlo */
 const MAX_LINK_ATTEMPTS = 3;
@@ -250,10 +245,25 @@ export class OAuthEndpoints {
 
 			await OAuthEndpoints.syncDiscordLogin(provider, tokens.accessToken, user, oauthProvider);
 
-			const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx, user);
-
 			// Redirigir al returnUrl o al default
 			const redirectUrl = OAuthEndpoints.getRedirectUrl(user, returnUrl);
+
+			// El segundo factor aplica igual entrando por un proveedor externo: que la cuenta de
+			// Discord o Google tenga su propio 2FA no lo sabemos ni lo podemos verificar, así que
+			// darlo por cubierto sería asumir sin evidencia. Lanza (redirect al desafío) si hace falta.
+			await TwoFactorLoginEndpoints.assertSecondFactor({
+				userId: user.id,
+				username: user.username,
+				// El login OAuth no elige organización: entra como acceso personal.
+				orgId: null,
+				provider,
+				returnUrl: redirectUrl,
+				respondWith: "redirect",
+				clearCookies,
+			});
+
+			const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx, user);
+
 			throw UncommonResponse.redirect(redirectUrl, {
 				status: 302,
 				cookies: tokenCookies,
@@ -323,7 +333,6 @@ export class OAuthEndpoints {
 
 		const user = await OAuthEndpoints.buildLinkedAccountUser(existingUser, pendingData);
 
-		const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx as unknown as EndpointCtx<ProviderParams>, user);
 		// El clear tiene que repetir el `domain` con el que se setearon o el browser no las borra.
 		const cookieDomain = OAuthEndpoints.deps.cookieDomain || undefined;
 		const clearLinkCookies: ClearCookie[] = [
@@ -334,6 +343,20 @@ export class OAuthEndpoints {
 		// El returnUrl vive en una cookie httpOnly que el SPA no puede leer: se resuelve acá
 		// (validado contra la allow-list) y viaja en la respuesta para que el front redirija.
 		const returnUrl = ctx.cookies?.[RETURN_URL_COOKIE_NAME] || "";
+
+		// La vinculación ya quedó hecha (es lo que se pidió); lo que el segundo factor gatea es la
+		// SESIÓN. La respuesta es JSON porque quien llama es el microfront, no una navegación.
+		await TwoFactorLoginEndpoints.assertSecondFactor({
+			userId: user.id,
+			username: user.username,
+			orgId: null,
+			provider: pendingData.provider,
+			returnUrl: OAuthEndpoints.getRedirectUrl(user, returnUrl),
+			respondWith: "json",
+			clearCookies: clearLinkCookies,
+		});
+
+		const tokenCookies = await OAuthEndpoints.getTokenCookies(ctx as unknown as EndpointCtx<ProviderParams>, user);
 
 		throw UncommonResponse.json(
 			{

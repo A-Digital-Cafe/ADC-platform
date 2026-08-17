@@ -2,9 +2,10 @@ import type { Connection, Model } from "mongoose";
 import { BaseService } from "../../BaseService.js";
 import type { BilingualNote, IdentityStats, OrgScopedManagers, UserDataExportDocument, UserDataExportSection } from "./types.js";
 import type MongoProvider from "../../../providers/object/mongo/index.js";
-import { userSchema, groupSchema, roleSchema, organizationSchema, regionSchema, discordGuildConfigSchema } from "./domain/index.js";
+import { userSchema, groupSchema, roleSchema, organizationSchema, regionSchema, discordGuildConfigSchema, userTwoFactorSchema } from "./domain/index.js";
 import type { DiscordGuildConfig } from "./domain/index.js";
 import type { User, Role, Group, Organization, RegionInfo } from "@common/types/identity/index.d.ts";
+import type { UserTwoFactor } from "@common/types/identity/TwoFactor.ts";
 import {
 	UserManager,
 	GroupManager,
@@ -13,6 +14,7 @@ import {
 	SystemManager,
 	RegionManager,
 	OrgManager,
+	TwoFactorManager,
 	LegalAcceptanceArchiver,
 	buildLegalAcceptanceArchiveSchema,
 	LEGAL_ACCEPTANCE_ARCHIVE_DEFAULT_RETENTION_DAYS,
@@ -43,6 +45,7 @@ import {
 	RegionEndpoints,
 	StatsEndpoints,
 	AvatarEndpoints,
+	TwoFactorEndpoints,
 } from "./endpoints/index.js";
 import type AttachmentsUtility from "../../../utilities/attachments/attachments-utility/index.js";
 import type { AttachmentsManager } from "../../../utilities/attachments/attachments-utility/index.js";
@@ -160,6 +163,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 	#internalUserManager: UserManager | null = null;
 	#internalOrgManager: OrgManager | null = null;
 	#internalRoleManager: RoleManager | null = null;
+	#twoFactorManager: TwoFactorManager | null = null;
 
 	/** Vinculación neutral de emails (alta y rectificación); se arma en `start()`. */
 	#bindEmailNeutrally: EmailBinder | null = null;
@@ -314,7 +318,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 
 	@OnlyKernel()
 	@EnableEndpoints({
-		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints],
+		managers: () => [UserEndpoints, RoleEndpoints, GroupEndpoints, OrgEndpoints, RegionEndpoints, StatsEndpoints, AvatarEndpoints, TwoFactorEndpoints],
 	})
 	async start(kernelKey: symbol): Promise<void> {
 		await super.start(kernelKey);
@@ -330,6 +334,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			const RoleModel = this.#mongoProvider.createModel<Role>("Role", roleSchema);
 			const GroupModel = this.#mongoProvider.createModel<Group>("Group", groupSchema);
 			const DiscordGuildConfigModel = this.#mongoProvider.createModel<DiscordGuildConfig>("DiscordGuildConfig", discordGuildConfigSchema);
+			const UserTwoFactorModel = this.#mongoProvider.createModel<UserTwoFactor>("UserTwoFactor", userTwoFactorSchema);
 			this.#discordGuildConfigModel = DiscordGuildConfigModel;
 
 			// Inicializar RegionManager PRIMERO (necesario para OrgManager)
@@ -415,6 +420,10 @@ export default class IdentityManagerService extends BaseService implements IIden
 				noAuth
 			);
 			this.#internalRoleManager = internalRoleManager;
+			// El segundo factor no tiene manager "con auth": el login lo consulta antes de que exista
+			// sesión, y por HTTP sólo se llega a la propia cuenta o con la jerarquía ya validada.
+			const twoFactorIssuer = (this.config?.private as { twoFactor?: { issuer?: string } } | undefined)?.twoFactor?.issuer || "ADC Platform";
+			this.#twoFactorManager = new TwoFactorManager(UserTwoFactorModel, this.logger, twoFactorIssuer);
 			// Ojo: el `RegionManager` es el ÚNICO y va con auth verifier (su cache se poblaría dos
 			// veces si hubiera otro). Por eso el manager interno es "sin auth" en todo menos en las
 			// validaciones de región: un caller interno no debe pasar `region` en `create`/`update`
@@ -550,6 +559,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			OrgEndpoints.init(this);
 			RegionEndpoints.init(this);
 			StatsEndpoints.init(this);
+			TwoFactorEndpoints.init(this, this.getCapability());
 			// Lookup mínimo para el endpoint público de avatar raw, vía el manager
 			// interno (sin auth): los endpoints no tocan models (ver endpoints.md).
 			AvatarEndpoints.init(this, (userId) => this.#internalUserManager!.getAvatarAttachmentId(userId), this.#avatarAttachmentsManager);
@@ -659,6 +669,7 @@ export default class IdentityManagerService extends BaseService implements IIden
 			this.#internalUserManager!,
 			this.#internalOrgManager!,
 			this.#internalRoleManager!,
+			this.#twoFactorManager!,
 			this.#bindEmailNeutrally!,
 			(userId, remoteAvatarUrl) => this.#ingestProviderAvatar(userId, remoteAvatarUrl)
 		);

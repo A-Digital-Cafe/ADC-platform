@@ -54,11 +54,15 @@ const OrgOption = Type.Object({
 	name: Type.Optional(Type.String()),
 });
 
-/** Respuesta de login: éxito directo o solicitud de selección de organización. */
+/** Respuesta de login: éxito directo, selección de organización, o desafío de segundo factor. */
 export const LoginResponse = Type.Object({
 	success: Type.Boolean(),
 	user: Type.Optional(AuthUser),
 	requiresOrgSelection: Type.Optional(Type.Boolean()),
+	/** El login quedó pendiente del segundo factor: seguir por `/api/auth/login/2fa`. */
+	requires2fa: Type.Optional(Type.Boolean()),
+	/** `verify` = presentar un código; `enroll` = darlo de alta ahora (obligatorio por rol). */
+	mode: Type.Optional(Type.Union([Type.Literal("verify"), Type.Literal("enroll")])),
 	userId: Type.Optional(Type.String()),
 	username: Type.Optional(Type.String()),
 	orgOptions: Type.Optional(Type.Array(OrgOption)),

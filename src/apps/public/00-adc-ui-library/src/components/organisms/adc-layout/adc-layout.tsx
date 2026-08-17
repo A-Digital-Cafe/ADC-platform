@@ -42,6 +42,15 @@ export class AdcLayout {
 	@Prop() authUrl?: string;
 	@Prop() apiBaseUrl?: string;
 
+	/**
+	 * Apps con menú lateral propio: en mobile el logo del header se convierte en el
+	 * botón que lo abre. El toggle llega como `adcMobileMenuToggle` (burbujea hasta
+	 * este elemento, que es donde conviene escucharlo).
+	 */
+	@Prop() mobileMenu: boolean = false;
+	@Prop() mobileMenuOpen: boolean = false;
+	@Prop() mobileMenuLabel?: string;
+
 	// ── Footer props (pass-through to adc-site-footer) ──
 
 	@Prop() brandName: string = "Abby's Digital Cafe";
@@ -72,6 +81,9 @@ export class AdcLayout {
 					show-access-button={this.showAccessButton}
 					auth-url={authUrl}
 					api-base-url={apiBaseUrl}
+					mobile-menu={this.mobileMenu}
+					mobile-menu-open={this.mobileMenuOpen}
+					mobile-menu-label={this.mobileMenuLabel}
 				>
 					<slot name="header" />
 				</adc-site-header>

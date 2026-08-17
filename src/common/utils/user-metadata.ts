@@ -18,3 +18,12 @@ export function sanitizeUserMetadata(metadata: Record<string, unknown> | undefin
 	}
 	return rest;
 }
+
+/**
+ * `true` si la cuenta la creó un proveedor OAuth: su password es aleatorio y desconocido, así que
+ * no sirve para re-autenticar. El alta nativa estampa `createdVia: "platform"`, el seed `"dev-seed"`.
+ */
+export function isOAuthCreatedAccount(user: { metadata?: Record<string, unknown> } | null | undefined): boolean {
+	const via = user?.metadata?.createdVia;
+	return typeof via === "string" && via !== "platform" && via !== "dev-seed";
+}

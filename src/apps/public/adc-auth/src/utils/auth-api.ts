@@ -17,6 +17,9 @@ export interface LegalAcceptanceInput {
 	privacyVersion: string;
 }
 
+/** `verify` = presentar un código; `enroll` = darlo de alta ahora (obligatorio por rol). */
+export type TwoFactorMode = "verify" | "enroll";
+
 export interface AuthResponse {
 	success: boolean;
 	user?: SessionUser;
@@ -25,9 +28,14 @@ export interface AuthResponse {
 	redirectUrl?: string;
 	/** Indica que el usuario debe seleccionar una organización antes de concretar el login */
 	requiresOrgSelection?: boolean;
+	/** El login quedó pendiente del segundo factor: continuar por `twoFactorApi`. */
+	requires2fa?: boolean;
+	mode?: TwoFactorMode;
 	userId?: string;
 	username?: string;
 	orgOptions?: OrgOption[];
+	/** Sólo al completar el alta obligatoria: se muestran una vez y no se vuelven a servir. */
+	recoveryCodes?: string[];
 }
 
 /** Error data returned when account is blocked */
@@ -102,6 +110,27 @@ export const authApi = {
 	 * Obtener organizaciones del usuario autenticado
 	 */
 	getUserOrgs: () => api.get<{ orgs: OrgOption[]; currentOrgId?: string }>("/user-orgs"),
+};
+
+/**
+ * Segundo factor del login. Todas las llamadas se apoyan en la cookie httpOnly del desafío que
+ * plantó el paso anterior; no hay identificador que el cliente tenga que llevar ni pueda tocar.
+ *
+ * `silent` en ningún caso: los errores (código incorrecto, desafío vencido) se muestran con el
+ * callout declarativo de la página, igual que en el resto del flujo de login.
+ */
+export const twoFactorApi = {
+	/** Qué espera el desafío vigente. Lo usa el flujo OAuth, que llega por redirect sin contexto. */
+	getChallenge: () => api.get<{ mode: TwoFactorMode; username: string; expiresAt: number; attemptsLeft: number }>("/login/2fa"),
+
+	/** Completa el login con un código del autenticador o de recuperación. */
+	verify: (code: string) => api.post<AuthResponse>("/login/2fa", { body: { code } }),
+
+	/** Alta obligatoria: pide el secreto nuevo. El QR se arma en el cliente con `otpauthUri`. */
+	startEnrollment: () => api.post<{ secret: string; otpauthUri: string }>("/login/2fa/enroll"),
+
+	/** Confirma el alta obligatoria: activa el factor, emite la sesión y devuelve los códigos. */
+	confirmEnrollment: (code: string) => api.post<AuthResponse>("/login/2fa/enroll/confirm", { body: { code } }),
 };
 
 /** API pública de identidad para canjear tokens que llegan por email (sin sesión). */

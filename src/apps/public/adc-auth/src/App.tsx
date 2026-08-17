@@ -3,12 +3,13 @@ import { useState, useEffect } from "react";
 import { Login } from "./pages/Login.tsx";
 import { Register } from "./pages/Register.tsx";
 import { LinkAccount } from "./pages/LinkAccount.tsx";
+import { TwoFactorChallenge } from "./pages/TwoFactorChallenge.tsx";
 import { AuthLayout } from "./components/AuthLayout.tsx";
 import { TokenActionPage } from "./components/TokenActionPage.tsx";
 import { identityPublicApi } from "./utils/auth-api.ts";
 import { DEFAULT_RETURN_URL, sanitizeReturnUrl } from "./utils/safe-url.ts";
 
-type Page = "login" | "register" | "cancel-deletion" | "confirm-email" | "link-account";
+type Page = "login" | "register" | "cancel-deletion" | "confirm-email" | "link-account" | "two-factor";
 
 function getReturnUrl(): string {
 	const params = new URLSearchParams(globalThis.location?.search);
@@ -26,6 +27,9 @@ function pageFromPath(path: string | undefined): Page {
 			return "confirm-email";
 		case "/link-account":
 			return "link-account";
+		// Acá aterriza el callback OAuth cuando la cuenta necesita el segundo factor.
+		case "/two-factor":
+			return "two-factor";
 		default:
 			return "login";
 	}
@@ -71,6 +75,8 @@ export default function App() {
 		);
 	} else if (page === "link-account") {
 		content = <LinkAccount onNavigateToLogin={() => navigate("login")} />;
+	} else if (page === "two-factor") {
+		content = <TwoFactorChallenge returnUrl={returnUrl} onNavigateToLogin={() => navigate("login")} />;
 	} else if (page === "register") {
 		content = <Register onNavigateToLogin={() => navigate("login")} returnUrl={returnUrl} />;
 	} else {

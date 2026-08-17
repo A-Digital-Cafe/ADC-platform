@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from "react";
-import { authApi, type BlockedErrorData, type OrgOption } from "../utils/auth-api.ts";
+import { authApi, type BlockedErrorData, type OrgOption, type TwoFactorMode } from "../utils/auth-api.ts";
 import { useTranslation } from "@ui-library/utils/i18n-react";
 import { clearErrors } from "@ui-library/utils/adc-fetch";
 import { getBaseUrl } from "@common/utils/url-utils.js";
 import { redirectToReturnUrl, sanitizeReturnUrl } from "../utils/safe-url.ts";
 import { OAuthLegalNotice } from "../components/OAuthLegalNotice.tsx";
+import { TwoFactorChallenge } from "./TwoFactorChallenge.tsx";
 
 /** Base URL for API calls */
 const API_BASE = getBaseUrl(3000);
@@ -46,6 +47,9 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
 
+	// Desafío de segundo factor: el login quedó a medio hacer y sigue en su propia pantalla.
+	const [twoFactorMode, setTwoFactorMode] = useState<TwoFactorMode | null>(null);
+
 	// Estado para selección de organización
 	const [showOrgSelector, setShowOrgSelector] = useState(false);
 	const [orgOptions, setOrgOptions] = useState<OrgOption[]>([]);
@@ -68,6 +72,12 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 		});
 
 		if (result.success && result.data) {
+			if (result.data.requires2fa) {
+				setTwoFactorMode(result.data.mode ?? "verify");
+				setLoading(false);
+				return;
+			}
+
 			// Verificar si requiere selección de organización
 			if (result.data.requiresOrgSelection && result.data.orgOptions?.length) {
 				setPendingUsername(username);
@@ -104,7 +114,9 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 			orgId
 		);
 
-		if (result.success && result.data && !result.data.requiresOrgSelection && globalThis.location) {
+		if (result.success && result.data?.requires2fa) {
+			setTwoFactorMode(result.data.mode ?? "verify");
+		} else if (result.success && result.data && !result.data.requiresOrgSelection && globalThis.location) {
 			redirectToReturnUrl(returnUrl);
 		}
 
@@ -119,6 +131,12 @@ export function Login({ onNavigateToRegister, returnUrl }: LoginProps) {
 	const getOAuthUrl = (provider: string): string => {
 		return `${API_BASE}/api/auth/login/${provider}?returnUrl=${encodeURIComponent(sanitizeReturnUrl(returnUrl))}`;
 	};
+
+	// El desafío reemplaza el formulario: volver atrás obliga a rehacer el login, que es lo correcto
+	// —el desafío pendiente se consume o vence, no se reanuda con otras credenciales—.
+	if (twoFactorMode) {
+		return <TwoFactorChallenge returnUrl={returnUrl} initialMode={twoFactorMode} onNavigateToLogin={() => setTwoFactorMode(null)} />;
+	}
 
 	// Skeleton mientras cargan las traducciones
 	if (!ready) {

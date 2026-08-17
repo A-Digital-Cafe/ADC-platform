@@ -46,6 +46,14 @@ type IdentityErrorTypes =
 	| "MAILBOX_ADDRESS_TAKEN"
 	// Cooldown de 30 días entre cambios de username; `data.retryAfterSeconds` alimenta el Retry-After
 	| "USERNAME_CHANGE_COOLDOWN"
+	// Segundo factor (TOTP)
+	| "TWO_FACTOR_ALREADY_ENABLED"
+	| "TWO_FACTOR_NOT_ENABLED"
+	| "TWO_FACTOR_REQUIRED"
+	| "NO_PENDING_ENROLLMENT"
+	| "INVALID_TOTP"
+	// El secreto guardado no se pudo descifrar: se falla cerrado en vez de dejar pasar
+	| "TWO_FACTOR_UNREADABLE"
 	// Validation
 	| "FORBIDDEN"
 	| "INVALID_BODY"

@@ -12,6 +12,10 @@ Autenticación OAuth 2.0 con Access/Refresh Tokens y rotación de secretos (`ker
 | POST   | `/api/auth/register`                        | público             | Alta (exige `legal`; el email se vincula por correo, ver abajo)    |
 | GET    | `/api/auth/session`                         | público             | Verifica sesión                                                    |
 | POST   | `/api/auth/refresh`                         | público             | Renueva tokens                                                     |
+| GET    | `/api/auth/login/2fa`                       | público             | Estado del desafío de segundo factor pendiente (`verify`/`enroll`) |
+| POST   | `/api/auth/login/2fa`                       | público             | Completa el login con un código (autenticador o recuperación)      |
+| POST   | `/api/auth/login/2fa/enroll`                | público             | Alta obligatoria: entrega el secreto (sólo desafíos `enroll`)      |
+| POST   | `/api/auth/login/2fa/enroll/confirm`        | público             | Confirma el alta, emite la sesión y entrega los códigos            |
 | POST   | `/api/auth/logout`                          | público             | Cierra sesión                                                      |
 | GET    | `/api/auth/legal/status`                    | sesión              | Documentos legales pendientes de re-aceptar (vacío = nada)         |
 | POST   | `/api/auth/legal/accept`                    | sesión              | Acepta la versión vigente (constancia `via: "re-acceptance"`)      |
@@ -50,6 +54,12 @@ Ver `.env.example`: `JWT_SECRET` (mín. 32 chars, solo sin rotación de claves),
   `IdentityManager._internal(cap).bindEmailNeutrally` (fuera de banda). El 409 sólo existe para
   `USERNAME_EXISTS` (identidad pública, ya resoluble por HEAD); si el email está tomado, el aviso va
   a su titular y la respuesta —cuerpo y cookies— es idéntica a la del caso libre
+- **Segundo factor**: entre "la contraseña es correcta" y "hay sesión". El desafío vive en Redis con
+  su cookie HttpOnly (5 min, 5 intentos) y **no** reenvía la contraseña en el segundo paso, a
+  diferencia del selector de organización. Aplica a quien ya lo activó y, obligatoriamente, a toda
+  cuenta con rol Admin —de plataforma o de alguna organización—, que si no lo tiene lo da de alta ahí
+  mismo o no entra. Cubre las tres vías: login nativo, callback OAuth y vinculación de cuenta; un
+  fallo leyendo Identity responde 503 en vez de dejar pasar
 - **Rate limiting**: 3 fallos login/día = bloqueo 1h; post-desbloqueo fallo = bloqueo permanente
 - **Geo-validation**: cambio de país invalida sesión
 - **Moderación**: integra `ModerationService` (opcional, vía `IModerationService`) para bloquear logins baneados;

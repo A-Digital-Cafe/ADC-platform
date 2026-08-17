@@ -23,6 +23,7 @@ import { assertEmailNotBanned, assertIpNotBanned, recordLoginAttemptIp, redirect
 import { assertOrgMembership, requiresOrgSelection, resolveNativeLoginUser, validateNativeLoginBody, type NativeLoginBody } from "../utils/nativeLogin.js";
 import { checkUsername } from "@common/utils/name-policy.js";
 import { buildLegalAcceptance, currentLegalVersions } from "@common/utils/legal-docs.js";
+import { TwoFactorLoginEndpoints, type IssuedSession } from "./twofactor.js";
 
 /** Nombre de las cookies */
 const ACCESS_COOKIE_NAME = "access_token";
@@ -159,6 +160,17 @@ export class AuthEndpoints {
 			// un token con el contexto de una organización ajena (mismo chequeo que
 			// hace `switch-org`).
 			assertOrgMembership(fullUser, orgId);
+
+			// Segundo factor. Va DESPUÉS de elegir organización porque el desafío guarda el contexto
+			// ya resuelto: al completarse emite la sesión sin volver a pasar por acá. Lanza si hace
+			// falta (código pendiente o alta obligatoria) y no vuelve.
+			await TwoFactorLoginEndpoints.assertSecondFactor({
+				userId: fullUser.id,
+				username: fullUser.username,
+				orgId: orgId ?? null,
+				provider: "platform",
+				respondWith: "json",
+			});
 
 			// Construir usuario directamente desde profile (ya validado por authenticate)
 			const user = await AuthEndpoints.buildAuthenticatedUser("platform", fullUser, orgId);
@@ -570,6 +582,47 @@ export class AuthEndpoints {
 		];
 
 		throw UncommonResponse.json({ success: true, message: "Sesión cerrada" }, { clearCookies });
+	}
+
+	/**
+	 * Emite la sesión de una cuenta ya autenticada **por completo**, incluido el segundo factor.
+	 *
+	 * La usa el segundo paso del desafío 2FA, que retoma un login abandonado a mitad de camino y no
+	 * tiene a mano ni el perfil ni el contexto. Vuelve a mirar el estado de la cuenta —pudo ser
+	 * baneada o dada de baja entre los dos pasos— y revalida la pertenencia a la organización, que
+	 * llega del desafío y no de un token todavía inexistente.
+	 */
+	static async issueSession(
+		ctx: EndpointCtx<any, any>,
+		userId: string,
+		orgId: string | null | undefined,
+		provider: string
+	): Promise<IssuedSession> {
+		const internal = AuthEndpoints.deps.internalIdentity;
+		if (!internal) throw new AuthError(500, "SERVICE_UNAVAILABLE", "Servicio de identidad no disponible");
+
+		const fullUser = await internal.users.getUser(userId);
+		if (!fullUser || fullUser.isActive === false) {
+			throw new AuthError(401, "ACCOUNT_DISABLED", "La cuenta no está disponible");
+		}
+
+		const resolvedOrgId = orgId ?? undefined;
+		assertOrgMembership(fullUser, resolvedOrgId);
+
+		const user = await AuthEndpoints.buildAuthenticatedUser(provider, fullUser, resolvedOrgId);
+		const cookies = await AuthEndpoints.getTokenCookies(ctx, user);
+
+		return {
+			cookies,
+			user: {
+				id: user.id,
+				username: user.username,
+				email: user.email,
+				avatar: user.avatar,
+				orgId: user.orgId,
+				orgSlug: user.orgId ? await AuthEndpoints.resolveOrgSlug(user.orgId) : undefined,
+			},
+		};
 	}
 
 	// ============ Métodos auxiliares (privados estáticos) ============

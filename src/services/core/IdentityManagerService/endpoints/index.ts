@@ -7,3 +7,4 @@ export { OrgEndpoints } from "./organizations.js";
 export { RegionEndpoints } from "./regions.js";
 export { StatsEndpoints } from "./stats.js";
 export { AvatarEndpoints } from "./avatar.js";
+export { TwoFactorEndpoints } from "./twofactor.js";
