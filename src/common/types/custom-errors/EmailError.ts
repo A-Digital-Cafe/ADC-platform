@@ -14,12 +14,17 @@ type EmailErrorTypes =
 	| "MAIL_ADDRESS_TAKEN"
 	| "ATTACHMENT_NOT_FOUND"
 	| "FOLDER_NOT_FOUND"
+	/** Ya hay una regla de remitente con ese valor en la misma lista. */
+	| "SPAM_RULE_EXISTS"
+	/** La regla de remitente no existe, o es de otra lista. */
+	| "SPAM_RULE_NOT_FOUND"
 	// Tier / cuota
 	| "QUOTA_EXCEEDED"
 	| "STORAGE_FULL"
 	| "ATTACHMENT_TOO_LARGE"
 	| "TOO_MANY_RECIPIENTS"
 	| "TOO_MANY_SCHEDULED"
+	| "TOO_MANY_SENDER_RULES"
 	// Política de entrega
 	| "EXTERNAL_SEND_DISABLED"
 	| "RECIPIENT_NOT_FOUND"

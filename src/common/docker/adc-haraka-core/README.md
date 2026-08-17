@@ -8,6 +8,9 @@ kernel si está junto a un módulo, o levantable con `docker compose up -d`.
   El 587 (submission) se habilita recién con envío externo (auth+TLS).
 - Entrega entrante al `email-service` vía webhook firmado; los rechazos son en sesión
   (5xx/4xx), nunca acepta-y-rebota. **DKIM** firma saliente y verifica entrante.
+- Payload del webhook: `{ mailFrom, recipients[], raw(base64), sizeBytes, receivedAt,
+  spam?: {score, flag}, auth?: {spf, dkim} }` — `"pass"|"fail"|"none"`. `adc_basic_spam` los
+  pasa por `txn.notes`, **fuera** del MIME; las `X-ADC-*` sólo sirven para mirar el .eml.
 - Anti-abuso: `early_talker`, `spf` en modo anotación, `adc_basic_spam` y `limit` con topes
   por sesión (errores/RCPT/comandos) **y por IP en el tiempo** (conexiones y destinatarios),
   estos últimos contra el Redis de la plataforma por la red `adc-core-net`. El tráfico

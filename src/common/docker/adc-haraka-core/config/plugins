@@ -42,7 +42,10 @@ rcpt_to.in_host_list
 headers
 attachment
 
-# Antispam: reglas básicas (ver plugins/adc_basic_spam.js)
+# Antispam: reglas básicas (ver plugins/adc_basic_spam.js). Aunque figure antes que
+# `dkim`, se registra en data_post con prioridad 50 para leer sus resultados: el
+# orden de este archivo no alcanza y moverlo acá abajo lo dejaría a merced de un
+# reordenamiento futuro.
 adc_basic_spam
 
 # Firmado DKIM saliente (selector global) + verificación del correo entrante.

@@ -31,13 +31,22 @@ exports.hook_queue = function (next, connection) {
 	// DATA hasta el timeout del plugin (ningún correo llegaba a entregarse).
 	txn.message_stream.get_data((raw) => {
 		const recipients = txn.rcpt_to.map((r) => r.address());
-		const payload = JSON.stringify({
+		const body = {
 			mailFrom: txn.mail_from ? txn.mail_from.address() : null,
 			recipients,
 			raw: raw.toString('base64'),
 			sizeBytes: raw.length,
 			receivedAt: new Date().toISOString(),
-		});
+		};
+
+		// Veredicto y señales de autenticación por `notes` (adc_basic_spam), fuera del
+		// MIME que controla el remitente. Si el plugin no corrió van omitidos, no vacíos.
+		const spam = txn.notes.adcSpam;
+		const auth = txn.notes.adcAuth;
+		if (spam) body.spam = { score: spam.score, flag: spam.flag };
+		if (auth) body.auth = { spf: auth.spf, dkim: auth.dkim };
+
+		const payload = JSON.stringify(body);
 
 		const parsed = new URL(url);
 		const client = parsed.protocol === 'https:' ? https : http;

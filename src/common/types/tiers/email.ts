@@ -28,6 +28,8 @@ export interface EmailUserTierLimits {
 	maxRecipientsPerMessage: number;
 	/** Correos programados activos simultáneos. */
 	maxScheduledMessages: number;
+	/** Remitentes en la lista personal (bloqueados + permitidos). */
+	blocklistSize: number;
 }
 
 /** Cuotas agregadas por organización (dominio de correo). */
@@ -51,6 +53,7 @@ export const EMAIL_USER_BASE_LIMITS: EmailUserTierLimits = {
 	maxAttachmentBytes: 25 * MB,
 	maxRecipientsPerMessage: 20,
 	maxScheduledMessages: 5,
+	blocklistSize: 50,
 };
 
 /** Piso del tier `default` de organización. */

@@ -12,6 +12,16 @@ export type EmailFolder = "inbox" | "sent" | "drafts" | "spam" | "trash";
 /** Dirección del flujo del mensaje. */
 type EmailDirection = "inbound" | "outbound";
 
+/** @public Veredicto de una comprobación de autenticación; `none` = el remitente no la publica. */
+export type AuthVerdict = "pass" | "fail" | "none";
+
+/** Resultado de autenticación del remitente, tal como lo vio el MTA. */
+export interface EmailAuthResults {
+	spf: AuthVerdict;
+	dkim: AuthVerdict;
+	dmarc: AuthVerdict;
+}
+
 /**
  * Estado del mensaje:
  * - `draft`: borrador editable.
@@ -86,8 +96,12 @@ export interface EmailMessage {
 
 	/** Tamaño total estimado (cuerpo + adjuntos) en bytes. */
 	sizeBytes: number;
-	/** Puntuación antispam de las reglas básicas (0 = limpio). */
+	/** Puntuación antispam, 0-100 (0 = limpio). */
 	spamScore?: number;
+	/** Por qué quedó en esa carpeta: `"blocked:global"`, `"blocked:user"`, `"allow:user"`, `"score"`, … */
+	spamReason?: string | null;
+	/** Veredicto de autenticación del MTA; `null` si el correo no pasó por él (entrega interna). */
+	authResults?: EmailAuthResults | null;
 	/** Último error de envío, si lo hubo. */
 	error?: string;
 
@@ -177,4 +191,51 @@ export interface EmailSendLog {
 	userId: string;
 	recipients: number;
 	createdAt: Date;
+}
+
+/** @public Granularidad de una regla o reputación: una dirección exacta o todo un dominio. */
+export type SpamMatchType = "address" | "domain";
+
+/** @public Alcance de una regla: propia del usuario o curada por un admin para toda la plataforma. */
+export type SpamRuleScope = "user" | "global";
+
+/** @public Sentido de la regla: bloquear el remitente o dejarlo pasar siempre. */
+export type SpamRuleKind = "block" | "allow";
+
+/** Regla de remitente. Se aplica en la entrega (no en el MTA): manda el correo a `spam`, nunca lo descarta. */
+export interface MailSenderRule {
+	id: string;
+	scope: SpamRuleScope;
+	/** `null` cuando el `scope` es `"global"`. */
+	ownerUserId: string | null;
+	kind: SpamRuleKind;
+	matchType: SpamMatchType;
+	/** Ya normalizado (ver `normalizeAddress`), porque el match es por igualdad exacta. */
+	value: string;
+	reason: string;
+	createdBy: string;
+	createdAt: Date;
+	/** `null` = no vence. El vencimiento lo filtra la consulta; el documento lo borra un barrido. */
+	expiresAt: Date | null;
+}
+
+/** Reputación **personal** de un remitente: lo que este usuario marcó como spam o como legítimo. */
+export interface MailSenderReputation {
+	ownerUserId: string;
+	matchType: SpamMatchType;
+	value: string;
+	spamReports: number;
+	hamReports: number;
+	lastMessageAt: Date;
+	updatedAt: Date;
+}
+
+/** Denuncia agregada entre usuarios; insumo del admin para promover un remitente a la lista global. */
+export interface MailSpamReport {
+	matchType: SpamMatchType;
+	value: string;
+	reporterUserIds: string[];
+	firstSeenAt: Date;
+	lastSeenAt: Date;
+	status: "pending" | "promoted" | "dismissed";
 }
