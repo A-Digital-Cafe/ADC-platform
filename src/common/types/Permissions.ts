@@ -117,6 +117,7 @@ export const P = buildAllPermissions() as {
 		readonly INTEGRITY: ScopePermissions<"network">;
 		readonly LIFECYCLE: ScopePermissions<"network">;
 		readonly ROUTING: ScopePermissions<"network">;
+		readonly ENDPOINTS: ScopePermissions<"network">;
 	};
 	readonly PLANS: {
 		readonly CATALOG: ScopePermissions<"plans">;

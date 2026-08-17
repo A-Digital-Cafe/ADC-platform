@@ -20,6 +20,9 @@ export const NETWORK_RESOURCE_NAME = "network" as const;
  * - `ROUTING`: los nombres públicos del borde (subdominios enrutados por el túnel). Bit propio
  *   porque publica superficie en internet: quien lo tiene puede colgar un host nuevo del dominio,
  *   que es una operación de otra naturaleza que mirar la topología o repartir claves de la overlay.
+ * - `ENDPOINTS`: el tráfico HTTP de la flota por endpoint (llamadas/hora, latencia, errores).
+ *   Bit propio y no derivado de `NODES` porque la lectura expone el mapa de rutas de toda la
+ *   plataforma, y su `EXECUTE` —resetear la ventana— borra evidencia de lo que pasó.
  */
 export const NetworkScopes = {
 	NONE: 0,
@@ -29,7 +32,8 @@ export const NetworkScopes = {
 	INTEGRITY: 1 << 3, // 8
 	LIFECYCLE: 1 << 4, // 16
 	ROUTING: 1 << 5, // 32
-	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5), // 63
+	ENDPOINTS: 1 << 6, // 64
+	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6), // 127
 } as const;
 
 /** @public */
