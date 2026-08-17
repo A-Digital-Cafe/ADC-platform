@@ -69,9 +69,9 @@ recursos disponibles, considerando tu preferencia (`plus` vs `pro`).
 
 | Severidad        | Recompensa mínima                 |
 | ---------------- | --------------------------------- |
-| Low              | 1-10 días **plus**                |
-| Medium / High    | 1 mes **plus** · ó 1-10 días **pro** |
-| Critical         | 3 meses **plus** · ó 1 mes **pro**   |
+| Low              | 1-10 días **pro**                 |
+| Medium / High    | 1 mes **pro** · ó 1-10 días **plus** |
+| Critical         | 3 meses **pro** · ó 1 mes **plus**   |
 
 Para recibir la recompensa necesitás una cuenta (el beneficio se aplica a tu
 usuario). El otorgamiento lo confirma un admin/Security Manager al resolver.
@@ -189,9 +189,9 @@ increase them or agree on other benefits from the ticket, considering your
 
 | Severity      | Minimum reward                  |
 | ------------- | ------------------------------- |
-| Low           | 1-10 days **plus**              |
-| Medium / High | 1 month **plus** · or 1-10 days **pro** |
-| Critical      | 3 months **plus** · or 1 month **pro**  |
+| Low           | 1-10 days **pro**               |
+| Medium / High | 1 month **pro** · or 1-10 days **plus** |
+| Critical      | 3 months **pro** · or 1 month **plus**  |
 
 **Programme terms** — the programme is voluntary and may be modified or
 discontinued with notice published on this page; **changes do not affect reports

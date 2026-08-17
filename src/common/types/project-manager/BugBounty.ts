@@ -39,30 +39,35 @@ interface BugBountyReward {
 
 /**
  * Recompensas MÍNIMAS por severidad. Cada severidad puede ofrecer varias
- * variantes (plus de mayor duración o pro de menor duración); el admin elige
- * una considerando la preferencia del reporter (`rewardPreference`).
+ * variantes (más días del tier menor, o menos días del tier mayor); el admin
+ * elige una considerando la preferencia del reporter (`rewardPreference`).
+ *
+ * **El orden de los tiers es `free < vip < pro < plus`** (ver `tierRank`): `plus`
+ * es el tier ALTO. La tabla estuvo escrita al revés —regalaba `plus` por la
+ * severidad más baja y ofrecía el par "1 mes plus ó 10 días pro", donde la
+ * segunda opción no la elegiría nadie porque era menos tier Y menos tiempo—.
  *
  * Bandas acordadas:
- * - low      → 1-10 días plus  (títulos, formato del sitio, lógicas simples)
- * - medium   → 1 mes plus / 1-10 días pro
- * - high     → 1 mes plus / 1-10 días pro  (lógica de negocio que afecta a muchos
+ * - low      → 1-10 días pro   (títulos, formato del sitio, lógicas simples)
+ * - medium   → 1 mes pro / 1-10 días plus
+ * - high     → 1 mes pro / 1-10 días plus  (lógica de negocio que afecta a muchos
  *              usuarios o CVEs conocidos en librerías de la plataforma)
- * - critical → 3 meses plus / 1 mes pro    (errores de seguridad críticos)
+ * - critical → 3 meses pro / 1 mes plus    (errores de seguridad críticos)
  * @public
  */
 export const BUG_BOUNTY_POLICY: Record<BugBountySeverity, readonly BugBountyReward[]> = {
-	low: [{ tier: "plus", days: 10 }],
+	low: [{ tier: "pro", days: 10 }],
 	medium: [
-		{ tier: "plus", days: 30 },
-		{ tier: "pro", days: 10 },
+		{ tier: "pro", days: 30 },
+		{ tier: "plus", days: 10 },
 	],
 	high: [
-		{ tier: "plus", days: 30 },
-		{ tier: "pro", days: 10 },
+		{ tier: "pro", days: 30 },
+		{ tier: "plus", days: 10 },
 	],
 	critical: [
-		{ tier: "plus", days: 90 },
-		{ tier: "pro", days: 30 },
+		{ tier: "pro", days: 90 },
+		{ tier: "plus", days: 30 },
 	],
 } as const;
 
