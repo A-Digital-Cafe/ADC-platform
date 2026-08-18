@@ -184,6 +184,6 @@ this.logger.logOk("Success");
 - **Provider base**: [src/providers/BaseProvider.ts](src/providers/BaseProvider.ts)
 - **Module config interface**: [src/interfaces/modules/IModule.d.ts](src/interfaces/modules/IModule.d.ts)
 - **UI Federation**: [src/services/core/UIFederationService/](src/services/core/UIFederationService/)
-- **Identity system**: [src/services/core/IdentityManagerService/](src/services/core/IdentityManagerService/)
-- **Session management**: [src/services/security/SessionManagerService/](src/services/security/SessionManagerService/)
+- **Identity system**: [presets/IAM/services/IdentityManagerService/](presets/IAM/services/IdentityManagerService/)
+- **Session management**: [presets/IAM/services/SessionManagerService/](presets/IAM/services/SessionManagerService/)
 - **Main UI Library**: [src/apps/public/00-adc-ui-library/](src/apps/public/00-adc-ui-library/) (components, Connect RPC utils, router, React JSX autogenerado, Tailwind preset)

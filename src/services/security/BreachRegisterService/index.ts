@@ -18,7 +18,7 @@ import {
 import { PLATFORM_TOPICS } from "@common/utils/notifications/platform-topics.ts";
 import { BreachError } from "@common/types/custom-errors/BreachError.ts";
 import { publicEnv } from "@common/utils/public-env.ts";
-import { SystemRole } from "@services/core/IdentityManagerService/defaults/systemRoles.js";
+import { SystemRole } from "@common/types/identity/systemRoles.js";
 import { buildBreachAffectedSchema, buildBreachSchema } from "./domain/breach.ts";
 import { buildAuthorityNotice, buildPublicCommunication, buildSubjectsNotice } from "./domain/templates.ts";
 import { BreachRepository, DUE_FOR_AUTHORITY_LIMIT, summarize, type BreachCursor } from "./dao/BreachRepository.ts";

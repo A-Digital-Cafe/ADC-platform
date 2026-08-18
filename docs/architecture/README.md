@@ -52,7 +52,7 @@ roles predefinidos (SYSTEM, Admin, Network/Security/Data/App/Config Manager, Use
 auto-creado con credenciales aleatorias por arranque, persistencia en MongoDB (fallback a memoria si
 no hay `mongo-provider`), hashing de contraseñas con argon2id (con lectura permanente del formato
 PBKDF2 anterior y rehash al iniciar sesión) y permisos granulares por recurso,
-acción y alcance (self/group/all). Detalle en [src/services/core/IdentityManagerService/README.md](../../src/services/core/IdentityManagerService/README.md).
+acción y alcance (self/group/all). Detalle en [presets/IAM/services/IdentityManagerService/README.md](../../presets/IAM/services/IdentityManagerService/README.md).
 
 ## Sistema de Capacidades
 

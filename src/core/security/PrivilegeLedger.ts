@@ -18,6 +18,12 @@ export interface PrivilegeChange {
 	grant: PrivilegeGrant;
 	/** Scopes que este módulo no tenía la vez anterior. Es lo que hay que mirar. */
 	added: string[];
+	/**
+	 * Los `added` que **no** están en el baseline aprobado: la escalada real. Un scope que ya
+	 * figura aprobado llega acá recién cuando alguien lo aprobó y el módulo se reinició para
+	 * recibirlo — avisarlo como escalada convertiría cada aprobación en su propia alarma.
+	 */
+	escalated: string[];
 	removed: string[];
 	/** Primera provisión del módulo en este proceso (alta de baseline, no escalada). */
 	first: boolean;
@@ -105,7 +111,9 @@ export class PrivilegeLedger {
 		// no cambió sus privilegios es el caso masivamente mayoritario.
 		if (!first && added.length === 0 && removed.length === 0 && withheld.length === 0) return;
 
-		this.#emit({ grant: next, added, removed, first, withheld: [...withheld], retroactive: false });
+		const approved = this.#approvals?.get(key);
+		const escalated = approved ? added.filter((scope) => !approved.includes(scope)) : added;
+		this.#emit({ grant: next, added, escalated, removed, first, withheld: [...withheld], retroactive: false });
 	}
 
 	/**
@@ -134,7 +142,7 @@ export class PrivilegeLedger {
 			const gone = new Set<string>(withheld);
 			const next: PrivilegeGrant = { ...grant, scopes: grant.scopes.filter((scope) => !gone.has(scope)) };
 			this.#grants.set(key, next);
-			this.#emit({ grant: next, added: [], removed: [], first: false, withheld, retroactive: true });
+			this.#emit({ grant: next, added: [], escalated: [], removed: [], first: false, withheld, retroactive: true });
 		}
 	}
 

@@ -149,7 +149,7 @@ node .claude/skills/run-adc-platform/driver.mjs drive http://localhost:3024/ hom
 > [docs/guides/ports.csv](docs/guides/ports.csv) (`port,app,notes` — picked up
 > automatically; poner `smoke-shot` en `notes` la suma a las capturas de `smoke`)
 > and the user to
-> `src/services/core/IdentityManagerService/defaults/devUsers.ts`, mirroring the
+> `presets/IAM/services/IdentityManagerService/defaults/devUsers.ts`, mirroring the
 > credentials in `utils/config.mjs`'s `DEV_USERS` for a login preset.
 
 **Stop cleanly — always via the driver, never Ctrl-C or `bun run cleanup`** (see Gotchas):

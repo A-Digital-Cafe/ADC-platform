@@ -46,7 +46,7 @@ Los servicios en modo kernel se cargan automáticamente antes que las apps:
 
 ## Gestión de Identidades
 
-El `IdentityManagerService` (servicio en modo kernel) gestiona usuarios, roles, grupos y organizaciones con persistencia en MongoDB, hashing PBKDF2 y permisos granulares por recurso/acción/alcance. Detalle en [docs/architecture/README.md](./docs/architecture/README.md) y en `src/services/core/IdentityManagerService/README.md`.
+El `IdentityManagerService` (servicio en modo kernel) gestiona usuarios, roles, grupos y organizaciones con persistencia en MongoDB, hashing PBKDF2 y permisos granulares por recurso/acción/alcance. Detalle en [docs/architecture/README.md](./docs/architecture/README.md) y en `presets/IAM/services/IdentityManagerService/README.md`.
 
 ## Provisioning Automático con Docker Compose
 

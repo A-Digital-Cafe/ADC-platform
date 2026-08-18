@@ -58,8 +58,8 @@ de copyright abstracta: es una atribución falsa frente al fisco y frente a quie
 ### b) Autoría de la persona detrás del proyecto
 
 Nombre real y direcciones personales donde figuran como autoría: aviso de copyright, `author` de los
-`package.json`, autoría de contenido en `src/apps/public/community-home/src/utils/constants.ts`,
-`creator-*` en `src/apps/public/adc-auth/src/components/AuthLayout.tsx` y buzones nombrados en
+`package.json`, autoría de contenido en `presets/community-home/apps/community-home/src/utils/constants.ts`,
+`creator-*` en `presets/IAM/apps/adc-auth/src/components/AuthLayout.tsx` y buzones nombrados en
 `docs/`.
 
 El aviso de copyright hay que conservarlo —lo exige la propia ISC—, pero **como atribución de

@@ -1,7 +1,7 @@
 import { maxTier, type AccountTier } from "@common/types/tiers.ts";
 import type { OrganizationTier } from "@common/types/identity/Organization.ts";
 import type { PlanAxis, PlanSubject } from "@common/types/plans/index.ts";
-import { ROLE_GRANTED_TIERS, SystemRole } from "@services/core/IdentityManagerService/defaults/systemRoles.js";
+import { ROLE_GRANTED_TIERS, SystemRole } from "@common/types/identity/systemRoles.js";
 import LRUCache from "@adc/utils/performance/LRUCache.ts";
 
 /**

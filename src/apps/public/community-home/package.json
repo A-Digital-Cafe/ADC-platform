@@ -1,9 +1,0 @@
-{
-	"name": "@adc-platform/community-home",
-	"license": "ISC",
-	"author": "abbytec",
-	"version": "1.0.0",
-	"private": true,
-	"type": "module",
-	"dependencies": {}
-}

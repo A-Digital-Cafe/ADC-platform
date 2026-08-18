@@ -16,7 +16,7 @@
  *   node scripts/generate-app-icons.mjs --list      # glifos disponibles
  *
  * Ejemplo:
- *   node scripts/generate-app-icons.mjs src/apps/public/adc-auth auth "Cuenta ADC" "Cuenta" "Iniciá sesión."
+ *   node scripts/generate-app-icons.mjs presets/IAM/apps/adc-auth auth "Cuenta ADC" "Cuenta" "Iniciá sesión."
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";

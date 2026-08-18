@@ -26,6 +26,6 @@ endpoint por-namespace serviría **un** manifest compartido; por eso cada app tr
 5. El content-type `.webmanifest → application/manifest+json` ya está resuelto en el provider http; el CSP
    ya permite `manifest-src 'self'`.
 
-Referencia: `src/apps/public/adc-home` (launcher instalable) y `presets/adc-drive` (manifest + `public/icons/`
+Referencia: `presets/home/apps/adc-home` (launcher instalable) y `presets/adc-drive` (manifest + `public/icons/`
 propios). Verificar con `add to home screen` real en Android (criterios: manifest con `name`/`icons` 192+512,
 SW con fetch, HTTPS/localhost).

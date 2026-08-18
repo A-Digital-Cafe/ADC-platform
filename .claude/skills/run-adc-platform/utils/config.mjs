@@ -9,7 +9,7 @@ export const BASE = process.env.ADC_BASE || "http://localhost:3000";
 export const DBG_PORT = Number(process.env.ADC_CDP_PORT || 9333);
 
 // Dev test users seeded by IdentityManagerService in NODE_ENV=development
-// (src/services/core/IdentityManagerService/defaults/devUsers.ts — keep in sync).
+// (presets/IAM/services/IdentityManagerService/defaults/devUsers.ts — keep in sync).
 // `orgId` is the dev org's stable id so the org admin lands straight in its context.
 export const DEV_USERS = {
 	admin: { username: "devadmin", password: "devadmin123" },

@@ -200,7 +200,7 @@ export class Kernel {
 	 * baseline, así que no alcanza con no conceder — hay que retirarle el scope.
 	 */
 	#onPrivilegeChange(change: PrivilegeChange): void {
-		const { grant, removed, withheld, first } = change;
+		const { grant, removed, withheld, first, escalated } = change;
 		if (change.retroactive) this.#revokeGrantedScopes(grant, withheld);
 		// En un alta no hay provisión anterior contra la cual diffear: `added` es el set entero
 		// del módulo, no una ampliación. Reportarlo como pedido nuevo sería mentira.
@@ -210,6 +210,13 @@ export class Kernel {
 			return;
 		}
 		const parts = [added.length ? `+[${added.join(", ")}]` : "", removed.length ? `-[${removed.join(", ")}]` : ""].filter(Boolean).join(" ");
+		// Cambio sin escalada: o el módulo perdió scopes, o ganó uno que ya estaba aprobado (el
+		// reinicio con el que `approvePrivileges` se lo concede). Queda anotado, pero no es un
+		// incidente y no despierta a nadie.
+		if (escalated.length === 0 && withheld.length === 0) {
+			this.#logger.logInfo(`Privilegios de ${grant.kind}:${grant.name} cambiaron (sin escalada): ${parts}`);
+			return;
+		}
 		if (withheld.length) {
 			// El camino retroactivo ya lo reportó `#revokeGrantedScopes` como "RETIRADOS".
 			if (!change.retroactive) {
@@ -219,7 +226,6 @@ export class Kernel {
 		} else {
 			this.#logger.logWarn(`Privilegios de ${grant.kind}:${grant.name} cambiaron: ${parts} (origen: ${grant.path})`);
 		}
-		if (added.length === 0 && withheld.length === 0) return; // perder privilegios no es un incidente
 
 		interface IdentityNotifier {
 			notifications(token: CapabilityToken): {

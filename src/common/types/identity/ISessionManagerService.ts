@@ -2,20 +2,19 @@
  * Contrato público del **SessionManagerService** (clase principal).
  *
  * Vive en `@common` para que apps y servicios consuman la sesión por **interfaz**
- * sin importar la clase concreta de `@services`. La clase concreta hace
+ * sin importar la clase concreta del preset `IAM`. La clase concreta hace
  * `implements ISessionManagerService`.
+ *
+ * Extiende `ISessionVerifier` en vez de repetir `verifyToken`/`extractSessionToken`: el resultado
+ * de verificación se declara una sola vez, ahí.
  */
 
-import type { TokenVerificationResult } from "@services/security/SessionManagerService/types.js";
+import type { ISessionVerifier } from "./SessionVerifier.ts";
 import type { CapabilityToken } from "@common/security/Capability.ts";
 
-export interface ISessionManagerService {
-	/** Verifica un token de sesión y resuelve el usuario/permisos actuales. */
-	verifyToken(token: string): Promise<TokenVerificationResult>;
+export interface ISessionManagerService extends ISessionVerifier {
 	/** Login server-side que devuelve un token de sesión. Requiere capability `session:programmatic`. */
 	loginProgrammatic(cap: CapabilityToken, username: string, password: string): Promise<string | null>;
-	/** Extrae el token de sesión de las cookies de una request. */
-	extractSessionToken(req: { cookies?: Record<string, string> }): string | null;
 	/**
 	 * Revoca todos los refresh tokens del usuario: sus sesiones dejan de poder renovarse y
 	 * mueren cuando expire el access token vigente. Requiere capability `session:revoke`.

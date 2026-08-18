@@ -53,6 +53,29 @@
         "vue-loader": "^17.4.2",
       },
     },
+    "presets/IAM/apps/adc-auth": {
+      "name": "@adc-platform/adc-auth",
+      "version": "1.0.0",
+    },
+    "presets/IAM/apps/adc-identity": {
+      "name": "@adc-platform/adc-identity",
+      "version": "1.0.0",
+    },
+    "presets/IAM/services/IdentityManagerService": {
+      "name": "identity-manager-service",
+      "version": "1.0.0",
+    },
+    "presets/IAM/services/ModerationService": {
+      "name": "@adc/moderation-service",
+      "version": "1.0.0",
+    },
+    "presets/IAM/services/SessionManagerService": {
+      "name": "@adc/session-manager-service",
+      "version": "1.0.0",
+      "devDependencies": {
+        "fastify": "^5.7.3",
+      },
+    },
     "presets/SEO/services/SEOService": {
       "name": "@adc-platform/seo-service",
       "version": "1.0.0",
@@ -148,12 +171,20 @@
       "name": "@adc-platform/content-service",
       "version": "1.0.0",
     },
+    "presets/community-home/apps/community-home": {
+      "name": "@adc-platform/community-home",
+      "version": "1.0.0",
+    },
     "presets/games/apps/adc-games": {
       "name": "@adc-platform/adc-games",
       "version": "0.1.0",
     },
     "presets/help/apps/help": {
       "name": "@adc-platform/help",
+      "version": "1.0.0",
+    },
+    "presets/home/apps/adc-home": {
+      "name": "@adc-platform/adc-home",
       "version": "1.0.0",
     },
     "presets/my-account/apps/my-account": {
@@ -184,24 +215,8 @@
       "name": "@adc-platform/adc-admin-panel",
       "version": "1.0.0",
     },
-    "src/apps/public/adc-auth": {
-      "name": "@adc-platform/adc-auth",
-      "version": "1.0.0",
-    },
     "src/apps/public/adc-error": {
       "name": "@adc-platform/adc-error",
-      "version": "1.0.0",
-    },
-    "src/apps/public/adc-home": {
-      "name": "@adc-platform/adc-home",
-      "version": "1.0.0",
-    },
-    "src/apps/public/adc-identity": {
-      "name": "@adc-platform/adc-identity",
-      "version": "1.0.0",
-    },
-    "src/apps/public/community-home": {
-      "name": "@adc-platform/community-home",
       "version": "1.0.0",
     },
     "src/apps/test/00-web-ui-library": {
@@ -344,10 +359,6 @@
       "name": "@adc-platform/execution-manager-service",
       "version": "1.0.0",
     },
-    "src/services/core/IdentityManagerService": {
-      "name": "identity-manager-service",
-      "version": "1.0.0",
-    },
     "src/services/core/LangManagerService": {
       "name": "@adc-platform/lang-manager-service",
       "version": "1.0.0",
@@ -391,17 +402,6 @@
       "name": "@adc/breach-register-service",
       "version": "1.0.0",
     },
-    "src/services/security/ModerationService": {
-      "name": "@adc/moderation-service",
-      "version": "1.0.0",
-    },
-    "src/services/security/SessionManagerService": {
-      "name": "@adc/session-manager-service",
-      "version": "1.0.0",
-      "devDependencies": {
-        "fastify": "^5.7.3",
-      },
-    },
     "src/utilities/adapters/json-file-adapter": {
       "name": "@adc-platform/json-file-adapter-utility",
     },
@@ -437,7 +437,7 @@
   "packages": {
     "@adc-platform/adc-admin-panel": ["@adc-platform/adc-admin-panel@workspace:src/apps/public/adc-admin-panel"],
 
-    "@adc-platform/adc-auth": ["@adc-platform/adc-auth@workspace:src/apps/public/adc-auth"],
+    "@adc-platform/adc-auth": ["@adc-platform/adc-auth@workspace:presets/IAM/apps/adc-auth"],
 
     "@adc-platform/adc-drive": ["@adc-platform/adc-drive@workspace:presets/adc-drive/apps/adc-drive"],
 
@@ -445,9 +445,9 @@
 
     "@adc-platform/adc-games": ["@adc-platform/adc-games@workspace:presets/games/apps/adc-games"],
 
-    "@adc-platform/adc-home": ["@adc-platform/adc-home@workspace:src/apps/public/adc-home"],
+    "@adc-platform/adc-home": ["@adc-platform/adc-home@workspace:presets/home/apps/adc-home"],
 
-    "@adc-platform/adc-identity": ["@adc-platform/adc-identity@workspace:src/apps/public/adc-identity"],
+    "@adc-platform/adc-identity": ["@adc-platform/adc-identity@workspace:presets/IAM/apps/adc-identity"],
 
     "@adc-platform/adc-image-editor": ["@adc-platform/adc-image-editor@workspace:presets/adc-image-editor/apps/adc-image-editor"],
 
@@ -475,7 +475,7 @@
 
     "@adc-platform/cluster-service": ["@adc-platform/cluster-service@workspace:src/services/core/ClusterService"],
 
-    "@adc-platform/community-home": ["@adc-platform/community-home@workspace:src/apps/public/community-home"],
+    "@adc-platform/community-home": ["@adc-platform/community-home@workspace:presets/community-home/apps/community-home"],
 
     "@adc-platform/content-service": ["@adc-platform/content-service@workspace:presets/community-content/services/content-service"],
 
@@ -553,11 +553,11 @@
 
     "@adc/endpoint-manager-service": ["@adc/endpoint-manager-service@workspace:src/services/core/EndpointManagerService"],
 
-    "@adc/moderation-service": ["@adc/moderation-service@workspace:src/services/security/ModerationService"],
+    "@adc/moderation-service": ["@adc/moderation-service@workspace:presets/IAM/services/ModerationService"],
 
     "@adc/provider-jwt": ["@adc/provider-jwt@workspace:src/providers/security/jwt"],
 
-    "@adc/session-manager-service": ["@adc/session-manager-service@workspace:src/services/security/SessionManagerService"],
+    "@adc/session-manager-service": ["@adc/session-manager-service@workspace:presets/IAM/services/SessionManagerService"],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 
@@ -1897,7 +1897,7 @@
 
     "icss-utils": ["icss-utils@5.1.0", "", { "peerDependencies": { "postcss": "^8.1.0" } }, "sha512-soFhflCVWLfRNOPU3iv5Z9VUdT44xFRbzjLsEzSr5AQmgqPMTHdU3PMT1Cf1ssx8fLNJDA1juftYl+PUcv3MqA=="],
 
-    "identity-manager-service": ["identity-manager-service@workspace:src/services/core/IdentityManagerService"],
+    "identity-manager-service": ["identity-manager-service@workspace:presets/IAM/services/IdentityManagerService"],
 
     "ieee754": ["ieee754@1.2.1", "", {}, "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA=="],
 

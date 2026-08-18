@@ -94,7 +94,9 @@ consumo de almacenamiento → `["storage:register"]`.
 recarga desde disco (deploy git, watcher de dev, lanzamiento de un pendiente) trae un `config.json`
 que pide scopes nuevos, queda un `logWarn`, una entrada `privileges-change` en el audit log del
 gestor de módulos y un aviso al equipo de seguridad. Con `MODULES_PRIVILEGE_GATE=true` esos scopes
-además **no se conceden** hasta aprobarlos (`POST /api/modules/privileges/approve`).
+además **no se conceden** hasta aprobarlos. El módulo arranca igual, sin ellos: el gestor de módulos
+los marca en la fila del módulo y se aprueban desde ahí (botón «Aprobar privilegios», que aprueba lo
+que el `config.json` declara hoy y reinicia el módulo; API: `POST /api/modules/privileges/approve`).
 
 ## Scopes y defaults por tier
 
