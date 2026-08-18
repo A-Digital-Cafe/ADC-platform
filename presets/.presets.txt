@@ -35,4 +35,4 @@ games https://github.com/A-Digital-Cafe/games.git main
 adc-network https://github.com/A-Digital-Cafe/adc-network.git main
 community-home https://github.com/A-Digital-Cafe/community-home.git main
 home https://github.com/A-Digital-Cafe/home.git main
-IAM https://github.com/A-Digital-Cafe/adc-iam.git main
+IAM https://github.com/A-Digital-Cafe/iam.git main
