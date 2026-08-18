@@ -239,3 +239,38 @@ export interface MailSpamReport {
 	lastSeenAt: Date;
 	status: "pending" | "promoted" | "dismissed";
 }
+
+/**
+ * @public Qué hacer con un adjunto entrante que no entra en la cuota del destinatario.
+ *
+ * `drive-link` guarda el archivo en el Drive del titular (carpeta `email-attachments`) y deja un
+ * enlace en el mensaje: el correo llega completo y el archivo cuenta contra la cuota de Drive.
+ * `reject` responde al MTA que reintente y termina en rebote, así el remitente se entera.
+ */
+export type AttachmentOverflowPolicy = "drive-link" | "reject";
+
+/** @public Carpeta de Drive donde caen los adjuntos desbordados. Se recrea sola si la borran. */
+export const EMAIL_ATTACHMENTS_FOLDER = "email-attachments";
+
+/** @public Densidad de la lista de mensajes. */
+export type MailListDensity = "comfortable" | "compact";
+
+/**
+ * Preferencias del titular del buzón. Documento por usuario, creado al primer guardado: la
+ * ausencia es un usuario que nunca tocó la configuración, y ahí valen los defaults.
+ */
+export interface MailUserSettings {
+	userId: string;
+	attachmentOverflow: AttachmentOverflowPolicy;
+	/** Marcar el mensaje como leído al abrirlo. Apagado deja el control en el botón de la lista. */
+	autoMarkRead: boolean;
+	listDensity: MailListDensity;
+	updatedAt: Date;
+}
+
+/** Valores con los que se responde mientras el usuario no haya guardado nada. */
+export const MAIL_USER_SETTINGS_DEFAULTS: Omit<MailUserSettings, "userId" | "updatedAt"> = {
+	attachmentOverflow: "drive-link",
+	autoMarkRead: true,
+	listDensity: "comfortable",
+};

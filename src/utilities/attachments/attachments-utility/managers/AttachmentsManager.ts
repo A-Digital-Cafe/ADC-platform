@@ -515,6 +515,101 @@ export class AttachmentsManager {
 		};
 	}
 
+	/**
+	 * Alta **desde el servidor**, con el binario ya en memoria: no hay navegador que suba a una URL
+	 * firmada. Es el camino del correo entrante, donde el archivo llega dentro del MIME.
+	 *
+	 * Se diferencia de `presignUpload` + `confirmUpload` en que el objeto nunca existe en claro en
+	 * el almacenamiento: se cifra antes del PUT en vez de re-escribirlo después. Lo demás —cuota,
+	 * permisos, validación— es lo mismo, y por eso el `ready` que deja es indistinguible del de una
+	 * subida normal para todo lo que viene después (descarga, borrado, reconciliación de uso).
+	 *
+	 * `@OnlyKernel()` porque saltea la firma: no puede quedar al alcance de un endpoint.
+	 */
+	@OnlyKernel()
+	async ingest(
+		_kernelKey: symbol,
+		ctx: AttachmentPermissionContext,
+		input: { ownerType: string; ownerId: string; fileName: string; mimeType: string; content: Buffer }
+	): Promise<Attachment> {
+		const size = input.content.length;
+		this.#validateUploadInput({ ownerType: input.ownerType, ownerId: input.ownerId, fileName: input.fileName, mimeType: input.mimeType, size });
+		const subCtx: SubPathContext = { ...ctx, ownerType: input.ownerType, ownerId: input.ownerId };
+		await this.#checkPermission("upload", subCtx);
+		await this.#checkQuotaAllowance(ctx, size);
+
+		const attachmentId = randomUUID();
+		const subPath = this.#subPathResolver(subCtx);
+		const plainKey = this.#buildKey(subPath, attachmentId, input.fileName);
+
+		// La cuota se comitea ANTES de escribir: si no entra, no se sube nada y quien llama decide
+		// qué hacer con el archivo (en correo, mandarlo a Drive o rechazar la entrega).
+		if (!(await this.#commitQuota(ctx, size))) {
+			this.#notifyQuotaExceeded(ctx.userId);
+			throw new AttachmentError(413, "ATTACHMENT_QUOTA_EXCEEDED", "Cuota de almacenamiento agotada");
+		}
+
+		let storageKey = plainKey;
+		let encryption: Record<string, unknown> | null = null;
+		let body = input.content;
+		if (this.#encryption) {
+			const dek = await this.#encryption.keyStore.getUserKey(ctx.userId);
+			const { ivPrefix, ciphertext } = encryptChunked(dek, input.content, ENCRYPTION_CHUNK_SIZE);
+			storageKey = `${plainKey}.enc`;
+			body = ciphertext;
+			encryption = {
+				scheme: CHUNKED_ENCRYPTION_SCHEME,
+				iv: ivPrefix.toString("base64"),
+				chunkSize: ENCRYPTION_CHUNK_SIZE,
+				keyRef: ctx.userId,
+			};
+		}
+
+		try {
+			await this.#s3.putObject({
+				bucket: this.#bucket,
+				key: storageKey,
+				body,
+				contentType: encryption ? "application/octet-stream" : input.mimeType,
+				contentLength: body.length,
+			});
+		} catch (e) {
+			await this.#releaseQuota(ctx.userId, ctx.orgId ?? null, size);
+			throw e;
+		}
+
+		try {
+			await this.#model.create({
+				_id: attachmentId,
+				basePath: this.#basePath,
+				subPath,
+				ownerType: input.ownerType,
+				ownerId: input.ownerId,
+				fileName: input.fileName,
+				mimeType: input.mimeType,
+				// Tamaño EN CLARO: es el que ve el usuario y con el que se descifra por chunks. El del
+				// objeto cifrado es mayor y no interesa fuera de S3.
+				size,
+				bucket: this.#bucket,
+				storageKey,
+				status: "ready",
+				uploadedBy: ctx.userId,
+				orgId: ctx.orgId ?? null,
+				encryption,
+				createdAt: new Date(),
+				uploadedAt: new Date(),
+			});
+		} catch (e) {
+			await this.#s3.deleteObject({ bucket: this.#bucket, key: storageKey }).catch(() => undefined);
+			await this.#releaseQuota(ctx.userId, ctx.orgId ?? null, size);
+			throw e;
+		}
+
+		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
+		if (!doc) throw new AttachmentError(500, "ATTACHMENT_NOT_FOUND", "El adjunto se creó pero no se pudo releer");
+		return this.#docToAttachment(doc);
+	}
+
 	async confirmUpload(ctx: AttachmentPermissionContext, attachmentId: string): Promise<Attachment> {
 		const doc = await this.#model.findById(attachmentId).lean<AttachmentDoc & { _id: string }>();
 		if (!doc) {

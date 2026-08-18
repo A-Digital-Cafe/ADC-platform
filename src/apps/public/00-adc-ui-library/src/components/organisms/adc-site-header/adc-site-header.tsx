@@ -116,6 +116,10 @@ export class AdcSiteHeader {
 
 						<adc-apps-menu></adc-apps-menu>
 
+						{/* Engranaje de la app que esté montada (Drive, Correo, …). Se pinta sólo si esa app
+						    lo enciende; el modal con las pestañas lo pone ella. */}
+						<adc-settings-menu></adc-settings-menu>
+
 						{/* Campana de notificaciones: se auto-oculta si el backend (preset adc-notifications) no responde. */}
 						<adc-notification-bell></adc-notification-bell>
 

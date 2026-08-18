@@ -54,6 +54,12 @@ export enum Scope {
 	AuditWrite = "audit:write",
 	/** Mutar el estado comercial de un plan (asientos pagos) desde el servicio de suscripciones. */
 	PlanAdmin = "plans:admin",
+	/**
+	 * Depositar un archivo en el Drive de un usuario en su nombre (`DriveService.saveIncomingFile`).
+	 * Opt-in explícito: escribe en el espacio de un tercero y le consume cuota, así que quién puede
+	 * hacerlo se decide en el `config.json` y no en runtime.
+	 */
+	DriveIntake = "drive:intake",
 	/** Anunciar a TODOS los usuarios (`NotificationService.broadcast`). Amplifica ×N: opt-in explícito. */
 	NotificationsBroadcast = "notifications:broadcast",
 	/**

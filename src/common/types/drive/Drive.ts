@@ -428,3 +428,28 @@ export const DRIVE_TUNNEL_PAIRING_TTL_MS = 10 * 60 * 1000;
 export const DRIVE_TRANSFER_DEFAULT_TTL_HOURS = 48;
 /** @public */
 export const DRIVE_TRANSFER_MAX_TTL_HOURS = 14 * 24;
+
+/** @public Cómo se listan los archivos al entrar: tabla o cuadrícula. */
+export type DriveDefaultView = "list" | "grid";
+
+/** @public Campo por el que se ordena el listado. */
+export type DriveSortField = "name" | "updatedAt" | "size";
+
+/** @public Sentido del orden. */
+export type DriveSortDirection = "asc" | "desc";
+
+/** @public Preferencias del dueño del Drive, tal como las expone la API. */
+export interface DriveSettingsDto {
+	defaultView: DriveDefaultView;
+	sortField: DriveSortField;
+	sortDirection: DriveSortDirection;
+	confirmTrash: boolean;
+}
+
+/** @public Valores con los que se responde mientras el usuario no haya guardado nada. */
+export const DRIVE_SETTINGS_DEFAULTS: DriveSettingsDto = {
+	defaultView: "list",
+	sortField: "name",
+	sortDirection: "asc",
+	confirmTrash: true,
+};

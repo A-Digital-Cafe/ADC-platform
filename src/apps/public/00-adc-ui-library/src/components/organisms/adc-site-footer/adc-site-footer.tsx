@@ -168,7 +168,7 @@ export class AdcSiteFooter {
 
 	private helpLinksComponent() {
 		return (
-			<nav class="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-sm" aria-label={this.translateFooter("aria")}>
+			<nav class="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-sm max-w-70vw m-auto" aria-label={this.translateFooter("aria")}>
 				{FOOTER_LINKS.map((link) => (
 					<a key={link.key} href={footerUrl(link.path, link.target)} class="underline hover:no-underline">
 						{this.translateFooter(link.key)}
