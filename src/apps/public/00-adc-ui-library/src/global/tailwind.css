@@ -90,6 +90,21 @@
         background-color: var(--c-surface);
     }
 
+    /*
+     * Un elemento con `backdrop-filter` es containing block de sus descendientes `position: fixed`,
+     * así que una superficie de este tema convierte el `inset-0` del modal en "centrado sobre la
+     * tarjeta" en vez de "centrado en la pantalla" — y con el scroll del fondo bloqueado, en una
+     * lista larga el modal queda fuera de vista y es imposible llegar a él.
+     *
+     * Se apaga el blur SOLO mientras esa superficie contiene un modal abierto. No se ve: el propio
+     * modal tapa la pantalla con su backdrop oscuro y difuminado. Va en una regla aparte para que un
+     * navegador sin `:has()` la descarte sin llevarse puesto el vidrio del tema.
+     */
+    :root[crystal-theme] .bg-surface:has(adc-modal[open]) {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+
     :root[crystal-theme] {
         --palette-tone-1: var(--custom-tone-1);
         --palette-tone-2: var(--custom-tone-2);
@@ -192,6 +207,12 @@
         font-family: Inter, system-ui, sans-serif;
         font-size: 13px;
         --footer-offset: 75px;
+    }
+
+    /* La barra del sitio es sticky: sin esto un `#ancla` o un `scrollIntoView` deja
+       el destino tapado debajo de ella. */
+    html {
+        scroll-padding-top: calc(var(--header-h, 0px) + 8px);
     }
 
     * {

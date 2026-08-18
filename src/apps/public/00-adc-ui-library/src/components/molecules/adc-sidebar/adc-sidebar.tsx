@@ -41,9 +41,11 @@ export class AdcSidebar {
 		return (
 			<aside
 				class={`z-20 fixed left-0 px-2 pt-5 pr-6 bg-background text-primary transition-transform lg:transition-[width] duration-300 shadow-[0_5px_20px_rgba(0,0,0,0.15)] overflow-hidden ${sidebarClass}`}
+				// Con fallback: una custom property sin definir invalida la declaración entera
+				// (`top: auto`, `height: auto`), no la resuelve a 0.
 				style={{
-					top: "var(--header-offset)",
-					height: "calc(100vh - var(--header-offset))",
+					top: "var(--header-offset, 0px)",
+					height: "calc(100dvh - var(--header-offset, 0px))",
 				}}
 			>
 				{(this.sectionTitle || this.subtitle) && (

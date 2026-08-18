@@ -1,3 +1,50 @@
+/* Barra pegada al tope: se esconde al bajar y vuelve al subir (el estado lo pone
+ * el componente con `data-hidden`).
+ *
+ * El `sticky` va en el host y NO en el <header> interno: un sticky se mueve dentro de su
+ * bloque contenedor, y el del <header> es este host, cuyo alto es el suyo → recorrido cero.
+ * El host, en cambio, es flex item del contenedor `min-h-screen` de `adc-layout`.
+ *
+ * `transform: none` en reposo (nunca `translateY(0)`) y sin `will-change`/`backdrop-filter`:
+ * una transformación identidad YA convierte al host en bloque contenedor de sus descendientes
+ * `position: fixed` (lista de disparadores en utils/fixed-anchor.ts). Por eso `adc-legal-gate`
+ * y `adc-banner-host` se mudaron a `adc-layout`.
+ *
+ * z-40: por encima del sidebar (z-20) y de sus velos (z-10), por debajo de modales y toasts (z-50). */
+adc-site-header {
+	display: block;
+	position: sticky;
+	top: 0;
+	z-index: 40;
+	transform: none;
+	transition: transform 220ms ease;
+}
+
+adc-site-header[data-hidden] {
+	transform: translate3d(0, -100%, 0);
+}
+
+/* Sin animación la barra aparece y desaparece de golpe; el estado sigue siendo el mismo. */
+@media (prefers-reduced-motion: reduce) {
+	adc-site-header {
+		transition: none;
+	}
+}
+
+/* El notch lo absorbe la barra y no el contenedor de la página: con `top: 0` la barra
+ * pasaría por encima de esa franja. Se repite el `py-*` de las utilidades (1rem, 1.5rem
+ * desde `md` = 48rem) porque este CSS va sin capa y pisaría el padding en vez de sumarse:
+ * si cambia el `py-4 md:py-6` del <header>, cambiarlo también acá. */
+adc-site-header > header {
+	padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+}
+
+@media (width >= 48rem) {
+	adc-site-header > header {
+		padding-top: calc(1.5rem + env(safe-area-inset-top, 0px));
+	}
+}
+
 /* Botón de menú del header (sólo mobile, apps con sidebar propio).
  * Es la misma caja de 39px del logo, girando entre dos caras: la de menú —la
  * funcional— y la del logo, para que se siga leyendo como la marca. */

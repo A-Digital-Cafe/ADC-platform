@@ -65,7 +65,8 @@ export class AdcLayout {
 			<div
 				class="flex flex-col min-h-screen bg-background text-text"
 				style={{
-					paddingTop: "env(safe-area-inset-top, 0px)",
+					// El inset de arriba lo absorbe `adc-site-header`: con la barra `sticky` en `top: 0`
+					// un padding acá sólo dejaría contenido pasando por debajo del notch.
 					paddingLeft: "env(safe-area-inset-left, 0px)",
 					paddingRight: "env(safe-area-inset-right, 0px)",
 					paddingBottom: "calc(var(--consent-h, 0px) + env(safe-area-inset-bottom, 0px))",
@@ -73,6 +74,12 @@ export class AdcLayout {
 			>
 				<adc-custom-error variant="toast" global handle-unhandled />
 				<adc-toast-manager />
+
+				{/* Re-aceptación de documentos legales: se pinta sola sólo si hay algo pendiente.
+				    Vive acá y no dentro del header porque su modal es `position: fixed` y el header,
+				    ahora sticky, se transforma para esconderse: cualquier ancestro transformado pasa a
+				    ser el bloque contenedor del `fixed` (ver el comentario de cabecera de adc-modal.tsx). */}
+				<adc-legal-gate />
 
 				<adc-site-header
 					logo-src={this.logoSrc}
@@ -87,6 +94,11 @@ export class AdcLayout {
 				>
 					<slot name="header" />
 				</adc-site-header>
+
+				{/* Avisos de mantenimiento/anuncios, justo debajo del header (1 fetch/página, compartido).
+				    Fuera del header a propósito: adentro quedaría pegado para siempre, porque el header
+				    ahora es sticky. Acá es contenido en flujo y se va con el scroll. */}
+				<adc-banner-host />
 
 				<main class={`flex-1 justify-center ${this.fullWidth ? "w-full" : "w-full xl:w-max xl:min-w-7xl xl:mx-auto"}`}>
 					<slot />

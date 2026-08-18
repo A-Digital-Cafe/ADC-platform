@@ -4,6 +4,14 @@ import { Component, Prop, Event, EventEmitter, Listen, Element, Host, Watch } fr
  * Modales abiertos en la página. El scroll del fondo se bloquea mientras haya
  * al menos uno: si no, se ven dos barras de scroll (la del fondo y la del
  * contenido del modal) y la rueda scrollea la página de atrás.
+ *
+ * ⚠️ El panel se centra con `position: fixed`, así que **cualquier ancestro con `transform`,
+ * `filter`, `backdrop-filter`, `perspective`, `will-change` o `contain` lo captura**: pasa a
+ * centrarse sobre ese ancestro y, con el scroll del fondo bloqueado, en un contenedor alto queda
+ * fuera de vista. El caso conocido es el vidrio del tema `crystal` sobre `.bg-surface` (una
+ * `adc-card`), neutralizado en `global/tailwind.css` mientras la superficie contiene un modal
+ * abierto — de ahí que `open` se refleje como atributo. Si aparece otro, se resuelve igual: no hay
+ * forma en CSS de que un `fixed` escape de su containing block.
  */
 let openModalCount = 0;
 

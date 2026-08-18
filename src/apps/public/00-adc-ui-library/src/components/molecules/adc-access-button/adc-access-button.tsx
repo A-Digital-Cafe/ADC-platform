@@ -15,7 +15,7 @@ import {
 	type AvatarUpdatePayload,
 } from "../../../../utils/auth-sync.js";
 import { DEFAULT_CREDENTIALS } from "../../../../utils/adc-fetch.js";
-import { getSession } from "../../../../utils/session.js";
+import { getCachedSession, getSession } from "../../../../utils/session.js";
 import { startSessionRefresh } from "../../../../utils/auth-refresh.js";
 import { sanitizeSvg } from "../../../../utils/sanitize-svg.js";
 import { appendCsrfHeader } from "../../../../utils/csrf.js";
@@ -180,6 +180,15 @@ export class AdcAccessButton {
 		// La campana de acceso está en el header de todas las apps: es el punto que
 		// garantiza la renovación proactiva incluso donde no se usa `createAdcApi`.
 		startSessionRefresh();
+		// Primer frame con la última sesión conocida: el header no espera a la red para pintarse.
+		// `checkSession` reconcilia enseguida —y manda si difiere—, así que lo peor que puede pasar
+		// es mostrar el avatar de una sesión recién cerrada por un instante.
+		const cached = getCachedSession();
+		if (cached?.authenticated) {
+			this.isAuthenticated = true;
+			this.user = cached.user || null;
+			this.loading = false;
+		}
 		this.checkSession();
 		this.teardownAuthSync = setupAuthSync(() => {
 			globalThis.location?.reload();
