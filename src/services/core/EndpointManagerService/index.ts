@@ -48,8 +48,6 @@ export default class EndpointManagerService extends BaseService implements IEndp
 	public readonly name = "EndpointManagerService";
 
 	#httpProvider: IHostBasedHttpProvider | null = null;
-	// SessionManager se carga con lazy-load pattern en #getSessionManager()
-	#sessionManager: ISessionVerifier | null = null;
 	#operationsService: IOperationsService | null = null;
 	readonly #registry = new EndpointRegistry(this.logger);
 	#jobManager: JobManager | null = null;
@@ -122,19 +120,17 @@ export default class EndpointManagerService extends BaseService implements IEndp
 	}
 
 	/**
-	 * Lazy-load singleton getter para SessionManagerService
-	 * Intenta obtener el servicio solo si no está cargado.
+	 * Resuelve SessionManagerService por request contra el registry. NO memoizar:
+	 * un restart del módulo deja la instancia vieja `stop()`-eada (verifyToken siempre
+	 * inválido) y colgaría el 401 en todos los endpoints hasta reiniciar el kernel.
 	 * Tipado contra el contrato ISessionVerifier (no la clase concreta).
 	 */
 	#getSessionManager(): ISessionVerifier | null {
-		if (!this.#sessionManager) {
-			try {
-				this.#sessionManager = this.getMyService<ISessionVerifier>("SessionManagerService");
-			} catch {
-				// SessionManagerService no disponible todavía
-			}
+		try {
+			return this.getMyService<ISessionVerifier>("SessionManagerService");
+		} catch {
+			return null; // no disponible todavía (o reiniciándose)
 		}
-		return this.#sessionManager;
 	}
 
 	/**
@@ -424,7 +420,6 @@ export default class EndpointManagerService extends BaseService implements IEndp
 
 		this.#httpProvider = null;
 		this.#csrfConfig = null;
-		this.#sessionManager = null;
 		this.#operationsService = null;
 
 		await super.stop(kernelKey);

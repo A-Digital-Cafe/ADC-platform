@@ -133,7 +133,14 @@ export class Kernel {
 			isShuttingDown,
 			this.#disabledRegistry
 		);
-		this.#dependencyReloader = new DependencyReloader(this.#registry, this.#registrar, this.#appLoader, this.#logger, Kernel.#kernelKey);
+		this.#dependencyReloader = new DependencyReloader(
+			this.#registry,
+			this.#registrar,
+			this.#appLoader,
+			this.#logger,
+			Kernel.#kernelKey,
+			(name) => this.#kernelServiceLoader.reload(name)
+		);
 		this.#detector = new ModuleDetector({
 			logger: this.#logger,
 			registry: this.#registry,

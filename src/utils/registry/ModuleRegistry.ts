@@ -455,7 +455,26 @@ export class ModuleRegistry {
 			return;
 		}
 
+		// Un servicio de plataforma (kernelMode) lo administra el kernel, no las apps: soltar la
+		// última referencia de app NO puede pararlo. Tras un reload el servicio vuelve con el
+		// contador en cero mientras las apps siguen anotadas, así que sin esto el primer reload
+		// de app de la cascada apaga Identity/Session y deja toda la plataforma en 401.
+		if (type === "service" && this.#isPinnedPlatformKey(uniqueKey)) {
+			refCountMap.set(uniqueKey, 0);
+			return;
+		}
+
 		await this.#destroyModuleByKey(type, uniqueKey);
+	}
+
+	/** `true` si `uniqueKey` resuelve a la instancia pinneada de un servicio de plataforma. */
+	#isPinnedPlatformKey(uniqueKey: string): boolean {
+		const module = this.#getRegistry("service").get(uniqueKey);
+		if (!module) return false;
+		for (const pinned of this.#platformServices.values()) {
+			if (pinned === module) return true;
+		}
+		return false;
 	}
 
 	async #destroyModuleByKey(type: ModuleType, uniqueKey: string): Promise<void> {

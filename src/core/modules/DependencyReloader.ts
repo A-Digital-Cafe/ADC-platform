@@ -14,7 +14,9 @@ export class DependencyReloader {
 		private readonly registrar: ModuleRegistrar,
 		private readonly appLoader: AppLoader,
 		private readonly logger: ILogger,
-		private readonly kernelKey: symbol
+		private readonly kernelKey: symbol,
+		/** Recarga por el camino del boot si el service es `kernelMode`; `false` si no lo es. */
+		private readonly reloadKernelService?: (name: string) => Promise<boolean>
 	) {}
 
 	/**
@@ -43,9 +45,15 @@ export class DependencyReloader {
 	 */
 	reloadByName = async (moduleType: ModuleType, name: string, version: string = "latest", language: string = "typescript"): Promise<void> => {
 		const dependents = this.registry.getDependentAppNamesByModuleName(moduleType, name);
-		await this.registry.unloadModulesByName(moduleType, this.kernelKey, name);
-		this.#repin(moduleType, name, await this.registrar.register(moduleType, { name, version, language }));
-		this.logger.logOk(`${moduleType} '${name}' (${version}) recargado.`);
+		// Un service kernelMode vuelve por el camino del boot (caps declaradas + pin de
+		// plataforma); el genérico lo dejaría degradado y sin identidad de plataforma.
+		if (moduleType === "service" && (await this.reloadKernelService?.(name))) {
+			this.logger.logOk(`service '${name}' (kernelMode) recargado.`);
+		} else {
+			await this.registry.unloadModulesByName(moduleType, this.kernelKey, name);
+			this.#repin(moduleType, name, await this.registrar.register(moduleType, { name, version, language }));
+			this.logger.logOk(`${moduleType} '${name}' (${version}) recargado.`);
+		}
 		await this.#reloadApps(dependents, `${moduleType}:${name}@${version}`);
 	};
 
