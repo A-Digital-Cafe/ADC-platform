@@ -10,6 +10,11 @@ import { dirname } from "node:path";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
+/** Paso de 30 s al que pertenece un instante. Es la unidad que el server marca como consumida. */
+export function totpStep(atMs = Date.now()) {
+	return Math.floor(atMs / 30_000);
+}
+
 /** Espejo de `src/common/utils/totp.ts` (SHA-1, 6 dígitos, ventana de 30 s). */
 export function totpCode(secret, atMs = Date.now()) {
 	let buffer = 0;
@@ -44,11 +49,38 @@ function readStore() {
 	}
 }
 
+/** El formato viejo guardaba el secreto pelado; el nuevo es `{ secret, lastStep }`. */
+function entryOf(username) {
+	const raw = readStore()[username];
+	if (!raw) return null;
+	return typeof raw === "string" ? { secret: raw } : raw;
+}
+
 export function getSecret(username) {
-	return readStore()[username] || null;
+	return entryOf(username)?.secret || null;
 }
 
 export function saveSecret(username, secret) {
+	writeEntry(username, { ...entryOf(username), secret });
+}
+
+/**
+ * Último paso que el server marcó como consumido para este usuario.
+ *
+ * Hace falta porque el segundo factor tiene guard de replay (`verifyTotpCode` descarta todo paso
+ * `<= lastStep`, y el DAO lo persiste en cada verificación exitosa): dos logins dentro del mismo
+ * paso de 30 s fallan SIEMPRE en el segundo, aunque el código sea correcto. Sin este dato el driver
+ * lo vive como un `INVALID_TOTP` intermitente.
+ */
+export function getLastStep(username) {
+	return entryOf(username)?.lastStep ?? null;
+}
+
+export function saveLastStep(username, lastStep) {
+	writeEntry(username, { ...entryOf(username), lastStep });
+}
+
+function writeEntry(username, entry) {
 	mkdirSync(dirname(STORE), { recursive: true });
-	writeFileSync(STORE, JSON.stringify({ ...readStore(), [username]: secret }, null, 2));
+	writeFileSync(STORE, JSON.stringify({ ...readStore(), [username]: entry }, null, 2));
 }

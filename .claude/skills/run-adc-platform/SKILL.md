@@ -119,7 +119,10 @@ applies across every app port. Custom users: `'username::password[::orgId]'`.
 Both presets are **administrators, so the platform blocks their login until they
 have a second factor** — the driver resolves that on its own: on the first login it
 enrolls TOTP and stores the secret in `temp/.adc-2fa-secrets.json` (gitignored),
-and after that it computes the code. Nothing to do by hand. Two consequences worth
+and after that it computes the code. El server tiene guard de replay (descarta todo paso `<=` al
+último verificado), así que dos logins dentro del mismo paso de 30 s fallarían con `INVALID_TOTP`
+aunque el código esté bien: el driver guarda el paso consumido junto al secreto y **espera al
+siguiente** en vez de reintentar (verás `2fa -> esperando Ns`). Nothing to do by hand. Two consequences worth
 knowing: deleting that file leaves the account enrolled and the driver unable to log
 in (reset it with `POST /api/identity/users/:userId/2fa/reset`, or drop the
 `usertwofactors` document), and `/api/auth/login` is rate-limited to **4 attempts per

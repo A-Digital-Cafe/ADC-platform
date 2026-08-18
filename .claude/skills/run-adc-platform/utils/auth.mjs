@@ -5,7 +5,7 @@
 // first option is auto-picked.
 import { setTimeout as sleep } from "node:timers/promises";
 import { BASE, DEV_USERS } from "./config.mjs";
-import { getSecret, saveSecret, totpCode } from "./totp.mjs";
+import { getLastStep, getSecret, saveLastStep, saveSecret, totpCode, totpStep } from "./totp.mjs";
 
 // Resolve a preset key (admin | orgadmin) or a "username::password[::orgId]" spec.
 export function resolveCreds(who) {
@@ -47,12 +47,34 @@ async function solveTwoFactor(cdp, creds, challenge) {
 	}
 
 	const path = challenge.mode === "enroll" ? "/api/auth/login/2fa/enroll/confirm" : "/api/auth/login/2fa";
-	const res = await pagePost(cdp, path, { code: totpCode(secret) });
+	const step = await waitForFreshStep(creds.username);
+	const res = await pagePost(cdp, path, { code: totpCode(secret, step * 30_000) });
 	if (!res?.json?.success) throw new Error(`2fa failed for ${creds.username}: ${JSON.stringify(res)}`);
 
+	saveLastStep(creds.username, step);
 	if (challenge.mode === "enroll") saveSecret(creds.username, secret);
 	console.log(`  2fa -> ${challenge.mode === "enroll" ? "alta" : "verificado"} (${creds.username})`);
 	return res.json;
+}
+
+/**
+ * Espera, si hace falta, hasta un paso de 30 s que el server todavía no haya consumido para este
+ * usuario, y lo devuelve.
+ *
+ * El guard de replay del segundo factor (`verifyTotpCode` + `lastStep` en `usertwofactors`) rechaza
+ * todo paso `<=` al último verificado, así que dos logins seguidos dentro de la misma ventana fallan
+ * con `INVALID_TOTP` aunque el código esté bien. Esperar el paso siguiente es más honesto que
+ * reintentar: el reintento inmediato vuelve a caer en el mismo paso.
+ */
+async function waitForFreshStep(username) {
+	const last = getLastStep(username);
+	const current = totpStep();
+	if (last === null || current > last) return current;
+	// +1 s de margen sobre el borde: el reloj del server puede ir apenas atrasado respecto del nuestro.
+	const waitMs = (last + 1) * 30_000 + 1000 - Date.now();
+	console.log(`  2fa -> esperando ${Math.ceil(waitMs / 1000)}s: el paso actual ya se consumió en el login anterior`);
+	await sleep(Math.max(waitMs, 0));
+	return totpStep();
 }
 
 export async function loginInPage(cdp, creds) {
