@@ -11,6 +11,7 @@
  */
 
 import { hostname } from "node:os";
+import { composeAlias } from "./infra-composes.js";
 
 /** Roles asimétricos: el primario es el único con watchers, git, docker y scheduler. */
 export type NodeRole = "primary" | "secondary";
@@ -121,15 +122,6 @@ export function advertisedAddress(): string | null {
 /** `true` si este nodo debe reenviar a sus vecinos lo que no sabe servir (`ClusterGatewayService`). */
 export function clusterGatewayEnabled(): boolean {
 	return env("ADC_CLUSTER_GATEWAY")?.toLowerCase() === "true";
-}
-
-/**
- * Normaliza el nombre de un directorio de `src/common/docker` a su alias corto
- * (`adc-mongo-core` → `mongo`), para que `ADC_INFRA_COMPOSE=mongo,redis` sea legible y no obligue a
- * escribir los nombres completos.
- */
-function composeAlias(dirName: string): string {
-	return dirName.replace(/^adc-/, "").replace(/-core$/, "").toLowerCase();
 }
 
 /**

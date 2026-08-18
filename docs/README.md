@@ -28,6 +28,8 @@ README enruta por categoría, no re-lista cada archivo).
   [desktop-clients](guides/desktop-clients.md) (clientes que se publican en npm),
   [discord-oauth](guides/discord-oauth.md), [email-dns-setup](guides/email-dns-setup.md),
   [github-deploy-auth](guides/github-deploy-auth.md) (device flow para deploys y clones de presets),
+  [infra-lifecycle](guides/infra-lifecycle.md) (qué motores levanta un nodo, motores críticos y cómo
+  volver a levantarlos a mano),
   [mongo-sharding](guides/mongo-sharding.md) (convertir el replica set en clúster sharded, y la
   verificación de integridad de la infraestructura),
   [name-policy](guides/name-policy.md) (alias de correo y usernames prohibidos),
