@@ -7,7 +7,7 @@ import { ModulesScopes, MODULES_RESOURCE_NAME } from "@common/types/modules/perm
 import { NetworkScopes, NETWORK_RESOURCE_NAME } from "@common/types/network/permissions.ts";
 import { EmailScopes, EMAIL_RESOURCE_NAME } from "@common/types/email/permissions.ts";
 import { PlanScopes, PLANS_RESOURCE_NAME } from "@common/types/plans/permissions.ts";
-import { BaseRole, RoleHierarchy } from "@common/types/identity/Role.ts";
+import { BaseRole, RoleHierarchy, roleHierarchy } from "@common/types/identity/Role.ts";
 import type { AccountTier } from "@common/types/tiers.ts";
 import { COMMUNITY_SCOPES_BITS, isGlobalOnlyResource } from "@common/types/resources.ts";
 
@@ -122,7 +122,7 @@ const BASE_MANAGEMENT_ROLES: Array<BaseRole> = [
 function toOrgRole(role: BaseRole): BaseRole | null {
 	const permissions = role.permissions.filter((p) => !isGlobalOnlyResource(p.resource));
 	if (permissions.length === 0) return null;
-	return { ...role, permissions };
+	return { ...role, permissions, hierarchy: roleHierarchy(role) - 1 };
 }
 
 /** Roles seedeados por organización (App Manager queda excluido: sólo tiene permisos globalOnly). */
