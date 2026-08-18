@@ -68,21 +68,19 @@ export default class TypeScriptLoader implements IModuleLoader {
 		const ServiceClass = await this.importClass<BaseService>(modulePath, "Service");
 		// Service recibe argumentos distintos (kernel + config), por lo que lo instanciamos diferente
 		const serviceInstance = new ServiceClass(kernel, config);
+		// Un `start()` fallido PROPAGA: si se degradaba a warn, el llamador registraba igual una
+		// instancia a medio inicializar como si estuviera sana. La política de si eso aborta al
+		// padre ya vive arriba (`failOnError`/`optional` en ModuleLoader.#loadServices).
+		let declared: string[] | undefined;
 		try {
-			// Privilegios declarados en el config.json del servicio (para los scopes de su businessCap).
-			let declared: string[] | undefined;
-			try {
-				const raw = safeParseJson(await fs.readFile(path.join(modulePath, "config.json"), "utf-8"), moduleConfigCheck);
-				if (raw && Array.isArray(raw.privileges)) declared = raw.privileges;
-			} catch {
-				/* sin config.json o sin privileges */
-			}
-			const lifecycleToken = kernel.provisionModule(this.#kernelKey, serviceInstance, { name: serviceInstance.name, kind: "service", path: modulePath, declared });
-			await serviceInstance.start(lifecycleToken);
-			runDevCleanup(serviceInstance, `service ${serviceInstance.name}`);
-		} catch (error: any) {
-			Logger.warn(`[TypeScriptLoader] Error iniciando service ${serviceInstance.name}: ${error.message}`);
+			const raw = safeParseJson(await fs.readFile(path.join(modulePath, "config.json"), "utf-8"), moduleConfigCheck);
+			if (raw && Array.isArray(raw.privileges)) declared = raw.privileges;
+		} catch {
+			/* sin config.json o sin privileges */
 		}
+		const lifecycleToken = kernel.provisionModule(this.#kernelKey, serviceInstance, { name: serviceInstance.name, kind: "service", path: modulePath, declared });
+		await serviceInstance.start(lifecycleToken);
+		runDevCleanup(serviceInstance, `service ${serviceInstance.name}`);
 		return serviceInstance;
 	}
 

@@ -209,6 +209,25 @@ export class ModuleLoader {
 		return run;
 	}
 
+	/**
+	 * Encola una recarga de service bajo la MISMA llave que `#loadOnce`: mientras el kernel
+	 * reemplaza la instancia, las apps que resuelvan ese nombre esperan a la nueva en vez de
+	 * no encontrar ninguna (y arrancar degradadas). A diferencia de `#loadOnce` no deduplica
+	 * —la recarga del kernel siempre corre—, sólo espera a lo que ya estaba en vuelo.
+	 */
+	enqueueServiceLoad(name: string, task: () => Promise<void>): Promise<void> {
+		const key = `service|${name}`;
+		const pending = this.#inFlight.get(key);
+		const tracked: Promise<void> = (pending ?? Promise.resolve())
+			.catch(() => {})
+			.then(task)
+			.finally(() => {
+				if (this.#inFlight.get(key) === tracked) this.#inFlight.delete(key);
+			});
+		this.#inFlight.set(key, tracked);
+		return tracked;
+	}
+
 	/** Lanza (envolviendo `error`) si la definición pide failOnError; si no, degrada a warn. */
 	static #failOrWarn(failOnError: boolean | undefined, message: string, error: unknown): void {
 		if (failOnError) throw new Error(message, { cause: error });

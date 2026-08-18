@@ -63,8 +63,11 @@ export class KernelServiceLoader {
 		const found = await Promise.all(this.#roots.map((p) => findKernelServices(p)));
 		const svc = found.flat().find((s) => s.name === name);
 		if (!svc) return false;
-		await this.registry.unloadModulesByName("service", this.kernelKey, name);
-		await this.#load(svc);
+		// Bajo la llave de carga del service: quien lo resuelva mientras tanto espera.
+		await this.moduleLoader.enqueueServiceLoad(name, async () => {
+			await this.registry.unloadModulesByName("service", this.kernelKey, name);
+			await this.#load(svc);
+		});
 		return true;
 	}
 
