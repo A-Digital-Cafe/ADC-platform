@@ -42,6 +42,8 @@ const LOCK_NAME = "adc-auth-refresh";
 const SKEW_MS = 3 * 60 * 1000;
 /** Piso entre renovaciones: protege del bucle si el servidor devolviera un `expiresAt` ya vencido. */
 const MIN_INTERVAL_MS = 30_000;
+/** Deadline del POST de renovación (ver `postRefresh`). */
+const REFRESH_TIMEOUT_MS = 5_000;
 
 /** Política de credenciales: en dev las apps viven en otros puertos ⇒ cross-origin. */
 const CREDENTIALS: RequestCredentials = IS_DEV ? "include" : "same-origin";
@@ -194,7 +196,10 @@ async function postRefresh(): Promise<boolean> {
 
 	try {
 		const headers = await appendCsrfHeader("POST", url, undefined, CREDENTIALS);
-		const response = await fetch(url, { method: "POST", credentials: CREDENTIALS, headers });
+		// Deadline propio: `ensureFreshSession()` se espera antes de CADA request, así que un
+		// `/refresh` colgado bloquearía toda la página sin más techo que el del navegador.
+		const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(REFRESH_TIMEOUT_MS) : undefined;
+		const response = await fetch(url, { method: "POST", credentials: CREDENTIALS, headers, signal });
 
 		if (!response.ok) {
 			// 401 = el refresh token también murió. Se olvida el vencimiento para no

@@ -11,11 +11,20 @@ interface RedisProviderConfig {
 	password?: string;
 	db?: number;
 	keyPrefix?: string;
+	/** Deadline por comando en ms. `0` lo desactiva (sólo queda el rechazo inmediato del socket caído). */
+	commandTimeoutMs?: number;
+}
+
+/** Estado del corta-circuitos. Vive en el pool: la salud es del socket físico, no de la instancia. */
+interface BreakerState {
+	failures: number;
+	openUntil: number;
 }
 
 interface SharedRedisEntry {
 	client: RedisClient;
 	refCount: number;
+	breaker: BreakerState;
 }
 
 // El kernel recarga este módulo con cache-busting (?v=timestamp) al crear cada
@@ -31,8 +40,53 @@ const SHARED_POOLS: Map<string, SharedRedisEntry> = ((globalThis as any)[GLOBAL_
  * clave física —y toda la que llegue después— recibe un cliente inservible sin que nada avise.
  * Redis vuelve solo de un reinicio o de un failover de VIP; lo que no vuelve es el provider si
  * dejó de intentar. El techo alto es, en la práctica, "seguí intentando".
+ *
+ * `enableOfflineQueue: false` es lo que evita que una caída de Redis cuelgue la plataforma entera:
+ * con la cola (el default) un comando emitido con el socket caído **no falla, queda encolado y su
+ * promesa no se resuelve nunca**, así que un `await redis.*` dentro de una request —el rate limit
+ * lo está, para todos los endpoints— deja la respuesta colgada hasta que el cliente se rinde.
+ * Medido en Bun 1.3.14 contra un puerto muerto: con cola sigue pendiente a los 5s, sin cola rechaza
+ * en 1ms. `autoReconnect` recupera el socket igual por su cuenta (verificado cortando la conexión:
+ * vuelve solo, sin que ningún comando lo dispare), así que apagarla no cuesta disponibilidad.
+ *
+ * Precio a pagar: durante el corte los comandos rechazan en vez de esperar. Quien puede degradar lo
+ * hace en su call site (el rate limit cae a un contador en memoria, la caché de permisos va a
+ * Mongo); quien no puede, falla — que es lo correcto para un login o un 2FA.
  */
-const RECONNECT_OPTIONS = { autoReconnect: true, maxRetries: 1_000_000, enableOfflineQueue: true } as const;
+const RECONNECT_OPTIONS = { autoReconnect: true, maxRetries: 1_000_000, enableOfflineQueue: false } as const;
+
+/**
+ * Deadline por comando. La cola apagada cubre "socket caído", no "socket vivo pero atascado"
+ * (un BGSAVE largo, una red que traga paquetes): ahí la promesa queda pendiente igual.
+ */
+const DEFAULT_COMMAND_TIMEOUT_MS = 1_000;
+/** Fallos seguidos que abren el corta-circuitos, para no pagar el deadline en cada request de un corte largo. */
+const BREAKER_THRESHOLD = 5;
+const BREAKER_OPEN_MS = 3_000;
+/**
+ * Plazo del `connect()` inicial. Contra un Redis caído esa promesa **no vuelve nunca** (medido:
+ * `autoReconnect` reintenta para siempre y no respeta `connectionTimeout`), y como se espera durante
+ * el arranque del provider, sin este plazo una caída de Redis colgaba el boot del kernel entero.
+ */
+const CONNECT_DEADLINE_MS = 5_000;
+
+/** `true` si la promesa se resolvió dentro del plazo; `false` si venció (la promesa sigue viva). */
+async function raceDeadline(promise: Promise<unknown>, ms: number): Promise<boolean> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise.then(
+				() => true,
+				() => false
+			),
+			new Promise<boolean>((resolve) => {
+				timer = setTimeout(() => resolve(false), ms);
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
 
 function buildRedisUrl(cfg: RedisProviderConfig): { url: string; physicalKey: string } {
 	const { host, port, password, db } = cfg;
@@ -66,7 +120,9 @@ export default class RedisProvider extends BaseProvider {
 
 	#client: RedisClient | null = null;
 	#physicalKey: string | null = null;
+	#breaker: BreakerState | null = null;
 	readonly #config: RedisProviderConfig;
+	readonly #commandTimeoutMs: number;
 
 	constructor(config?: RedisProviderConfig) {
 		super();
@@ -77,7 +133,52 @@ export default class RedisProvider extends BaseProvider {
 			password: config?.password || Bun.env.REDIS_PASSWORD || undefined,
 			db: config?.db || Number.parseInt(Bun.env.REDIS_DB || "0", 10),
 			keyPrefix: config?.keyPrefix || "adc:",
+			commandTimeoutMs: config?.commandTimeoutMs,
 		};
+		// La cadena vacía se descarta antes de convertir: `Number("")` es 0, y un
+		// `${REDIS_COMMAND_TIMEOUT_MS:-}` sin valor apagaría el deadline sin que nadie lo pidiera.
+		const raw = this.#config.commandTimeoutMs ?? Bun.env.REDIS_COMMAND_TIMEOUT_MS;
+		const declared = raw === "" || raw === undefined ? Number.NaN : Number(raw);
+		this.#commandTimeoutMs = Number.isFinite(declared) && declared >= 0 ? declared : DEFAULT_COMMAND_TIMEOUT_MS;
+	}
+
+	/**
+	 * Envoltorio de TODO comando: corta-circuitos + deadline.
+	 *
+	 * El rechazo tardío del comando original (llega cuando el socket se entera del corte, después de
+	 * que ganó el deadline) se silencia a propósito: sin `catch` vuela como `unhandledRejection` y
+	 * Bun tumba el proceso.
+	 */
+	async #exec<T>(op: () => Promise<T>): Promise<T> {
+		const breaker = this.#breaker;
+		if (breaker && breaker.openUntil > Date.now()) {
+			throw new Error(`Redis no disponible (${this.#config.host}:${this.#config.port}): corta-circuitos abierto`);
+		}
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const command = op();
+			if (this.#commandTimeoutMs <= 0) return await command;
+			command.catch(() => {
+				/* ver docstring */
+			});
+			const result = await Promise.race([
+				command,
+				new Promise<never>((_, reject) => {
+					timer = setTimeout(() => reject(new Error(`Redis no respondió en ${this.#commandTimeoutMs}ms`)), this.#commandTimeoutMs);
+				}),
+			]);
+			if (breaker) breaker.failures = 0;
+			return result;
+		} catch (err) {
+			if (breaker && ++breaker.failures >= BREAKER_THRESHOLD) {
+				breaker.failures = 0;
+				breaker.openUntil = Date.now() + BREAKER_OPEN_MS;
+			}
+			throw err;
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	get client(): RedisClient {
@@ -104,24 +205,44 @@ export default class RedisProvider extends BaseProvider {
 				Logger.ok(`[RedisProvider] Conectado (${where})`);
 			};
 
-			try {
-				await client.ping();
-			} catch (err: any) {
-				this.logger.logError(`Error conectando a Redis: ${err.message}`);
-				try {
-					client.close();
-				} catch {
-					/* ignore */
+			// `connect()` explícito y no un `ping()` pelado: con la cola offline apagada el PRIMER
+			// comando de un cliente recién construido rechaza ("Connection is closed"), porque la
+			// conexión se abre perezosamente. Y ya valida el handshake completo (AUTH incluida), así
+			// que el ping de comprobación sobra.
+			//
+			// Se distingue rechazo de plazo vencido: un rechazo es configuración rota (contraseña,
+			// host) y tiene que fallar fuerte; un plazo vencido es "Redis todavía no está", y ahí se
+			// arranca degradado — `autoReconnect` conecta solo en cuanto aparece (verificado) y hasta
+			// entonces los comandos rechazan rápido en vez de colgarse.
+			const connecting = client.connect();
+			let failure: any = null;
+			connecting.catch((err: any) => {
+				failure = err;
+			});
+
+			if (!(await raceDeadline(connecting, CONNECT_DEADLINE_MS))) {
+				if (failure) {
+					this.logger.logError(`Error conectando a Redis: ${failure.message}`);
+					try {
+						client.close();
+					} catch {
+						/* ignore */
+					}
+					throw failure;
 				}
-				throw err;
+				this.logger.logWarn(
+					`RedisProvider arranca degradado (${this.#config.host}:${this.#config.port} no respondió en ${CONNECT_DEADLINE_MS}ms): ` +
+						"los comandos fallarán rápido hasta que reconecte"
+				);
 			}
 
-			entry = { client, refCount: 0 };
+			entry = { client, refCount: 0, breaker: { failures: 0, openUntil: 0 } };
 			SHARED_POOLS.set(physicalKey, entry);
 			this.logger.logOk(`RedisProvider pool abierto (${this.#config.host}:${this.#config.port})`);
 		}
 
 		entry.refCount++;
+		this.#breaker = entry.breaker;
 		return entry.client;
 	}
 
@@ -159,21 +280,21 @@ export default class RedisProvider extends BaseProvider {
 			const key = this.#physicalKey;
 			this.#physicalKey = null;
 			this.#client = null;
+			this.#breaker = null;
 			await this.#release(key);
 		}
 	}
 
 	// === Operaciones básicas ===
 	async get(key: string): Promise<string | null> {
-		return this.client.get(this._k(key));
+		return this.#exec(() => this.client.get(this._k(key)));
 	}
 
 	async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
 		const finalKey = this._k(key);
-		if (ttlSeconds)
-			// Bun soporta argumentos estándar de Redis
-			await this.client.set(finalKey, value, "EX", ttlSeconds);
-		else await this.client.set(finalKey, value);
+		// Bun soporta argumentos estándar de Redis
+		if (ttlSeconds) await this.#exec(() => this.client.set(finalKey, value, "EX", ttlSeconds));
+		else await this.#exec(() => this.client.set(finalKey, value));
 	}
 
 	/**
@@ -189,81 +310,81 @@ export default class RedisProvider extends BaseProvider {
 	 */
 	async setIfAbsent(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
 		const finalKey = this._k(key);
-		const result = ttlSeconds && ttlSeconds > 0
-			? await this.client.set(finalKey, value, "NX", "EX", String(ttlSeconds))
-			: await this.client.set(finalKey, value, "NX");
+		const result = await (ttlSeconds && ttlSeconds > 0
+			? this.#exec(() => this.client.set(finalKey, value, "NX", "EX", String(ttlSeconds)))
+			: this.#exec(() => this.client.set(finalKey, value, "NX")));
 		return result === "OK";
 	}
 
 	async del(key: string): Promise<void> {
-		await this.client.del(this._k(key));
+		await this.#exec(() => this.client.del(this._k(key)));
 	}
 
 	async exists(key: string): Promise<boolean> {
-		const result = await this.client.exists(this._k(key));
+		const result = await this.#exec(() => this.client.exists(this._k(key)));
 		return result;
 	}
 
 	// === Operaciones con TTL ===
 	async setex(key: string, ttlSeconds: number, value: string): Promise<void> {
-		await this.client.setex(this._k(key), ttlSeconds, value);
+		await this.#exec(() => this.client.setex(this._k(key), ttlSeconds, value));
 	}
 
 	async ttl(key: string): Promise<number> {
-		return this.client.ttl(this._k(key));
+		return this.#exec(() => this.client.ttl(this._k(key)));
 	}
 
 	async expire(key: string, ttlSeconds: number): Promise<boolean> {
-		const result = await this.client.expire(this._k(key), ttlSeconds);
+		const result = await this.#exec(() => this.client.expire(this._k(key), ttlSeconds));
 		return result === 1;
 	}
 
 	// === Operaciones con hash ===
 	async hget(key: string, field: string): Promise<string | null> {
-		return this.client.hget(this._k(key), field);
+		return this.#exec(() => this.client.hget(this._k(key), field));
 	}
 
 	async hset(key: string, field: string, value: string): Promise<void> {
 		// hset devuelve el número de campos añadidos, pero la interfaz pide void
-		await this.client.hset(this._k(key), field, value);
+		await this.#exec(() => this.client.hset(this._k(key), field, value));
 	}
 
 	async hdel(key: string, field: string): Promise<void> {
-		await this.client.hdel(this._k(key), field);
+		await this.#exec(() => this.client.hdel(this._k(key), field));
 	}
 
 	async hgetall(key: string): Promise<Record<string, string>> {
-		return this.client.hgetall(this._k(key));
+		return this.#exec(() => this.client.hgetall(this._k(key)));
 	}
 
 	async hincrby(key: string, field: string, increment: number): Promise<number> {
-		return this.client.hincrby(this._k(key), field, increment);
+		return this.#exec(() => this.client.hincrby(this._k(key), field, increment));
 	}
 
 	// === Operaciones con sets ===
 	async sadd(key: string, ...members: string[]): Promise<number> {
-		return this.client.sadd(this._k(key), ...members);
+		return this.#exec(() => this.client.sadd(this._k(key), ...members));
 	}
 
 	async srem(key: string, ...members: string[]): Promise<number> {
-		return this.client.srem(this._k(key), ...members);
+		return this.#exec(() => this.client.srem(this._k(key), ...members));
 	}
 
 	async smembers(key: string): Promise<string[]> {
-		return this.client.smembers(this._k(key));
+		return this.#exec(() => this.client.smembers(this._k(key)));
 	}
 
 	async sismember(key: string, member: string): Promise<boolean> {
-		return await this.client.sismember(this._k(key), member);
+		return await this.#exec(() => this.client.sismember(this._k(key), member));
 	}
 
 	// === Operaciones de incremento ===
 	async incr(key: string): Promise<number> {
-		return this.client.incr(this._k(key));
+		return this.#exec(() => this.client.incr(this._k(key)));
 	}
 
 	async incrby(key: string, increment: number): Promise<number> {
-		return this.client.incrby(this._k(key), increment);
+		return this.#exec(() => this.client.incrby(this._k(key), increment));
 	}
 
 	/**
@@ -281,18 +402,18 @@ export default class RedisProvider extends BaseProvider {
 	 */
 	async incrWithTtl(key: string, ttlSeconds: number): Promise<number> {
 		const ttl = String(Math.max(1, Math.floor(ttlSeconds)));
-		const count = await this.client.send("EVAL", [INCR_WITH_TTL_SCRIPT, "1", this._k(key), ttl]);
+		const count = await this.#exec(() => this.client.send("EVAL", [INCR_WITH_TTL_SCRIPT, "1", this._k(key), ttl]));
 		return Number(count);
 	}
 
 	// === Operaciones de patrón ===
 	async keys(pattern: string): Promise<string[]> {
 		// Nota: keys usa el prefijo si se lo aplicamos
-		return this.client.keys(this._k(pattern));
+		return this.#exec(() => this.client.keys(this._k(pattern)));
 	}
 
 	async scan(cursor: number, pattern: string, count: number = 100): Promise<[string, string[]]> {
-		return await this.client.scan(cursor.toString(), "MATCH", this._k(pattern), "COUNT", count);
+		return await this.#exec(() => this.client.scan(cursor.toString(), "MATCH", this._k(pattern), "COUNT", count));
 	}
 
 	/**

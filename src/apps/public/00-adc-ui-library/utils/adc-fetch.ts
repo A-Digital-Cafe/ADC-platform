@@ -162,12 +162,21 @@ function sanitizeIdempotencyKey(key: string): string {
 }
 
 /**
- * El 401 queda fuera del breaker: con renovación proactiva significa "sesión
- * terminada", no "backend caído", y ya tiene su propio camino (renovar y reintentar).
- * Contarlo haría que una ráfaga de sesiones vencidas fuerce un logout duro.
+ * El breaker termina en `forceLogoutAndRefresh`: cierra la sesión y recarga la página. Sólo tiene
+ * sentido para la familia de errores que un logout puede arreglar —estado de cliente inconsistente,
+ * 4xx en ráfaga— y por eso mira sólo 4xx.
+ *
+ * El 401 queda afuera: con renovación proactiva significa "sesión terminada" y ya tiene su propio
+ * camino (renovar y reintentar); contarlo haría que una ráfaga de sesiones vencidas fuerce un
+ * logout duro. El 429 también: es "esperá", no "estás roto".
+ *
+ * Los 5xx quedan afuera **a propósito**: un backend caído no se arregla deslogueando, y desde que
+ * el servidor falla rápido en vez de colgarse (deadline de handler, rate limit degradado) una caída
+ * genera justo el patrón que disparaba el breaker — o sea, cerraba la sesión de todo el mundo por
+ * un corte de infraestructura.
  */
 function isCircuitBreakerStatus(status?: number): status is number {
-	return typeof status === "number" && status >= 400 && status < 600 && status !== 401;
+	return typeof status === "number" && status >= 400 && status < 500 && status !== 401 && status !== 429;
 }
 
 async function registerCircuitBreakerFailure(status?: number): Promise<boolean> {

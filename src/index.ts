@@ -90,6 +90,11 @@ async function main() {
 		"ECONNRESET",
 		"EPIPE",
 		"ECANCELED",
+		// Redis se cayó o se reinició. Desde que el cliente falla rápido en vez de encolar comandos
+		// (ver `providers/queue/redis`), estos errores SÍ afloran; tirar el kernel por un Redis que
+		// vuelve solo en segundos sería mucho peor que la degradación que ya manejan los call sites.
+		"ERR_REDIS_CONNECTION_CLOSED",
+		"ERR_REDIS_CONNECTION_TIMEOUT",
 	]);
 	const NON_FATAL_MESSAGE_HINTS = ["writeHead", "headers after they are sent", "Request aborted", "premature close"];
 	const isNonFatal = (reason: any): boolean => {

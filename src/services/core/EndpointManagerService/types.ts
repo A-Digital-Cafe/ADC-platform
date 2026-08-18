@@ -70,7 +70,21 @@ interface EndpointOptions {
 	 * Cabeceras de cache para respuestas GET 200 (las absorben CDN/navegador).
 	 * Sólo se aplica a método GET; ignorado en mutativos.
 	 */
-	cache?: { maxAge: number; staleWhileRevalidate?: number; scope?: "public" | "private" };
+	cache?: {
+		maxAge: number;
+		staleWhileRevalidate?: number;
+		/**
+		 * Segundos durante los cuales una caché compartida puede seguir sirviendo la copia vencida
+		 * si el origen falla o no contesta. Es lo que mantiene viva una superficie pública durante
+		 * una caída del backend.
+		 */
+		staleIfError?: number;
+		/**
+		 * `public` sólo se emite si la request llegó sin credenciales; con sesión degrada a
+		 * `private` automáticamente (ver `applyCacheHeaders`).
+		 */
+		scope?: "public" | "private";
+	};
 	/**
 	 * Valida el cuerpo con `ETag` + `If-None-Match` y responde `304` sin cuerpo si
 	 * el cliente ya tiene la versión vigente. Sólo GET. Pensado para endpoints que
@@ -82,6 +96,12 @@ interface EndpointOptions {
 	 * coincida y el 304 no se dispararía nunca.
 	 */
 	etag?: boolean | { ignore: string[] };
+	/**
+	 * Deadline del handler en ms. Por defecto 15s en GET/HEAD y sin límite en mutaciones (ver
+	 * `DEFAULT_HANDLER_TIMEOUT_MS`). `0` lo desactiva; un número lo fija para este endpoint.
+	 * Vencido el plazo la request responde 504 — el handler NO se cancela, sigue corriendo.
+	 */
+	timeoutMs?: number;
 	/** Skip automatic idempotency check for this endpoint (default: false). */
 	skipIdempotency?: boolean;
 	/** Skip cookie-auth CSRF validation for this endpoint (default: false). */

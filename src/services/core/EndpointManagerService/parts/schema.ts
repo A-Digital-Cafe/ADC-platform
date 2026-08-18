@@ -106,7 +106,12 @@ export function validateEndpointInput(compiled: CompiledEndpointSchemas, ctx: En
 	if (compiled.querystring && !compiled.querystring.Check(ctx.query)) {
 		throw new HttpError(400, "INVALID_QUERY", "Query string inválida", { issues: firstErrors(compiled.querystring, ctx.query) });
 	}
-	if (compiled.body && !compiled.body.Check(ctx.data)) {
-		throw new HttpError(400, "INVALID_BODY", "Cuerpo de la petición inválido", { issues: firstErrors(compiled.body, ctx.data) });
+	// Body ausente = `{}` sin mutar `ctx.data` (los handlers hacen `ctx.data || {}` y alguno distingue el ausente):
+	// TypeBox rechaza `undefined` contra un Type.Object, así que un schema todo-opcional daba un "Expected object"
+	// engañoso; con propiedades requeridas sigue fallando, ya con "Expected required property". Type.Optional en la
+	// raíz no arregla esto (Check lo ignora ahí) y un union con Type.Undefined emitiría JSON Schema inválido al OpenAPI.
+	const bodyValue = ctx.data ?? {};
+	if (compiled.body && !compiled.body.Check(bodyValue)) {
+		throw new HttpError(400, "INVALID_BODY", "Cuerpo de la petición inválido", { issues: firstErrors(compiled.body, bodyValue) });
 	}
 }

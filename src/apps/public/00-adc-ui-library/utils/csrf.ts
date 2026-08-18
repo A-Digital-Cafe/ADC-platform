@@ -37,9 +37,17 @@ function isLocalOrigin(csrfUrl: string): boolean {
 	}
 }
 
+/**
+ * Deadline propio. Este GET se espera ANTES de armar la request real, así que queda fuera del
+ * timeout de `adc-fetch`: sin esto, un `/api/csrf-token` que no contesta bloquea todas las
+ * mutaciones de la página sin techo alguno (y `inFlight` comparte el cuelgue entre todas).
+ */
+const CSRF_TIMEOUT_MS = 5_000;
+
 async function requestCsrfToken(csrfUrl: string, credentials: RequestCredentials): Promise<string | null> {
 	try {
-		const response = await fetch(csrfUrl, { method: "GET", credentials, headers: { Accept: "application/json" } });
+		const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(CSRF_TIMEOUT_MS) : undefined;
+		const response = await fetch(csrfUrl, { method: "GET", credentials, headers: { Accept: "application/json" }, signal });
 		// 404 en dev = la plataforma corre con CSRF apagado; el endpoint no va a aparecer en esta sesión.
 		if (response.status === 404 && isLocalOrigin(csrfUrl)) disabledOrigins.add(csrfUrl);
 		if (!response.ok) return null;
