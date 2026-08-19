@@ -708,6 +708,21 @@ export class Kernel {
 	}
 
 	/**
+	 * Guard de los `change`: el watcher entrega CUALQUIER `index.ts` dentro del radio de
+	 * `WATCH_DEPTH`, así que los barriles internos de un módulo (`.../dao/index.ts`,
+	 * `.../endpoints/index.ts`, `providers/http/fastify-server/security/index.ts`) llegan igual
+	 * que el índice real. `add` ya los descarta con este mismo criterio; sin el guard acá,
+	 * `ModuleRegistrar` les inventa nombre con `basename(dirname)` y los carga como módulo propio:
+	 * ruidoso cuando el nombre choca con un grupo de la capa (`security` → "No se pudo resolver
+	 * Provider"), y SILENCIOSO cuando no (`endpoints`, `domain`, `dao` se cargan como services).
+	 */
+	async #ignoreNonModuleChange(p: string): Promise<boolean> {
+		if (await this.#detector.isModuleRoot(path.dirname(p))) return false;
+		this.#logger.logDebug(`Cambio en ${p} ignorado: no es raíz de módulo (sin package.json/config).`);
+		return true;
+	}
+
+	/**
 	 * Handlers de eventos de `index.ts` por capa, compartidos por los watchers de core
 	 * y de presets. `add` va al detector (módulo nuevo → pendiente, SIN ejecutar);
 	 * `change` recarga sólo módulos ya cargados (pendientes/deshabilitados se ignoran
@@ -718,6 +733,7 @@ export class Kernel {
 			return {
 				add: (p) => this.#detector.detect("app", p),
 				change: async (p) => {
+					if (await this.#ignoreNonModuleChange(p)) return;
 					if (await this.#detector.isReloadBlocked("app", p)) {
 						this.#logger.logDebug(`Cambio en app pendiente/deshabilitada ignorado: ${p}`);
 						return;
@@ -735,6 +751,7 @@ export class Kernel {
 		return {
 			add: (p) => this.#detector.detect(type, p),
 			change: async (p) => {
+				if (await this.#ignoreNonModuleChange(p)) return;
 				if (await this.#detector.isReloadBlocked(type, p)) {
 					this.#logger.logDebug(`Cambio en módulo pendiente/deshabilitado ignorado: ${p}`);
 					return;

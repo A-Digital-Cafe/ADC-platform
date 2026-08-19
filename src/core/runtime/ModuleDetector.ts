@@ -53,7 +53,7 @@ export class ModuleDetector {
 		if (this.#d.isShuttingDown()) return;
 		if (indexPath.includes(`${path.sep}node_modules${path.sep}`)) return;
 		const dir = path.dirname(indexPath);
-		if (!(await this.#isModuleRoot(dir))) {
+		if (!(await this.isModuleRoot(dir))) {
 			this.#d.logger.logDebug(`[detector] ${indexPath} no es raíz de módulo (sin package.json/config): ignorado.`);
 			return;
 		}
@@ -114,8 +114,12 @@ export class ModuleDetector {
 		}
 	}
 
-	/** Raíz de módulo = directorio con package.json o config (evita falsos positivos en subdirs con index). */
-	async #isModuleRoot(dir: string): Promise<boolean> {
+	/**
+	 * Raíz de módulo = directorio con package.json o config (evita falsos positivos en subdirs con index).
+	 * Pública porque el mismo criterio tiene que valer para los `change`: un barril interno
+	 * (`.../dao/index.ts`) no es un módulo, y cargarlo como tal es el bug que documenta el llamador.
+	 */
+	async isModuleRoot(dir: string): Promise<boolean> {
 		for (const f of ["package.json", "config.json", "default.json"]) {
 			try {
 				await fs.access(path.join(dir, f));
