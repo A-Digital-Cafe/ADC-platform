@@ -16,6 +16,12 @@ export class AdcButton {
 	@Prop() label?: string;
 	/** Muestra un spinner y deshabilita el botón mientras una acción está en curso. */
 	@Prop() loading?: boolean;
+	/**
+	 * `rel` del enlace cuando hay `href`. Reemplaza el default `noopener noreferrer`, así que quien
+	 * lo use tiene que incluirlos. Existe para los enlaces salientes que además necesitan
+	 * `nofollow ugc` (destinos propuestos por terceros, como el directorio de comunidades).
+	 */
+	@Prop() rel?: string;
 
 	@Event() adcClick!: EventEmitter<MouseEvent>;
 
@@ -89,7 +95,7 @@ export class AdcButton {
 					// Sin href al estar deshabilitado: un <a> con aria-disabled navega igual.
 					href={isDisabled ? undefined : this.href}
 					target="_blank"
-					rel="noopener noreferrer"
+					rel={this.rel ?? "noopener noreferrer"}
 					class={className}
 					aria-label={this.ariaLabel}
 					aria-disabled={isDisabled}
