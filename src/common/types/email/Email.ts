@@ -20,6 +20,16 @@ export interface EmailAuthResults {
 	spf: AuthVerdict;
 	dkim: AuthVerdict;
 	dmarc: AuthVerdict;
+	/** Dominio del sobre SMTP que pasó SPF (el "mailed-by"); `null` si no pasó. */
+	mailedBy?: string | null;
+	/** Dominio `d=` de la firma DKIM válida (el "signed-by"); `null` si no hay firma válida. */
+	signedBy?: string | null;
+}
+
+/** @public Cifrado de la conexión SMTP por la que entró el correo. */
+export interface EmailTransportSecurity {
+	version: string | null;
+	cipher: string | null;
 }
 
 /**
@@ -102,6 +112,8 @@ export interface EmailMessage {
 	spamReason?: string | null;
 	/** Veredicto de autenticación del MTA; `null` si el correo no pasó por él (entrega interna). */
 	authResults?: EmailAuthResults | null;
+	/** Cifrado de la conexión entrante; `null` = en claro, o el correo no pasó por el MTA. */
+	transportSecurity?: EmailTransportSecurity | null;
 	/** Último error de envío, si lo hubo. */
 	error?: string;
 

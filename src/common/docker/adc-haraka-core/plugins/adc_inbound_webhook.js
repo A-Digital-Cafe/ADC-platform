@@ -12,6 +12,14 @@ exports.register = function () {
 	this.cfg = this.config.get('adc_inbound_webhook.ini');
 };
 
+// Cifrado de la sesión SMTP. Con el plugin `tls` apagado (default) `connection.tls`
+// existe pero sin `enabled`, así que devuelve null = el correo entró en claro.
+function tlsInfo(connection) {
+	if (!connection.tls?.enabled) return null;
+	const cipher = connection.tls.cipher || {};
+	return { version: cipher.version || null, cipher: cipher.standardName || cipher.name || null };
+}
+
 exports.hook_queue = function (next, connection) {
 	// Los callbacks internos son arrow functions, así que `this` (el plugin de
 	// Haraka) se preserva sin necesidad del alias `const plugin = this`.
@@ -44,7 +52,10 @@ exports.hook_queue = function (next, connection) {
 		const spam = txn.notes.adcSpam;
 		const auth = txn.notes.adcAuth;
 		if (spam) body.spam = { score: spam.score, flag: spam.flag };
-		if (auth) body.auth = { spf: auth.spf, dkim: auth.dkim };
+		if (auth) body.auth = { spf: auth.spf, dkim: auth.dkim, mailedBy: auth.mailedBy, signedBy: auth.signedBy };
+
+		const tls = tlsInfo(connection);
+		if (tls) body.transport = tls;
 
 		const payload = JSON.stringify(body);
 

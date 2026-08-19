@@ -35,6 +35,23 @@ function dkimVerdict(txn) {
 	return 'none';
 }
 
+// Las entradas del store pueden venir como dominio pelado o como identidad
+// (`@dominio`, `user@dominio`), según la firma: quedarse con el dominio.
+function signingDomain(txn) {
+	const entry = txn.results.get('dkim')?.pass?.[0];
+	if (typeof entry !== 'string') return null;
+	const domain = entry.trim().split('@').pop().toLowerCase();
+	return domain || null;
+}
+
+// El "mailed-by" es el dominio que SPF autenticó: el del sobre SMTP, o el del
+// HELO cuando el sobre viene vacío (rebotes). Se saca del core de Haraka y no
+// del store del plugin, cuyos campos no son estables entre versiones.
+function mailedByDomain(txn, connection) {
+	const domain = txn.mail_from?.host || connection.hello?.host || '';
+	return domain.trim().toLowerCase() || null;
+}
+
 exports.adc_spam_check = function (next, connection) {
 	const txn = connection.transaction;
 	if (!txn) return next();
@@ -54,7 +71,19 @@ exports.adc_spam_check = function (next, connection) {
 	if (txn.rcpt_to.length > 25) score += 1;
 
 	const flag = score >= 5;
-	const auth = { spf: spfVerdict(txn), dkim: dkimVerdict(txn) };
+	const spf = spfVerdict(txn);
+	const dkim = dkimVerdict(txn);
+	// Desde la red interna entrega el propio email-service: no hay remitente externo que
+	// autenticar, y `spf`/`limit` ya eximen esas IPs. Sin veredicto, la plataforma lo trata
+	// como entrega interna en vez de mostrar "sin verificar" en cada correo entre usuarios.
+	const auth = connection.remote?.is_private
+		? null
+		: {
+				spf,
+				dkim,
+				mailedBy: spf === 'pass' ? mailedByDomain(txn, connection) : null,
+				signedBy: dkim === 'pass' ? signingDomain(txn) : null,
+		  };
 
 	txn.notes.adcSpam = { score, flag };
 	txn.notes.adcAuth = auth;
@@ -63,7 +92,7 @@ exports.adc_spam_check = function (next, connection) {
 	for (const name of ADC_HEADERS) txn.remove_header(name);
 	txn.add_header('X-ADC-Spam-Score', String(score));
 	if (flag) txn.add_header('X-ADC-Spam-Flag', 'YES');
-	txn.add_header('X-ADC-Auth-Results', `spf=${auth.spf}; dkim=${auth.dkim}`);
+	txn.add_header('X-ADC-Auth-Results', auth ? `spf=${auth.spf}; dkim=${auth.dkim}` : 'internal');
 
 	return next();
 };
