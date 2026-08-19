@@ -13,6 +13,7 @@
  */
 
 import { getUrl, getDevUrl, IS_DEV, isPrivateHost } from "./url-utils.js";
+import { ERROR_APP_DEVPORT, ERROR_APP_PROD_HOST, errorAppPath } from "./error-app.js";
 
 export interface AppAvailability {
 	messageKey?: string;
@@ -109,10 +110,6 @@ export async function getUnavailableApps(): Promise<Set<string>> {
 	return new Set([...Object.keys(state.disabled), ...(state.down ?? [])]);
 }
 
-/** Dev port y host de producción de la app de errores (adc-error). */
-const ERROR_APP_DEVPORT = 3026;
-const ERROR_APP_PROD_HOST = "error.adigitalcafe.com";
-
 /**
  * Gate de mantenimiento para el bootstrap de una app (main.tsx). Si la app (por
  * nombre base) está deshabilitada en el modules-manager, redirige a la página de
@@ -131,7 +128,7 @@ export async function redirectIfUnderMaintenance(appBaseName: string): Promise<b
 	// al usuario a la app (mismo destino) cuando vuelva a estar disponible.
 	const from = globalThis.location?.href;
 	if (from) params.set("from", from);
-	const target = getUrl(ERROR_APP_DEVPORT, ERROR_APP_PROD_HOST, `/maintenance?${params.toString()}`);
+	const target = getUrl(ERROR_APP_DEVPORT, ERROR_APP_PROD_HOST, errorAppPath("/maintenance", Object.fromEntries(params)));
 	globalThis.location?.replace(target);
 	return true;
 }
@@ -145,8 +142,12 @@ function registrableDomain(hostname: string): string {
  * Valida que una return-URL apunte a la misma plataforma para evitar open-redirects:
  * mismo host, o un host privado/LAN en dev, o un subdominio del mismo dominio
  * registrable en prod (ej: `drive.adigitalcafe.com` desde `error.adigitalcafe.com`).
+ *
+ * @public Exportada porque toda página que reciba un destino por query string
+ * (`?from=`, `?returnUrl=`) necesita este mismo filtro; tener una sola copia es
+ * lo que evita que la próxima se olvide de aplicarlo.
  */
-function isSafeReturnUrl(raw: string): boolean {
+export function isSafeReturnUrl(raw: string): boolean {
 	try {
 		const url = new URL(raw, globalThis.location?.href);
 		if (url.protocol !== "http:" && url.protocol !== "https:") return false;

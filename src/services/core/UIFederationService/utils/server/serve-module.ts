@@ -2,10 +2,20 @@ import type { RegisteredUIModule } from "../../types.js";
 import type { UIFederationContext } from "../types/context.js";
 import { parseFramework } from "../../strategies/index.js";
 import { getUIModuleHostOptions } from "../security.js";
+import { buildAccessGuard } from "../access-guard.js";
+import { exposeChunkPathPrefix } from "@common/utils/federation-exposes.ts";
 
 function serveStaticFallback(module: RegisteredUIModule, namespace: string, ctx: UIFederationContext): void {
 	const urlPath = `/${namespace}/${module.name}`;
-	if (module.outputPath) ctx.httpProvider?.serveStatic(urlPath, module.outputPath);
+	// El gate viaja también por acá: es el camino de los módulos UI sin `hosting`, y dejarlo
+	// fuera haría que declarar `access` protegiera o no según un detalle del despliegue.
+	if (module.outputPath) {
+		ctx.httpProvider?.serveStatic(urlPath, module.outputPath, {
+			accessGuard: accessGuardFor(module, ctx),
+			// El prefijo del chunk federado va relativo al montaje, no a la raíz del host.
+			pathGuards: exposePathGuards(module, ctx, urlPath),
+		});
+	}
 	ctx.logger.logOk(`Módulo UI ${module.name} [${namespace}] servido en http://localhost:${ctx.port}${urlPath}`);
 }
 
@@ -38,6 +48,46 @@ function registerSubdomainHosts(
 		patterns.push(pattern);
 	}
 	return patterns;
+}
+
+/**
+ * Gates de `uiModule.federationAccess`: protegen el chunk de cada `expose` en el host de ESTE
+ * módulo, que es donde se sirve (no en el del consumidor). El nombre del chunk lo fija el
+ * generador de la config del bundler, así que el prefijo es estable pese al `[contenthash]`.
+ */
+function exposePathGuards(module: RegisteredUIModule, ctx: UIFederationContext, mountPath = "") {
+	const federationAccess = module.uiConfig.federationAccess;
+	if (!federationAccess) return undefined;
+
+	const exposes = module.uiConfig.federationExposes ?? {};
+	const guards = [];
+	for (const [exposeKey, access] of Object.entries(federationAccess)) {
+		// Una clave que no existe entre los exposes no protege nada, y no hay ningún síntoma:
+		// el chunk se sigue sirviendo y el gate parece puesto.
+		if (!(exposeKey in exposes)) {
+			ctx.logger.logError(`[access] ${module.name}: federationAccess declara "${exposeKey}", que no está en federationExposes; no protege nada.`);
+			continue;
+		}
+		const guard = buildAccessGuard({
+			moduleName: module.name,
+			logLabel: `${module.name} ${exposeKey}`,
+			uiConfig: { ...module.uiConfig, access },
+			getSessionVerifier: ctx.getSessionVerifier,
+			logger: ctx.logger,
+		});
+		if (guard) guards.push({ prefix: `${mountPath}${exposeChunkPathPrefix(exposeKey)}`, guard });
+	}
+	return guards.length > 0 ? guards : undefined;
+}
+
+/** Gate de `uiModule.access` del módulo, o `undefined` si no declaró ninguno. */
+function accessGuardFor(module: RegisteredUIModule, ctx: UIFederationContext) {
+	return buildAccessGuard({
+		moduleName: module.name,
+		uiConfig: module.uiConfig,
+		getSessionVerifier: ctx.getSessionVerifier,
+		logger: ctx.logger,
+	});
 }
 
 /**
@@ -75,7 +125,7 @@ async function registerHostsForModule(module: RegisteredUIModule, namespace: str
 	if (!hosting || !module.outputPath) return;
 
 	const registeredPatterns: string[] = [];
-	const hostOptions = getUIModuleHostOptions(module.uiConfig);
+	const hostOptions = getUIModuleHostOptions(module.uiConfig, accessGuardFor(module, ctx), exposePathGuards(module, ctx));
 
 	for (const hostConfig of hosting) {
 		for (const domain of hostConfig.domains) {

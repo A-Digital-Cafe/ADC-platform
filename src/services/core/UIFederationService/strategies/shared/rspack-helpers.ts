@@ -2,6 +2,7 @@ import * as path from "node:path";
 import type { IBuildContext } from "../types.js";
 import { normalizeForConfig, getCommonPublicDir } from "../../utils/fs/path-resolver.js";
 import { buildResponsiveRedirectScript } from "../../utils/codegen/html-templates.js";
+import { exposeChunkName } from "@common/utils/federation-exposes.ts";
 
 /**
  * Construye la configuración de `shared` para ModuleFederationPlugin.
@@ -32,13 +33,18 @@ export function buildSharedConfig(usedFrameworks: Set<string>): string {
  * Construye `exposes` para Module Federation.
  * Si el módulo tiene `federationExposes` definido en su config, se respeta;
  * caso contrario expone `./App` apuntando a `./src/App<ext>`.
+ *
+ * Cada entrada lleva `name` para fijar el nombre del chunk: sin él rspack le pone un id numérico
+ * que se reordena entre builds (`4524.<hash>.js`) y no habría forma de referirse al archivo desde
+ * afuera. Con nombre estable queda `expose_ModerationPanel.<hash>.js`, que es lo que
+ * `federationAccess` protege por prefijo de ruta.
  */
 export function buildExposesConfig(context: IBuildContext, appExtension: string): string {
 	const federationExposes = context.module.uiConfig.federationExposes;
 
 	if (federationExposes && Object.keys(federationExposes).length > 0) {
 		const exposesEntries = Object.entries(federationExposes)
-			.map(([key, value]) => `                '${key}': '${value}'`)
+			.map(([key, value]) => `                '${key}': { import: '${value}', name: '${exposeChunkName(key)}' }`)
 			.join(",\n");
 		return `
             filename: 'remoteEntry.js',
@@ -50,7 +56,7 @@ ${exposesEntries}
 	return `
             filename: 'remoteEntry.js',
             exposes: {
-                './App': './src/App${appExtension}',
+                './App': { import: './src/App${appExtension}', name: '${exposeChunkName("./App")}' },
             },`;
 }
 

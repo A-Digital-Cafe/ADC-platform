@@ -10,6 +10,10 @@
 		"devPort": 3046,
 		"sharedLibs": ["react", "tailwind"],
 		"i18n": true,
+		"access": {
+			"globalOnly": true,
+			"roles": ["Admin", "Security Manager", "Data Manager"]
+		},
 		"hosting": [
 			{
 				"domains": ["adigitalcafe.com"],

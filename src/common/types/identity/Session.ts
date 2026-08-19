@@ -11,6 +11,8 @@ export interface SessionUser {
 	email?: string;
 	avatar?: string;
 	perms?: Permission[];
+	/** Nombres de los roles vigentes en el contexto (personal u organización). */
+	roles?: string[];
 	orgId?: string;
 	orgSlug?: string;
 	linkedAccounts?: LinkedAccount[];

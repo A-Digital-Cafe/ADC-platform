@@ -10,7 +10,13 @@ import { readFileSync } from "node:fs";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 import { OnlyKernel } from "../../../utils/decorators/OnlyKernel.ts";
 import { Scope, assertScope, type Capability } from "@common/security/Capability.ts";
-import type { IHostBasedHttpProvider, HostOptions, HttpHandler, RequestForwarder } from "../../../interfaces/modules/providers/IHttpServer.js";
+import type {
+	IHostBasedHttpProvider,
+	HostOptions,
+	HttpHandler,
+	RequestForwarder,
+	StaticAccessGuard,
+} from "../../../interfaces/modules/providers/IHttpServer.js";
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import type { ConnectRouter, ServiceImpl } from "@connectrpc/connect";
 import {
@@ -33,7 +39,10 @@ import {
 	isAllowedHttpMethod,
 	injectCountry,
 	isCspNonceEnabled,
+	isBlockedBuildArtifact,
 	isSafeStaticPath,
+	normalizeUrlPath,
+	staticCacheControl,
 	readShapingConfig,
 	resolveTrustProxy,
 	stampCspNonce,
@@ -186,6 +195,10 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	private readonly registeredHosts = new Map<string, RegisteredHost>();
 	private readonly globalRoutes: GlobalRoute[] = [];
 	private readonly globalStaticPaths = new Map<string, string>();
+	/** Gates de acceso por prefijo estático global (los módulos UI sin `hosting`). Ver `serveStatic`. */
+	private readonly globalStaticGuards = new Map<string, StaticAccessGuard>();
+	/** Gates acotados a un archivo dentro de un prefijo estático global (chunks federados). */
+	private readonly globalStaticPathGuards = new Map<string, NonNullable<HostOptions["pathGuards"]>>();
 	/** Hosts en modo mantenimiento: patrón → mensaje. Sirven 503 en vez de la app. */
 	private readonly maintenanceHosts = new Map<string, string>();
 	/**
@@ -548,10 +561,37 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			return;
 		}
 
+		// Artefactos de build que nunca deben salir en producción (source maps, `collection/`, …).
+		// Va antes de cualquier resolución de archivo y cubre por igual los hosts virtuales y las
+		// rutas estáticas globales, que es por donde se sirven las UI libraries.
+		if (isBlockedBuildArtifact(urlPath)) {
+			reply.code(404).send({ error: "Not Found" });
+			return;
+		}
+
+		// Gate de acceso del host: lo último antes de tocar el disco, y después del ruteo de API y
+		// de las rutas del host, para no cambiar la semántica de `/api/*` (que autoriza por su
+		// cuenta) ni la de `/robots.txt` (que tiene que seguir siendo público).
+		if (matchedHost?.options.accessGuard && (await this.#denyStaticAccess(request, reply, matchedHost.options))) return;
+
+		// Gates por prefijo: un archivo concreto protegido dentro de un host que por lo demás es
+		// público (el chunk de un `expose` federado). Ver `HostOptions.pathGuards`.
+		// Sobre el path NORMALIZADO: comparar el crudo mientras el archivo se resuelve decodificando
+		// deja pasar `//expose_X.js`, `/./expose_X.js` y `/a/../expose_X.js`, que abren el mismo
+		// archivo sin matchear el prefijo.
+		const normalizedPath = normalizeUrlPath(urlPath);
+		const pathGuard = matchedHost?.options.pathGuards?.find((entry) => normalizedPath?.startsWith(entry.prefix));
+		if (pathGuard && (await this.#denyStaticAccess(request, reply, { accessGuard: pathGuard.guard, headers: matchedHost?.options.headers }))) {
+			return;
+		}
+
 		// Si no hay host matcheado, intentar con rutas estáticas globales
 		if (!matchedHost) {
 			const global = this.#resolveGlobalStatic(urlPath);
-			if (global) return this.serveFile(global.filePath, global.directory, reply);
+			if (global) {
+				if (await this.#denyGlobalStaticAccess(request, reply, global.mountPath, normalizedPath)) return;
+				return this.serveFile(global.filePath, global.directory, reply);
+			}
 
 			reply.code(404).send({ error: "Not Found", host: request.hostname });
 			return;
@@ -576,10 +616,56 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		// ni un 404 que delatara el problema.
 		if (!fs.existsSync(filePath)) {
 			const global = this.#resolveGlobalStatic(urlPath);
-			if (global) return this.serveFile(global.filePath, global.directory, reply);
+			if (global) {
+				if (await this.#denyGlobalStaticAccess(request, reply, global.mountPath, normalizedPath)) return;
+				return this.serveFile(global.filePath, global.directory, reply);
+			}
 		}
 
 		await this.serveFile(filePath, matchedHost.directory, reply, matchedHost.options);
+	}
+
+	/**
+	 * Gates de un prefijo estático global: el del prefijo entero y los acotados a un archivo.
+	 * `true` = ya respondió y el llamador tiene que cortar.
+	 */
+	async #denyGlobalStaticAccess(request: FastifyRequest, reply: FastifyReply, mountPath: string, normalizedPath: string | null): Promise<boolean> {
+		const guard = this.globalStaticGuards.get(mountPath);
+		if (guard && (await this.#denyStaticAccess(request, reply, { accessGuard: guard }))) return true;
+
+		const pathGuard = this.globalStaticPathGuards.get(mountPath)?.find((entry) => normalizedPath?.startsWith(entry.prefix));
+		return Boolean(pathGuard) && this.#denyStaticAccess(request, reply, { accessGuard: pathGuard!.guard });
+	}
+
+	/**
+	 * Corre el gate de acceso al contenido estático. `true` = ya respondió (redirect) y el
+	 * llamador tiene que cortar.
+	 *
+	 * Fail-closed: si el gate lanza, se responde 403 en vez de servir. Un gate roto es un gate,
+	 * no un permiso — la alternativa (dejar pasar ante un error transitorio del verificador de
+	 * sesión) convierte cualquier hipo en una publicación del panel de administración.
+	 *
+	 * Todo lo que pase por acá sale `no-store`: la respuesta depende de la cookie del visitante y
+	 * una caché compartida no tiene forma de saberlo.
+	 */
+	async #denyStaticAccess(request: FastifyRequest, reply: FastifyReply, options: Pick<HostOptions, "accessGuard" | "headers">): Promise<boolean> {
+		let redirectTo: string | null;
+		try {
+			redirectTo = (await options.accessGuard?.(request as FastifyRequest<any>)) ?? null;
+		} catch (error: any) {
+			this.logger.logError(`Gate de acceso falló en ${request.hostname}${request.url}: ${error?.message}`);
+			applySecurityHeaders(reply, options.headers);
+			reply.header("Cache-Control", "no-store");
+			reply.code(403).send({ error: "FORBIDDEN" });
+			return true;
+		}
+
+		reply.header("Cache-Control", "no-store");
+		if (!redirectTo) return false;
+
+		applySecurityHeaders(reply, options.headers);
+		reply.redirect(redirectTo, 302);
+		return true;
 	}
 
 	/**
@@ -594,7 +680,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 	 * puede seguir cayendo al `common/public` de abajo, en vez de cortar con 404 en el primer
 	 * prefijo que matchee.
 	 */
-	#resolveGlobalStatic(urlPath: string): { filePath: string; directory: string } | null {
+	#resolveGlobalStatic(urlPath: string): { filePath: string; directory: string; mountPath: string } | null {
 		const byLongestPrefix = [...this.globalStaticPaths.entries()].sort((a, b) => b[0].length - a[0].length);
 
 		for (const [pathPrefix, directory] of byLongestPrefix) {
@@ -605,7 +691,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			const rest = urlPath.slice(prefix.length);
 			const relativePath = rest === "" || rest === "/" ? "/index.html" : rest;
 			const filePath = resolveSafeStaticPath(directory, relativePath);
-			if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) return { filePath, directory };
+			if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) return { filePath, directory, mountPath: pathPrefix };
 		}
 
 		return null;
@@ -650,6 +736,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 				const contentType = this.getContentType(ext);
 
 				applySecurityHeaders(reply, options?.headers);
+				this.#applyStaticCache(reply, filePath);
 				reply.header("Content-Type", contentType);
 				const content = fs.readFileSync(filePath);
 				reply.send(content);
@@ -661,6 +748,7 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 				const indexPath = resolveSafeStaticPath(baseDir, "/index.html");
 				if (indexPath && fs.existsSync(indexPath)) {
 					applySecurityHeaders(reply, options?.headers);
+					this.#applyStaticCache(reply, indexPath);
 					reply.header("Content-Type", "text/html");
 					const content = fs.readFileSync(indexPath);
 					reply.send(content);
@@ -673,6 +761,16 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 			this.logger.logError(`Error serving file ${filePath}: ${error.message}`);
 			reply.code(500).send({ error: "Internal server error" });
 		}
+	}
+
+	/**
+	 * Caché del estático, **sin pisar** lo que ya haya puesto quien vino antes: el gate de acceso
+	 * marca sus respuestas `no-store` porque dependen de la cookie del visitante, y esa decisión
+	 * tiene que ganarle a cualquier política por nombre de archivo.
+	 */
+	#applyStaticCache(reply: FastifyReply, filePath: string): void {
+		if (reply.getHeader("Cache-Control")) return;
+		reply.header("Cache-Control", staticCacheControl(filePath));
 	}
 
 	private getContentType(ext: string): string {
@@ -821,9 +919,14 @@ export default class FastifyServerProvider extends BaseProvider implements IHost
 		this.logger.logOk("Swagger UI disponible en /api/docs");
 	}
 
-	serveStatic(urlPath: string, directory: string): void {
+	serveStatic(urlPath: string, directory: string, options?: Pick<HostOptions, "accessGuard" | "pathGuards">): void {
 		this.globalStaticPaths.set(urlPath, directory);
-		this.logger.logDebug(`Archivos estáticos globales: ${urlPath} -> ${directory}`);
+		if (options?.accessGuard) this.globalStaticGuards.set(urlPath, options.accessGuard);
+		else this.globalStaticGuards.delete(urlPath);
+		if (options?.pathGuards?.length) this.globalStaticPathGuards.set(urlPath, options.pathGuards);
+		else this.globalStaticPathGuards.delete(urlPath);
+		const gated = options?.accessGuard || options?.pathGuards?.length ? " (con gate de acceso)" : "";
+		this.logger.logDebug(`Archivos estáticos globales: ${urlPath} -> ${directory}${gated}`);
 	}
 
 	/**

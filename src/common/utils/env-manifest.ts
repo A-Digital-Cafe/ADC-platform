@@ -234,6 +234,7 @@ export const ENV_VARS: readonly EnvVarDef[] = [
 	{ name: "ADC_UI_APPS", group: "build" },
 	{ name: "ADC_LOAD_APPS", group: "build" },
 	{ name: "ADC_UI_SOURCEMAPS", group: "build" },
+	{ name: "ADC_SERVE_SOURCEMAPS", group: "build" },
 	{ name: "ADC_DEFER_UI_BUILDS", group: "build" },
 	{ name: "ENABLE_TESTS", group: "build" },
 	{ name: "BOOT_MAX_PARALLEL", group: "build" },

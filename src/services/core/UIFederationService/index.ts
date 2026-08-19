@@ -21,6 +21,7 @@ import { Scope, assertScope, type Capability, type CapabilityToken } from "@comm
 import { LoadSemaphore } from "../../../utils/system/LoadSemaphore.ts";
 import { MemoryProbe } from "../../../utils/system/MemoryProbe.ts";
 import type { IUIFederationService } from "@common/types/ui/IUIFederationService.ts";
+import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 
 export default class UIFederationService extends BaseService implements IUIFederationService {
 	public readonly name = "UIFederationService";
@@ -76,7 +77,18 @@ export default class UIFederationService extends BaseService implements IUIFeder
 			uiOutputBaseDir: this.#uiOutputBaseDir,
 			isDevelopment: this.#isDevelopment,
 			getSEOService: () => this.#seoService,
+			getSessionVerifier: () => this.#getSessionVerifier(),
 		};
+	}
+
+	/**
+	 * Verificador de sesión para el gate de `uiModule.access`. Resuelto por request y no
+	 * cacheado: SessionManagerService es opcional (un despliegue puede no traer el preset IAM)
+	 * y puede reiniciarse, y una referencia guardada apuntaría a la instancia muerta. La
+	 * resolución es un lookup en el registry, no una carga.
+	 */
+	#getSessionVerifier(): ISessionVerifier | null {
+		return this.tryGetMyService<ISessionVerifier>("SessionManagerService") ?? null;
 	}
 
 	@OnlyKernel()

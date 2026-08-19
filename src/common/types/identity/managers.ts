@@ -186,6 +186,10 @@ export interface IRegionManager {
 export interface IPermissionManager {
 	hasPermission(userId: string, action: number, scope: number, orgId?: string, resource?: string, opts?: { ownerId?: string }): Promise<boolean>;
 	resolvePermissions(userId: string, orgId?: string): Promise<ResolvedPermission[]>;
+	/** Nombres de los roles vigentes del usuario en el contexto (mismos criterios que `resolvePermissions`). */
+	resolveRoleNames(userId: string, orgId?: string): Promise<string[]>;
+	/** Nombres distintos de todos los roles existentes. Sólo para validar configuración. */
+	listAllRoleNames(): Promise<string[]>;
 	getMaxHierarchy(userId: string, orgId?: string): Promise<number>;
 	getRolesMaxHierarchy(roleIds: readonly string[]): Promise<number>;
 	invalidateUser(userId: string): void;

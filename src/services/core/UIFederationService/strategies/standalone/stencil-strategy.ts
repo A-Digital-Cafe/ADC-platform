@@ -5,7 +5,7 @@ import { BaseCLIStrategy } from "../base-strategy.js";
 import type { IBuildContext, IBuildResult } from "../types.js";
 import { getBinPath } from "../../utils/fs/path-resolver.js";
 import { runCommand } from "../../utils/fs/file-operations.js";
-import { generateAutoInit, regenerateReactJSX, cleanupStrayEmits } from "../shared/stencil-output.js";
+import { generateAutoInit, regenerateReactJSX, cleanupStrayEmits, prunePublishedArtifacts } from "../shared/stencil-output.js";
 import { writeStencilConfig } from "./stencil-config.js";
 import { bootTimeline } from "../../../../../utils/system/BootTimeline.ts";
 
@@ -113,6 +113,8 @@ export class StencilStrategy extends BaseCLIStrategy {
 		module.outputPath = outputDir;
 
 		await Promise.all([generateAutoInit(module, context.logger), regenerateReactJSX(module, context.logger), cleanupStrayEmits(context.logger)]);
+		// Después del post-build, no antes: `generateAutoInit` escribe dentro del mismo directorio.
+		await prunePublishedArtifacts(module, context.logger);
 		context.logger?.logOk(`Build Stencil completado para ${module.uiConfig.name}`);
 
 		return { outputPath: outputDir };

@@ -29,6 +29,12 @@
 			"version": "latest",
 			"language": "typescript",
 			"optional": true
+		},
+		{
+			"name": "SessionManagerService",
+			"version": "latest",
+			"language": "typescript",
+			"optional": true
 		}
 	]
 }

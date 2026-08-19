@@ -5,6 +5,7 @@ import type { ImportMap } from "../../../../../interfaces/modules/IUIModule.js";
 import type { ModuleRegistry } from "../registry/module-registry.js";
 import type { LoadSemaphore } from "../../../../../utils/system/LoadSemaphore.ts";
 import type { ISEOService } from "../../../../../common/types/SEO/Service.js";
+import type { ISessionVerifier } from "@common/types/identity/SessionVerifier.ts";
 
 /** Ver {@link UIFederationContext.deferredBuilds}. */
 interface DeferredBuildPolicy {
@@ -47,6 +48,13 @@ export interface UIFederationContext {
 	isDevelopment: boolean;
 	/** Lookup soft de SEOService. Devuelve `null` si aún no está registrado. */
 	getSEOService: () => ISEOService | null;
+	/**
+	 * Lookup soft del verificador de sesión, para el gate de `uiModule.access`. Se resuelve por
+	 * request (no al arrancar): SessionManagerService es una dependencia opcional y puede
+	 * reiniciarse, y una referencia cacheada en el `start()` quedaría apuntando a la instancia
+	 * muerta. `null` = no hay quien autentique, y el gate cierra.
+	 */
+	getSessionVerifier: () => ISessionVerifier | null;
 }
 
 export const DEFAULT_NAMESPACE = "default";

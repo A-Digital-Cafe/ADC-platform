@@ -1,8 +1,12 @@
 import type { UIModuleConfig } from "../../../../interfaces/modules/IUIModule.js";
-import type { HostOptions } from "../../../../interfaces/modules/providers/IHttpServer.js";
+import type { HostOptions, StaticAccessGuard } from "../../../../interfaces/modules/providers/IHttpServer.js";
 import { isRealProduction } from "@common/utils/runtime-env.ts";
 
-export function getUIModuleHostOptions(config: UIModuleConfig): HostOptions {
+export function getUIModuleHostOptions(
+	config: UIModuleConfig,
+	accessGuard?: StaticAccessGuard,
+	pathGuards?: HostOptions["pathGuards"]
+): HostOptions {
 	const security = config.security;
 	const envOverrides = isRealProduction() ? security?.production?.headers : security?.development?.headers;
 	const headers: Record<string, string> = { ...security?.headers, ...envOverrides };
@@ -15,5 +19,9 @@ export function getUIModuleHostOptions(config: UIModuleConfig): HostOptions {
 	// cuando alguien lo pide explícitamente. Una app que declare su propio `X-Robots-Tag` manda.
 	if (!config.enableSEO) headers["X-Robots-Tag"] ??= "noindex, nofollow";
 
-	return Object.keys(headers).length > 0 ? { spaFallback: true, headers } : { spaFallback: true };
+	const base: HostOptions = { spaFallback: true };
+	if (Object.keys(headers).length > 0) base.headers = headers;
+	if (accessGuard) base.accessGuard = accessGuard;
+	if (pathGuards?.length) base.pathGuards = pathGuards;
+	return base;
 }

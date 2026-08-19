@@ -6,14 +6,16 @@ import { CsrfPage } from "./pages/CsrfPage.tsx";
 import { OAuthErrorPage } from "./pages/OAuthErrorPage.tsx";
 import { GenericErrorPage } from "./pages/GenericErrorPage.tsx";
 import { MaintenancePage } from "./pages/MaintenancePage.tsx";
+import { UnauthorizedPage } from "./pages/UnauthorizedPage.tsx";
 
-type Page = "banned" | "csrf" | "oauth" | "maintenance" | "generic";
+type Page = "banned" | "csrf" | "oauth" | "maintenance" | "unauthorized" | "generic";
 
 const PATH_TO_PAGE: Record<string, Page> = {
 	"/banned": "banned",
 	"/csrf": "csrf",
 	"/oauth": "oauth",
 	"/maintenance": "maintenance",
+	"/unauthorized": "unauthorized",
 };
 
 function resolvePage(): Page {
@@ -37,6 +39,7 @@ export default function App() {
 			{page === "csrf" && <CsrfPage />}
 			{page === "oauth" && <OAuthErrorPage />}
 			{page === "maintenance" && <MaintenancePage />}
+			{page === "unauthorized" && <UnauthorizedPage />}
 			{page === "generic" && <GenericErrorPage />}
 		</ErrorLayout>
 	);

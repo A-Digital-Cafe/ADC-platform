@@ -7,6 +7,9 @@ Microfront para mostrar páginas de error de la plataforma (OAuth, baneos, CSRF,
 - `/banned` — Cuenta o IP baneada (param: `reason`)
 - `/csrf` — Error de validación CSRF en flujo OAuth
 - `/oauth` — Error genérico de OAuth (params: `provider`, `message`)
+- `/maintenance` — App deshabilitada (params: `app`, `reason`, `from`)
+- `/unauthorized` — El kernel no entregó un módulo con `uiModule.access` (params: `app`, `reason`
+  = `auth`|`role`|`unavailable`, `from`). No dice qué rol faltaba: llega cualquiera.
 - `/` — Fallback genérico (param: `message`)
 
 ## Detalles

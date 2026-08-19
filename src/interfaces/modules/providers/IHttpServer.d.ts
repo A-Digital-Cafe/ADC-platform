@@ -60,9 +60,11 @@ export interface IHttpServerProvider {
 	unregisterRoutesByOwner?(owner: string): number;
 
 	/**
-	 * Sirve archivos estáticos desde un directorio
+	 * Sirve archivos estáticos desde un directorio. `accessGuard` protege el prefijo entero y
+	 * `pathGuards` archivos puntuales dentro de él (es el camino que usan los módulos UI sin
+	 * `hosting`); el resto de `HostOptions` no aplica.
 	 */
-	serveStatic(path: string, directory: string): void;
+	serveStatic(path: string, directory: string, options?: Pick<HostOptions, "accessGuard" | "pathGuards">): void;
 
 	/**
 	 * Inicia el servidor en un puerto específico
@@ -141,7 +143,25 @@ export interface HostOptions {
 	priority?: number;
 	/** Headers adicionales para las respuestas */
 	headers?: Record<string, string>;
+	/**
+	 * Gate de acceso al contenido estático (HTML/JS/CSS/assets) de este host o prefijo.
+	 * Devuelve `null` para dejar pasar, o la URL absoluta a la que redirigir cuando el
+	 * visitante no califica. Corre DESPUÉS del ruteo de API y de las rutas del host, así que
+	 * `/api/*` conserva su propia autorización y `/robots.txt` sigue siendo público.
+	 *
+	 * El provider no sabe nada de sesiones: quien registra el host arma el closure.
+	 */
+	accessGuard?: StaticAccessGuard;
+	/**
+	 * Gates acotados a un prefijo de ruta dentro del host, para proteger un archivo concreto
+	 * sin cerrar la app entera (el chunk de un `expose` de Module Federation en una app
+	 * pública). Se evalúan después del gate del host; gana el primer prefijo que matchee.
+	 */
+	pathGuards?: Array<{ prefix: string; guard: StaticAccessGuard }>;
 }
+
+/** Ver {@link HostOptions.accessGuard}. */
+export type StaticAccessGuard = (req: FastifyRequest<any>) => Promise<string | null> | string | null;
 
 /**
  * Re-exportar tipos de Express para compatibilidad

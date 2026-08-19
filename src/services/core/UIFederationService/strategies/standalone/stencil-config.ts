@@ -6,6 +6,11 @@ import type { IBuildContext } from "../types.js";
  * Escribe `stencil.config.ts` en el directorio del módulo.
  * Stencil exige que el config viva en la app (no puede estar en `temp/`).
  * Output va a `temp/ui-builds/<namespace>/<moduleName>/` con cache en `temp/stencil-cache/`.
+ *
+ * Un solo output target (`dist`): es el que produce `loader/` + `esm/`, que son los que resuelven
+ * los aliases (`@ui-library` → `init.js` → `loader/index.js` → `../esm/loader.js`).
+ * `dist-custom-elements` se sacó porque no lo consumía nadie —ni el build ni el navegador— y
+ * costaba build y 2 MB publicados por library.
  */
 export async function writeStencilConfig(context: IBuildContext): Promise<string> {
 	const { module, uiOutputBaseDir } = context;
@@ -36,15 +41,14 @@ export const config: Config = {
 			typesDir: '${relativeOutputDir}/types',
 			isPrimaryPackageOutputTarget: true
         },
-        {
-            type: 'dist-custom-elements',
-            dir: '${relativeOutputDir}/custom-elements',
-            customElementsExportBehavior: 'auto-define-custom-elements',
-            externalRuntime: true,
-			generateTypeDeclarations: true,
-        },
     ],
-    sourceMap: true,
+    // Los source maps de Stencil llevan \`sourcesContent\`: el TypeScript ORIGINAL completo,
+    // incluido todo \`src/common\` que la library arrastra (permisos, planes, legal). El
+    // directorio de salida se sirve entero por HTTP, así que en producción serían el código
+    // fuente publicado. Se decide con \`process.env\` y no con un booleano horneado porque este
+    // archivo queda commiteado y \`bun run build:ui\` lo reutiliza: si no, el valor dependería de
+    // en qué modo corrió el kernel por última vez.
+    sourceMap: process.env.NODE_ENV !== 'production',
     buildEs5: false,
 };
 `;

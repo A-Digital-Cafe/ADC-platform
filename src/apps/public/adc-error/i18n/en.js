@@ -18,6 +18,17 @@ export default {
 		defaultMessage: "Something went wrong while authenticating with the provider.",
 		hint: "Try again or use a different method.",
 	},
+	unauthorized: {
+		title: "Restricted access",
+		subtitle: "This section is not available for your account.",
+		subtitleApp: "\u201C{{app}}\u201D is not available for your account.",
+		auth: "You need to sign in to access this section.",
+		role: "Your account doesn't have a role enabled for this section.",
+		org: "This section manages the platform, not an organization: switch to your personal account to continue.",
+		unavailable: "The accounts system is unavailable right now, so we can't verify your access.",
+		login: "Sign in",
+		hint: "If you think you should have access, ask a platform administrator.",
+	},
 	generic: {
 		title: "Something went wrong",
 		subtitle: "An unexpected error occurred.",

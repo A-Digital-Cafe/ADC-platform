@@ -32,6 +32,25 @@ interface UIModuleSecurityConfig {
 	production?: UIModuleSecurityHeaders;
 }
 
+/**
+ * Acceso mínimo para que el kernel entregue el contenido del módulo (HTML, JS, CSS y
+ * cualquier estático de su host). Se evalúa ANTES de servir un solo byte: sin permiso el
+ * navegador recibe un redirect a `adc-error/unauthorized` y el bundle nunca sale del server.
+ *
+ * No reemplaza los chequeos de los endpoints —siguen siendo la autorización real—; evita que
+ * el código de un panel de administración sea material público para cualquiera que conozca
+ * el subdominio.
+ */
+interface UIAccessConfig {
+	/**
+	 * Exige sesión válida sin pedir ningún rol concreto. Implícito cuando hay `roles`, así que
+	 * sólo hace falta declararlo para un "cualquier usuario logueado".
+	 */
+	requireAuth?: boolean;
+	roles?: string[];
+	globalOnly?: boolean;
+}
+
 /** Coordenadas de una app contraparte (la "otra" variante responsive). */
 interface UIResponsiveCounterpart {
 	/** `devPort` de la contraparte (para resolver su origen en dev/LAN). */
@@ -115,6 +134,21 @@ export interface UIModuleConfig {
 	hosting?: UIHostingConfig[];
 	/** Seguridad HTTP específica para el módulo UI */
 	security?: UIModuleSecurityConfig;
+	/** Roles mínimos para que el kernel entregue el contenido de este módulo */
+	access?: UIAccessConfig;
+	/**
+	 * Acceso mínimo por `expose` de Module Federation: clave del expose → roles.
+	 *
+	 * Los remotes se sirven desde el host de quien los EXPONE, no desde el del consumidor, así
+	 * que un panel de administración federado desde una app pública (el de moderación de Drive)
+	 * quedaría descargable aunque el panel que lo consume esté protegido. Esto gatea el chunk
+	 * del expose en su propio host. `access` no sirve para el caso: cerraría la app entera.
+	 *
+	 * Sólo protege el chunk del expose, no las dependencias compartidas (que no llevan la
+	 * lógica del panel). El `remoteEntry.js` sigue nombrando el expose: se oculta el código,
+	 * no su existencia.
+	 */
+	federationAccess?: Record<string, UIAccessConfig>;
 	/**
 	 * Habilita inyección de metadatos SEO en las respuestas HTML
 	 * de este módulo. Requiere que `SEOService` esté cargado y que

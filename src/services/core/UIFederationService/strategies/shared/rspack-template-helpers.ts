@@ -5,6 +5,7 @@ import type { IBuildContext } from "../types.js";
 import { buildExposesConfig } from "./rspack-helpers.js";
 import { BUNDLER_CACHE_CONTRACT, bundlerCacheDir } from "@common/utils/bundler-cache.ts";
 import { sharedBundleInputs } from "@common/utils/build-id.ts";
+import { ERROR_APP_DEVPORT } from "@common/utils/error-app.ts";
 
 /** Versión de `@rspack/core` en uso: una caché escrita por otra versión no se reutiliza. */
 let cachedRspackVersion: string | null = null;
@@ -132,8 +133,71 @@ export function resolvePublicPath(opts: {
 	return "'auto'";
 }
 
+/**
+ * Gate de `uiModule.access` para el dev server.
+ *
+ * En desarrollo el kernel NO sirve estas apps —cada una corre en su propio puerto rspack—, así
+ * que el gate del provider HTTP no las toca y el panel quedaría abierto justo donde más se
+ * prueba. La verificación la sigue haciendo el kernel (`GET /api/auth/session` con la cookie
+ * del visitante, que es del mismo host y por eso viaja); acá sólo se compara `user.roles`.
+ *
+ * Cachea 10s por cookie para no pedir una sesión por asset. Fail-closed: si el kernel no
+ * contesta, no se sirve.
+ */
+export function buildDevAccessGate(moduleName: string, requiredRoles: readonly string[], globalOnly: boolean, requireAuth = false): string {
+	// `requireAuth` o `globalOnly` sin roles también son un gate: sin esto, un módulo que sólo
+	// pide sesión quedaba abierto en desarrollo mientras el kernel sí lo cierra en producción.
+	if (requiredRoles.length === 0 && !requireAuth && !globalOnly) return "";
+	return `
+        setupMiddlewares: (middlewares) => {
+            const REQUIRED = new Set(${JSON.stringify(requiredRoles)});
+            const GLOBAL_ONLY = ${globalOnly};
+            const cache = new Map();
+            const decide = async (cookie) => {
+                const hit = cache.get(cookie);
+                if (hit && hit.until > Date.now()) return hit.reason;
+                let reason = 'unavailable';
+                try {
+                    const res = await fetch('http://localhost:3000/api/auth/session', { headers: cookie ? { cookie } : {} });
+                    if (res.status === 401) reason = 'auth';
+                    else if (res.ok) {
+                        const body = await res.json();
+                        if (!body?.authenticated) reason = 'auth';
+                        else if (GLOBAL_ONLY && body.user?.orgId) reason = 'org';
+                        else if (REQUIRED.size === 0) reason = null;
+                        else reason = (body.user?.roles ?? []).some((r) => REQUIRED.has(String(r).trim().toLowerCase())) ? null : 'role';
+                    }
+                } catch { /* kernel caído: queda 'unavailable' y no se sirve */ }
+                cache.set(cookie, { reason, until: Date.now() + 10_000 });
+                return reason;
+            };
+            middlewares.unshift({
+                name: 'adc-access-gate',
+                middleware: async (req, res, next) => {
+                    // El canal de HMR no lleva cookie ni sirve contenido: gatearlo sólo rompe el reload.
+                    if (req.url.startsWith('/ws') || req.url.includes('hot-update')) return next();
+                    const reason = await decide(req.headers.cookie || '');
+                    if (!reason) return next();
+                    const host = (req.headers.host || 'localhost').split(':')[0];
+                    const from = encodeURIComponent('http://' + (req.headers.host || '') + req.url);
+                    res.statusCode = 302;
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.setHeader('Location', \`http://\${host}:${ERROR_APP_DEVPORT}/unauthorized?app=${moduleName}&reason=\${reason}&from=\${from}\`);
+                    res.end();
+                },
+            });
+            return middlewares;
+        },`;
+}
+
 /** Construye el bloque `devServer` (con proxy a i18n/sw del kernel). */
-export function buildDevServerBlock(devPort: number | undefined, hotReload: boolean, staticDirs: string, namespace: string): string {
+export function buildDevServerBlock(
+	devPort: number | undefined,
+	hotReload: boolean,
+	staticDirs: string,
+	namespace: string,
+	accessGate = ""
+): string {
 	return `
     devServer: {
         host: '0.0.0.0',
@@ -153,6 +217,6 @@ export function buildDevServerBlock(devPort: number | undefined, hotReload: bool
                 target: 'http://localhost:3000',
                 changeOrigin: true,
             },
-        ],
+        ],${accessGate}
     },`;
 }

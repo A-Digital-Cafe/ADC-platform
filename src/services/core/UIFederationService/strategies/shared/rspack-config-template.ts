@@ -2,7 +2,15 @@ import * as path from "node:path";
 import type { IBuildContext } from "../types.js";
 import { normalizeForConfig } from "../../utils/fs/path-resolver.js";
 import { buildSharedConfig, buildStaticDirectories } from "./rspack-helpers.js";
-import { injectTailwindAlias, resolveFederationConfig, resolvePublicPath, buildDevServerBlock, buildCacheBlock } from "./rspack-template-helpers.js";
+import {
+	injectTailwindAlias,
+	resolveFederationConfig,
+	resolvePublicPath,
+	buildDevServerBlock,
+	buildDevAccessGate,
+	buildCacheBlock,
+} from "./rspack-template-helpers.js";
+import { normalizeAccessRoles } from "@common/utils/ui-access.ts";
 
 export interface IRspackConfigOptions {
 	context: IBuildContext;
@@ -27,6 +35,25 @@ export interface IRspackConfigOptions {
 	imports: string;
 	experiments: string;
 	additionalRules: string;
+}
+
+/**
+ * Nombres de archivo del build. En producción llevan `[contenthash]`, que es lo que permite
+ * servirlos `immutable`: si el contenido cambia, cambia el nombre, así que ninguna caché
+ * intermedia puede devolver algo viejo y no hace falta purgar nada al desplegar.
+ *
+ * `[name]` y no `[id]` en los chunks: los ids son números que se reordenan build a build, y los
+ * chunks de los `exposes` de Module Federation necesitan un nombre estable para poder protegerlos
+ * por ruta (ver `federationAccess`). `remoteEntry.js` no se ve afectado: su nombre lo fija el
+ * ModuleFederationPlugin y los hosts lo referencian por URL.
+ *
+ * En desarrollo se dejan los nombres cortos de siempre: el hash sólo ensucia el log del bundler.
+ */
+function buildOutputFilenames(isProduction: boolean): string {
+	if (!isProduction) return "";
+	return `
+        filename: '[name].[contenthash:8].js',
+        chunkFilename: '[name].[contenthash:8].js',`;
 }
 
 /** `devtool` de desarrollo; ver la nota en {@link buildRspackConfigContent}. */
@@ -81,7 +108,16 @@ export function buildRspackConfigContent(options: IRspackConfigOptions): string 
 	const hasExposes = !!module.uiConfig.federationExposes && Object.keys(module.uiConfig.federationExposes).length > 0;
 	const publicPath = resolvePublicPath({ isRemote, isHost, isProduction, devPort: module.uiConfig.devPort, hasExposes });
 	const staticDirs = buildStaticDirectories(context);
-	const devServerConfig = buildDevServerBlock(module.uiConfig.devPort, !isProduction, staticDirs, context.namespace);
+	// El gate de `uiModule.access` en dev: el kernel no sirve estas apps (cada una tiene su
+	// propio dev server), así que sin esto el panel queda abierto justo donde más se prueba.
+	const devAccessGate = isProduction ? "" : buildDevAccessGate(
+				module.uiConfig.name,
+				normalizeAccessRoles(module.uiConfig.access?.roles ?? []),
+				module.uiConfig.access?.globalOnly === true,
+				module.uiConfig.access?.requireAuth === true
+			);
+	const devServerConfig = buildDevServerBlock(module.uiConfig.devPort, !isProduction, staticDirs, context.namespace, devAccessGate);
+	const outputFilenames = buildOutputFilenames(isProduction);
 
 	const externalsLine =
 		externals.length > 0
@@ -108,7 +144,7 @@ export default {
     output: {
         path: '${normalizeForConfig(path.join(uiOutputBaseDir, module.uiConfig.name))}',
         publicPath: ${publicPath},
-        uniqueName: '${safeName}',
+        uniqueName: '${safeName}',${outputFilenames}
     },
     resolve: {
         extensions: ${JSON.stringify(extensions)},
