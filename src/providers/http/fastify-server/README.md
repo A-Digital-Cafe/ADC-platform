@@ -2,6 +2,16 @@
 
 Servidor HTTP con host-based routing, HTTP/2 y Connect RPC.
 
+## Estructura
+
+`index.ts` es la fachada (la API del provider); el estado y el trabajo viven en los colaboradores:
+
+- `routing/` — tabla de hosts virtuales (`host-registry`), tabla de rutas globales (`global-routes`), matching de paths y patrones de host, adaptador de handlers Express.
+- `static/` — prefijos estáticos globales y sus gates (`static-store`), servido de archivos con SPA fallback (`serve-file`), gates de acceso, tabla MIME.
+- `dispatch/` — lo que corre por request cuando no la atendió una ruta declarada en fastify (`static-request` es el `setNotFoundHandler`).
+- `setup/` — todo lo que se instala una vez: plugins y hooks (`middleware`, `hooks`), parser de binarios crudos, inyectores de HTML, TLS in-process, bind del puerto.
+- `security/` — políticas puras (headers, CSP, CORS, proxies confiables, límites, rutas seguras).
+
 ## Puertos
 
 - `npm run start` → puerto 80
@@ -42,6 +52,7 @@ h2, o ALPN negociaría sólo h2 y dejaría afuera a todos los clientes internos.
 - **Conexiones lentas**: un cuerpo que deja de avanzar `HTTP_IDLE_BODY_TIMEOUT_MS` (30 s) se corta con 408, y cada IP puede tener `HTTP_MAX_INFLIGHT_BODIES_PER_IP` (24) peticiones **con cuerpo** a la vez, contadas en `onRequest` — antes de leer un byte, que es donde el rate limit por endpoint todavía no mira. Sólo cuerpos: un `GET` no cuelga bytes de subida y contarlo mataría el SSE. Ver `security/traffic-shaper.ts` y `security/inflight.ts`; los dos valores viven en `platform_settings`.
 - **Caudal de subida**: `UPLOAD_BANDWIDTH_BYTES_PER_SEC` reparte el ancho de banda entrante en partes iguales entre las transferencias en curso y lo achica solo con la carga del proceso (`@common/utils/bandwidth-governor.ts`). Se cambia en caliente desde Admin - Red.
 - Los métodos HTTP se limitan a GET, POST, PUT, PATCH, DELETE, HEAD y OPTIONS.
+- **Fuera del índice**: `registerNoIndexPrefix(prefijo)` marca un prefijo de URL como infraestructura y todo lo que cuelgue de él sale con `X-Robots-Tag: noindex` (lo usa la UI federation con `/<namespace>/`). El `spaFallback` sólo contesta el `index.html` para rutas del cliente: una URL que pide un archivo concreto que no está devuelve 404, no el shell.
 
 ## API Docs (Swagger UI)
 

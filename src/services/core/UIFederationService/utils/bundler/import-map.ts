@@ -71,6 +71,22 @@ function addModuleImports(
 }
 
 /**
+ * ¿El módulo es alcanzable bajo `/<namespace>/<nombre>/`?
+ *
+ * En producción `serveModule` monta ahí sólo a los que NO declaran `hosting`: los demás viven en
+ * su propio host y esa URL no existe. Publicarlos igual dejaba specifiers que resolvían al
+ * `index.html` del `spaFallback` —200 `text/html` donde el navegador espera un módulo— y, de paso,
+ * le entregaba a los buscadores una lista de URLs-directorio para rastrear por cada host, que es
+ * de donde salió el grueso de las páginas duplicadas.
+ *
+ * La federación entre apps no depende de esto: `loadRemoteComponent` arma la URL del
+ * `remoteEntry.js` contra el origin de la app, no contra el import map.
+ */
+function isServedUnderNamespace(module: RegisteredUIModule, isDevelopment: boolean): boolean {
+	return isDevelopment || !module.uiConfig.hosting?.length;
+}
+
+/**
  * Genera el import map completo con todos los módulos registrados de un namespace
  * @param registeredModules - Módulos registrados
  * @param port - Puerto del servidor principal
@@ -89,6 +105,7 @@ export function generateCompleteImportMap(
 	const imports: Record<string, string> = getReactImports();
 
 	for (const [name, module] of registeredModules.entries()) {
+		if (!isServedUnderNamespace(module, isDevelopment)) continue;
 		addModuleImports(imports, name, module, baseUrl, nsPrefix, isDevelopment, host);
 	}
 

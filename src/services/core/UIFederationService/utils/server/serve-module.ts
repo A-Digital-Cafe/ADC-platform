@@ -170,6 +170,11 @@ async function serveModuleInProd(module: RegisteredUIModule, namespace: string, 
 export async function serveModule(module: RegisteredUIModule, namespace: string, ctx: UIFederationContext): Promise<void> {
 	const { bundler } = parseFramework(module.uiConfig.framework || "astro");
 
+	// El prefijo del namespace es el punto de montaje de los módulos, no contenido: nada de lo que
+	// cuelgue de ahí va al índice. Importa aunque el módulo se sirva por host, porque igual queda
+	// alcanzable en todos ellos —el `spaFallback` contesta el `index.html` para cualquier path—.
+	ctx.httpProvider?.registerNoIndexPrefix?.(`/${namespace}/`);
+
 	if (ctx.isDevelopment) {
 		serveModuleInDev(module, namespace, bundler, ctx);
 		return;

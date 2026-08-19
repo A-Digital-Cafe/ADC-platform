@@ -79,6 +79,31 @@ export function isBlockedBuildArtifact(urlPath: string): boolean {
 }
 
 /**
+ * Extensiones que sólo puede pedir un asset, nunca una ruta del router del cliente. Es una lista
+ * cerrada y no `path.extname()` porque hay slugs con punto —`/articles/node.js-basics` da
+ * extensión `.js-basics`— y ésos tienen que seguir cayendo en el `spaFallback`.
+ */
+const STATIC_ASSET_EXTENSIONS = new Set([
+	"js", "mjs", "cjs", "css", "map", "json", "webmanifest", "xml", "txt",
+	"ico", "png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "bmp",
+	"woff", "woff2", "ttf", "otf", "eot",
+	"mp3", "mp4", "webm", "ogg", "wav",
+	"pdf", "zip", "wasm", "html", "htm",
+]);
+
+/**
+ * ¿La URL pide un archivo concreto? Lo usa el `spaFallback` para no contestar el `index.html`
+ * cuando el archivo no está: un `.js` que devuelve HTML con 200 es un error mudo —el `<script>`
+ * falla por MIME, el import map parece resolver, y los buscadores indexan el shell bajo la URL
+ * del asset—. Ahí corresponde 404.
+ */
+export function looksLikeStaticAsset(filePath: string): boolean {
+	const name = filePath.replaceAll("\\", "/").split("/").pop() ?? "";
+	const dot = name.lastIndexOf(".");
+	return dot > 0 && STATIC_ASSET_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
+
+/**
  * ¿El nombre del archivo lleva un hash de contenido? (`main.a1b2c3d4.js`, `p-048bb303.entry.js`,
  * `index-CXFLINVP.js`). Sólo esos pueden servirse `immutable`: su URL cambia con el contenido.
  *

@@ -67,6 +67,12 @@ export interface IHttpServerProvider {
 	serveStatic(path: string, directory: string, options?: Pick<HostOptions, "accessGuard" | "pathGuards">): void;
 
 	/**
+	 * Marca un prefijo de URL como no indexable (`X-Robots-Tag: noindex` en todo lo que cuelgue de
+	 * él, en cualquier host). Para infraestructura servida por URL, no para contenido.
+	 */
+	registerNoIndexPrefix?(prefix: string): void;
+
+	/**
 	 * Inicia el servidor en un puerto específico
 	 */
 	listen(port: number): Promise<void>;
