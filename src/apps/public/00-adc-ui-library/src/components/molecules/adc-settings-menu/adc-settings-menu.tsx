@@ -34,7 +34,7 @@ export class AdcSettingsMenu {
 			<Host class="relative inline-flex">
 				<button
 					type="button"
-					class="relative inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-black/10 transition-colors"
+					class="relative inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-black/10 transition-colors cursor-pointer"
 					aria-label={this.label}
 					title={this.label}
 					aria-expanded={this.expanded ? "true" : "false"}

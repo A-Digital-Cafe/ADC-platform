@@ -23,9 +23,11 @@ export const identityApi = {
 	 * Página de usuarios + roles referenciados + `total` (para paginar).
 	 * `q` (mín. 2 chars) filtra por username/email sobre TODA la colección (server-side).
 	 */
-	listUsers: (opts: { orgId?: string; q?: string; limit?: number; offset?: number } = {}) =>
+	listUsers: (
+		opts: { orgId?: string; q?: string; limit?: number; offset?: number; sortBy?: "username" | "email" | "lastLogin"; sortDir?: "asc" | "desc" } = {}
+	) =>
 		api.get<{ users: ClientUser[]; roles: Role[]; total: number }>("/users", {
-			params: { orgId: opts.orgId, q: opts.q, limit: opts.limit, offset: opts.offset },
+			params: { orgId: opts.orgId, q: opts.q, limit: opts.limit, offset: opts.offset, sortBy: opts.sortBy, sortDir: opts.sortDir },
 		}),
 	searchUsers: (q: string, orgId?: string) => api.get<ClientUser[]>("/users/search", { params: { q, orgId } }),
 	getUser: (userId: string) => api.get<ClientUser>(`/users/${assertSafeId(userId, "userId")}`),

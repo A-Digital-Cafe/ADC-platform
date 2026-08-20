@@ -28,6 +28,9 @@ export interface ListOptions {
 	limit?: number;
 	offset?: number;
 	q?: string;
+	/** Campo de orden; cada DAO define su propia whitelist de campos aceptados. */
+	sortBy?: string;
+	sortDir?: "asc" | "desc";
 }
 
 /**
