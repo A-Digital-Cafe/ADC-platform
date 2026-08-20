@@ -14,6 +14,8 @@ export class AdcTextarea {
 	@Prop() rows?: number = 3;
 	@Prop() ariaLabel?: string = "";
 	@Prop() disabled?: boolean = false;
+	/** Sólo lectura: se puede seleccionar y copiar, pero no editar. */
+	@Prop() readOnly?: boolean = false;
 	/** Marca el campo como requerido en su formulario. */
 	@Prop() required?: boolean = false;
 	/** Cantidad máxima de caracteres. */
@@ -58,21 +60,24 @@ export class AdcTextarea {
 		const messageId = this.messageId;
 		return (
 			<Host class="block">
+				{/* El valor va como propiedad y no como contenido: como hijo sólo fija el valor
+				    inicial, así que en cuanto alguien escribe el campo deja de responder a la
+				    prop y no hay forma de vaciarlo desde afuera. */}
 				<textarea
 					id={this.textareaId}
 					name={this.name}
 					placeholder={this.placeholder}
 					rows={this.rows}
 					disabled={this.disabled}
+					readOnly={this.readOnly}
 					required={this.required}
 					maxlength={this.maxLength}
 					aria-label={this.ariaLabel || this.placeholder || this.name}
 					aria-invalid={this.isInvalid ? "true" : undefined}
 					aria-describedby={messageId}
 					class={`w-full px-3 py-2 rounded-xxl border bg-surface font-text text-[12px] text-text resize-y disabled:opacity-50 disabled:cursor-not-allowed ${this.isInvalid ? "border-danger" : "border-text/15"}`}
-				>
-					{this.value}
-				</textarea>
+					value={this.value}
+				/>
 				{this.renderMessage(messageId)}
 			</Host>
 		);

@@ -38,9 +38,10 @@ export function createFanoutConsumer(
 	connection: Connection,
 	exchange: string,
 	queue: string,
-	handler: (body: unknown) => Promise<void>
+	handler: (body: unknown) => Promise<void>,
+	onError?: (err: Error) => void
 ): Consumer {
-	return connection.createConsumer(
+	const consumer = connection.createConsumer(
 		{
 			queue,
 			queueOptions: { exclusive: true, autoDelete: true, durable: false },
@@ -53,4 +54,13 @@ export function createFanoutConsumer(
 			await handler(msg.body);
 		}
 	);
+
+	// El setup del consumer es asíncrono: un fallo al declarar la cola NO lo tira el `createConsumer`,
+	// lo emite acá. Sin este listener el EventEmitter lo vuelve `uncaughtException` y mata el proceso
+	// por un bus que es opcional.
+	consumer.on("error", (err: Error) => {
+		onError?.(err);
+	});
+
+	return consumer;
 }

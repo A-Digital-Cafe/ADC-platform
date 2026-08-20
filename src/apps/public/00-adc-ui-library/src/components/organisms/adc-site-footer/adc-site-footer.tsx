@@ -2,7 +2,7 @@ import { Component, Prop, State } from "@stencil/core";
 import { IS_DEV } from "@common/utils/url-utils.js";
 import { publicEnv } from "@common/utils/public-env.js";
 
-type FooterLinkKey = "privacy" | "terms" | "cookies" | "licenses" | "contact" | "team" | "help" | "status";
+type FooterLinkKey = "privacy" | "terms" | "cookies" | "licenses" | "contact" | "team" | "plans" | "help" | "status";
 
 interface ADCGlobal {
 	t?: (key: string, params?: Record<string, string> | null, namespace?: string) => string;
@@ -10,13 +10,16 @@ interface ADCGlobal {
 	getLocale?: () => string;
 }
 
-const HELP_DEV_PORT = 3022;
-const HELP_HOST = "help.adigitalcafe.com";
-const STATUS_DEV_PORT = 3020;
-const STATUS_HOST = "status.adigitalcafe.com";
 const I18N_NAMESPACE = "adc-ui-library";
 
-type FooterHost = "help" | "status";
+type FooterHost = "help" | "status" | "subscription";
+
+/** Cada destino con su puerto de dev y su subdominio de prod (ver `uiModule` de cada app). */
+const FOOTER_HOSTS: Record<FooterHost, { devPort: number; host: string }> = {
+	help: { devPort: 3022, host: "help.adigitalcafe.com" },
+	status: { devPort: 3020, host: "status.adigitalcafe.com" },
+	subscription: { devPort: 3042, host: "subscription.adigitalcafe.com" },
+};
 
 const FOOTER_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string; target: FooterHost }> = [
 	{ key: "privacy", path: "/privacy", target: "help" },
@@ -27,6 +30,7 @@ const FOOTER_LINKS: ReadonlyArray<{ key: FooterLinkKey; path: string; target: Fo
 	{ key: "licenses", path: "/licenses", target: "help" },
 	{ key: "contact", path: "/contact", target: "help" },
 	{ key: "team", path: "/team", target: "help" },
+	{ key: "plans", path: "/", target: "subscription" },
 	{ key: "help", path: "/", target: "help" },
 	{ key: "status", path: "/", target: "status" },
 ];
@@ -40,6 +44,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		licenses: "Licencias",
 		contact: "Contacto",
 		team: "Equipo",
+		plans: "Planes",
 		help: "Ayuda",
 		status: "Estado",
 	},
@@ -51,6 +56,7 @@ const FALLBACK_LABELS: Record<"es" | "en", Record<FooterLinkKey | "aria", string
 		licenses: "Licenses",
 		contact: "Contact",
 		team: "Team",
+		plans: "Plans",
 		help: "Help",
 		status: "Status",
 	},
@@ -61,8 +67,7 @@ const proto = () => globalThis.location?.protocol ?? "http:";
 const adcI18n = globalThis as typeof globalThis & ADCGlobal;
 
 function footerUrl(path: string, target: FooterHost): string {
-	const devPort = target === "status" ? STATUS_DEV_PORT : HELP_DEV_PORT;
-	const prodHost = target === "status" ? STATUS_HOST : HELP_HOST;
+	const { devPort, host: prodHost } = FOOTER_HOSTS[target];
 	return IS_DEV ? `${proto()}//${host()}:${devPort}${path}` : `${proto()}//${prodHost}${path}`;
 }
 

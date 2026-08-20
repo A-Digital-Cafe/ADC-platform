@@ -193,9 +193,19 @@ export default class ClusterService extends BaseService implements IClusterServi
 			return;
 		}
 		try {
-			this.#rabbit.createFanoutConsumer(CLUSTER_EXCHANGE, `q.cluster.${nodeId()}`, async (body) => {
-				await this.#dispatch(body as ClusterEvent);
-			});
+			// El pid va en el nombre porque la cola es exclusiva de la conexión: dos procesos en la
+			// misma máquina (un dev server que todavía no murió y el que arranca) comparten `nodeId()`
+			// y el segundo se comía un RESOURCE_LOCKED. El nombre no lo usa nadie más: lo que importa
+			// es el binding al fanout.
+			const queue = `q.cluster.${nodeId()}.${process.pid}`;
+			this.#rabbit.createFanoutConsumer(
+				CLUSTER_EXCHANGE,
+				queue,
+				async (body) => {
+					await this.#dispatch(body as ClusterEvent);
+				},
+				(err) => this.logger.logWarn(`[cluster] el consumer del bus falló: ${err.message}`)
+			);
 			this.logger.logOk(`[cluster] bus conectado (${CLUSTER_EXCHANGE})`);
 		} catch (error) {
 			this.logger.logWarn(`[cluster] no se pudo conectar el bus: ${(error as Error).message}`);

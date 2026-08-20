@@ -83,6 +83,7 @@ export default {
 		licenses: "Licenses",
 		contact: "Contact",
 		team: "Team",
+		plans: "Plans",
 		help: "Help",
 		status: "Status"
 	},

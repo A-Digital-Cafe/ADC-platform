@@ -146,8 +146,16 @@ export default class RabbitMQProvider extends BaseProvider {
 	}
 
 	/** Consume el fan-out con una cola exclusiva de este nodo (se borra sola al desconectarse). */
-	createFanoutConsumer(exchange: string, queue: string, handler: (body: unknown) => Promise<void>): Consumer {
-		const consumer = buildFanoutConsumer(this.#requireConnection(), exchange, queue, handler);
+	createFanoutConsumer(
+		exchange: string,
+		queue: string,
+		handler: (body: unknown) => Promise<void>,
+		onError?: (err: Error) => void
+	): Consumer {
+		const consumer = buildFanoutConsumer(this.#requireConnection(), exchange, queue, handler, (err) => {
+			this.logger.logWarn(`[RabbitMQ] fanout consumer ${queue} error: ${redact(err.message)}`);
+			onError?.(err);
+		});
 		this.#consumers.set(`fanout:${queue}`, consumer);
 		return consumer;
 	}
