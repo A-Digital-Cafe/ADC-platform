@@ -8,10 +8,12 @@
  * mantenida a mano— y lleva impresos la versión, la vigencia y el `contentHash` del fuente.
  *
  * **Un PDF ya publicado nunca se regenera.** Un archivo congelado que cambia deja de probar nada,
- * así que el script salta los que ya existen. Para rehacer uno hay que borrarlo a mano, y eso
- * debería ser una decisión consciente.
+ * así que el script salta los que ya existen. Rehacer uno es una decisión consciente y con rastro:
+ * se pide desde la tab «Legales» del panel de administración, que exige un motivo y lo asienta en
+ * el audit log antes de borrar el archivo.
  *
- * Uso: `bun run build:legal` (y lo exige el pre-commit hook de `presets/help`).
+ * Normalmente no hace falta invocarlo: `LegalDocsService` lo corre al arrancar (con `--json`, para
+ * asentar qué generó) y cuando se lo pide el panel. `bun run build:legal` queda como salida manual.
  */
 
 // El componente se renderiza fuera del navegador: estos globales existen sólo ahí y el hook de
@@ -154,14 +156,21 @@ async function buildOne(doc: LegalDocument): Promise<"written" | "skipped"> {
 	return "written";
 }
 
-let written = 0;
+// `--json` lo pasa `LegalDocsService`, que corre este script como proceso aparte: sin un resumen
+// legible por máquina no podría asentar en el historial qué se generó y qué ya estaba congelado.
+const asJson = process.argv.includes("--json");
+const written: string[] = [];
+const skipped: string[] = [];
+
 for (const doc of Object.values(LEGAL_DOCUMENTS)) {
-	const result = await buildOne(doc as LegalDocument);
-	if (result === "written") {
-		written++;
-		console.log(`[legal-pdf] generado ${doc.id}-${doc.version}.pdf`);
+	const file = `${doc.id}-${doc.version}.pdf`;
+	if ((await buildOne(doc as LegalDocument)) === "written") {
+		written.push(file);
+		console.log(`[legal-pdf] generado ${file}`);
 	} else {
-		console.log(`[legal-pdf] ${doc.id}-${doc.version}.pdf ya existe, no se regenera`);
+		skipped.push(file);
+		console.log(`[legal-pdf] ${file} ya existe, no se regenera`);
 	}
 }
-console.log(`[legal-pdf] ${written} archivo(s) nuevo(s)`);
+console.log(`[legal-pdf] ${written.length} archivo(s) nuevo(s)`);
+if (asJson) console.log(`LEGAL_PDF_JSON ${JSON.stringify({ written, skipped })}`);

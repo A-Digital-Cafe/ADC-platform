@@ -14,6 +14,10 @@ export const SECURITY_RESOURCE_NAME = "security" as const;
  *   (BreachRegisterService; art. 33.5 RGPD, Res. AAIP 47/2018). Bit propio y no derivado
  *   de AUDIT_LOG: el registro lleva descripciones del incidente que el audit log rechaza,
  *   y decidir *no* notificar es una potestad distinta de leer el rastro.
+ * - LEGAL: ciclo de vida de los documentos legales (LegalDocsService): ver qué versión rige,
+ *   generar los PDF congelados, re-anunciar un cambio y leer las cifras de aceptación. Bit
+ *   propio porque quien administra los documentos que la gente acepta no es necesariamente
+ *   quien instruye incidentes ni quien lee el rastro de acciones sobre datos personales.
  */
 export const SecurityScopes = {
 	NONE: 0,
@@ -21,7 +25,8 @@ export const SecurityScopes = {
 	AUDIT: 1 << 1, // 2
 	AUDIT_LOG: 1 << 2, // 4
 	BREACH: 1 << 3, // 8
-	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3), // 15
+	LEGAL: 1 << 4, // 16
+	ALL: 1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4), // 31
 } as const;
 
 /** @public */

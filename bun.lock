@@ -114,6 +114,24 @@
       "name": "@adc-platform/adc-mail",
       "version": "1.0.0",
     },
+    "presets/adc-generators/apps/adc-generators": {
+      "name": "@adc-platform/adc-generators",
+      "version": "0.1.0",
+      "dependencies": {
+        "@fontsource/bebas-neue": "^5.2.5",
+        "@fontsource/caveat": "^5.2.5",
+        "@fontsource/dancing-script": "^5.2.5",
+        "@fontsource/lobster": "^5.2.5",
+        "@fontsource/pacifico": "^5.2.5",
+        "@fontsource/playfair-display": "^5.2.5",
+        "@fontsource/press-start-2p": "^5.2.5",
+        "@fontsource/space-mono": "^5.2.5",
+      },
+    },
+    "presets/adc-generators/services/GeneratorsService": {
+      "name": "@adc-platform/generators",
+      "version": "1.0.0",
+    },
     "presets/adc-image-editor/apps/adc-image-editor": {
       "name": "@adc-platform/adc-image-editor",
       "version": "1.0.0",
@@ -181,6 +199,10 @@
     },
     "presets/help/apps/help": {
       "name": "@adc-platform/help",
+      "version": "1.0.0",
+    },
+    "presets/help/services/LegalDocsService": {
+      "name": "@adc-platform/legal-docs-service",
       "version": "1.0.0",
     },
     "presets/home/apps/adc-home": {
@@ -445,6 +467,8 @@
 
     "@adc-platform/adc-games": ["@adc-platform/adc-games@workspace:presets/games/apps/adc-games"],
 
+    "@adc-platform/adc-generators": ["@adc-platform/adc-generators@workspace:presets/adc-generators/apps/adc-generators"],
+
     "@adc-platform/adc-home": ["@adc-platform/adc-home@workspace:presets/home/apps/adc-home"],
 
     "@adc-platform/adc-identity": ["@adc-platform/adc-identity@workspace:presets/IAM/apps/adc-identity"],
@@ -491,6 +515,8 @@
 
     "@adc-platform/file-storage-provider": ["@adc-platform/file-storage-provider@workspace:src/providers/files/file-storage"],
 
+    "@adc-platform/generators": ["@adc-platform/generators@workspace:presets/adc-generators/services/GeneratorsService"],
+
     "@adc-platform/help": ["@adc-platform/help@workspace:presets/help/apps/help"],
 
     "@adc-platform/image-editor": ["@adc-platform/image-editor@workspace:presets/adc-image-editor/services/ImageEditorService"],
@@ -500,6 +526,8 @@
     "@adc-platform/json-file-crud-service": ["@adc-platform/json-file-crud-service@workspace:src/services/data/json-file-crud"],
 
     "@adc-platform/lang-manager-service": ["@adc-platform/lang-manager-service@workspace:src/services/core/LangManagerService"],
+
+    "@adc-platform/legal-docs-service": ["@adc-platform/legal-docs-service@workspace:presets/help/services/LegalDocsService"],
 
     "@adc-platform/media-ui-library": ["@adc-platform/media-ui-library@workspace:presets/adc-media/apps/media-ui-library"],
 
@@ -874,6 +902,22 @@
     "@fastify/swagger": ["@fastify/swagger@9.8.1", "", { "dependencies": { "fastify-plugin": "^6.0.0", "json-schema-resolver": "^3.0.0", "openapi-types": "^12.1.3", "rfdc": "^1.3.1", "yaml": "^2.4.2" } }, "sha512-VpHMnqZTY8iBZYJE8WWkbKPrXIYWy2rDfIf5qLr6DzZSpQYZ+KxQVcJFiq/AMlvNwI4gCBd66++iUlxXXGT0IQ=="],
 
     "@fastify/swagger-ui": ["@fastify/swagger-ui@6.1.1", "", { "dependencies": { "@fastify/static": "^10.1.0", "fastify-plugin": "^6.0.0", "openapi-types": "^12.1.3", "rfdc": "^1.3.1", "yaml": "^2.4.1" } }, "sha512-RKCLSHASlzS2JZvHWn14NmEpHyl0yNosGvqzhUumm/LGPG6RWQBf4oscTFt83QDvc5O5Tol3Beup8inAl/k4EA=="],
+
+    "@fontsource/bebas-neue": ["@fontsource/bebas-neue@5.3.0", "", {}, "sha512-nCxMEb9Bg9sjNWm9TIOsvHKDMLRUfEZPWpLgYu6m9KavZZVSA/WoHzI5wROwqA+eNwEi/PNBAcB5Co7HA3S0Cw=="],
+
+    "@fontsource/caveat": ["@fontsource/caveat@5.3.0", "", {}, "sha512-eHTfzQxFSW9ABERRLNruHoNJmKed2J7pqTUc5lp4a4POMgXGKpxmWj3d9Hz10kmAg6iuTTLe6UagbA4bnsmfQw=="],
+
+    "@fontsource/dancing-script": ["@fontsource/dancing-script@5.3.0", "", {}, "sha512-/FFbz4ZCNN+eG2a6phkZB41iKmyCC6rq2blA/kG9OFeI3/tpzLNazND1bBdEnogLhpfg7o4NfauTbEEYSpSUGg=="],
+
+    "@fontsource/lobster": ["@fontsource/lobster@5.3.0", "", {}, "sha512-jt+RDk/8Sstl1Omhox62gTbvRSLbh06kn5BNfDFgf4rNuDPHF+19eWYFxzq5FsdkalbRJNtc5p5C3qE0+leNVg=="],
+
+    "@fontsource/pacifico": ["@fontsource/pacifico@5.3.0", "", {}, "sha512-bWv0fHR1n36p7scRn+maaEaVeQCOq9yvfVfjyAeUzKrK4Y/3qiRAEj4hJgfxj/sjgZZGkeHyKPrbWdDaZtpCVw=="],
+
+    "@fontsource/playfair-display": ["@fontsource/playfair-display@5.3.0", "", {}, "sha512-uJSABalvdWc10fEPppQjQocamT21LEyRfzzWfRfqbkPz+sRv+kKpYDKyluBUskvJREkJTos9epj1WjQROGu99Q=="],
+
+    "@fontsource/press-start-2p": ["@fontsource/press-start-2p@5.3.0", "", {}, "sha512-gxWFxdeDglPhEYSwEeooomcaFK8kSQYLQwVxfnOJeYRj2sPEHXjpVtFgEaYfqzOjuAJGrIcJOipu2KY5YkbyuQ=="],
+
+    "@fontsource/space-mono": ["@fontsource/space-mono@5.3.0", "", {}, "sha512-FrpBMOVWn3PRdRHlrZWC55X3kZG/2BTH7SM5ZyS/bky3iKya2BturI5lk+t0RoDQL2JyHzURsVq/EisCsxpI5A=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.1", "", {}, "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA=="],
 

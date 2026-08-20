@@ -17,6 +17,7 @@ export const DEFAULT_APPS: AppMenuItem[] = [
 		url: getUrl(3034, "editor.adigitalcafe.com"),
 		moduleName: "adc-image-editor",
 	},
+	{ id: "gen", name: "Generadores", url: getUrl(3050, "gen.adigitalcafe.com"), moduleName: "adc-generators" },
 ];
 
 /** Identity: solo admin, admin de organización o security_manager (detectado por permiso `users` READ). */

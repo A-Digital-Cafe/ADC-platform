@@ -49,6 +49,31 @@ export interface EnrollmentStart {
 	otpauthUri: string;
 }
 
+/** Versiones contra las que se mide la aceptación legal, y desde cuándo se exige. */
+export interface LegalAcceptanceQuery {
+	termsVersion: string;
+	privacyVersion: string;
+	/** ISO `YYYY-MM-DD`: entrar después de esta fecha implica haber visto el gate de re-aceptación. */
+	effectiveFrom: string;
+}
+
+/**
+ * Cuántas cuentas cubren la versión vigente de los documentos que se aceptan. Son **contadores**:
+ * saber si un cambio legal fue mal recibido no exige listar a nadie.
+ */
+export interface LegalAcceptanceCounts {
+	/** Cuentas activas sin baja programada: el denominador del porcentaje. */
+	total: number;
+	accepted: number;
+	pending: number;
+	/** Pendientes que entraron después de `effectiveFrom`: vieron el gate y no aceptaron. */
+	pendingSeen: number;
+	/** Pendientes que no volvieron a entrar desde entonces. */
+	pendingDormant: number;
+	/** Cuentas con baja programada, contadas aparte para no ensuciar el porcentaje. */
+	deleting: number;
+}
+
 /**
  * Superficie pública del manager de usuarios: sin las primitivas pre-auth ni el hard delete,
  * que viven en {@link IUserManagerInternal}.
@@ -90,6 +115,7 @@ export interface IUserManager {
 	getAllUsers(token?: string, orgId?: string, opts?: ListOptions): Promise<PagedResult<User>>;
 	getAllUserIds(token?: string): Promise<string[]>;
 	countUsersByTier(token?: string): Promise<Record<string, number>>;
+	countLegalAcceptance(query: LegalAcceptanceQuery, token?: string): Promise<LegalAcceptanceCounts>;
 	getUserIdsPage(afterId: string | null, limit: number, token?: string): Promise<string[]>;
 	searchUsers(query: string, limit?: number, token?: string, orgId?: string): Promise<User[]>;
 

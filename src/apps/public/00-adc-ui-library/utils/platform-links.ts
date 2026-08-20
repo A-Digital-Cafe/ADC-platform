@@ -175,6 +175,7 @@ const DEFAULT_APPS: PlatformApp[] = [
 		adminPanelLabel: "Drive",
 	},
 	{ id: "editor", label: "Image Editor", devPort: 3034, subdomain: "editor" },
+	{ id: "gen", label: "Generadores", devPort: 3050, subdomain: "gen", iconTag: "adc-icon-app-gen" },
 	{ id: "mail", label: "Mail", devPort: 3030, subdomain: "email", iconTag: "adc-icon-app-mail" },
 	{ id: "modules", label: "Modules Manager", devPort: 3038, subdomain: "modules" },
 	{ id: "admin", label: "Administración", devPort: 3046, subdomain: "admin" },

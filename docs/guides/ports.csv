@@ -27,3 +27,4 @@ port,app,notes
 3044,public/adc-games,preset games — sitio en construcción (sin publicidad activa)
 3046,public/adc-admin-panel,
 3048,public/adc-network,preset adc-network — nodos, topología de datos y red privada
+3050,public/adc-generators,preset adc-generators — generadores y utilidades (subdominio gen)

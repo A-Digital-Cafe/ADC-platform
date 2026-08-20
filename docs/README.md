@@ -30,6 +30,8 @@ README enruta por categoría, no re-lista cada archivo).
   [github-deploy-auth](guides/github-deploy-auth.md) (device flow para deploys y clones de presets),
   [infra-lifecycle](guides/infra-lifecycle.md) (qué motores levanta un nodo, motores críticos y cómo
   volver a levantarlos a mano),
+  [legal-operations](guides/legal-operations.md) (versionar los documentos legales, PDF congelados
+  y la tab «Legales» del panel),
   [mongo-sharding](guides/mongo-sharding.md) (convertir el replica set en clúster sharded, y la
   verificación de integridad de la infraestructura),
   [name-policy](guides/name-policy.md) (alias de correo y usernames prohibidos),

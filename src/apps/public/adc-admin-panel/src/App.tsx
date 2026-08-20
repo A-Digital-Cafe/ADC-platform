@@ -12,6 +12,7 @@ import { FederatedAdminTab } from "./components/FederatedAdminTab.tsx";
 import BreachPanel from "./components/breach/BreachPanel.tsx";
 import AuditPanel from "./components/AuditPanel.tsx";
 import PlansPanel from "./components/plans/PlansPanel.tsx";
+import LegalPanel from "./components/legal/LegalPanel.tsx";
 
 /** Bit `moderate` del recurso `drive` (ver DRIVE_SCOPES en @common/types/resources.ts). */
 const DRIVE_MODERATE = 1 << 1;
@@ -27,6 +28,8 @@ interface Caps {
 	/** Máquina de estados del registro (avanzar, congelar audiencia, despachar el aviso). */
 	breachExecute: boolean;
 	audit: boolean;
+	/** Ciclo de vida de los documentos legales (LegalDocsService). */
+	legal: boolean;
 	plansCatalog: boolean;
 	plansOverrides: boolean;
 	driveModerate: boolean;
@@ -37,6 +40,7 @@ const NO_CAPS: Caps = {
 	breachWrite: false,
 	breachExecute: false,
 	audit: false,
+	legal: false,
 	plansCatalog: false,
 	plansOverrides: false,
 	driveModerate: false,
@@ -50,6 +54,7 @@ function capsFrom(perms: Permission[], orgId?: string): Caps {
 		breachWrite: can(SecurityScopes.BREACH, CRUDXAction.WRITE),
 		breachExecute: can(SecurityScopes.BREACH, CRUDXAction.EXECUTE),
 		audit: can(SecurityScopes.AUDIT_LOG, CRUDXAction.READ),
+		legal: can(SecurityScopes.LEGAL, CRUDXAction.READ),
 		// Sólo lectura para decidir visibilidad: el panel muestra lo que puede leer y deja que el
 		// backend rechace la escritura si el rol no tiene UPDATE.
 		plansCatalog: can(PlanScopes.CATALOG, CRUDXAction.READ, PLANS_RESOURCE_NAME),
@@ -94,6 +99,7 @@ export default function App() {
 		const list: AdcTab[] = [];
 		if (caps.breachRead) list.push({ id: "breaches", label: "Brechas" });
 		if (caps.audit) list.push({ id: "audit", label: "Auditoría" });
+		if (caps.legal) list.push({ id: "legal", label: "Legales" });
 		if (caps.plansCatalog || caps.plansOverrides) list.push({ id: "plans", label: "Planes" });
 		for (const app of federated) list.push({ id: app.id, label: app.adminPanelLabel ?? app.label });
 		return list;
@@ -108,6 +114,7 @@ export default function App() {
 	const panels: Record<string, ReactNode> = {
 		breaches: <BreachPanel canWrite={caps?.breachWrite ?? false} canExecute={caps?.breachExecute ?? false} />,
 		audit: <AuditPanel />,
+		legal: <LegalPanel />,
 		plans: <PlansPanel canCatalog={caps?.plansCatalog ?? false} canOverrides={caps?.plansOverrides ?? false} />,
 	};
 	const federatedApp = federated.find((a) => a.id === tab);
@@ -123,7 +130,7 @@ export default function App() {
 							</span>
 							<div>
 								<h1 className="font-heading text-2xl font-bold text-text">Administración</h1>
-								<p className="text-sm text-muted">Incidentes de datos, auditoría, planes y moderación de contenido.</p>
+								<p className="text-sm text-muted">Incidentes de datos, auditoría, documentos legales, planes y moderación de contenido.</p>
 							</div>
 						</div>
 						<adc-button variant="accent-outlined" size="small" label="Refrescar" onClick={() => void refresh()} />

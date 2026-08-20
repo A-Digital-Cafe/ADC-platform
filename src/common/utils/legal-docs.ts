@@ -6,20 +6,43 @@
  * aceptación y `SessionManagerService` que graba la constancia. Si cada una llevara su propia copia,
  * la constancia dejaría de probar *qué texto* se aceptó, que es justamente para lo que sirve.
  *
- * **Al editar un documento legal hay que subir su versión acá y regenerar su `contentHash`**
- * (`sha256sum` del archivo fuente, ruta en cada entrada). `version` es la fecha de publicación ISO,
- * la misma que muestra la página. El hash viaja a la constancia e identifica *el texto exacto* que
- * se aceptó —recuperable del historial git—, no sólo su fecha.
+ * **Este archivo es metadata: el texto vive en el `.tsx` que apunta `sourcePath` y los dos viajan
+ * juntos en el mismo despliegue.** Por eso la versión no se administra desde una base de datos —
+ * un nodo podría servir un texto y la base afirmar otro número.
+ *
+ * `contentHash` es el `sha256sum` de ese archivo y viaja a la constancia: identifica *el texto
+ * exacto* que se aceptó —recuperable del historial git—, no sólo su fecha. **No se mantiene a
+ * ojo**: `scripts/legal-check.mjs` (dentro de `bun run extra-checks`) lo recalcula y avisa, y la
+ * tab «Legales» del panel de administración lo muestra en vivo contra el archivo desplegado.
  *
  * `effectiveFrom` es la fecha desde la que esa versión rige **para las cuentas que ya existían**, y
  * tiene que estar al menos `MIN_LEGAL_NOTICE_DAYS` días después de `version`. Los Términos prometen
  * ese preaviso, y una versión que entra en vigor el día del despliegue lo incumple: el aviso sale
  * cuando se publica, la exigencia de re-aceptar recién cuando llega `effectiveFrom`. Para el alta
  * `effectiveFrom` no juega — quien se registra hoy acepta en el acto la versión vigente.
+ *
+ * Mientras `hoy < effectiveFrom` el documento **no rige todavía**, y entonces corregirlo sólo pide
+ * actualizar el `contentHash`: versionar pediría re-aceptar algo que nadie aceptó. Cada corrección
+ * así queda asentada en `corrections` (ver {@link LegalCorrection}), que es la trazabilidad de por
+ * qué esa versión dice hoy algo distinto de lo que decía el día que se publicó.
  */
 
 /** Preaviso mínimo entre publicar un documento y que rija para las cuentas preexistentes. */
 export const MIN_LEGAL_NOTICE_DAYS = 30;
+
+/**
+ * Corrección aplicada a una versión **antes** de que entrara en vigor.
+ *
+ * La condición para corregir en lugar de versionar es que el cambio amplíe derechos, asuma
+ * obligaciones o informe de más — nunca que recorte. La contrapartida asumida: las altas
+ * anteriores a la corrección llevan sellado el hash previo, recuperable del historial de git.
+ */
+export interface LegalCorrection {
+	/** Fecha ISO `YYYY-MM-DD` en que se aplicó. */
+	date: string;
+	/** Qué cambió, en una o dos oraciones. Lo lee la tab «Legales» del panel. */
+	summary: string;
+}
 
 export const LEGAL_DOCUMENTS = {
 	terms: {
@@ -29,12 +52,20 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/terms",
 		requiresAcceptance: true,
-		// Corregida el 2026-08-10 sin bump por el mismo criterio que privacy: no rige hasta el
-		// 2026-09-07. La tabla de edad mínima por país deja de enumerar Estados miembros de la UE
-		// (ver el memo de alcance territorial en el repo privado) y pasa a una regla única de 13
-		// años; el resto de los países queda como referencia informativa, no vinculante.
-		// sha256sum presets/help/apps/help/src/pages/TermsPage.tsx
-		contentHash: "af5fff04d3f66786b7c67de8380ded94dba19960d4942919562f6ed40bf02d78",
+		sourcePath: "presets/help/apps/help/src/pages/TermsPage.tsx",
+		contentHash: "2676cf2bd3b3e8f27a3c332825110c5d30dc1b43ebcb6c0bddfdc21b7f8aa043",
+		corrections: [
+			{
+				date: "2026-08-10",
+				summary:
+					"La tabla de edad mínima por país deja de enumerar Estados miembros de la UE (ver el memo de alcance territorial en el repo privado) y pasa a una regla única de 13 años; el resto de los países queda como referencia informativa, no vinculante.",
+			},
+			{
+				date: "2026-08-20",
+				summary:
+					"De cara al subdominio de generadores (`gen`): §6 suma el contenido que se crea CON las herramientas —es del usuario, uso comercial incluido, sin licencia para nosotros más allá de guardárselo—, §8 declara el subdominio y sus dos avisos propios (licencias de tipografías y accesibilidad del texto Unicode decorativo), y §10 extiende el «tal cual» al resultado de las herramientas dejando a cargo nuestro que la herramienta haga lo que dice y que sus componentes de terceros estén licenciados.",
+			},
+		],
 	},
 	privacy: {
 		id: "privacy",
@@ -43,25 +74,30 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/privacy",
 		requiresAcceptance: true,
-		// La 2026-08-08 tuvo erratas/ampliaciones antes de entrar en vigencia (leyenda AAIP,
-		// derechos self-service, plazos de archivo, alcance de la rectificación y de la baja) y una
-		// segunda tanda el 2026-08-09: plazos de retención de correo y de tickets ahora que el código
-		// los aplica, §6 sin nombrar el algoritmo de hashing (ya no es PBKDF2) y §13 nueva sobre datos
-		// de colaboradores. Y una tercera el 2026-08-10: la inscripción en el RNBD en §1, y el servidor
-		// STUN de Google —que el túnel P2P ya usaba sin declararlo— en §7 y en el párrafo del túnel.
-		// Y una cuarta el 2026-08-12, de cara al plan de escalabilidad: las filas de infraestructura propia
-		// de §7 admiten ahora varios servidores replicados (la redacción anterior daba a entender una sola
-		// máquina), la fila de logs de §5 dice "cada proceso" y se compromete a no escribirlos a disco ni
-		// mandarlos a terceros, §6 suma el régimen de réplicas y copias de seguridad (cifradas, 30 días, sin
-		// restaurar datos ya suprimidos) y §8 promete anuncio previo + re-declaración ante el RNBD si alguna
-		// vez hubiera infraestructura propia fuera del país. Cada una de esas frases habría exigido una
-		// enmienda con 30 días de preaviso el día que se sumara el segundo nodo.
-		// Se corrige en lugar de versionar porque el documento todavía NO rige: una
-		// versión nueva pediría re-aceptar algo que nadie aceptó, y todo lo agregado amplía derechos o
-		// informa de más, nunca recorta. Contrapartida asumida: las altas posteriores al 2026-08-08
-		// llevan sellado el hash anterior, recuperable del historial de git. Queda en git.
-		// sha256sum presets/help/apps/help/src/pages/PrivacyPage.tsx
+		sourcePath: "presets/help/apps/help/src/pages/PrivacyPage.tsx",
 		contentHash: "9abe6ca74dfec78f87fedc1bb0987787986ed1268d09dfb04398e8150a0d4bd1",
+		corrections: [
+			{
+				date: "2026-08-08",
+				summary:
+					"Erratas y ampliaciones el mismo día de publicarla: leyenda AAIP, derechos self-service, plazos de archivo, y alcance de la rectificación y de la baja.",
+			},
+			{
+				date: "2026-08-09",
+				summary:
+					"Plazos de retención de correo y de tickets, ahora que el código los aplica; §6 deja de nombrar el algoritmo de hashing (ya no es PBKDF2); §13 nueva sobre datos de colaboradores.",
+			},
+			{
+				date: "2026-08-10",
+				summary:
+					"La inscripción en el RNBD en §1, y el servidor STUN de Google —que el túnel P2P ya usaba sin declararlo— en §7 y en el párrafo del túnel.",
+			},
+			{
+				date: "2026-08-12",
+				summary:
+					"De cara al plan de escalabilidad: las filas de infraestructura propia de §7 admiten varios servidores replicados (la redacción anterior daba a entender una sola máquina), la fila de logs de §5 dice «cada proceso» y se compromete a no escribirlos a disco ni mandarlos a terceros, §6 suma el régimen de réplicas y copias de seguridad (cifradas, 30 días, sin restaurar datos ya suprimidos), y §8 promete anuncio previo + re-declaración ante el RNBD si alguna vez hubiera infraestructura propia fuera del país. Cada una de esas frases habría exigido una enmienda con 30 días de preaviso el día que se sumara el segundo nodo.",
+			},
+		],
 	},
 	cookies: {
 		id: "cookies",
@@ -70,26 +106,34 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/cookies",
 		requiresAcceptance: false,
-		// Corregida el 2026-08-09 sin bump por el mismo criterio que privacy: la lista de terceros de
-		// §6 se acortó (React y las fotos de Discord dejaron de servirse desde un CDN ajeno), así que
-		// el texto pasa a declarar MENOS terceros de los que declaraba. No rige hasta el 2026-09-07.
-		// Corregida otra vez el 2026-08-10, esta vez sumando uno: el servidor STUN de Google que el
-		// túnel P2P del Drive contacta al abrir una transferencia entre dispositivos.
-		// Y una tercera el 2026-08-12: §2 declara la cookie técnica `adc_build`, que fija la sesión de
-		// navegación a un nodo mientras los artefactos de UI no estén igualados entre nodos (si no, el
-		// documento sale de un nodo y sus chunks de otro → 404 intermitentes). Se declara ANTES de que
-		// exista: sólo se escribe con ADC_CLUSTER_GATEWAY=true y algún vecino vivo, o sea que con un
-		// solo nodo no se crea nunca, y la fila lo dice. Mismo criterio que las correcciones de arriba:
-		// sin bump porque el documento no rige hasta el 2026-09-07 —versionar pediría re-aceptar algo
-		// que nadie aceptó— y porque declarar una cookie de más nunca recorta lo que ya se prometió.
-		// Declararla recién el día que se encienda el segundo nodo sí habría exigido enmienda con 30
-		// días de preaviso, y esa espera bloquearía el despliegue.
-		// Y una cuarta el 2026-08-15, por el mismo criterio: §5 declara que respetamos **Global Privacy
-		// Control** (sin el script de analítica cuando el navegador manda `Sec-GPC`), y se corrige quién
-		// inserta ese script —lo inyecta la plataforma, no el proxy de Cloudflare— porque es lo que hace
-		// posible la decisión por visita. Suma un derecho y precisa un hecho: no recorta nada.
-		// sha256sum presets/help/apps/help/src/pages/CookiesPage.tsx
-		contentHash: "4fee0cb26c6a78f27a9394008afaf3cd76d3e755e20de2913ae8815f25475f55",
+		sourcePath: "presets/help/apps/help/src/pages/CookiesPage.tsx",
+		contentHash: "45d0976665f8fe2a5a3c29074357f3885bf46f2152956983074441325b977304",
+		corrections: [
+			{
+				date: "2026-08-09",
+				summary:
+					"La lista de terceros de §6 se acortó: React y las fotos de Discord dejaron de servirse desde un CDN ajeno, así que el texto declara MENOS terceros de los que declaraba.",
+			},
+			{
+				date: "2026-08-10",
+				summary: "Suma uno: el servidor STUN de Google que el túnel P2P del Drive contacta al abrir una transferencia entre dispositivos.",
+			},
+			{
+				date: "2026-08-12",
+				summary:
+					"§2 declara la cookie técnica `adc_build`, que fija la sesión de navegación a un nodo mientras los artefactos de UI no estén igualados entre nodos (si no, el documento sale de un nodo y sus chunks de otro → 404 intermitentes). Se declara antes de que exista: sólo se escribe con ADC_CLUSTER_GATEWAY=true y algún vecino vivo, y la fila lo dice. Declararla recién el día que se encienda el segundo nodo habría exigido enmienda con 30 días de preaviso, y esa espera bloquearía el despliegue.",
+			},
+			{
+				date: "2026-08-15",
+				summary:
+					"§5 declara que respetamos Global Privacy Control (sin el script de analítica cuando el navegador manda `Sec-GPC`), y corrige quién inserta ese script: lo inyecta la plataforma, no el proxy de Cloudflare, que es lo que hace posible la decisión por visita.",
+			},
+			{
+				date: "2026-08-20",
+				summary:
+					"§4.3 declara `adc-generators:*`, el borrador local de los generadores del subdominio `gen` (texto en curso, paleta y preferencias). Se declara antes de que exista, igual que `adc_build`, y la fila deja escrito que no sale del navegador ni lleva identificador de seguimiento — que es lo que hace que el subdominio pueda funcionar sin cuenta y sin consentimiento previo.",
+			},
+		],
 	},
 	dpa: {
 		id: "dpa",
@@ -98,15 +142,20 @@ export const LEGAL_DOCUMENTS = {
 		effectiveFrom: "2026-09-07",
 		href: "/dpa",
 		requiresAcceptance: false,
-		// Corregida el 2026-08-10 sin bump por el mismo criterio que privacy: no rige hasta el
-		// 2026-09-07. Se excluye a organizaciones establecidas en el EEE (declaración, garantía e
-		// indemnidad), ver el memo de alcance territorial en el repo privado.
-		// Corregida otra vez el 2026-08-12, de cara al plan de escalabilidad: §7 suma redundancia de la
-		// infraestructura y copias de seguridad cifradas a las medidas técnicas, y §8 aclara que operar
-		// sobre varios servidores propios NO es alta de subencargado (sí lo sería un alojamiento o un
-		// backup de terceros, que mantiene el aviso previo y el derecho a terminar el plan).
-		// sha256sum presets/help/apps/help/src/pages/DpaPage.tsx
+		sourcePath: "presets/help/apps/help/src/pages/DpaPage.tsx",
 		contentHash: "cd64ee99f3eb81476e684ff437fc2c29f5598517470110527ca43f91c54b025d",
+		corrections: [
+			{
+				date: "2026-08-10",
+				summary:
+					"Se excluye a organizaciones establecidas en el EEE (declaración, garantía e indemnidad); ver el memo de alcance territorial en el repo privado.",
+			},
+			{
+				date: "2026-08-12",
+				summary:
+					"De cara al plan de escalabilidad: §7 suma redundancia de la infraestructura y copias de seguridad cifradas a las medidas técnicas, y §8 aclara que operar sobre varios servidores propios NO es alta de subencargado (sí lo sería un alojamiento o un backup de terceros, que mantiene el aviso previo y el derecho a terminar el plan).",
+			},
+		],
 	},
 } as const;
 
@@ -128,8 +177,15 @@ export interface LegalDocument {
 	 * preaviso de 30 días lo prometen también Privacidad §7 y DPA §15.
 	 */
 	requiresAcceptance: boolean;
-	/** SHA-256 del archivo fuente de la página en esta versión (ver nota de cabecera). */
+	/**
+	 * Archivo fuente de la página, relativo a la raíz del repo. Única declaración de la ruta: la
+	 * usan el generador de PDF, el chequeo de deriva y el panel de administración.
+	 */
+	sourcePath: string;
+	/** SHA-256 de `sourcePath` en esta versión (ver nota de cabecera). */
 	contentHash: string;
+	/** Correcciones aplicadas a esta versión antes de entrar en vigor, más viejas primero. */
+	corrections: readonly LegalCorrection[];
 }
 
 /**
@@ -181,6 +237,33 @@ export function buildLegalAcceptance(via: LegalAcceptance["via"], ageConfirmed: 
 export function legalNoticeDays(doc: LegalDocument): number {
 	const days = (Date.parse(doc.effectiveFrom) - Date.parse(doc.version)) / 86_400_000;
 	return Number.isFinite(days) ? Math.floor(days) : 0;
+}
+
+/**
+ * `true` mientras el documento todavía **no rige** para las cuentas preexistentes.
+ *
+ * Es la ventana en la que corregir el texto sólo pide actualizar el `contentHash`: versionar
+ * pediría re-aceptar algo que nadie aceptó. Fuera de ella, editar el texto obliga a bump con
+ * `MIN_LEGAL_NOTICE_DAYS` de preaviso. Lo consultan el panel, el chequeo de deriva y el servicio.
+ */
+export function isInCorrectionWindow(doc: LegalDocument, now: Date = new Date()): boolean {
+	return Date.parse(doc.effectiveFrom) > now.getTime();
+}
+
+/** Días que faltan para `effectiveFrom` (0 si ya rige). */
+export function daysUntilEffective(doc: LegalDocument, now: Date = new Date()): number {
+	const days = Math.ceil((Date.parse(doc.effectiveFrom) - now.getTime()) / 86_400_000);
+	return Number.isFinite(days) && days > 0 ? days : 0;
+}
+
+/**
+ * Fechas que le tocarían a un bump hecho hoy, ya validadas contra el preaviso comprometido.
+ * El panel las muestra listas para pegar en este mismo archivo.
+ */
+export function nextLegalVersionDates(now: Date = new Date()): { version: string; effectiveFrom: string } {
+	const iso = (d: Date) => d.toISOString().slice(0, 10);
+	const effective = new Date(now.getTime() + MIN_LEGAL_NOTICE_DAYS * 86_400_000);
+	return { version: iso(now), effectiveFrom: iso(effective) };
 }
 
 /**

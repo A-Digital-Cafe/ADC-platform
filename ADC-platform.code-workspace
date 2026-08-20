@@ -12,6 +12,7 @@
 		{ "name": "✉️ adc-email-frontend", "path": "presets/adc-email-frontend" },
 		{ "name": "🖼️ adc-image-editor", "path": "presets/adc-image-editor" },
 		{ "name": "🎨 adc-media", "path": "presets/adc-media" },
+		{ "name": "🎨 adc-generators", "path": "presets/adc-generators" },
 		{ "name": "📦 adc-modules-manager", "path": "presets/adc-modules-manager" },
 		{ "name": "📦 adc-subscriptions", "path": "presets/adc-subscriptions" },
 		{ "name": "☕ community-content", "path": "presets/community-content" },
