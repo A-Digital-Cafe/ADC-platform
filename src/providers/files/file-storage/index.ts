@@ -1,4 +1,5 @@
 import { IStorage } from "../../../interfaces/modules/providers/IStorage.js";
+import { isInsideBase } from "@common/utils/path-containment.ts";
 import { BaseProvider, ProviderType } from "../../BaseProvider.js";
 
 import * as fs from "node:fs/promises";
@@ -83,7 +84,13 @@ export default class FileStorageProvider extends BaseProvider implements IStorag
 	}
 
 	async list(subPath?: string): Promise<string[]> {
-		const dirPath = subPath ? path.join(this.#basePath, subPath) : this.#basePath;
+		const dirPath = subPath ? path.resolve(this.#basePath, subPath) : path.resolve(this.#basePath);
+		// `save`/`load`/`delete` se defienden con `basename`; el listado admite subdirectorios, así
+		// que acá la defensa es la contención dentro de `#basePath`.
+		if (!isInsideBase(this.#basePath, dirPath)) {
+			this.logger.logError(`Listado fuera del almacenamiento: ${subPath}`);
+			return [];
+		}
 		try {
 			const files = await fs.readdir(dirPath);
 			// Devolver solo los nombres de archivo sin la extensión .bin
