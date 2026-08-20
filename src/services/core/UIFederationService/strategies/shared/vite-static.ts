@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getCommonPublicDir } from "../../utils/fs/path-resolver.js";
+import { isInsideBase } from "@common/utils/path-containment.ts";
 import type { IBuildContext } from "../types.js";
 
 /** Mapa consolidado de extensiones a content-types para servir archivos estáticos */
@@ -21,6 +22,23 @@ const STATIC_CONTENT_TYPES: Record<string, string> = {
 	".txt": "text/plain; charset=utf-8",
 	".webmanifest": "application/manifest+json",
 };
+
+/**
+ * Resuelve el path de una request dentro de `baseDir`, o `null` si se escapa. `req.url` es el path
+ * crudo del cliente: un `GET /ui/../../etc/passwd` (o su versión percent-encoded) llega tal cual,
+ * sin que el navegador lo normalice.
+ */
+function resolveInsideDir(baseDir: string, requestPath: string): string | null {
+	let decoded: string;
+	try {
+		decoded = decodeURIComponent(requestPath);
+	} catch {
+		return null;
+	}
+	if (decoded.includes("\0")) return null;
+	const resolved = path.resolve(baseDir, `.${decoded.startsWith("/") ? "" : "/"}${decoded}`);
+	return isInsideBase(baseDir, resolved) ? resolved : null;
+}
 
 /**
  * Sirve un archivo estático con el content-type apropiado.
@@ -66,8 +84,8 @@ export function createStaticAssetsPlugin(context: IBuildContext): any {
 
 				const relativePath = req.url.slice(4);
 				for (const dir of uiLibraryDirs) {
-					const filePath = path.join(dir, relativePath);
-					if (serveStaticFile(filePath, res, 31536000)) return;
+					const filePath = resolveInsideDir(dir, relativePath);
+					if (filePath && serveStaticFile(filePath, res, 31536000)) return;
 				}
 				next();
 			});
@@ -89,8 +107,8 @@ export function createCommonPublicFallbackPlugin(): any {
 				if (!req.url || req.url.startsWith("/ui/") || req.url.startsWith("/@")) return next();
 
 				const cleanUrl = req.url.split("?")[0].split("#")[0];
-				const filePath = path.join(commonDir, cleanUrl);
-				if (serveStaticFile(filePath, res, 86400)) return;
+				const filePath = resolveInsideDir(commonDir, cleanUrl);
+				if (filePath && serveStaticFile(filePath, res, 86400)) return;
 				next();
 			});
 		},
