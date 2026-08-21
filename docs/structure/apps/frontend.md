@@ -51,6 +51,8 @@ src/apps/public/adc-<feature>/        # o presets/<preset>/apps/adc-<feature>/
 		"hosting": [
 			{ "domains": ["adigitalcafe.com"], "subdomains": ["myfeature"] }
 		],
+		// Rutas de cliente reales. Lo que no matchee sale 404 (con el index.html igual)
+		"spaRoutes": ["/", "/items", "/items/:id"],
 		"federationExposes": {
 			"./platformLinkResolver": "./src/utils/platform-links-resolver.ts"
 		}
@@ -66,6 +68,13 @@ Reglas:
 
 - `devPort` único (revisar [../../guides/ports.csv](../../guides/ports.csv) y los `config.json` existentes). **Tras crear la app, registrá su puerto en [../../guides/ports.csv](../../guides/ports.csv)** (CSV `port,app,notes` — fuente única que leen el driver de la skill `run-adc-platform` y `bun run cleanup`).
 - `hosting` define los subdominios de producción; en dev cada app usa su `devPort`.
+- `spaRoutes` lista las rutas que el router del cliente sabe atender (`:param` y `*` admitidos). Sin
+  ella el `spaFallback` contesta 200 a cualquier path y para un crawler eso es una página real: los
+  paths que aparecen en un ejemplo de código (`"/dashboard"`) terminan rastreados como URLs del
+  sitio. Con la lista, lo que no matchee sale **404 con el mismo `index.html`**, así que el router
+  igual renderiza su pantalla de "no encontrado". Hay que listar TODAS las rutas reales, también las
+  que no van al índice (`/admin/*`), y el `default` del router tiene que renderizar
+  `<adc-not-found>` (UI library): un 404 mostrando la home es el mismo problema al revés.
 - `serviceWorker: true` solo en apps layout: cascadea automáticamente a sus hijas.
 - Si la app expone `federationExposes` consumidos cross-app (ej. el resolver de platform links), extender la CSP con los orígenes cross-app (`script-src`/`connect-src`: `http://localhost:* https://*.adigitalcafe.com`).
 

@@ -132,6 +132,16 @@ export interface UIModuleConfig {
 	federationExposes?: Record<string, string>;
 	/** Configuración de hosting para producción (dominios/subdominios) */
 	hosting?: UIHostingConfig[];
+	/**
+	 * Rutas de cliente que la SPA sabe atender (`:param` y `*` admitidos). Declaradas, el
+	 * `spaFallback` contesta **404** —con el mismo `index.html`, así que el router igual
+	 * renderiza su pantalla de "no encontrado"— para todo lo demás.
+	 *
+	 * Sin esto cualquier path inventado responde 200 y para un crawler es una página real: los
+	 * ejemplos de código de un artículo (`"/dashboard"`) terminan rastreados como URLs del sitio.
+	 * Hay que listar TODAS las rutas reales, también las que no van al índice (`/admin/*`).
+	 */
+	spaRoutes?: string[];
 	/** Seguridad HTTP específica para el módulo UI */
 	security?: UIModuleSecurityConfig;
 	/** Roles mínimos para que el kernel entregue el contenido de este módulo */

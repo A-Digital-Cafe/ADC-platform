@@ -20,6 +20,7 @@ export function getUIModuleHostOptions(
 	if (!config.enableSEO) headers["X-Robots-Tag"] ??= "noindex, nofollow";
 
 	const base: HostOptions = { spaFallback: true };
+	if (config.spaRoutes?.length) base.spaRoutes = config.spaRoutes;
 	if (Object.keys(headers).length > 0) base.headers = headers;
 	if (accessGuard) base.accessGuard = accessGuard;
 	if (pathGuards?.length) base.pathGuards = pathGuards;

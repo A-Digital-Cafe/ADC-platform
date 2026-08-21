@@ -47,5 +47,6 @@ export async function serveHostStatic(
 
 	if (!fs.existsSync(filePath) && (await serveFromGlobalStatic(ctx, request, reply, requested, normalizedPath))) return;
 
-	await serveFile(ctx.logger, filePath, host.directory, reply, host.options);
+	// `urlPath` y no `requested`: el `/` ya se resolvió a `/index.html` y ninguna lista lo declara así.
+	await serveFile(ctx.logger, filePath, host.directory, reply, host.options, urlPath);
 }

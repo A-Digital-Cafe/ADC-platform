@@ -30,6 +30,12 @@ export default {
 				
 				alt: "var(--c-alt)",
 
+				// Separadores y bordes de cajas. Se deriva de `--c-text` en vez de ser un var propio
+				// para que siga al tema solo: cada bloque redefine `--c-text` y este acompaña.
+				// Sin esta entrada, `border-divider` no generaba ninguna regla y el borde caía al
+				// `currentColor` que Tailwind 4 trae por defecto — blanco puro en tema oscuro.
+				divider: "color-mix(in oklch, var(--c-text) 12%, transparent)",
+
 				// Tonos semánticos (fondo + texto) via CSS Variables
 				info: "var(--c-info)",
 				tinfo: "var(--c-tinfo)",

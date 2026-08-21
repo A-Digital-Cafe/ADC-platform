@@ -145,6 +145,12 @@ export interface IHostBasedHttpProvider extends IHttpServerProvider {
 export interface HostOptions {
 	/** Fallback a index.html para SPA routing */
 	spaFallback?: boolean;
+	/**
+	 * Rutas de cliente conocidas del SPA (`:param` y `*`). Con la lista declarada el
+	 * `spaFallback` sigue sirviendo el `index.html`, pero con status 404 cuando el path no
+	 * matchea ninguna. Ver {@link UIModuleConfig.spaRoutes}.
+	 */
+	spaRoutes?: string[];
 	/** Prioridad del host (mayor = más prioritario, comodines tienen menor) */
 	priority?: number;
 	/** Headers adicionales para las respuestas */
