@@ -38,7 +38,7 @@ export default function AuditPanel() {
 
 			<ul className="flex flex-col gap-2">
 				{items.map((e) => (
-					<li key={e.id} className="rounded-lg border border-border p-3 text-sm">
+					<li key={e.id} className="rounded-lg border border-divider bg-surface p-3 text-sm">
 						<div className="flex flex-wrap items-center gap-2">
 							<span className="text-xs text-muted">{new Date(e.at).toLocaleString()}</span>
 							<adc-badge color="blue">{e.action}</adc-badge>

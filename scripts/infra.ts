@@ -13,15 +13,18 @@
  *   bun run infra ls
  *   bun run infra up redis            # o `up mongo redis`, o `up adc-redis-core`
  *   bun run infra down redis
+ *   bun run infra rebuild             # elegir de una lista; sin argumentos es interactivo
+ *   bun run infra rebuild haraka --no-cache
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "dotenv";
 import { ENV_GROUP_ORDER } from "../src/common/utils/env-manifest.ts";
-import { composeAlias } from "../src/common/utils/infra-composes.ts";
+import { composeAlias, criticalComposeReason } from "../src/common/utils/infra-composes.ts";
 
 const ROOT = path.resolve(fileURLToPath(import.meta.url), "../..");
 const DOCKER_DIR = path.join(ROOT, "src", "common", "docker");
@@ -100,6 +103,84 @@ function down(names: string[]): number {
 	return failed;
 }
 
+/**
+ * ¿El stack construye su imagen desde un Dockerfile? Los que sólo referencian una `image:` se
+ * actualizan con `pull`, y pedirles `--build` sale error.
+ */
+function buildsImage(dir: string): boolean {
+	const compose = readFileSync(path.join(DOCKER_DIR, dir, "docker-compose.yml"), "utf8");
+	return compose.split("\n").some((line) => /^\s+build:/.test(line) && !line.trimStart().startsWith("#"));
+}
+
+/**
+ * Reconstruye y reemplaza el contenedor. Es lo que el arranque del kernel **no** hace: su
+ * `docker compose up -d` reusa la imagen existente, así que un cambio en `plugins/` o en el
+ * `Dockerfile` de un stack nunca llega al contenedor por reiniciar la plataforma.
+ */
+async function rebuild(names: string[], noCache: boolean): Promise<number> {
+	// Recrear es un corte: en un stack crítico se lleva las sesiones y con ellas el panel. Se avisa
+	// sólo si hay terminal; pedido por nombre en un script, la decisión ya está tomada.
+	for (const name of names) {
+		const reason = criticalComposeReason(name);
+		if (!reason || !process.stdin.isTTY) continue;
+		const rl = createInterface({ input: process.stdin, output: process.stdout });
+		const answer = await rl.question(`⚠ ${composeAlias(name)} ${reason}.\n  Recrearlo corta el servicio. ¿Seguir? (s/N): `);
+		rl.close();
+		if (!/^s(i|í)?$/i.test(answer.trim())) {
+			console.error("Cancelado.");
+			process.exit(1);
+		}
+	}
+
+	spawnSync("docker", ["network", "create", SHARED_NETWORK], { stdio: "ignore" });
+	let failed = 0;
+	for (const name of names) {
+		const dir = resolveStack(name);
+		const { args, cwd } = composeArgs(dir);
+		if (buildsImage(dir)) {
+			console.log(`\n⟳ reconstruyendo ${composeAlias(name)}...`);
+			const build = ["build", ...(noCache ? ["--no-cache"] : [])];
+			if (docker([...args, ...build], cwd) !== 0) {
+				failed++;
+				continue;
+			}
+		} else {
+			console.log(`\n⟳ actualizando la imagen de ${composeAlias(name)}...`);
+			// Sin Dockerfile no hay nada que construir: lo que puede estar viejo es la imagen del registro.
+			if (docker([...args, "pull"], cwd) !== 0) failed++;
+		}
+		// `up -d` solo no recrea el contenedor si la config del servicio no cambió, y acá la imagen es
+		// nueva pero el compose es el mismo: sin esto el contenedor viejo sigue corriendo sin aviso.
+		if (docker([...args, "up", "-d", "--force-recreate"], cwd) !== 0) failed++;
+	}
+	return failed;
+}
+
+/** Selector cuando `rebuild` viene sin stacks: lista numerada, acepta varios o `all`. */
+async function pickStacks(): Promise<string[]> {
+	// Sin terminal no hay a quién preguntarle y `question()` se queda esperando un EOF que no llega
+	// (un `bun run infra rebuild` dentro de un script quedaría colgado sin decir por qué).
+	if (!process.stdin.isTTY) {
+		console.error("Sin terminal interactiva: pasá el stack como argumento (`bun run infra rebuild haraka`).");
+		process.exit(1);
+	}
+	const aliases = [...stacks().keys()];
+	console.log("Stacks en src/common/docker:\n");
+	aliases.forEach((alias, i) => console.log(`  ${String(i + 1).padStart(2)}) ${alias.padEnd(12)} ${stacks().get(alias)}`));
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
+	const answer = await rl.question("\n¿Cuál reconstruir? (número, varios separados por espacio, o `all`): ");
+	rl.close();
+	const tokens = answer.trim().split(/\s+/).filter(Boolean);
+	if (tokens.length === 1 && tokens[0].toLowerCase() === "all") return aliases;
+	// Se acepta el número de la lista o el alias escrito a mano; lo que no resuelva lo rechaza `resolveStack`.
+	const picked = tokens.map((token) => (/^\d+$/.test(token) ? aliases[Number(token) - 1] : token)).filter(Boolean);
+	if (picked.length === 0) {
+		console.error("Nada seleccionado.");
+		process.exit(1);
+	}
+	return picked;
+}
+
 function ls(): void {
 	for (const [alias, dir] of stacks()) {
 		const { args, cwd } = composeArgs(dir);
@@ -110,13 +191,19 @@ function ls(): void {
 }
 
 loadEnv();
-const [action, ...names] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const noCache = argv.includes("--no-cache");
+const [action, ...names] = argv.filter((arg) => !arg.startsWith("--"));
 
 if (action === "ls") {
 	ls();
 } else if ((action === "up" || action === "down") && names.length > 0) {
 	process.exit(action === "up" ? up(names) : down(names));
+} else if (action === "rebuild") {
+	process.exit(await rebuild(names.length > 0 ? names : await pickStacks(), noCache));
 } else {
-	console.error("Uso: bun run infra <ls | up <stack...> | down <stack...>>   (stack = alias `redis` o directorio `adc-redis-core`)");
+	console.error(
+		"Uso: bun run infra <ls | up <stack...> | down <stack...> | rebuild [stack...] [--no-cache]>   (stack = alias `redis` o directorio `adc-redis-core`)"
+	);
 	process.exit(1);
 }

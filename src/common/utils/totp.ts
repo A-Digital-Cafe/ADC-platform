@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 
 /**
  * TOTP (RFC 6238) sobre HOTP (RFC 4226) y Base32 (RFC 4648), sin dependencias.
@@ -161,9 +161,9 @@ export function generateRecoveryCodes(count: number): string[] {
 	for (let i = 0; i < count; i++) {
 		const groups: string[] = [];
 		for (let g = 0; g < RECOVERY_GROUPS; g++) {
-			// `randomBytes` por grupo y módulo sobre 31 símbolos: el sesgo (256 % 31) es
-			// despreciable frente a los ~2^74 del código completo.
-			const chars = [...randomBytes(RECOVERY_GROUP_LEN)].map((byte) => RECOVERY_ALPHABET[byte % RECOVERY_ALPHABET.length]);
+			// `randomInt` y no `randomBytes % 31`: el módulo sobre un alfabeto que no divide a 256
+			// sesga los primeros símbolos, y acá el rechazo lo hace `node:crypto` gratis.
+			const chars = Array.from({ length: RECOVERY_GROUP_LEN }, () => RECOVERY_ALPHABET[randomInt(RECOVERY_ALPHABET.length)]);
 			groups.push(chars.join(""));
 		}
 		codes.push(groups.join("-"));

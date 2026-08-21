@@ -28,7 +28,7 @@ export function AdoptionCard({ adoption }: Props) {
 	const enforced = Date.parse(adoption.enforcedFrom) <= Date.now();
 
 	return (
-		<section className="rounded-lg border border-border p-4">
+		<section className="rounded-lg border border-divider bg-surface p-4">
 			<header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
 				<h3 className="font-heading text-base font-semibold text-text">Aceptación de la versión vigente</h3>
 				<span className="text-xs text-muted">
@@ -71,7 +71,7 @@ export function AdoptionCard({ adoption }: Props) {
 				</div>
 			</dl>
 
-			<p className="mt-3 border-t border-border pt-2 text-xs text-muted">
+			<p className="mt-3 border-t border-divider pt-2 text-xs text-muted">
 				Sobre {adoption.total} cuentas activas. Las {adoption.deleting} con baja programada quedan fuera del cálculo. Son contadores: la
 				pantalla no lista personas.
 			</p>

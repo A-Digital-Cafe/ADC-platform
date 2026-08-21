@@ -44,7 +44,14 @@ Desde una consola en la máquina, sin panel y sin kernel:
 bun run infra ls              # qué stacks hay y cuáles están corriendo
 bun run infra up redis        # o `up mongo redis`, o el nombre del directorio
 bun run infra down redis      # baja con 60 s de gracia, como el cierre ordenado
+bun run infra rebuild         # lista para elegir; `rebuild haraka [--no-cache]` sin preguntar
 ```
+
+`rebuild` es lo único que el arranque del kernel **no** hace: su `docker compose up -d` reusa la
+imagen que ya existe, así que un cambio en el `Dockerfile` o en los archivos que el stack copia
+adentro (los plugins de Haraka, por ejemplo) no llega al contenedor por reiniciar la plataforma —
+hay que reconstruir y recrear. Los stacks sin `build:` (Mongo, Redis, Rabbit) hacen `pull` en vez de
+`build`, que es lo equivalente para una imagen de registro.
 
 `scripts/infra.ts` hace lo mismo que el kernel al arrancar: carga `env/*.env` (sin eso
 `REDIS_PASSWORD` queda vacía y el motor arranca sin auth), crea la red compartida `adc-core-net` y

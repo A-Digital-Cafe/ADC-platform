@@ -31,7 +31,7 @@ export function RunHistory({ reloadKey }: { readonly reloadKey: number }) {
 	}, [load, reloadKey]);
 
 	return (
-		<section className="rounded-lg border border-border p-4">
+		<section className="rounded-lg border border-divider bg-surface p-4">
 			<h3 className="font-heading text-base font-semibold text-text">Historial</h3>
 			<p className="mb-3 text-sm text-muted">
 				Generaciones de PDF, avisos y regeneraciones forzadas — las automáticas del arranque incluidas.
@@ -42,7 +42,7 @@ export function RunHistory({ reloadKey }: { readonly reloadKey: number }) {
 
 			<ul className="flex flex-col gap-2">
 				{items.map((run) => (
-					<li key={run.id} className="rounded-md border border-border/60 p-3 text-sm">
+					<li key={run.id} className="rounded-md border border-divider bg-surface p-3 text-sm">
 						<div className="flex flex-wrap items-center gap-2">
 							<span className="text-xs text-muted">{new Date(run.at).toLocaleString()}</span>
 							<adc-badge color={TONE[run.kind] ?? "gray"} size="sm">

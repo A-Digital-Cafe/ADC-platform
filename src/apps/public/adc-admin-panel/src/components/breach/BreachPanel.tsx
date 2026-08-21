@@ -46,8 +46,8 @@ export default function BreachPanel({ canWrite, canExecute }: Readonly<{ canWrit
 						<li key={b.id}>
 							<button
 								type="button"
-								className={`flex w-full flex-wrap items-center gap-3 rounded-lg border p-3 text-left text-sm ${
-									selected === b.id ? "border-primary" : "border-border"
+								className={`flex w-full flex-wrap items-center gap-3 rounded-lg border bg-surface p-3 text-left text-sm ${
+									selected === b.id ? "border-primary" : "border-divider"
 								}`}
 								onClick={() => setSelected(selected === b.id ? null : b.id)}
 							>

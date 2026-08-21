@@ -194,7 +194,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 				</div>
 			</section>
 
-			<section className="flex flex-col gap-4 rounded-lg border border-border p-4">
+			<section className="flex flex-col gap-4 rounded-lg border border-divider bg-surface p-4">
 				<h3 className="font-heading text-lg font-semibold text-text">Paso siguiente</h3>
 				{STEP_HELP[breach.state] && <p className="text-sm text-muted">{STEP_HELP[breach.state]}</p>}
 
@@ -215,7 +215,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 									<select
 										value={target}
 										onChange={(e) => patch({ to: e.target.value as BreachTransitionInput["to"] })}
-										className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+										className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 									>
 										{next.map((s) => (
 											<option key={s} value={s}>
@@ -246,7 +246,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 													<button
 														key={c}
 														type="button"
-														className={`rounded-full border px-3 py-1 text-xs ${selected ? "border-primary bg-primary/10 text-text" : "border-border text-muted"}`}
+														className={`rounded-full border px-3 py-1 text-xs ${selected ? "border-primary bg-primary/10 text-text" : "border-divider text-muted"}`}
 														onClick={() => {
 															const current = new Set<BreachDataCategory>(
 																draft?.dataCategories ?? breach.dataCategories
@@ -283,7 +283,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 												onChange={(e) =>
 													patch({ risk: { ...draft?.risk, severity: e.target.value as BreachRiskLevel } })
 												}
-												className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+												className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 											>
 												{RISK_LEVEL_KEYS.map((l) => (
 													<option key={l} value={l}>
@@ -298,7 +298,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 												onChange={(e) =>
 													patch({ risk: { ...draft?.risk, likelihood: e.target.value as BreachRiskLevel } })
 												}
-												className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+												className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 											>
 												{RISK_LEVEL_KEYS.map((l) => (
 													<option key={l} value={l}>
@@ -358,7 +358,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 													authorityNotifiedAt: e.target.value ? new Date(e.target.value).toISOString() : undefined,
 												})
 											}
-											className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+											className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 										/>
 									</Field>
 									<Field label="Texto enviado" hint="Pegá el texto tal como salió: el borrador no es prueba de nada.">
@@ -395,7 +395,7 @@ export function BreachDetail({ id, canExecute, onChanged }: Readonly<{ id: strin
 											onChange={(e) =>
 												patch({ subjectsExemption: (e.target.value || undefined) as BreachSubjectExemption | undefined })
 											}
-											className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+											className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 										>
 											<option value="">Sin excepción: se avisó una por una</option>
 											{Object.entries(EXEMPTION_LABEL).map(([v, l]) => (

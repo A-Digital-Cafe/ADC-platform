@@ -38,7 +38,7 @@ export function OpenBreachModal({ onClose, onSubmit }: Readonly<{ onClose: () =>
 						type="datetime-local"
 						value={detectedAt}
 						onChange={(e) => setDetectedAt(e.target.value)}
-						className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+						className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 					/>
 				</label>
 
@@ -47,7 +47,7 @@ export function OpenBreachModal({ onClose, onSubmit }: Readonly<{ onClose: () =>
 					<select
 						value={source}
 						onChange={(e) => setSource(e.target.value as BreachOpenInput["source"])}
-						className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+						className="rounded-lg border border-divider bg-surface px-3 py-2 text-sm text-text"
 					>
 						{Object.entries(SOURCE_LABEL).map(([value, label]) => (
 							<option key={value} value={value}>

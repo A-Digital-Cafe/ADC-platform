@@ -33,7 +33,7 @@ export function DocCard({ doc, nextVersion, onRebuild, onAnnounce, busy }: Props
 	};
 
 	return (
-		<article className="rounded-lg border border-border p-4">
+		<article className="rounded-lg border border-divider bg-surface p-4">
 			<header className="flex flex-wrap items-start justify-between gap-2">
 				<div>
 					<h3 className="font-heading text-base font-semibold text-text">{doc.label}</h3>
@@ -85,7 +85,7 @@ export function DocCard({ doc, nextVersion, onRebuild, onAnnounce, busy }: Props
 			)}
 
 			{open && (
-				<div className="mt-4 flex flex-col gap-4 border-t border-border pt-4 text-sm">
+				<div className="mt-4 flex flex-col gap-4 border-t border-divider pt-4 text-sm">
 					{(doc.drifted || doc.deployedHash !== null) && (
 						<div>
 							<span className="mb-1 block text-xs uppercase tracking-wide text-muted">Hash del texto</span>

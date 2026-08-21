@@ -50,7 +50,7 @@ export class AdcKanbanCard {
 
 		return (
 			<Host
-				class={`relative block rounded-lg bg-surface border border-border shadow-sm p-3 space-y-1.5 hover:shadow-md transition-shadow ${cursorCls} ${mutedCls} ${draggingCls}`}
+				class={`relative block rounded-lg bg-surface border border-divider shadow-sm p-3 space-y-1.5 hover:shadow-md transition-shadow ${cursorCls} ${mutedCls} ${draggingCls}`}
 				style={accentStyle}
 				role={role}
 				tabIndex={tabIndex}

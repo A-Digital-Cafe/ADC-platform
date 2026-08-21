@@ -47,6 +47,9 @@ export interface ProjectSettings {
 }
 
 /** Proyecto del Project Manager. */
+/** `ownerId` de los tableros que crea y opera el servicio (tickets, solicitudes de org). */
+export const SYSTEM_PROJECT_OWNER_ID = "system";
+
 export interface Project {
 	id: string;
 	/** `null` = proyecto global (no pertenece a ninguna org). */

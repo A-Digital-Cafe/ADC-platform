@@ -54,13 +54,16 @@ export function sharedBundleInputs(): string[] {
 /** Directorio real de `.git`, resolviendo el archivo-puntero de worktrees y submódulos. */
 function gitDir(repoDir: string): string | null {
 	const dotGit = path.join(repoDir, ".git");
+	let raw: string;
 	try {
-		if (fs.statSync(dotGit).isDirectory()) return dotGit;
-		const pointer = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(dotGit, "utf8"))?.[1]?.trim();
-		return pointer ? path.resolve(repoDir, pointer) : null;
-	} catch {
-		return null;
+		raw = fs.readFileSync(dotGit, "utf8");
+	} catch (error) {
+		// Un `stat` previo para distinguir el caso normal sería una carrera: el propio `read` ya
+		// separa el repo común (EISDIR) de "acá no hay repo" sin una segunda mirada al disco.
+		return (error as NodeJS.ErrnoException).code === "EISDIR" ? dotGit : null;
 	}
+	const pointer = /^gitdir:\s*(.+)$/m.exec(raw)?.[1]?.trim();
+	return pointer ? path.resolve(repoDir, pointer) : null;
 }
 
 /** Sha de HEAD de un repo, o `null` si no hay repo (despliegue por tarball, preset copiado a mano). */

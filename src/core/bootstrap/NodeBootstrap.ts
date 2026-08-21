@@ -12,7 +12,7 @@
  * siquiera existe todavía el archivo del que se leerían.
  */
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync, chmodSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ILogger } from "../../interfaces/utils/ILogger.js";
 import { ENV_GROUP_ORDER, type EnvGroup } from "../../common/utils/env-manifest.js";
@@ -80,13 +80,25 @@ function permsFor(group: EnvGroup): number {
 }
 
 /**
+ * Contenido del archivo, o `null` si no existe. Una sola lectura y no `existsSync` + `readFileSync`:
+ * entre las dos llamadas el archivo puede aparecer o irse, y el error del `read` ya dice lo mismo.
+ */
+function readIfExists(file: string): string | null {
+	try {
+		return readFileSync(file, "utf-8");
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Reescribe `env/<grupo>.env` con lo recibido, **conservando lo que ya estaba** y sin duplicar
  * claves. Lo que ya tenía valor local gana: el alta trae la configuración que falta, no pisa
  * decisiones que alguien tomó en esta máquina.
  */
 function mergeIntoGroupFile(dir: string, group: EnvGroup, values: Record<string, string>): number {
 	const file = resolve(dir, `${group}.env`);
-	const existing = existsSync(file) ? readFileSync(file, "utf-8") : "";
+	const existing = readIfExists(file) ?? "";
 	const already = new Set(
 		existing
 			.split("\n")
@@ -193,7 +205,7 @@ export async function bootstrapNodeIfPending(basePath: string, logger: ILogger):
 
 	const dir = resolve(basePath, "..", ENV_DIR);
 	const marker = resolve(dir, JOINED_MARKER);
-	if (existsSync(marker)) {
+	if (readIfExists(marker) !== null) {
 		logger.logDebug(`[alta] este nodo ya canjeó su token (${JOINED_MARKER}); se sigue con el arranque normal.`);
 		return { joined: false, applied: 0, groups: [] };
 	}
@@ -208,7 +220,7 @@ export async function bootstrapNodeIfPending(basePath: string, logger: ILogger):
 	logger.logInfo(`[alta] nodo '${nodeId()}' en espera de configuración: canjeando el token contra ${joinUrl}…`);
 	const response = await redeemWithBackoff(joinUrl, token, logger);
 
-	if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o755 });
+	mkdirSync(dir, { recursive: true, mode: 0o755 });
 	const { applied, groups } = applyConfig(dir, response, logger);
 
 	writeFileSync(marker, `${nodeId()} ${new Date().toISOString()}\n`, { mode: 0o600 });
