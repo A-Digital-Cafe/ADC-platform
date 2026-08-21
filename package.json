@@ -27,6 +27,7 @@
 		"extra-checks": "bun run check:legal && bash scripts/find-large-files.sh && knip --dependencies && bun run check:lgpl",
 		"check:lgpl": "bun scripts/check-lgpl-placement.mjs",
 		"check:legal": "bun scripts/legal-check.ts",
+		"install:prod": "bash scripts/install-prod.sh",
 		"cleanup": "bash scripts/cleanup-processes.sh",
 		"infra": "bun scripts/infra.ts",
 		"env:split": "bun scripts/split-env.mjs",
@@ -114,7 +115,9 @@
 		"rollup": "^4.62.2",
 		"serialize-javascript": "^7.0.6",
 		"body-parser": "^1.20.6",
-		"svgo": "^4.0.2"
+		"svgo": "^4.0.2",
+		"nanoid": "^3.3.18",
+		"deepmerge-ts": "^8.0.0"
 	},
 	"resolutions": {
 		"@fastify/ajv-compiler/ajv": "^8.18.0",

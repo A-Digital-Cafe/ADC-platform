@@ -31,6 +31,7 @@ docs/                  # Documentación on-demand (índice: docs/README.md)
 | `bun run dev` | Desarrollo (hot reload) |
 | `bun run start:prodtests` | Simular producción + tests habilitados |
 | `bun run start` | Producción (puerto 80) |
+| `bun run install:prod` | Instala deps en prod desde `bun.lock` (frozen, no lo reescribe) |
 | `bun run typecheck` | TypeScript check + knip unused exports — **sale 1 por baseline** (knip reporta exports sin usar); el exit code NO es señal de fallo, hay que leer la salida |
 | `bun run extra-checks` | Archivos grandes + knip dependencies sin usar |
 | `bun run lint` | ESLint (zero warnings). Cubre `src` **y `presets`**: los presets no tienen config ni ESLint propios, así que se lintean con la config de la raíz al pasar por el monorepo (desde un clon suelto del preset, no corre) |
