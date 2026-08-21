@@ -70,7 +70,7 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 	}
 
 	async startDevServer(context: IBuildContext): Promise<IBuildResult> {
-		const configPath = await this.generateConfig(context);
+		const configPath = path.join(getConfigDir(context.namespace, context.module.uiConfig.name), "rspack.config.mjs");
 		const outputPath = path.join(context.uiOutputBaseDir, context.module.uiConfig.name);
 		const mode = context.isDevelopment ? "Dev Server" : "Production Server";
 
@@ -84,7 +84,7 @@ export abstract class RspackBaseStrategy extends BaseFrameworkStrategy {
 	}
 
 	async buildStatic(context: IBuildContext): Promise<IBuildResult> {
-		const configPath = await this.generateConfig(context);
+		const configPath = path.join(getConfigDir(context.namespace, context.module.uiConfig.name), "rspack.config.mjs");
 		const outputPath = path.join(context.uiOutputBaseDir, context.module.uiConfig.name);
 		const { module, namespace, isDevelopment } = context;
 

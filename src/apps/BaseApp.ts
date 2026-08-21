@@ -55,7 +55,7 @@ export abstract class BaseApp extends BaseModule implements IApp {
 
 			uiConfig.name = cleanModuleName;
 
-			this.logger.logInfo(`Registrando módulo UI: ${cleanModuleName}`);
+			this.logger.logDebug(`Registrando módulo UI: ${cleanModuleName}`);
 			await uiFederationService.registerUIModule(this.getCapability(), cleanModuleName, this.appDir, uiConfig);
 			this.uiModuleRegistered = true;
 
