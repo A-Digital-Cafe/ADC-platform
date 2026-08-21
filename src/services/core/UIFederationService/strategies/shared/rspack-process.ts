@@ -96,10 +96,17 @@ export function runRspackBuild(context: IBuildContext, args: string[], outputPat
 
 	return new Promise((resolve, reject) => {
 		const proc = spawn(rspackBin, args, { cwd: module.appDir, stdio: "pipe", shell: false });
-		let errorOutput = "";
+		// Se leen las DOS salidas: rspack reporta los errores de compilación por stdout, no por
+		// stderr, así que mirar sólo stderr dejaba el diagnóstico vacío en el único momento en que
+		// hace falta. Además, un pipe que nadie drena puede trabar al hijo si se llena.
+		let stdout = "";
+		let stderr = "";
 
+		proc.stdout?.on("data", (data) => {
+			stdout += data.toString();
+		});
 		proc.stderr?.on("data", (data) => {
-			errorOutput += data.toString();
+			stderr += data.toString();
 		});
 
 		proc.on("close", (code) => {
@@ -107,8 +114,11 @@ export function runRspackBuild(context: IBuildContext, args: string[], outputPat
 				context.logger?.logOk(`Build completado para ${module.uiConfig.name}`);
 				resolve({ outputPath });
 			} else {
+				// La COLA, no la cabeza: el arranque de rspack es banner y progreso, y el detalle del
+				// fallo queda al final. Cortar los primeros 500 caracteres tapaba justo el error.
+				const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
 				context.logger?.logError(`Build falló para ${module.uiConfig.name}`);
-				context.logger?.logError(`Error: ${errorOutput.slice(0, 500)}`);
+				context.logger?.logError(`Salida de rspack:\n${output.slice(-4000) || "(sin salida)"}`);
 				reject(new Error(`Rspack build falló con código ${code}`));
 			}
 		});

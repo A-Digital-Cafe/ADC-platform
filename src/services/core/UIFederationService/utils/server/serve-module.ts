@@ -122,7 +122,18 @@ function registerRobots(patterns: string[], seoEnabled: boolean, ctx: UIFederati
 
 async function registerHostsForModule(module: RegisteredUIModule, namespace: string, ctx: UIFederationContext): Promise<void> {
 	const hosting = module.uiConfig.hosting;
-	if (!hosting || !module.outputPath) return;
+	if (!hosting) return;
+	// Sin `outputPath` el host se quedaría sin dueño y el vhost caería al 404 genérico. Antes se
+	// volvía en silencio: como el build de una hoja no lo espera nadie, su fallo era una línea
+	// suelta en el boot y el síntoma aparecía recién en producción, como un 404 inexplicable.
+	if (!module.outputPath) {
+		const patterns = hosting.flatMap((h) => h.domains.flatMap((d) => (h.subdomains ? h.subdomains.map((s) => `${s}.${d}`) : [d])));
+		ctx.logger.logWarn(
+			`Módulo UI ${module.name} [${namespace}] declara hosting (${patterns.join(", ")}) pero no tiene build: ` +
+				`esos hosts van a responder 404. Estado del build: ${module.buildStatus ?? "desconocido"}.`
+		);
+		return;
+	}
 
 	const registeredPatterns: string[] = [];
 	const hostOptions = getUIModuleHostOptions(module.uiConfig, accessGuardFor(module, ctx), exposePathGuards(module, ctx));
