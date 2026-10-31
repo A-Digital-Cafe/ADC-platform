@@ -39,6 +39,10 @@ export class AdcSelect {
 	@Prop() error?: string;
 	/** Marca el control como inválido sin texto. */
 	@Prop() invalid?: boolean = false;
+	/** No se puede abrir (el valor queda a la vista). */
+	@Prop() disabled?: boolean = false;
+	/** Nombre accesible cuando no hay `<label>` (p. ej. dentro de una tabla). */
+	@Prop() ariaLabel?: string;
 
 	/** Normalizes options prop — handles both array and JSON string */
 	private get parsedOptions(): SelectOption[] {
@@ -112,6 +116,7 @@ export class AdcSelect {
 	}
 
 	private readonly handleToggle = () => {
+		if (this.disabled) return;
 		if (this.isOpen) {
 			this.close();
 			return;
@@ -172,7 +177,9 @@ export class AdcSelect {
 				<button
 					type="button"
 					ref={(el) => (this.trigger = el as HTMLButtonElement)}
-					class={`w-full px-3 py-2 rounded-xxl border bg-surface text-text text-[12px] font-text flex justify-between items-center gap-2 ${isInvalid ? "border-danger" : "border-text/15"}`}
+					class={`w-full px-3 py-2 rounded-xxl border bg-surface text-text text-[12px] font-text flex justify-between items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${isInvalid ? "border-danger" : "border-text/15"}`}
+					disabled={this.disabled}
+					aria-label={this.ariaLabel || undefined}
 					aria-haspopup="menu"
 					aria-expanded={this.isOpen ? "true" : "false"}
 					aria-invalid={isInvalid ? "true" : null}

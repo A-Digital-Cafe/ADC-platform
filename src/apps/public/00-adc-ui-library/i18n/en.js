@@ -77,6 +77,22 @@ export default {
 		ARCHIVE_NOT_FOUND: "That zip download doesn't exist.",
 		LINK_UNAVAILABLE: "This link isn't available right now. Try again later."
 	},
+	chat: {
+		send: "Send",
+		placeholder: "Write a message…",
+		replyingTo: "Replying to",
+		cancelReply: "Cancel reply",
+		typing: "Typing…",
+		newMessages: "New messages",
+		loadOlder: "Load earlier",
+		loadingOlder: "Loading…",
+		empty: "No messages yet.",
+		today: "Today",
+		yesterday: "Yesterday",
+		log: "Conversation",
+		connection: { live: "Live", polling: "Refreshing now and then", connecting: "Connecting…", offline: "Offline" },
+		status: { sending: "Sending…", queued: "Queued", sent: "Sent", read: "Read", done: "Answered", failed: "Couldn't send" }
+	},
 	input: {
 		showPassword: "Show password",
 		hidePassword: "Hide password"

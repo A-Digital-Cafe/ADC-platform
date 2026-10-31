@@ -22,6 +22,10 @@ Nombres autoexplicativos; fuente: `src/components/{atoms,molecules,organisms}`.
   `adc-share-buttons`, `adc-custom-error`, …
 - **Organismos** (vistas): `adc-layout`, `adc-site-header`, `adc-site-footer`, `adc-blocks-editor` /
   `-renderer`, `adc-comments-section`, `adc-mail-composer` / `-viewer`.
+- **Chat** (data-driven, modelo en `@common/types/chat/thread.ts`): `adc-chat-thread` (organismo:
+  lista con stick-to-bottom, "mensajes nuevos", historial anterior, días, agrupado, typing y composer),
+  `adc-chat-message` y `adc-chat-composer` (moléculas), `adc-typing-indicator` y `adc-chat-receipt`.
+  Emiten `adcChat*`; la app pone el transporte y decide qué significa cada `id` (ver `adc-sumi`).
 - **Iconos**: `adc-icon-*` en `src/components/icons`.
 
 ## Design tokens (Tailwind)

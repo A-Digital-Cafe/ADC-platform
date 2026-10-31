@@ -194,6 +194,8 @@ const DEFAULT_APPS: PlatformApp[] = [
 	{ id: "org", label: "Organizations", devPort: 3028, subdomain: "org", iconTag: "adc-icon-app-org" },
 	{ id: "status", label: "Status", devPort: 3020, subdomain: "status", iconTag: "adc-icon-app-status" },
 	{ id: "subscription", label: "Suscripción", devPort: 3042, subdomain: "subscription" },
+	{ id: "sumi", label: "Sumi", devPort: 3052, subdomain: "sumi", iconTag: "adc-icon-app-sumi" },
+	{ id: "sumi-admin", label: "Administración de Sumi", devPort: 3054, subdomain: "sumi-admin", iconTag: "adc-icon-app-sumi" },
 ];
 
 function getRegistry(): PlatformLinkRegistry {

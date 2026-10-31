@@ -84,8 +84,11 @@ export class AdcLegalGate {
 		this.submitting = true;
 		this.error = "";
 
+		const body = { accepted: true, ageConfirmed: this.ageConfirmed || undefined, ...currentLegalVersions() };
+		// El endpoint exige `Idempotency-Key` como toda mutación; sin ella respondía 400 y nadie podía aceptar.
 		const result = await api.post<{ success: boolean }>("/legal/accept", {
-			body: { accepted: true, ageConfirmed: this.ageConfirmed || undefined, ...currentLegalVersions() },
+			body,
+			idempotencyData: { action: "legal-accept", ...body },
 			silent: true,
 		});
 

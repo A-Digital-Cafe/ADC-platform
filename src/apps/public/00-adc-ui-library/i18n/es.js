@@ -78,6 +78,22 @@ export default {
 		ARCHIVE_NOT_FOUND: "Esa descarga comprimida no existe.",
 		LINK_UNAVAILABLE: "El enlace no está disponible en este momento. Probá más tarde."
 	},
+	chat: {
+		send: "Enviar",
+		placeholder: "Escribí un mensaje…",
+		replyingTo: "Respondiendo a",
+		cancelReply: "Cancelar respuesta",
+		typing: "Escribiendo…",
+		newMessages: "Mensajes nuevos",
+		loadOlder: "Cargar anteriores",
+		loadingOlder: "Cargando…",
+		empty: "Todavía no hay mensajes.",
+		today: "Hoy",
+		yesterday: "Ayer",
+		log: "Conversación",
+		connection: { live: "En vivo", polling: "Actualizando cada tanto", connecting: "Conectando…", offline: "Sin conexión" },
+		status: { sending: "Enviando…", queued: "En cola", sent: "Enviado", read: "Leído", done: "Respondido", failed: "No se pudo enviar" }
+	},
 	input: {
 		showPassword: "Mostrar contraseña",
 		hidePassword: "Ocultar contraseña"

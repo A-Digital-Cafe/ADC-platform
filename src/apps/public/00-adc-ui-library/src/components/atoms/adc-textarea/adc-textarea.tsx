@@ -1,4 +1,4 @@
-import { Component, Prop, Host } from "@stencil/core";
+import { Component, Prop, Host, Element } from "@stencil/core";
 
 let textareaUid = 0;
 
@@ -26,8 +26,35 @@ export class AdcTextarea {
 	@Prop() invalid?: boolean = false;
 	/** Texto de ayuda neutro bajo el campo. Se ignora si hay `error`. */
 	@Prop() hint?: string;
+	/** Crece con el contenido desde `rows` hasta `maxRows` (después scrollea). Sin manija de resize. */
+	@Prop() autoGrow?: boolean = false;
+	/** Tope de filas con `autoGrow`. */
+	@Prop() maxRows?: number = 8;
+
+	@Element() el!: HTMLElement;
 
 	private readonly uid = `adc-textarea-${textareaUid++}`;
+
+	componentDidRender() {
+		this.fit();
+	}
+
+	/** Ajusta la altura al contenido. Corre tras cada render para cubrir también el vaciado desde afuera. */
+	private readonly fit = () => {
+		if (!this.autoGrow) return;
+		const area = this.el.querySelector("textarea");
+		if (!area) return;
+		const style = getComputedStyle(area);
+		const px = (v: string) => Number.parseFloat(v) || 0;
+		const line = px(style.lineHeight) || px(style.fontSize) * 1.4 || 18;
+		// `border-box`: la altura incluye el borde, que `scrollHeight` no cuenta.
+		const borders = px(style.borderTopWidth) + px(style.borderBottomWidth);
+		const max = line * (this.maxRows ?? 8) + px(style.paddingTop) + px(style.paddingBottom) + borders;
+		area.style.height = "auto";
+		const wanted = area.scrollHeight + borders;
+		area.style.height = `${Math.min(wanted, max)}px`;
+		area.style.overflowY = wanted > max ? "auto" : "hidden";
+	};
 
 	private get isInvalid(): boolean {
 		return this.invalid || !!this.error;
@@ -75,8 +102,9 @@ export class AdcTextarea {
 					aria-label={this.ariaLabel || this.placeholder || this.name}
 					aria-invalid={this.isInvalid ? "true" : undefined}
 					aria-describedby={messageId}
-					class={`w-full px-3 py-2 rounded-xxl border bg-surface font-text text-[12px] text-text resize-y disabled:opacity-50 disabled:cursor-not-allowed ${this.isInvalid ? "border-danger" : "border-text/15"}`}
+					class={`w-full px-3 py-2 rounded-xxl border bg-surface font-text text-[12px] text-text ${this.autoGrow ? "resize-none" : "resize-y"} disabled:opacity-50 disabled:cursor-not-allowed ${this.isInvalid ? "border-danger" : "border-text/15"}`}
 					value={this.value}
+					onInput={this.fit}
 				/>
 				{this.renderMessage(messageId)}
 			</Host>

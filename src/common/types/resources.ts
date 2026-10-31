@@ -3,6 +3,7 @@ import { ModulesScopes } from "./modules/permissions.js";
 import { NetworkScopes } from "./network/permissions.js";
 import { EmailScopes } from "./email/permissions.js";
 import { PlanScopes } from "./plans/permissions.js";
+import { SumiScopes } from "./sumi/permissions.js";
 
 // Scope definition
 
@@ -136,6 +137,13 @@ const PLANS_SCOPES: ScopeDef[] = [
 	{ key: "subscriptions", value: PlanScopes.SUBSCRIPTIONS },
 ];
 
+/** Sumi scopes — alineados con SumiScopes en types/sumi/permissions.ts */
+const SUMI_SCOPES: ScopeDef[] = [
+	{ key: "chat", value: SumiScopes.CHAT },
+	{ key: "trusted", value: SumiScopes.TRUSTED },
+	{ key: "admin", value: SumiScopes.ADMIN },
+];
+
 // Resource registry — only resources that have real endpoints
 
 export const RESOURCES: ResourceDef[] = [
@@ -149,6 +157,8 @@ export const RESOURCES: ResourceDef[] = [
 	{ id: "modules", label: "resources.modules", scopes: MODULES_SCOPES, globalOnly: true },
 	{ id: "network", label: "resources.network", scopes: NETWORK_SCOPES, globalOnly: true },
 	{ id: "plans", label: "resources.plans", scopes: PLANS_SCOPES, globalOnly: true },
+	// Global-only: Sumi es una app de plataforma; así el `*` de un Admin de organización no la abre.
+	{ id: "sumi", label: "resources.sumi", scopes: SUMI_SCOPES, globalOnly: true },
 ];
 
 /**

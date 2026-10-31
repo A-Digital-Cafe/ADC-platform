@@ -30,3 +30,5 @@ port,app,notes
 3046,public/adc-admin-panel,
 3048,public/adc-network,preset adc-network — nodos, topología de datos y red privada
 3050,public/adc-generators,preset adc-generators — generadores y utilidades (subdominio gen)
+3052,public/adc-sumi,preset sumi (privado) — chat con Sumi; necesita Sumi corriendo en SUMI_UPSTREAM_URL
+3054,public/adc-sumi-admin,preset sumi (privado) — administración de Sumi (Admin / Sumi Admin)

@@ -4,6 +4,7 @@ import { hasBitfieldPermission } from "@common/utils/perms.js";
 import { SecurityScopes } from "@common/types/security/permissions.js";
 import { PlanScopes } from "@common/types/plans/permissions.js";
 import { NetworkScopes } from "@common/types/network/permissions.js";
+import { SumiScopes } from "@common/types/sumi/permissions.js";
 import {
 	authMarkerFor,
 	broadcastAuthChange,
@@ -85,6 +86,12 @@ export class AdcAccessButton {
 
 	/** URL del panel de red e infraestructura */
 	@Prop() networkAdminUrl: string = "";
+
+	/** Texto del acceso al panel de administración de Sumi */
+	@Prop() sumiAdminText: string = "Admin - SumiAI";
+
+	/** URL del panel de administración de Sumi */
+	@Prop() sumiAdminUrl: string = "";
 
 	@Prop() redirectAfterLogin: boolean = true;
 
@@ -234,6 +241,17 @@ export class AdcAccessButton {
 		if (!this.user || this.user.orgId) return false;
 		if (this.user.isAdmin) return true;
 		return hasBitfieldPermission(this.user.perms, `network.${NetworkScopes.NODES}.${ACTION_READ}`);
+	}
+
+	private getDefaultSumiAdminUrl(): string {
+		return getUrl(3054, "sumi-admin.adigitalcafe.com");
+	}
+
+	/** Moderación de Sumi: Admin global o el rol `Sumi Admin` (scope `admin` del recurso `sumi`, global-only). */
+	private canAccessSumiAdmin(): boolean {
+		if (!this.user || this.user.orgId) return false;
+		if (this.user.isAdmin) return true;
+		return hasBitfieldPermission(this.user.perms, `sumi.${SumiScopes.ADMIN}.${ACTION_READ}`);
 	}
 
 	/**
@@ -636,6 +654,19 @@ export class AdcAccessButton {
 										/>
 									</svg>
 									{this.networkAdminText}
+								</a>
+							</div>
+						)}
+						{/* Panel de Sumi: moderación, cuentas y aprendizaje global del chatbot */}
+						{this.canAccessSumiAdmin() && (
+							<div class="border-t border-divider">
+								<a
+									href={this.sumiAdminUrl || this.getDefaultSumiAdminUrl()}
+									class="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-accent/10 text-text hover:cursor-pointer transition-colors"
+									role="menuitem"
+								>
+									<adc-icon-app-sumi size="1.25rem" />
+									{this.sumiAdminText}
 								</a>
 							</div>
 						)}

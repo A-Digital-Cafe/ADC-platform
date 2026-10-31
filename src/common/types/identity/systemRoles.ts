@@ -7,6 +7,7 @@ import { ModulesScopes, MODULES_RESOURCE_NAME } from "@common/types/modules/perm
 import { NetworkScopes, NETWORK_RESOURCE_NAME } from "@common/types/network/permissions.ts";
 import { EmailScopes, EMAIL_RESOURCE_NAME } from "@common/types/email/permissions.ts";
 import { PlanScopes, PLANS_RESOURCE_NAME } from "@common/types/plans/permissions.ts";
+import { SumiScopes, SUMI_RESOURCE_NAME } from "@common/types/sumi/permissions.ts";
 import { BaseRole, RoleHierarchy, roleHierarchy } from "@common/types/identity/Role.ts";
 import type { AccountTier } from "@common/types/tiers.ts";
 import { COMMUNITY_SCOPES_BITS, isGlobalOnlyResource } from "@common/types/resources.ts";
@@ -25,6 +26,10 @@ export enum SystemRole {
 	DISCORD_NITRO_BOOSTER = "Discord Nitro Booster",
 	DISCORD_PUBLISHER = "Discord Publisher",
 	DISCORD_REVIEWER = "Discord Reviewer",
+	// Sumi (preset `sumi`): roles globales que abren el chat y su panel de administración
+	SUMI_USER = "Sumi User",
+	SUMI_TRUSTED = "Sumi Trusted",
+	SUMI_ADMIN = "Sumi Admin",
 }
 
 /**
@@ -166,6 +171,25 @@ export const PREDEFINED_ROLES: Array<BaseRole> = [
 			{ resource: "community", action: CRUDXAction.CRUD, scope: COMMUNITY_SCOPES_BITS.CONTENT },
 			{ resource: "community", action: CRUDXAction.CRUD, scope: COMMUNITY_SCOPES_BITS.PUBLISH_STATUS },
 		],
+	},
+	// ─── Sumi (sólo globales: el recurso es globalOnly, en una org no significarían nada) ───
+	{
+		name: SystemRole.SUMI_USER,
+		description: "Puede conversar con Sumi",
+		hierarchy: RoleHierarchy.MEMBER,
+		permissions: [{ resource: SUMI_RESOURCE_NAME, action: CRUDXAction.ALL, scope: SumiScopes.CHAT }],
+	},
+	{
+		name: SystemRole.SUMI_TRUSTED,
+		description: "Conversa con Sumi y lo que enseña cuenta como fuente confiable",
+		hierarchy: RoleHierarchy.MEMBER,
+		permissions: [{ resource: SUMI_RESOURCE_NAME, action: CRUDXAction.ALL, scope: SumiScopes.CHAT | SumiScopes.TRUSTED }],
+	},
+	{
+		name: SystemRole.SUMI_ADMIN,
+		description: "Administra Sumi: moderación, cuentas y aprendizaje global",
+		hierarchy: RoleHierarchy.MANAGER,
+		permissions: [{ resource: SUMI_RESOURCE_NAME, action: CRUDXAction.ALL, scope: SumiScopes.ALL }],
 	},
 ];
 

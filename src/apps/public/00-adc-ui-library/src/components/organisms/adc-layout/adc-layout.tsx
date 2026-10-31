@@ -100,7 +100,7 @@ export class AdcLayout {
 				    ahora es sticky. Acá es contenido en flujo y se va con el scroll. */}
 				<adc-banner-host />
 
-				<main class={`flex-1 justify-center ${this.fullWidth ? "w-full" : "w-full xl:w-max xl:min-w-7xl xl:mx-auto"}`}>
+				<main class={`flex-1 justify-center ${this.fullWidth ? "w-full" : "w-full xl:max-w-7xl xl:mx-auto"}`}>
 					<slot />
 				</main>
 

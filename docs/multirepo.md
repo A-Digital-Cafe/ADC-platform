@@ -17,6 +17,10 @@ Los presets se montan como capas nativas del kernel (ver [architecture/README.md
   `baseUrl` (eliminado en tsgo).
 - **Imports:** todo import que escape del preset usa aliases (`@common`, `@services`, `@providers`,
   `@utilities`, `@interfaces`, `@adc/utils`, `@kernel`). Imports internos relativos.
+- **Código compartido entre las apps de un preset:** `presets/<preset>/shared/`, importado por
+  ruta relativa. El tsconfig raíz lo excluye (como a `apps/**`) y lo incluye el tsconfig de cada
+  app (`"../../shared/**/*"`); si tiene clases Tailwind, cada app suma `@source "../../../../shared";`.
+  Referencia: `presets/sumi`.
 - **Contratos con `src`:** las apps de `src` que consumen un servicio de preset opcional dependen de
   una interfaz en `@common/types` (ej. `IContentService`), nunca del tipo concreto del preset.
 - **Docs:** cada preset incluye `README.md` (propósito, módulos, deps externas, env vars críticas,

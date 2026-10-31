@@ -125,6 +125,11 @@ export const P = buildAllPermissions() as {
 		readonly OVERRIDES: ScopePermissions<"plans">;
 		readonly SUBSCRIPTIONS: ScopePermissions<"plans">;
 	};
+	readonly SUMI: {
+		readonly CHAT: ScopePermissions<"sumi">;
+		readonly TRUSTED: ScopePermissions<"sumi">;
+		readonly ADMIN: ScopePermissions<"sumi">;
+	};
 };
 
 /**
